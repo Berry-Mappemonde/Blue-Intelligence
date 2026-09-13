@@ -1,0 +1,19 @@
+{
+  "kind": "climatology",
+  "month": 1,
+  "period": "1994-2020",
+  "source_ids": [
+    "WIND_GLO_PHY_L4_MY_012_006"
+  ],
+  "doi": "10.48670/moi-00183",
+  "dataset": [
+    "cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H",
+    "cmems_obs-wind_glo_phy_my_l4_0.125deg_PT1H"
+  ],
+  "note": "0.25deg Jun 1994\u2013Oct 2009, then 0.125deg to 2020. Jan\u2013May 1994 absent.",
+  "stat": "rose",
+  "subsample": "6h",
+  "grid_spacing_deg": 0.5,
+  "years": "1994-2020",
+  "generated_at": "2026-09-13T20:02:29Z"
+}
