@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "backend" / "data" / "climatology" / "wind"
 
 PRODUCT = "WIND_GLO_PHY_L4_MY_012_006"
-DATASET = "cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H"
+# Même produit, deux jeux : 0,25° s'arrête en oct. 2009 ; 0,125° prend la suite.
+DATASET_025 = "cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H"
+DATASET_0125 = "cmems_obs-wind_glo_phy_my_l4_0.125deg_PT1H"
 PERIOD = "1994-2020"
 DOI = "10.48670/moi-00183"
 MS_TO_KN = 1.94384
@@ -32,14 +34,25 @@ SECTORS = 8
 ACC_KEYS = ("lats", "lons", "count", "calm", "gale", "sec_n", "sec_spd", "u_sum", "v_sum")
 
 
-def _sidecar_is_rose(path: Path) -> bool:
+def pick_dataset(year: int, month: int) -> tuple[str, float] | None:
+    """None = mois hors archive (ex. janv.–mai 1994)."""
+    if (year, month) < (1994, 6):
+        return None
+    if (year, month) <= (2009, 10):
+        return DATASET_025, 0.25
+    return DATASET_0125, 0.125
+
+
+def _sidecar_is_complete_rose(path: Path, year_start: int, year_end: int) -> bool:
     if not path.is_file():
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return False
-    return data.get("stat") == "rose"
+    if data.get("stat") != "rose":
+        return False
+    return data.get("years") == f"{year_start}-{year_end}"
 
 
 def _month_range(month: int, year: int) -> tuple[str, str]:
@@ -51,13 +64,22 @@ def _month_range(month: int, year: int) -> tuple[str, str]:
     return start, end
 
 
-def _open_year(month: int, year: int, spacing: float):
+def _is_out_of_bounds(exc: BaseException) -> bool:
+    name = type(exc).__name__
+    return "OutOfDatasetBounds" in name or "out of bounds" in str(exc).lower()
+
+
+def _open_year(month: int, year: int, spacing: float, target_lats=None, target_lons=None):
+    picked = pick_dataset(year, month)
+    if picked is None:
+        return None
+    dataset_id, native = picked
     start, end = _month_range(month, year)
     last_err = None
     for attempt in range(1, 5):
         try:
             ds = open_dataset(
-                dataset_id=DATASET,
+                dataset_id=dataset_id,
                 variables=["eastward_wind", "northward_wind"],
                 start_datetime=start,
                 end_datetime=end,
@@ -66,13 +88,18 @@ def _open_year(month: int, year: int, spacing: float):
             v_name = "northward_wind" if "northward_wind" in ds else "v10"
             if "time" in ds.dims:
                 ds = ds.isel(time=slice(None, None, 6))
-            if spacing > 0.25:
-                step = max(1, int(round(spacing / 0.25)))
-                lat_name = "latitude" if "latitude" in ds.dims else "lat"
-                lon_name = "longitude" if "longitude" in ds.dims else "lon"
+            lat_name = "latitude" if "latitude" in ds.dims else "lat"
+            lon_name = "longitude" if "longitude" in ds.dims else "lon"
+            if target_lats is not None and target_lons is not None:
+                ds = ds.sel({lat_name: target_lats, lon_name: target_lons}, method="nearest")
+            elif spacing > native:
+                step = max(1, int(round(spacing / native)))
                 ds = ds.isel({lat_name: slice(None, None, step), lon_name: slice(None, None, step)})
-            return ds, u_name, v_name
+            return ds, u_name, v_name, dataset_id
         except Exception as exc:
+            if _is_out_of_bounds(exc):
+                print(f"  skip {year}-{month:02d} hors archive ({dataset_id})", file=sys.stderr)
+                return None
             last_err = exc
             wait = 4 * (2 ** (attempt - 1))
             print(f"  retry {attempt}/4 dans {wait}s ({type(exc).__name__})", file=sys.stderr)
@@ -128,7 +155,9 @@ def _accumulate(acc: dict, u, v) -> None:
     acc["gale"] += ((spd >= 34) & valid).sum(axis=0).astype("int32")
     acc["u_sum"] += np.nansum(u, axis=0)
     acc["v_sum"] += np.nansum(v, axis=0)
-    sec = ((coming + 22.5) % 360.0 // 45.0).astype("int16")
+    sec = np.zeros(coming.shape, dtype="int16")
+    finite_dir = np.isfinite(coming)
+    sec[finite_dir] = ((coming[finite_dir] + 22.5) % 360.0 // 45.0).astype("int16")
     for k in range(SECTORS):
         mask = valid & (sec == k)
         acc["sec_n"][:, :, k] += mask.sum(axis=0).astype("int32")
@@ -159,8 +188,19 @@ def generate_month(
 
     t0 = time.time()
     for i, year in enumerate(todo, start=1):
-        print(f"mois {month:02d}  année {year}  ({i}/{len(todo)})", file=sys.stderr)
-        ds, u_name, v_name = _open_year(month, year, spacing)
+        picked = pick_dataset(year, month)
+        label = picked[0] if picked else "skip"
+        print(f"mois {month:02d}  année {year}  ({i}/{len(todo)})  {label}", file=sys.stderr)
+        opened = _open_year(
+            month, year, spacing,
+            target_lats=None if acc is None else acc["lats"],
+            target_lons=None if acc is None else acc["lons"],
+        )
+        if opened is None:
+            if acc is not None:
+                _save_partial(partial, acc, year + 1)
+            continue
+        ds, u_name, v_name, _dataset_id = opened
         u = ds[u_name].values.astype("float32", copy=False)
         v = ds[v_name].values.astype("float32", copy=False)
         lat_name = "latitude" if "latitude" in ds.coords else "lat"
@@ -179,10 +219,14 @@ def generate_month(
 
     n = np.maximum(acc["count"], 1)
     pct = acc["sec_n"] * 100.0 / n[:, :, None]
-    spd_mean = np.divide(acc["sec_spd"], np.maximum(acc["sec_n"], 1), where=acc["sec_n"] > 0)
+    spd_mean = np.zeros_like(acc["sec_spd"], dtype="float64")
+    np.divide(
+        acc["sec_spd"], np.maximum(acc["sec_n"], 1),
+        out=spd_mean, where=acc["sec_n"] > 0,
+    )
     pct[pct < 2.5] = 0.0
     sea = acc["count"] > 20
-    tmp = dest.with_suffix(".npz.tmp")
+    tmp = dest.with_name(dest.stem + ".tmp.npz")
     np.savez_compressed(
         tmp,
         lats=acc["lats"],
@@ -204,7 +248,8 @@ def generate_month(
         "period": PERIOD,
         "source_ids": [PRODUCT],
         "doi": DOI,
-        "dataset": DATASET,
+        "dataset": [DATASET_025, DATASET_0125],
+        "note": "0.25deg Jun 1994–Oct 2009, then 0.125deg to 2020. Jan–May 1994 absent.",
         "stat": "rose",
         "subsample": "6h",
         "grid_spacing_deg": spacing,
@@ -252,8 +297,8 @@ def main() -> int:
     login()
     for month in months:
         sidecar = args.out / f"wind-{month:02d}.atlas.json"
-        if args.skip_existing and _sidecar_is_rose(sidecar):
-            print(f"mois {month:02d} déjà en rose — skip", file=sys.stderr)
+        if args.skip_existing and _sidecar_is_complete_rose(sidecar, args.year_start, args.year_end):
+            print(f"mois {month:02d} déjà en rose {args.year_start}-{args.year_end} — skip", file=sys.stderr)
             continue
         generate_month(month, args.year_start, args.year_end, args.spacing, args.out)
     return 0

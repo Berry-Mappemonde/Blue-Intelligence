@@ -42,6 +42,11 @@ Les 12 mois prennent souvent **plusieurs heures**. `caffeinate` empêche
 le Mac de s'endormir. Si ça s'arrête, relance **la même commande** : le
 mois en cours reprend à l'année suivante. Un mois déjà en rose est sauté.
 
+Le vent horaire CMEMS est en deux jeux du même produit : 0,25° jusqu'en
+octobre 2009, puis 0,125° jusqu'en 2020. Le script les enchaîne et
+stocke une maille 0,5°. Janvier–mai 1994 n'existent pas : ils sont
+sautés, ce n'est pas une erreur.
+
 ```bash
 # Cyclones (CSV libre, le plus court)
 python3 scripts/climatology/gen_cyclones.py
