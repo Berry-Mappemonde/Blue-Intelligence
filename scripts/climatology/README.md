@@ -12,9 +12,35 @@ libres). Ils écrivent `backend/data/climatology/` :
 | `gen_wave_mean.py` | WAVERYS climatology_P1M-m | `wave/wave-MM.npz` (`stat: mean`) |
 | `gen_wave_pct.py` | WAVERYS PT3H, un mois à la fois | `wave/wave-MM.npz` (`hs_p50` / `hs_p90`) |
 
-Prérequis Mac : compte Copernicus (`copernicusmarine login`), `numpy`,
-`netCDF4` / `xarray`, assez de disque pour **un mois** à la fois — jamais le
-cube mondial en RAM.
+Prérequis Mac : compte Copernicus dans `backend/.env`
+(`COPERNICUS_USERNAME` / `COPERNICUS_PASSWORD`), `numpy`, `netCDF4` /
+`xarray`, assez de disque pour **un mois** à la fois — jamais le cube
+mondial en RAM. Ne pas lancer ça sur le VPS.
+
+### Roses — une commande sur le Mac
+
+Dans Terminal (remplace le chemin si ton dossier n'est pas là) :
+
+```bash
+cd ~/Blue-Intelligence-Map
+source backend/.venv/bin/activate
+pip install copernicusmarine xarray netCDF4 numpy python-dotenv
+bash scripts/climatology/gen_wind_atlas_mac.sh
+```
+
+Si le Mac n'a pas encore de venv :
+
+```bash
+cd ~/Blue-Intelligence-Map
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install copernicusmarine xarray netCDF4 numpy python-dotenv
+bash scripts/climatology/gen_wind_atlas_mac.sh
+```
+
+Les 12 mois prennent souvent **plusieurs heures**. `caffeinate` empêche
+le Mac de s'endormir. Si ça s'arrête, relance **la même commande** : le
+mois en cours reprend à l'année suivante. Un mois déjà en rose est sauté.
 
 ```bash
 # Cyclones (CSV libre, le plus court)
@@ -26,7 +52,11 @@ python3 scripts/climatology/gen_current.py
 # Vent AVERAGE (climatologie mensuelle — V0 visible, pas une rose)
 python3 scripts/climatology/gen_wind_mean.py
 
-# Vent roses (subset 6 h × 1994–2020, un mois calendaire à la fois)
+# Vent roses — 12 mois, sur le Mac (pas le VPS)
+# Empêche la veille, reprend si le réseau coupe.
+bash scripts/climatology/gen_wind_atlas_mac.sh
+
+# Un seul mois (ex. mars, pour vérifier les alizés)
 python3 scripts/climatology/gen_wind_atlas.py --month 3
 
 # Houle : moyenne P1M d'abord (V0, ne pas l'étiqueter P90), puis percentiles
