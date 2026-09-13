@@ -54,7 +54,7 @@ def _coord(lat: float, lon: float) -> None:
 @router.get("/climatology/meta")
 async def climatology_meta(month: int = Query(1, ge=1, le=12)):
     month = _month(month)
-    snaps = snapshot_status()
+    snaps = snapshot_status(month)
     return {
         "kind": KIND,
         "month": month,
@@ -76,7 +76,7 @@ async def climatology_meta(month: int = Query(1, ge=1, le=12)):
         "disclaimer": DISCLAIMER_EN,
         "disclaimer_fr": DISCLAIMER_FR,
         "review": False,
-        "products": {k: product_meta(k) for k in ("wind", "wave", "current", "cyclone")},
+        "products": {k: product_meta(k, month) for k in ("wind", "wave", "current", "cyclone")},
     }
 
 
@@ -123,7 +123,7 @@ async def climatology_point(
             "longitude": lon,
             "cell_selection": "land" if land else "sea",
         },
-        "snapshot": snapshot_status(),
+        "snapshot": snapshot_status(month),
         "disclaimer": DISCLAIMER_EN,
         "disclaimer_fr": DISCLAIMER_FR,
         **blocks,
