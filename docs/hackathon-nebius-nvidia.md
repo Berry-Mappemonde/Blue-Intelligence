@@ -1,296 +1,291 @@
 # Hackathon Nebius × NVIDIA — synthèse et orientations
 
-**Projet cible :** Blue Intelligence + NAVIGUIDE
-**Track visé :** Best Apps and Agents
-**Nom de travail :** Expedition Clearance Copilot (Clearance Brief + copilote de route)
-**Date de cette synthèse :** 13 septembre 2026
-**Deadline soumission :** vendredi 30 octobre 2026, 10:00 PT
-**Jugement :** 1–15 décembre 2026 · résultats vers le 11 janvier 2027
+**Produit :** NAVIGUIDE Simulator — on rejoue Berry-Mappemonde.  
+**Track :** Best Apps and Agents  
+**Code :** `naviguide-simulator/` (à créer, extractible) — **pas** un patch de la prod  
+**Date :** 13 septembre 2026 (soir) — arbitrages **v3.0**
 
-Ce document fige la discussion du 12–13 septembre 2026 : règles, recherches (Token Factory, Tavily, Nemotron, code), décision produit, contraintes réelles, et plan d’exécution. Mis à jour le 13 septembre (crédits reçus, RDV Toronto). Ce n’est pas une soumission Devpost — c’est le cahier interne.
+**Plan pour gagner (stratégie, étapes 1–6, vidéo, Devpost) :** [PLAN_HACKATHON_GAGNER.md](./PLAN_HACKATHON_GAGNER.md)  
+**Chantier étape 1 (cockpit Leaflet) :** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md)
+
+**Deadline soumission :** vendredi 30 octobre 2026, 10:00 PT  
+**Jugement :** 1–15 décembre 2026 · résultats vers le 11 janvier 2027  
+**IRL :** Builders & Brews **Toronto, mardi 29 septembre 2026** (pas Paris)
+
+Cahier interne, pas une soumission Devpost. Ce fichier est la **synthèse à jour**. Les anciennes orientations (Clearance Brief dans `backend/`, 4 chats, import/export, ConTree, `llm_cascade` en prod, MapLibre) sont **annulées**.
 
 ---
 
 ## 1. Décision en une phrase
 
-On soumet **un seul produit** (track Best Apps), pas la plateforme entière : un agent de formalités / notices sur une jambe de route, avec **Token Factory + Nemotron (Nano/Lightning + Ultra juge)** et **Tavily runtime**. L’esprit « Coding / Sandboxes » reste un stretch goal dans le même projet. On ne vise pas Personal AI ni Physical AI.
+On soumet **un seul produit** : le **simulateur**. Le bateau avance sur Berry-Mappemonde. `ici()` prépare un **sac à dos** (la carte vue du cockpit, pas le globe). Nano / Lightning **racontent**. Tavily **revérifie la fiche Gold de cette ZEE**. Ultra **barre** ce qui n’est plus prouvé. Un Briefing, **pas** 4 chats.
+
+Le méga-briefing éco-tourisme (toutes les couches) est le **même** produit, sérialisé : d’abord le film + le sac + PoE Gold + Tavily/Ultra ; le reste se branche plus tard sur le même Briefing.
 
 ---
 
-## 2. Le hackathon, ce qu’il faut retenir
+## 2. Le film (ce que le juge voit)
 
-- **Sponsor :** Nebius B.V. · **Admin :** Devpost
-- **Page :** https://nebiusglobalaihackathon.devpost.com/
-- **Inscriptions :** ~3 660 au 12 septembre 2026
-- **Éligibilité :** majorité légale ; la France est OK (exclus : Brésil, Québec, Russie, Crimée, Cuba, Iran, Corée du Nord, sanctions OFAC).
-- **Événement IRL :** Builders & Brews **Toronto, mardi 29 septembre 2026** (pas Paris). Crédits extra possibles + éligibilité City Winner 500 $.
+1. On **rejoue** l’expédition. Le bateau avance (Précédent / Suivant).  
+2. Il **entre dans une ZEE** (polygone Blue Intelligence).  
+3. Si elle est **Gold** : Ports d’entrée + lien officiel.  
+4. Tavily ne cherche pas le monde : il **revérifie cette fiche**.  
+5. Ultra barre ce qui n’est plus prouvé.  
+6. Un événement météo / climat : l’agent raconte le bulletin (cyclone nommé, avis) — Copernicus reste les **chiffres au point**.  
+7. Stretch : proximité AMP / projet (« parc, saison, mouillage »).
 
-### Obligation technique (étape 1, éliminatoire)
+Ce n’est plus un chatbot. C’est un **voyage**.
 
-Le projet doit :
+---
 
-1. Faire un **appel runtime** à Token Factory **ou** tourner sur Nebius AI Cloud (Serverless Jobs, Endpoints ou DevPods).
-   **NVIDIA NIM (`integrate.api.nvidia.com`) ne compte pas.**
-2. Utiliser **au moins un modèle NVIDIA open source** (Nemotron, GR00T, Cosmos, Sonic).
-3. Coller vraiment au track — pas un rebrand superficiel.
+## 3. Le hackathon (règles utiles)
 
-### Critères étape 2 (poids égal)
+- **Page :** https://nebiusglobalaihackathon.devpost.com/  
+- **Sponsor :** Nebius B.V. · **Admin :** Devpost  
+- **~3 660** inscrits au 12 septembre 2026  
+- France éligible (exclus : Brésil, Québec, Russie, Crimée, Cuba, Iran, RPDC, OFAC)
 
-| Critère | Question |
-|---|---|
-| Technological Implementation | Le stack Nebius + NVIDIA est-il au cœur ? |
-| Design | Produit fini, pas une preuve de concept |
-| Potential Impact | Problème réel, public réel, preuve dans la démo |
-| Quality of the Idea | Usage **non évident** de Token Factory / Nemotron |
+**Étape 1 (éliminatoire) :** appel **runtime Token Factory** **ou** Nebius AI Cloud (Jobs / Endpoints / DevPods) + **au moins un** modèle NVIDIA open source.  
+**NVIDIA NIM (`integrate.api.nvidia.com`) ne compte pas.**
 
-Les juges **n’ont pas l’obligation de tester le code**. Vidéo + texte + images pèsent énormément.
+**Étape 2 (poids égal) :** Technological Implementation · Design · Potential Impact · Quality of the Idea.  
+Juges **non obligés** de tester le code. « Push past the obvious » : un wrapper Nemotron = perdu.
 
-**Update officielle :** « push past the obvious » — un wrapper ChatGPT / un chatbot Nemotron = perdu.
-
-### Prix (un projet = Overall **ou** Track, plus **un** bonus)
-
-| Prix | Montant | Note |
+| Prix | Montant | Notre choix |
 |---|---|---|
-| Grand Prize / 2e / 3e | 20 000 $ / 10 000 $ / 6 000 $ | Objectif |
-| Gagnant de track | Jetson Orin Nano | Consolation si pas Overall |
-| Best Use of Tavily | 3 000 $ | Appel **runtime** Tavily |
-| City Winner | 500 $ × 20 | Toronto 29 sept. — **un seul bonus** : Tavily **ou** City |
-| Most Valuable Feedback | 100 $ + swag × 10 | Section feedback soignée |
+| Grand / 2e / 3e | 20k / 10k / 6k $ | Objectif Overall |
+| Track | Jetson Orin Nano | Si pas Overall |
+| Best Use of Tavily | 3 000 $ | **Bonus visé** (appel runtime) |
+| City Winner | 500 $ | Toronto — **un seul bonus** : on privilégie Tavily |
+| Feedback | 100 $ + swag | Remplir quand même |
 
-On vise **Grand Prize + Tavily**. Le feedback se remplit quand même (peut ne pas stacker).
-
-### Soumission Devpost (check-list)
-
-- Un seul track
-- Démo URL qui marche (login de test si besoin)
-- Repo **public** + licence MIT / Apache / MPL visible dans About
-- README **anglais** : setup, où est Nemotron, où Token Factory accélère, où est Tavily
-- Vidéo YouTube **publique**, **≤ 3 min**, projet qui tourne, sans musique copyright
-- Textes en anglais (ou traduction)
-- Feedback Nebius / NVIDIA
-- Si projet existant : paragraphe « what we significantly updated » pendant la période (26 août – 30 oct.)
-- Testable jusqu’au **15 décembre 2026**
+Soumission : 1 track, démo URL, repo public + licence MIT, README **anglais**, YouTube ≤ 3 min, « significantly updated », testable jusqu’au **15 décembre 2026**.
 
 ---
 
-## 3. Orientations validées
+## 4. Architecture verrouillée (v3.0, 13 septembre soir)
 
-### Combo produit : 1 + 2, esprit de 3 en stretch
+```
+Skipper (cockpit Leaflet, 2 sidebars 320 px)
+        │  useLegContext
+        ▼
+ici(lat, lon)     ← sac (~30 nm), PAS 4500 projets
+        │
+Événement ?  ──non──►  JSON seul (gratuit)
+        │ oui
+        ▼
+Tavily (cette fiche) → Nano raconte → Ultra juge
+        ▼
+Un Briefing + pastilles sur la carte
+```
 
-1. **Clearance Brief** — agent de formalités / ports d’entrée / ZEE, sourcé, juge d’évidence Ultra.
-2. **Copilote de route NAVIGUIDE** — Lightning en tool calls (Tavily, Copernicus, AMP, ZEE, polaires), **un** Ultra pour le go/no-go.
-3. **Routing Lab / ConTree** — **pas** une 2ᵉ soumission Coding. Stretch : l’agent exécute des tests géospatiaux (point-in-polygon, AMP) dans un Sandbox ConTree, 3 branches visibles. Si le cœur n’est pas poli mi-octobre, on s’en passe.
+| Mot | Sens |
+|---|---|
+| Film | Sidebars NAVIGUIDE, route, bateau, tracer, boutons |
+| Projecteur | **Leaflet** (comme Blue Intelligence), **plus** MapLibre |
+| Légende | 10 pastilles : ZEE, WPI, Balisage, Projets, Marinas, Capit., PoE, AMP, Science, Climatologie. **Plusieurs allumées ensemble** (contrairement aux 6 modes BI) |
+| Moteur bateau | searoute Python + polar (VMG / upload), **sans chat**, **sans** grille 181×61 dans le prompt |
+| Moteur situation | `ici()` **avant** tout LLM |
+| Le projet | Un récit d’événement |
 
-**Tracks écartés**
+### Sac à dos (contrat)
 
-- Personal AI (NemoClaw / Hermes) : Design faible vs notre carte ; compat Nemotron encore fragile.
-- Physical AI : pas de robot ; vidéo 1 min hardware obligatoire.
-- Coding seul : trop concurrentiel, dépend d’un moteur de routage encore prototype.
+Rayon ~20–50 nm (cible **30 nm**) + « quelle ZEE contient ce point » :
 
-### Git : les deux, rôles distincts
+| Couche | Dans le sac | Pas ça |
+|---|---|---|
+| ZEE | 1 polygone, nom, `mrgid`, Gold ? | 285 textes |
+| PoE | Ports **de cette ZEE**, URL officielle, statut | Tous les PoE |
+| AMP / Projets | Près du trait | Le catalogue |
+| Marinas / capit. / WPI | 3–5 plus proches | OSM entier |
+| Balisage | De la zone | Le monde |
+| Science | 0 ou 1 jeu localisé | Sextant entier |
+| Vent / vague / courant | Au **point** | Le globe |
+| Polaires | Vitesse / ETA **de cette jambe** | Grille 181×61 / CSV |
+| Tavily | Cette fiche / cet avis | `search("ports of entry")` |
 
-Le dépôt `NAVIGUIDE-for-Berry-Mappemonde/Blue-Intelligence-Map` est **déjà public**, licence **MIT détectée** (PR #78, double MIT/Apache sur `origin/main`).
+Les boutons allument **toute** la couche sur la carte. Le LLM n’en voit qu’une poignée.
+
+### Interdit (v3.0)
+
+| Interdit | Pourquoi |
+|---|---|
+| 4 chats Ports / Sécurité / Météo / Cruisers | Remplacés par le Briefing |
+| Chat polar (`POST /polar/chat`) | Le récit n’est pas un Q&A VMG |
+| Import / export GeoJSON / KML | Route = Berry **ou** crayon + searoute |
+| Console / Review / Swarm / 6 modes | UX opérateur BI |
+| MapLibre / PMTiles « carte marine » | On change de projecteur |
+| Recoller `:8000` / `:8004` | Cassera l’extraction hackathon |
+| ConTree en 2ᵉ soumission | Un seul produit, track Apps |
+| NIM comme cerveau de soumission | Hors règlement |
+| Modifier `frontend/`, `backend/`, `naviguide/`, `infra/vps/` | Prod intouchée |
+
+**Prod `naviguide.fr` / `blueintelligence.online` intouchées.**
+
+---
+
+## 5. Git et arborescence
+
+Le monorepo est **public**, licence MIT (PR #78).
+
+```
+Blue-Intelligence-Map/
+├── frontend/ backend/ naviguide/   # PROD — on lit, on n’édite pas
+├── naviguide-simulator/            # NOUVEAU — extractible (hackathon)
+└── docs/
+    ├── hackathon-nebius-nvidia.md  # ce fichier
+    ├── PLAN_HACKATHON_GAGNER.md
+    └── PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md
+```
 
 | Où | Rôle |
 |---|---|
-| Branche `hackathon/clearance-brief` dans ce monorepo | Développement (réutilise ZEE, geo, carte, pipelines) |
-| Dossier autonome `clearance-brief/` | Facilite l’export |
-| `main` | Production VPS — merge seulement ce qui doit être live (feature flag) |
-| Dépôt public dédié, ex. `…/clearance-brief` | URL Devpost : README EN, historique 100 % période hackathon, pas de secrets |
+| `naviguide-simulator/` dans ce dépôt | Développement extractible — **aucune** import `../../frontend` |
+| `main` | Prod VPS — on n’y merge pas le simulateur « pour tester » |
+| Dépôt public dédié (plus tard) | URL Devpost : `git subtree split` ou copie, README EN, historique période hackathon |
 
-Le dépôt dédié se crée à la main (l’agent GitHub est en lecture seule). Export plus tard (`git subtree split` ou copie propre).
-
----
-
-## 4. Contraintes réelles (et comment on les retourne)
-
-### 4.1 Ports d’Entrée peu reviewés (11 polygones Gold)
-
-**Ce n’est pas bloquant.** La démo 3 min n’a besoin que des jambes qui traversent ces 11 zones.
-
-**C’est un atout.** Les 11 zones Gold = vérité terrain pour évaluer « Tavily → Nano extrait → Ultra juge » (précision, ports hallucinés rejetés). Chiffre à mettre dans le README et la vidéo.
-
-**Pitch produit :** la review manuelle est lente ; l’agent produit des dossiers sourcés qui **accélèrent** Review → Gold. On ne prétend pas que les données sont officielles. Le disclaimer « ne convient pas à la navigation » reste.
-
-### 4.2 Crédits reçus (13 septembre 2026)
-
-Comptes ouverts sur l’organisation **Berry-Mappemonde**. Inventaire lu dans les consoles :
-
-| Service | État observé | Usage prévu |
-|---|---|---|
-| **Nebius Token Factory** | Solde **60 $** ; essai 29 j / 30 j encore à **1,00 $ / 1,00 $** | Inférence Nemotron (Nano/Lightning volume, Ultra juge). Variable d’env : `NEBIUS_API_KEY`. |
-| **Tavily** (plan Researcher) | **0 / 10 000** crédits du plan mensuel ; add-on **0 / 3 125** (Builders) ; clé déjà créée | Search + Extract + Research mini runtime. Ne pas allumer « Pay as you go » tant que le quota suffît. |
-| **Toloka** | Solde **50 $** (collecte / labélisation / fine-tune) | Hors cœur hackathon. Utile plus tard pour labéliser les 11 zones Gold vs sorties agent. |
-| **Tendem** | Promo **50 $** (12 sept. 2026) | Hors cœur hackathon. Ne pas en dépendre pour la soumission. |
-
-Discipline de dépense (inchangée) : Nano/Lightning = 0,06 $ / M tokens in — le volume est presque gratuit. Ultra (1 $ / 3 $ par M) : **un Ultra par action utilisateur visible**, jamais dans la boucle d’outils. Tavily : Research **mini** seulement, pas de `pro` au clic, pas de crawl sans `limit`.
-
-La clé Token Factory n’est **pas** encore dans le code (et ne doit jamais aller dans le frontend ni dans git). Créer la clé dans Token Factory → API keys, la poser en env sur le Mac / le VPS.
-
-Toronto (29 sept.) peut encore débloquer des crédits extra.
-
-### 4.3 Moteur de routage NAVIGUIDE encore prototype
-
-L’option 2 **lit** les sorties existantes (segments, anti-shipping, Copernicus, VMG) ; elle n’exige pas un moteur parfait, seulement une jambe de démo qui marche (déjà le cas en live).
-C’est la raison de **ne pas** faire l’option 3 en soumission séparée.
+Créer le dépôt dédié à la main (l’agent GitHub est en lecture seule).
 
 ---
 
-## 5. État du code (12 septembre 2026)
+## 6. Contraintes réelles
 
-Monorepo **2 apps** :
+### 6.1 Gold PoE
 
-| | Blue Intelligence | NAVIGUIDE |
+Tavily s’appuie sur **la carte**, pas l’inverse. Minimum concours : ZEE de la **route Berry** (et de la jambe démo). Ambition skipper : **285** si l’accélérateur garde le critère Gold (source + géométrie). Un Gold **faux** est pire qu’un « probable » — sinon statut `accelerated` à côté de Gold.
+
+Les 11 polygones déjà Gold restent un **jeu d’éval** (Nano extrait / Ultra barre). Disclaimer : ne convient pas à la navigation.
+
+### 6.2 Crédits reçus (13 septembre)
+
+Organisation **Berry-Mappemonde** :
+
+| Service | Observé | Usage |
 |---|---|---|
-| Rôle | OSINT géospatial (6 modes + Console + Review) | Planificateur de route expédition |
-| Prod | blueintelligence.online | www.naviguide.fr (et preview complete.dev) |
-| LLM | `backend/app/core/nvidia.py` + `judge.py` + `llm.py` | `naviguide/llm_cascade.py` |
+| Token Factory | ~**60 $** ; essai 29 j / 1,00 $ restant | Nano / Lightning / Ultra. `NEBIUS_API_KEY` hors git |
+| Tavily Researcher | **0 / 10 000** + add-on **0 / 3 125** | Extract / Search / Research **mini** sur **cette** fiche |
+| Toloka / Tendem | 50 $ + 50 $ | Hors soumission |
 
-**Chaînes actuelles = NIM hosted, pas Token Factory, pas Nemotron.**
+Discipline : **un Ultra par action visible**. Tavily `mini`, pas de `pro` au clic, pas de crawl sans `limit`, pas de Search à chaque « Suivant ». Tenir ~30–80 crédits / run démo.
 
-- BI : `NVIDIA_URL = https://integrate.api.nvidia.com/v1/chat/completions`
-  Rôles `judge` / `extract` / `legal` / `json` / `page` / `text` : DeepSeek Pro, gpt-oss-20b, Muse, Flash, Kimi.
-  `engine_label()` sait taguer `nvidia-nemotron` mais **`CHAINS` n’en contient aucun**.
-- NAVIGUIDE : même NIM ; chaîne interactive gpt-oss → Pro → Muse → OpenRouter → Claude.
-  LangGraph : Route → Risk → Briefing (~26 s) — le LLM **commente** en ~120–280 mots, il n’appelle pas d’outils web.
+### 6.3 Routage prototype
 
-**Recherche web actuelle (pas Tavily) :** OpenRouter `:online`, SearXNG, Serper, TinyFish, DuckDuckGo HTML.
-
-**Atouts déjà là (à réutiliser, pas à réécrire) :**
-
-- `zee_crossings.py` — intersection route ∩ ZEE (VLIZ v12, shapely, 4 fallbacks)
-- `extract_ports` / `ask_yes_no` / `complete_json_cascade` — extract + juge anti-hallucination
-- `poe_pipeline.py` — workflow long (search → whitelist gov → extract → géocode → point-in-EEZ)
-- Carte Leaflet / MapLibre, exports GeoJSON versionnés
-- NAVIGUIDE : Copernicus, polaires, anti-shipping, couches ZEE/WPI
-
-**À ne pas soumettre tel quel :** toute la plateforme (trop large, FR, « quoi de neuf ? »).
-**Risque Stage 1 :** le README distant parle déjà Token Factory / Nemotron alors que le code pointe encore NIM — aligner le code avant le pitch.
+Le simulateur **lit** searoute + polar + vent au point. On ne soumet pas le moteur isochrone weather-routing. Draw = crayon + searoute, pas un fichier.
 
 ---
 
-## 6. Architecture cible
+## 7. État du code prod (lecture seule)
 
-```
-Skipper (carte BI / jambe NAVIGUIDE)
-        │  GeoJSON route + ZEE + AMP
-        ▼
-FastAPI « clearance » (VPS ou Serverless Endpoint)
-        │
-        ├─ Lightning / Nano (eu-north1)     volume, JSON, tools
-        ├─ Super (us-central1, optionnel)   briefing bilingue
-        └─ Ultra (us-central1)              1× juge d’évidence OU go/no-go
-                │
-                ├─ Tavily Search / Extract / Research mini  (runtime, citations)
-                ├─ Outils existants : point_in_eez, Overpass, VLIZ, polar, Copernicus
-                └─ [stretch] ConTree : 3 branches de tests géo, rollback
-                ▼
-        Carte : pins validés / rejetés + HUD tokens Ultra vs Nano
-```
+NIM partout, **pas** Token Factory, **pas** Nemotron actif, **pas** Tavily.
 
-**Règle d’or crédits :** ~7–15 % des appels en Ultra. Afficher le split dans l’UI (preuve qu’on a lu le brief du track).
+- BI : `backend/app/core/nvidia.py` → `integrate.api.nvidia.com` (DeepSeek / gpt-oss / Muse / Kimi).  
+- NAVIGUIDE : `llm_cascade.py` + LangGraph qui **commente** ; 4 chats simulation ; MapLibre ; polar **avec** chat.  
+- Recherche web BI : SearXNG, TinyFish, Serper, OpenRouter `:online`.
 
-**Deux `base_url` Token Factory :**
+**À copier (pas importer) dans le simulateur :** `useLegContext`, searoute (`naviguide-api` — `GET /route`, jamais le npm `searoute-js`), `polar_engine.py` **sans** chat, styles Leaflet BI, `backend/data/route.geojson` en fallback, exports `/api/export/*`.
 
-- Contrôle / Nano / Lightning : `https://api.tokenfactory.nebius.com/v1/`
-- Super / Ultra : `https://api.tokenfactory.us-central1.nebius.com/v1/`
-- Clé : `NEBIUS_API_KEY` (jamais dans le frontend)
+**Risque Stage 1 :** le README prod peut déjà parler Token Factory / Nemotron alors que le code est NIM. La soumission = le **simulateur**, pas ce README.
 
-**IDs à vérifier le jour J** via `GET /v1/models?verbose=true` (casse significative ; le cookbook ment parfois) :
+---
 
-| Rôle | ID (snapshot 12 sept. 2026) | Prix / M tok |
+## 8. Token Factory et Tavily (soumission, étapes 4–6)
+
+**Ne pas commencer ici tant que l’étape 1 n’est pas recettable** (A1–A7, A11, E1–E5).
+
+**Endpoints :** `https://api.tokenfactory.nebius.com/v1/` (Nano / Lightning, eu-north1) · `https://api.tokenfactory.us-central1.nebius.com/v1/` (Super / Ultra).
+
+| Rôle | ID (à revérifier `GET /v1/models?verbose=true`) | Prix / M tok |
 |---|---|---|
-| Volume | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | 0,06 / 0,24 |
+| Volume / récit | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | 0,06 / 0,24 |
 | Agents rapides | `nvidia/Nemotron-3_5-Lightning` | 0,06 / 0,24 |
-| Briefing | `nvidia/nemotron-3-super-120b-a12b` | 0,30 / 0,90 |
-| Juge | `nvidia/Nemotron-3-Ultra-550b-a55b` | 1,00 / 3,00 |
+| Juge (1× / action) | `nvidia/Nemotron-3-Ultra-550b-a55b` | 1,00 / 3,00 |
 
-Nemotron 3 : raisonnement **ON par défaut**. JSON / tools : `enable_thinking: false` ou `max_tokens` généreux + parser `reasoning_content` **et** `content`. Tag catalogue « JSON mode » : **aucun Nemotron live** — prompt + parseur existant (`parse_json_flexible`). Fine-tune Nemotron sur TF : **non disponible**.
+Raisonnement ON par défaut → thinking OFF pour JSON / texte court. Parser `content` **et** `reasoning_content`.
 
-**Tavily (bonus) — runtime essentiel, pas un 4ᵉ crawler.**
+**Tavily :** Extract sur l’URL officielle de la ZEE d’abord ; Search allowlist seulement si besoin ; Research **mini** + `files=[leg.json]` si briefing sourcé. **Pas** `include_answer`. Envelope ~13 000 crédits (10k + 3 125).
 
-On **garde** SearXNG / TinyFish / trafilatura pour le volume. Tavily = vérité officielle live + citations :
-
-1. Search `advanced` + allowlist .gouv / hydrographie + `time_range=week`
-2. Extract `advanced` (pages JS / tableaux) — **pas** search+extract des mêmes URL
-3. Map puis Crawl si le chemin « formalités » est inconnu
-4. Research **mini** (pas pro) + `files=[leg.json]` + `output_schema` + streaming
-5. **Ne pas** utiliser `include_answer` (ça court-circuite Nemotron)
-
-Un run démo : ~30–80 crédits. Envelope réel (13 sept.) : **10 000** (plan Researcher) + **3 125** (add-on Builders) ≈ **13 000** crédits Tavily — largement suffisant si on reste en `mini` et on cache par jambe.
-`include_domains_mode=filter` pour toute affirmation réglementaire.
+SearXNG / TinyFish restent le volume **prod BI**. Le simulateur ne les recopie pas.
 
 ---
 
-## 7. Fichiers à toucher (quand on implémente)
+## 9. Fichiers (quand on code)
 
-**Nouveau**
+**On crée seulement** `naviguide-simulator/**` :
 
-- `backend/app/core/token_factory.py` (ou évolution de `nvidia.py`)
-- `backend/app/core/tavily.py`
-- `backend/app/services/clearance_brief.py`
-- `backend/app/routers/clearance.py` — `POST /api/clearance/brief`
-- `frontend/src/components/ClearanceBriefPanel.js`
-- Tests mock Tavily / Token Factory
-- `docs/hackathon-nebius-nvidia.md` (ce document)
+- Vite 7 + React 19 + Tailwind 4, port **5174**  
+- FastAPI **8010** : `/route`, polar upload/get/summary (**pas** `/chat`), proxies ZEE/WPI/seamark, `/wind|/wave|/current`  
+- Pas de maplibre, pas de react-leaflet, pas de searoute-js, pas de LangGraph « pour agents », pas de `/agents/*`  
+- Adaptateur Token Factory / Tavily = **dans ce dossier**, pas dans `backend/app/core/`
 
-**Léger**
+**On n’ouvre pas :** `frontend/src/**`, `backend/app/**`, `naviguide/**` (sauf lecture pour copier), `infra/vps/**`.
 
-- `backend/app/config.py`, `backend/.env.example`
-- `naviguide/llm_cascade.py` (même bascule)
-- `naviguide/.../nodes.py` — nœud tools (phase 2)
-- `frontend` Header / carte — entrée démo
-- README feature EN + paragraphe « significantly updated »
+**Ne pas open-sourcer :** `.env`, dumps Mongo, PMTiles, Review nominatif, clés.
 
-**Réemploi sans réécrire :** `zee_crossings.py`, `poe_pipeline.py`, `geo.py`, `extract.py`, `judge.py`, `llm.extract_ports`, couches carte NAVIGUIDE.
-
-**Ne pas open-sourcer :** `.env`, dumps Mongo, PMTiles seamap, Review nominatif, clés (`NVIDIA_*`, `NEBIUS_*`, `TAVILY_*`, `TINYFISH_*`, `SERPER_*`).
+BI sur `:8001` est **optionnel** pour les couches `/bi`. Le simulateur doit tourner sans (erreurs honnêtes) ; export figé dans `public/` pour la démo autonome.
 
 ---
 
-## 8. Vidéo 3 min (structure)
+## 10. Vidéo 3 min
 
-Tout en **anglais**, YouTube public.
+Anglais, YouTube public, **bateau qui bouge**. Pas de musique copyright.
 
 | Temps | Plan |
 |---|---|
-| 0:00–0:20 | Problème skipper : décret / ZEE / notices — **pas** un chatbot |
-| 0:20–0:50 | Nano/Lightning extrait (HUD : ID, région, 1,8 s, 0,00X $) |
-| 0:50–1:25 | Ultra **rejette** 2 ports sans citation (surlignage) |
-| 1:25–2:10 | NAVIGUIDE : Lightning tool-calls Tavily + vent + AMP ; Ultra go/no-go |
-| 2:10–2:40 | Token Factory : split ~92 % Lightning / 8 % Ultra |
-| 2:40–3:00 | Carte : validés vs rejetés ; « Nebius Token Factory + Nemotron 3 » |
+| 0:00–0:20 | Problème skipper / ZEE — pas un chatbot |
+| 0:20–0:45 | Film : Suivant, entrée de ZEE, pastilles |
+| 0:45–1:20 | Gold + Tavily sur **cette** fiche, sources .gouv |
+| 1:20–1:55 | Ultra barre 2 ports (citation absente) |
+| 1:55–2:25 | JSON `ici()` (1 ZEE, 4 PoE, 1 AMP, vent) |
+| 2:25–2:45 | Split ~90 % Lightning / 10 % Ultra |
+| 2:45–3:00 | Route Berry, disclaimer, repo |
+
+Audio : nommer **Nebius Token Factory**, **Nemotron 3 Ultra vs Nano**, **Tavily on this EEZ fiche**.
 
 ---
 
-## 9. Plan jusqu’au 30 octobre
+## 11. Plan jusqu’au 30 octobre
 
 | Phase | Quoi | Qui |
 |---|---|---|
-| **Fait** | Comptes + crédits TF (60 $) + Tavily (10k + 3 125) | Humain |
-| **Phase 1** | Adaptateur Token Factory + module Tavily (clés en env, pas dans git) | Agent |
-| **Cœur** | Clearance Brief sur zones Gold + éval vs 11 polygones reviewés | Agent |
-| **Phase 2** | Copilote route NAVIGUIDE (mêmes adaptateur / outils) | Agent |
-| **Stretch** | ConTree 3 branches de vérif géo | Si le cœur est poli mi-octobre |
-| **29 sept.** | Builders & Brews **Toronto** | Humain |
-| **Fin octobre** | Gel, démo hébergée, README EN, vidéo, dépôt d’extraction, soumission | Les deux |
+| **Fait** | Crédits TF + Tavily ; Toronto choisi | Humain |
+| **1** | Cockpit Leaflet, Berry, draw, polar sans chat, stub `ici()` | Agent — [plan étape 1](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md) |
+| **2** | Sac réel (ZEE, PoE, proches 30 nm, `entered_eez`) **sur le serveur simulateur** | Agent |
+| **3** | Gold route Berry, voire 285 | Humain |
+| **4** | Nano raconte le JSON (adaptateur **dans** le simulateur) | Agent |
+| **5** | Tavily sentinelle de fiche | Agent |
+| **6** | Ultra + stretch AMP + vidéo + dépôt dédié | Les deux |
+| **29 sept.** | Builders & Brews Toronto — film, idéalement sac amorcé | Humain |
+| **Fin octobre** | Gel, démo dédiée (pas naviguide.fr), soumission | Les deux |
 
-Un seul projet Devpost, un seul README, une seule vidéo.
-
----
-
-## 10. Sources
-
-- https://nebiusglobalaihackathon.devpost.com/ · /rules · /resources
-- https://dev.nebius.com/ · https://dev.nebius.com/builders
-- https://docs.tokenfactory.nebius.com/ · https://tokenfactory.nebius.com/api/public/models_info
-- https://docs.tavily.com/
-- https://developer.nvidia.com/topics/ai/nemotron
-- Code : `backend/app/core/nvidia.py`, `judge.py`, `llm.py`, `zee_crossings.py`, `poe_pipeline.py`, `naviguide/llm_cascade.py`
+**Pas d’étape 5 si l’étape 1 n’est pas recettable** (A1–A7, A11, E1–E5). Un Nemotron collé sur un cockpit vide = wrapper = Stage 1 fail.
 
 ---
 
-## 11. Prochaine action
+## 12. Recette « on peut gagner »
 
-1. Humain : créer la clé Token Factory (`NEBIUS_API_KEY`) si ce n’est pas déjà fait ; la garder hors git. Aller à Toronto le 29 septembre.
-2. Agent : adaptateur Token Factory + `tavily.py`, puis Clearance Brief (plus besoin de mocks pour les appels réels).
+Un inconnu (juge) doit pouvoir :
+
+1. Ouvrir la démo, reconnaître un **cockpit** (pas une Console).  
+2. Avancer le bateau, **voir une ZEE**, des PoE, un lien.  
+3. Voir Tavily **sur cette fiche** (sources, pas un slide).  
+4. Voir Ultra **contredire** Nano une fois.  
+5. Lire dans le README le **sac à dos** (contrat `ici()`).  
+6. Relancer le repo avec `.env.example` et deux commandes.
+
+---
+
+## 13. Sources
+
+- https://nebiusglobalaihackathon.devpost.com/ · /rules · /resources  
+- https://dev.nebius.com/builders · https://docs.tokenfactory.nebius.com/ · https://docs.tavily.com/  
+- Code prod (lecture) : `nvidia.py`, `zee_crossings.py`, `poe_pipeline.py`, `naviguide-api/main.py`, `polar_engine.py`, `MapView.js`
+
+---
+
+## 14. Prochaine action
+
+1. **Humain :** Gold (route d’abord) ; `NEBIUS_API_KEY` en env ; Toronto le 29.  
+2. **Agent :** créer `naviguide-simulator/` jalon 1.0 (Vite + FastAPI 8010 / 5174), **sans** Tavily ni Nemotron.
+
+Détail d’exécution : [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md).  
+Critère de victoire : [PLAN_HACKATHON_GAGNER.md](./PLAN_HACKATHON_GAGNER.md) §10.
