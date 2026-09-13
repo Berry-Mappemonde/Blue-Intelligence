@@ -254,6 +254,41 @@ def test_wave_mean_is_not_labelled_p90(tmp_path, monkeypatch):
     assert fc["features"] == []
 
 
+def test_snapshot_status_follows_month_sidecar(tmp_path, monkeypatch):
+    root = tmp_path / "climatology"
+    for name in ("wind", "wave", "current", "cyclones"):
+        (root / name).mkdir(parents=True)
+    (root / "wave" / "wave-01.json").write_text('{"stat":"mean"}', encoding="utf-8")
+    (root / "wave" / "wave-07.json").write_text('{"stat":"p50_p90"}', encoding="utf-8")
+    (root / "wave" / "wave-01.npz").write_bytes(b"x")
+    (root / "wave" / "wave-07.npz").write_bytes(b"x")
+    monkeypatch.setattr(common, "CLIMATOLOGY_DIR", root)
+    monkeypatch.setattr(common, "climatology_dir", lambda: root)
+    jan = common.snapshot_status(1)
+    jul = common.snapshot_status(7)
+    assert jan["wave_stat"] == "mean"
+    assert jul["wave_stat"] == "p50_p90"
+    assert jan["wave"] is True
+    assert jul["wave"] is True
+
+
+def test_cmems_auth_accepts_id_mdp(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "climatology"))
+    import cmems_auth
+
+    monkeypatch.delenv("COPERNICUS_USERNAME", raising=False)
+    monkeypatch.delenv("COPERNICUS_USER", raising=False)
+    monkeypatch.delenv("COPERNICUSMARINE_SERVICE_USERNAME", raising=False)
+    monkeypatch.delenv("COPERNICUS_PASSWORD", raising=False)
+    monkeypatch.delenv("COPERNICUSMARINE_SERVICE_PASSWORD", raising=False)
+    monkeypatch.setenv("COPERNICUS_ID", "user@example.com")
+    monkeypatch.setenv("COPERNICUS_MDP", "secret")
+    monkeypatch.setattr(cmems_auth, "load_cmems_env", lambda: None)
+    user, password = cmems_auth.credentials()
+    assert user == "user@example.com"
+    assert password == "secret"
+
+
 def test_wave_p90_gt_p50(tmp_path, monkeypatch):
     wave_dir = tmp_path / "wave"
     wave_dir.mkdir()
@@ -275,6 +310,13 @@ def test_wave_p90_gt_p50(tmp_path, monkeypatch):
     assert w["hs_p90_m"] > w["hs_p50_m"] > 0
     assert w["stat"] == "p50_p90"
     assert wave_mod.is_wave_hazard(-40.0, 10.0, 7) is True
+    fc = wave_mod.wave_geojson(7, stat="p90", spacing_deg=0.5)
+    assert fc["features"]
+    assert fc["features"][0]["properties"]["stat"] == "p90"
+    assert fc["features"][0]["properties"]["period_s"] == 11.0
+    assert fc["features"][0]["properties"]["dir_deg"] == 250.0
+    p50 = wave_mod.wave_geojson(7, stat="p50", spacing_deg=0.5)
+    assert p50["features"][0]["properties"]["hs_m"] == 2.1
 
 
 def test_current_below_threshold_flagged(tmp_path, monkeypatch):

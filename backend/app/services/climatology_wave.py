@@ -114,6 +114,15 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     }
 
 
+def _val_cell(arr, i: int, j: int):
+    if arr is None:
+        return None
+    v = float(arr[i, j])
+    if np is not None and np.isnan(v):
+        return None
+    return v
+
+
 def _round(v):
     return None if v is None else round(float(v), 1)
 
@@ -159,6 +168,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                         v = float(arr[i, j])
                         if np.isnan(v) or v <= 0:
                             continue
+                        period_s = _round(_val_cell(bundle.get("period"), i, j))
+                        dir_deg = _round(_val_cell(bundle.get("dir"), i, j))
                         features.append({
                             "type": "Feature",
                             "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
@@ -167,6 +178,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                                 "month": month,
                                 "stat": want if want != "p90" or snapshot_stat != "mean" else "mean",
                                 "hs_m": round(v, 2),
+                                "period_s": period_s,
+                                "dir_deg": dir_deg,
                             },
                         })
     return {
