@@ -2,8 +2,10 @@
 
 **Projet cible :** Blue Intelligence + NAVIGUIDE
 **Track visé :** Best Apps and Agents
-**Nom de travail :** Expedition Clearance Copilot (Clearance Brief + copilote de route)
-**Date de cette synthèse :** 13 septembre 2026
+**Nom de travail :** NAVIGUIDE Simulator (film Berry-Mappemonde + sac `ici()` + Clearance)
+**Date de cette synthèse :** 13 septembre 2026  
+**Plan pour gagner :** [PLAN_HACKATHON_GAGNER.md](./PLAN_HACKATHON_GAGNER.md)  
+**Chantier étape 1 :** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md)
 **Deadline soumission :** vendredi 30 octobre 2026, 10:00 PT
 **Jugement :** 1–15 décembre 2026 · résultats vers le 11 janvier 2027
 
@@ -13,7 +15,7 @@ Ce document fige la discussion du 12–13 septembre 2026 : règles, recherches (
 
 ## 1. Décision en une phrase
 
-On soumet **un seul produit** (track Best Apps), pas la plateforme entière : un agent de formalités / notices sur une jambe de route, avec **Token Factory + Nemotron (Nano/Lightning + Ultra juge)** et **Tavily runtime**. L’esprit « Coding / Sandboxes » reste un stretch goal dans le même projet. On ne vise pas Personal AI ni Physical AI.
+On soumet **un seul produit** (track Best Apps) : le **simulateur** — on rejoue Berry-Mappemonde, le bateau avance, `ici()` prépare un sac à dos, Nano raconte, Tavily revérifie **la fiche Gold de cette ZEE**, Ultra barre ce qui n’est plus prouvé. Pas la plateforme entière, pas 4 chats. Détail : [PLAN_HACKATHON_GAGNER.md](./PLAN_HACKATHON_GAGNER.md).
 
 ---
 
