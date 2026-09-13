@@ -44,11 +44,13 @@ def credentials() -> tuple[str, str]:
         os.environ.get("COPERNICUS_USERNAME")
         or os.environ.get("COPERNICUS_USER")
         or os.environ.get("COPERNICUSMARINE_SERVICE_USERNAME")
+        or os.environ.get("COPERNICUS_ID")
         or ""
     ).strip()
     password = (
         os.environ.get("COPERNICUS_PASSWORD")
         or os.environ.get("COPERNICUSMARINE_SERVICE_PASSWORD")
+        or os.environ.get("COPERNICUS_MDP")
         or ""
     ).strip()
     if not user or not password:
