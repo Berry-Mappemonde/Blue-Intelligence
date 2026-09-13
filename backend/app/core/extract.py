@@ -11,6 +11,8 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
                            pour les pages JavaScript et les challenges « soft ».
+                           Jamais sur une URL .pdf ni un captcha dur (SiteGround,
+                           Akamai) — Chromium plante le process sous MemoryHigh.
                            Allumé seulement si le HTML simple ET Fetch ont échoué.
   Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
 
@@ -69,7 +71,8 @@ UA_READER = {
 HARD_CHALLENGE_RE = re.compile(
     r"challenge validation|sec-cpt-if|sec-container|akamai|"
     r"just a moment|_cf_chl_|cf-browser-verification|"
-    r"challenges\.cloudflare|performing security verification",
+    r"challenges\.cloudflare|performing security verification|"
+    r"sg-captcha|robot challenge screen|checking the site connection security",
     re.I,
 )
 
@@ -120,7 +123,8 @@ BLOCKED_MARKERS_RE = re.compile(
     r"|automated access to this (?:site|page)|ddos protection by"
     r"|complete the captcha|prove (?:that )?you are human|browser verification"
     r"|unblock request|access from your area has been temporarily limited"
-    r"|challenge validation|sec-cpt-if|sec-container",
+    r"|challenge validation|sec-cpt-if|sec-container"
+    r"|sg-captcha|robot challenge screen|checking the site connection security",
     re.I,
 )
 
@@ -177,6 +181,29 @@ def serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
         if serp_drop_reason(u, extra_re=extra_re, protect=protect) is None:
             out.append(r)
     return out
+
+
+def url_looks_like_pdf(url: str | None) -> bool:
+    """Chemin .pdf — même si le serveur sert un HTML de captcha à la place."""
+    path = (urlparse(url or "").path or "").lower()
+    return path.endswith(".pdf")
+
+
+def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
+    """Captcha SiteGround / interstitiel : 202 + HTML, header sg-captcha, ou marqueurs."""
+    headers = getattr(resp, "headers", None)
+    if headers is not None and headers.get("sg-captcha"):
+        return True
+    blob = content or b""
+    probe = blob[:6000].decode("utf-8", errors="replace")
+    if looks_hard_challenge(text=probe[:2000], html=probe):
+        return True
+    status = getattr(resp, "status_code", None)
+    head = blob[:400].lstrip().lower()
+    if status == 202 and url_looks_like_pdf(url) and (
+            head.startswith(b"<") or head.startswith(b"<!doctype")):
+        return True
+    return False
 
 
 def looks_blocked(text: str, html: str = "", title: str = "") -> bool:
@@ -1621,7 +1648,11 @@ def _mirror_http_err(exc: Exception) -> str:
 
 
 def _mirror_usable(text: str | None) -> bool:
-    return bool(text and len(text) >= 400 and not looks_blocked(text))
+    if not text or len(text) < 400:
+        return False
+    if looks_blocked(text) or looks_hard_challenge(text=text, html=text):
+        return False
+    return True
 
 
 def _append_fetch_links(text: str, links: list | None) -> str:
@@ -1863,13 +1894,27 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
                 out["text"] = parsed["text"]
 
     # N3 — rendu navigateur local (gratuit) : pages JS et challenges « soft ».
-    # Un challenge Akamai dur n'est jamais résolu par Chromium : on passe au miroir.
-    # Pas de Chromium sur un PDF, ni si le texte N1/N2 est déjà utilisable.
-    hard = looks_hard_challenge(out.get("text") or "", out.get("html") or "", out.get("title") or "")
-    needs_render = (not out["is_pdf"]) and (out["blocked"] or len(out["text"]) < min_chars)
-    if needs_render and allow_render and hard:
-        log("challenge anti-bot dur — rendu Chromium sauté, tentative de miroir")
-    if needs_render and allow_render and not hard:
+    # Un challenge dur (Akamai, SiteGround, Cloudflare) n'est jamais résolu par
+    # Chromium : on passe au miroir (TinyFish Fetch passe SiteGround ; Jina non).
+    # Pas de Chromium sur un PDF — ni sur une URL .pdf qui a renvoyé du HTML.
+    if resp is not None and looks_bot_challenge_response(
+            resp, content, out.get("final_url") or url):
+        out["blocked"] = True
+        log("captcha anti-bot — Chromium sauté, tentative de miroir")
+    pdf_url = url_looks_like_pdf(url) or url_looks_like_pdf(out.get("final_url"))
+    hard = looks_hard_challenge(
+        out.get("text") or "", out.get("html") or "", out.get("title") or "")
+    skip_chromium = bool(out["is_pdf"] or pdf_url or hard or out["blocked"])
+    short = len(out["text"]) < min_chars
+    # 205 chars de page captcha ne doivent pas empêcher TinyFish Fetch (≥ 400).
+    want_mirror = bool(out["blocked"] or short or (pdf_url and not out["is_pdf"] and len(out["text"]) < 400))
+    needs_render = (not skip_chromium) and allow_render and (out["blocked"] or short)
+    if skip_chromium and want_mirror and (hard or out["blocked"] or pdf_url):
+        if pdf_url and not out["is_pdf"]:
+            log("URL .pdf sans octets PDF — Chromium sauté, tentative de miroir")
+        elif hard or out["blocked"]:
+            log("challenge anti-bot dur — rendu Chromium sauté, tentative de miroir")
+    if needs_render:
         from app.core.render import render_html
         rendered = await render_html(url, log=log)
         if rendered:
@@ -1894,8 +1939,9 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
             elif r_blocked:
                 out["blocked"] = True
 
-    # Miroir générique : page officielle bloquée ou trop courte (challenge Akamai…).
-    if (out["blocked"] or len(out["text"]) < min_chars) and not _is_mirror_url(url):
+    # Miroir générique : page officielle bloquée, trop courte, ou .pdf captcha
+    # (205 chars Chromium ne doivent pas court-circuiter TinyFish Fetch).
+    if want_mirror and not _is_mirror_url(url):
         mirrored = await fetch_mirror_text(url, log=log, skip_tinyfish=skip_fetch_mirror)
         if mirrored:
             text, level = mirrored[0], mirrored[1]
