@@ -1,4 +1,4 @@
-"""C4 : SMCFAC voisin ≤ 250 m = contrôle, pas identité."""
+"""C4: neighbor SMCFAC ≤ 250 m = control, not identity."""
 from __future__ import annotations
 
 import sys

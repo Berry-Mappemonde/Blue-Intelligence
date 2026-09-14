@@ -370,7 +370,7 @@ async def poe_seeds_osm_refresh():
 
 @router.post("/poe/seeds/build")
 async def poe_seeds_build(body: SeedBuildBody | None = None):
-    """Reconstruit poe_seed_ports (runs ∪ listing ∪ OSM). Aucun crawl, pas poe_ports."""
+    """Rebuild poe_seed_ports (runs ∪ listing ∪ OSM). No crawl, not poe_ports."""
     body = body or SeedBuildBody()
     ids = [x.strip() for x in body.run_ids if str(x).strip()]
     report = await collect_seed_report(
@@ -406,7 +406,7 @@ async def poe_seeds_list(mrgid: int | None = None, verdict: str | None = None,
 
 @router.get("/poe/seeds/gps-audit")
 async def poe_seeds_gps_audit():
-    """Audit GPS des `confirmed` (dry-run). Pas de persist, pas poe_ports, pas build."""
+    """GPS audit of `confirmed` (dry-run). No persist, not poe_ports, no build."""
     return await audit_from_db(_db)
 
 
@@ -418,7 +418,7 @@ async def poe_seeds_gps_arbitrated():
 
 @router.get("/poe/seeds/line")
 async def poe_seeds_line(mrgid: int, name: str):
-    """Une ligne juge pour un candidat (collection, sinon listing + priors)."""
+    """One judge line for a candidate (collection, else listing + priors)."""
     docs = await _db.poe_seed_ports.find({"mrgid": int(mrgid)}).to_list(8000)
     hit = match_named_seed(docs, mrgid, name)
     source = "poe_seed_ports"

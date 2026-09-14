@@ -1,4 +1,4 @@
-"""Runs isolés Projets (CDC v2, phase B) — n'écrit jamais `projects`."""
+"""Isolated Projects runs (CDC v2, phase B) — never write `projects`."""
 import asyncio
 import os
 import sys
@@ -335,7 +335,7 @@ def test_force_rescan_reextracts_url_already_on_live_map(monkeypatch):
 
 
 def test_low_s_ocean_after_extract_rejected_even_if_gatekeeper_accepts(monkeypatch):
-    """CDC §10 : après extract, S_ocean 0,1 (Dana Point) est jeté malgré un GPS côtier."""
+    """CDC §10: after extract, S_ocean 0.1 (Dana Point) is dropped despite a coastal GPS."""
     import app.services.swarm_pipeline as sp
 
     _patch_extract(

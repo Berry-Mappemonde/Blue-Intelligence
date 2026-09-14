@@ -64,7 +64,7 @@ async def science_count():
 
 @router.get("/depth")
 async def approach_depth(lat: float = Query(...), lon: float = Query(...)):
-    """Profondeur d'approche (DTM EMODnet) en un point, avec cache Mongo."""
+    """Approach depth (EMODnet DTM) at a point, with Mongo cache."""
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         raise HTTPException(400, "lat/lon out of range")
     from app.services.depth_sample import sample_depth

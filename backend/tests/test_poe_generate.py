@@ -1,4 +1,4 @@
-"""generate / generate-batch retirés — 410, sans écrire poe_ports."""
+"""generate / generate-batch removed — 410, without writing poe_ports."""
 from pathlib import Path
 import asyncio
 import os

@@ -455,7 +455,7 @@ async def zee_compute_status():
 
 @router.delete("/zee/crossings")
 async def zee_clear_crossings(delete_eez_file: bool = False):
-    """Supprime le cache crossings (et optionnellement le fichier EEZ local)."""
+    """Clear the crossings cache (and optionally the local EEZ file)."""
     res = await db.zee_crossings.delete_one({"_id": "latest"})
     eez_deleted = False
     if delete_eez_file and EEZ_FILE.exists():

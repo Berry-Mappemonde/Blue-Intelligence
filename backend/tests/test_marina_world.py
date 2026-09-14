@@ -1,4 +1,4 @@
-"""Dump mondial marinas — palier 1 (identité osm_id, slim GeoJSON, pas de purge)."""
+"""World marina dump — tier 1 (osm_id identity, slim GeoJSON, no purge)."""
 from __future__ import annotations
 
 import asyncio

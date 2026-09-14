@@ -1,4 +1,4 @@
-"""Porte unique ask_yes_no — aucun réseau."""
+"""Single door ask_yes_no — no network."""
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +31,7 @@ class TestAsBool:
         assert yn.as_bool(True) is True
         assert yn.as_bool(0) is False
         assert yn.as_bool(None) is None
-        assert bool("false") is True  # le piège que l'adaptateur évite
+        assert bool("false") is True  # the trap the adapter avoids
 
 
 class TestParseYesNo:

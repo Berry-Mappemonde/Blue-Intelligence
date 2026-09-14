@@ -1,4 +1,4 @@
-"""searx_instances — URL locale toujours en tête, sans doublon."""
+"""searx_instances — local URL always first, no duplicate."""
 import sys
 from pathlib import Path
 

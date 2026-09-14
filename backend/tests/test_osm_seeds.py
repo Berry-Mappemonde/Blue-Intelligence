@@ -1,4 +1,4 @@
-"""Graines OSM — tags wiki/Taginfo, parsing Overpass, sans réseau."""
+"""OSM seeds — wiki/Taginfo tags, Overpass parsing, no network."""
 import sys
 from pathlib import Path
 
@@ -189,7 +189,7 @@ def test_overpass_query_uses_wiki_tags_not_all_hbrfac():
     assert 'nwr["seamark:type"="harbour"][!"seamark:harbour:category"]' in q
     assert 'nwr["leisure"="marina"]' not in q
     assert 'nwr["amenity"="ferry_terminal"]' not in q
-    # Ne plus dump les 25k HBRFAC.
+    # No longer dump the 25k HBRFAC.
     assert 'nwr["seamark:type"="harbour"](10.0000,-70.0000,20.0000,-60.0000);' not in q
     kinds = {c[0] for c in OSM_SEED_CLAUSES}
     assert "eq" in kinds and "regex" in kinds and "and" in kinds

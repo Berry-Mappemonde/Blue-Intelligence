@@ -1,4 +1,4 @@
-"""Empreinte code des runs PoE — aucun réseau, aucun secret persisté."""
+"""Code fingerprint of PoE runs — no network, no persisted secret."""
 import asyncio
 import os
 import sys

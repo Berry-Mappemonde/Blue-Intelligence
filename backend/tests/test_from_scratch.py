@@ -1,4 +1,4 @@
-"""Full from scratch : ne pas sauter le déjà-posé sur la carte."""
+"""Full from scratch: do not skip what is already placed on the map."""
 from __future__ import annotations
 
 import asyncio

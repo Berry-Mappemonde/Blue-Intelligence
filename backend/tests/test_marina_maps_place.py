@@ -1,4 +1,4 @@
-"""Signal fiche Google /maps/place/ — sans API Places, sans scrape."""
+"""Google /maps/place/ card signal — no Places API, no scrape."""
 from __future__ import annotations
 
 import asyncio
@@ -86,7 +86,7 @@ def test_bout_blanc_does_not_inherit_nearby_minimes_place():
     assert mp.pick_google_place("Bassin du Bout Blanc", hits, 46.14687, -1.16452) is None
     assert mp.pick_google_place(
         "Port des Minimes", hits, 46.14676, -1.16606,
-    ) is None  # pas de jeton « minimes » dans le hit
+    ) is None  # no “minimes” token in the hit
     hits[0]["snippet"] = "Port des Minimes, La Rochelle"
     assert mp.pick_google_place("Port des Minimes", hits, 46.14676, -1.16606) is not None
 
@@ -365,7 +365,7 @@ def test_resolve_batch_signals_without_filtering():
     assert by_id["way/741789648"]["maps_place_status"] == "found"
     assert by_id["way/41585114"]["maps_place_status"] == "none"
     assert "maps_place_status" not in by_id["node/1"] or by_id["node/1"].get("maps_place_status") in (None, "skipped_unnamed")
-    # On n'a pas filtré : les 3 docs restent.
+    # We did not filter: the 3 docs remain.
     assert len(coll.docs) == 3
 
 
