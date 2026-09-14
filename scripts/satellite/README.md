@@ -1,45 +1,45 @@
-# Pilotes Sentinel — corridor Berry (hors VPS)
+# Sentinel pilots — Berry corridor (off the VPS)
 
-Filière 4 du plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
-Le VPS **sert** un GeoJSON versionné. Il ne télécharge pas d’images,
-n’exécute pas ACOLITE / CoastSat / ICESat-2.
+Stream 4 of the plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+The VPS **serves** a versioned GeoJSON. It does not download images
+and does not run ACOLITE / CoastSat / ICESat-2.
 
-## S0 — Compte CDSE (confirmé le 2026-09-14)
+## S0 — CDSE account (confirmed 2026-09-14)
 
-CMEMS (vent, houle, courant, climatologie —
-`scripts/climatology/cmems_auth.py`) **n’est pas** CDSE
-(images Sentinel-2, `dataspace.copernicus.eu`).
+CMEMS (wind, wave, current, climatology —
+`scripts/climatology/cmems_auth.py`) **is not** CDSE
+(Sentinel-2 images, `dataspace.copernicus.eu`).
 
-| Question | Réponse |
-|----------|---------|
-| Accès CDSE distinct du login CMEMS ? | **oui** |
-| Qui possède le login ? | Compte dataspace.copernicus.eu de l’opérateur Berry |
+| Question | Answer |
+|----------|--------|
+| Separate CDSE access from the CMEMS login? | **yes** |
+| Who owns the login? | The Berry operator's dataspace.copernicus.eu account |
 
-Les identifiants vont dans `scripts/satellite/.env` (gitignoré).
-Modèle : `scripts/satellite/.env.example`.
-**Aucun mot de passe dans git.**
+Credentials go in `scripts/satellite/.env` (gitignored).
+Template: `scripts/satellite/.env.example`.
+**No password in git.**
 
 ```bash
-# Sur le Mac, dans le dossier du projet :
+# On the Mac, in the project folder:
 cp scripts/satellite/.env.example scripts/satellite/.env
-# Puis remplir CDSE_USERNAME et CDSE_PASSWORD (mot de passe entre quotes).
+# Then fill in CDSE_USERNAME and CDSE_PASSWORD (password in quotes).
 
 python3 scripts/satellite/check_login.py
 python3 scripts/satellite/search_stac.py --limit 2
 ```
 
-`search_stac.py` **liste** 1–2 scènes autour de La Rochelle (buffer 30 M).
-Il ne télécharge pas les fichiers images (trop lourds, à faire plus tard
-sur le Mac).
+`search_stac.py` **lists** 1–2 scenes around La Rochelle (30 M buffer).
+It does not download the image files (too heavy; do that later
+on the Mac).
 
-## Suite (S1 → S7)
+## Next steps (S1 → S7)
 
-1. S1 — Télécharger 1–2 scènes Sentinel-2 listées (Mac, hors VPS).
-2. S2 — ACOLITE en local (correction atmosphérique côtière).
-3. S3 — MNDWI / CoastSat → trait de côte.
-4. S4 — Profondeur seulement si une trace ICESat-2 croise la scène.
-5. S5 — Comparer à EMODnet (`GET /api/depth` + WMS). Noter `error_m`.
-6. S6 — Tamponner le GeoJSON :
+1. S1 — Download 1–2 listed Sentinel-2 scenes (Mac, off the VPS).
+2. S2 — ACOLITE locally (coastal atmospheric correction).
+3. S3 — MNDWI / CoastSat → coastline.
+4. S4 — Depth only if an ICESat-2 track crosses the scene.
+5. S5 — Compare to EMODnet (`GET /api/depth` + WMS). Record `error_m`.
+6. S6 — Stamp the GeoJSON:
 
 ```bash
 python3 scripts/satellite/export_pilot.py \
@@ -47,9 +47,9 @@ python3 scripts/satellite/export_pilot.py \
   --out backend/data/satellite/coastline.geojson
 ```
 
-7. S7 — Importer dans Blue Intelligence (mode Science, source
+7. S7 — Import into Blue Intelligence (Science mode, source
    `sentinel-pilot`) via `POST /api/import/science.geojson`.
-   **Pas** dans la moisson `SOURCES`. Review / Gold : off.
+   **Not** in the `SOURCES` harvest. Review / Gold: off.
 
-Interdit : recaler l’image avec un VLM ou `geo.py`. Présenter le SDB
-comme un sondage. Tourner ACOLITE sur le VPS.
+Forbidden: snapping the image with a VLM or `geo.py`. Present SDB
+as a sounding. Running ACOLITE on the VPS.

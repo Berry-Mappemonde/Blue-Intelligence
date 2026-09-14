@@ -1,7 +1,7 @@
-"""Charge CDSE_* depuis l'environnement et les .env gitignorés.
+"""Load CDSE_* from the environment and gitignored .env files.
 
-CMEMS (vent / houle / courant) n'est pas CDSE (images Sentinel).
-Ne jamais imprimer le mot de passe. Ne jamais committer .env.
+CMEMS (wind / wave / current) is not CDSE (Sentinel images).
+Never print the password. Never commit .env.
 """
 from __future__ import annotations
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""WAVERYS PT3H → hs_p50 / hs_p90 pour un mois calendaire, toutes années.
+"""WAVERYS PT3H → hs_p50 / hs_p90 for one calendar month, all years.
 
-Un mois à la fois, une année à la fois, pas de temps par pas de temps.
-Jamais le cube mondial en RAM. Les percentiles viennent d'un histogramme
-Hs (pas d'une moyenne P1M étiquetée P90).
+One month at a time, one year at a time, timestep by timestep.
+Never the worldwide cube in RAM. Percentiles come from an Hs
+histogram (not a P1M mean labelled P90).
 
-Reprise : relancer la même commande reprend à l'année suivante
+Resume: rerun the same command to continue at the next year
 (``wave-MM.partial.npz``).
 
-À lancer sur le Mac (ou une grosse machine), **pas** sur le VPS 8 Go.
+Run on the Mac (or a large machine), **not** on the 8 GB VPS.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ PERIOD = "1993-2019"
 DOI = "10.48670/moi-00022"
 NATIVE_DEG = 0.2
 
-# Hs 0–20 m par pas de 5 cm ; Tm02 0–20 s par pas de 0,1 s.
+# Hs 0–20 m in 5 cm steps; Tm02 0–20 s in 0.1 s steps.
 HS_BIN = 0.05
 HS_BINS = 400
 PER_BIN = 0.1
@@ -44,7 +44,7 @@ ACC_KEYS = (
 
 
 def hist_percentiles(counts, qs, bin_width):
-    """Percentiles depuis un histogramme (ny, nx, nbins). NaN si compteur 0."""
+    """Percentiles from a histogram (ny, nx, nbins). NaN when the count is 0."""
     import numpy as np
 
     total = counts.sum(axis=-1)
@@ -200,7 +200,7 @@ def _bin_index(values, bin_width: float, n_bins: int):
 
 
 def accumulate(acc: dict, hs, period=None, direction=None) -> None:
-    """Ajoute un cube (time, lat, lon) aux histogrammes. Pas de concat globale."""
+    """Add a (time, lat, lon) cube to the histograms. No global concat."""
     import numpy as np
 
     if hs.ndim == 2:
@@ -312,7 +312,7 @@ def generate_month(
             continue
         ds, lat_name, lon_name, time_name = opened
         if acc is None and exist_lats is not None and exist_lons is not None:
-            # Première année : coller la maille V0 mean si elle est déjà là.
+            # First year: paste the V0 mean grid if it is already there.
             if abs(float(exist_lats[1] - exist_lats[0]) - spacing) < 0.05:
                 ds = ds.sel(
                     {lat_name: exist_lats, lon_name: exist_lons},
@@ -379,18 +379,18 @@ def generate_month(
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Hs P50/P90 WAVERYS PT3H — un mois ou les 12. Pas sur le VPS."
+        description="Hs P50/P90 WAVERYS PT3H — one month or all 12. Not on the VPS."
     )
-    ap.add_argument("--month", type=int, default=None, help="1–12 ; omit avec --all")
-    ap.add_argument("--all", action="store_true", help="les 12 mois, dans l'ordre")
+    ap.add_argument("--month", type=int, default=None, help="1–12 ; omit with --all")
+    ap.add_argument("--all", action="store_true", help="all 12 months, in order")
     ap.add_argument(
         "--skip-existing",
         action="store_true",
-        help="saute un mois déjà en p50_p90 (pas une moyenne P1M)",
+        help="skip a month already stored as p50_p90 (not a P1M mean)",
     )
     ap.add_argument("--year-start", type=int, default=1993)
     ap.add_argument("--year-end", type=int, default=2019)
-    ap.add_argument("--spacing", type=float, default=0.4, help="maille stockée (°)")
+    ap.add_argument("--spacing", type=float, default=0.4, help="stored cell size (°)")
     ap.add_argument("--time-chunk", type=int, default=TIME_CHUNK)
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()

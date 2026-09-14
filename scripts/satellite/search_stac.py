@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Liste 1–2 scènes Sentinel-2 L2A sur le corridor (STAC CDSE).
+"""List 1–2 Sentinel-2 L2A scenes on the corridor (CDSE STAC).
 
-N'écrit aucune image. À lancer sur le Mac de l'opérateur.
+Does not write any image. Run on the operator's Mac.
 """
 from __future__ import annotations
 
@@ -87,10 +87,10 @@ def search_scenes(token: str, bbox: list[float], limit: int, max_cloud: float) -
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Recherche STAC Sentinel-2 (pas de téléchargement)")
+    p = argparse.ArgumentParser(description="Sentinel-2 STAC search (no download)")
     p.add_argument("--limit", type=int, default=2)
     p.add_argument("--max-cloud", type=float, default=20)
-    p.add_argument("--out", type=Path, help="Écrire le manifeste JSON ici")
+    p.add_argument("--out", type=Path, help="Write the JSON manifest here")
     args = p.parse_args()
     bbox = default_bbox()
     token = access_token()
