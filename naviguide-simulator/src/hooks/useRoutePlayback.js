@@ -40,6 +40,8 @@ export function useRoutePlayback({ flat, marks, boatKnots, enabled }) {
   const skipDwellRef = useRef(false);
   const marksRef = useRef(marks);
   marksRef.current = marks;
+  const boatKnotsRef = useRef(boatKnots);
+  boatKnotsRef.current = boatKnots;
 
   const totalNm = playheadLength(flat);
   const atlanticNm = atlanticSpanNm(marks, flat?.totalNm || totalNm);
@@ -108,7 +110,11 @@ export function useRoutePlayback({ flat, marks, boatKnots, enabled }) {
       const dt = Math.min(0.08, (ts - lastTs.current) / 1000);
       lastTs.current = ts;
       const total = playheadLength(flat);
-      const rate = rateAtPlayhead(flat, nmRef.current, sailRate, profile);
+      const liveRate = nmPerSecond(profile, {
+        boatKnots: boatKnotsRef.current,
+        atlanticNm,
+      });
+      const rate = rateAtPlayhead(flat, nmRef.current, liveRate, profile);
       const inAir = Boolean(edgeAtFilmNm(flat, nmRef.current)?.jump);
       if (inAir !== lastAir.current) {
         lastAir.current = inAir;
@@ -145,7 +151,7 @@ export function useRoutePlayback({ flat, marks, boatKnots, enabled }) {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, playing, sailRate, profile, flat]);
+  }, [enabled, playing, profile, flat, atlanticNm]);
 
   return {
     nm,

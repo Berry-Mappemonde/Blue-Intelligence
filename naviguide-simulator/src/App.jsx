@@ -18,6 +18,7 @@ import { useMarkerOffsets } from "./hooks/useMarkerOffsets.js";
 import { useRoutePlayback } from "./hooks/useRoutePlayback.js";
 import { useRouteWindProfile } from "./hooks/useRouteWindProfile.js";
 import { useExpeditionSpeed } from "./hooks/useExpeditionSpeed.js";
+import { useWakeLayer } from "./hooks/useWakeLayer.js";
 import { useIciDossier } from "./hooks/useIciDossier.js";
 import { useFilmCamera } from "./hooks/useFilmCamera.js";
 import { useAirHopLine } from "./hooks/useAirHopLine.js";
@@ -205,6 +206,14 @@ export default function App() {
     profile: playback.profile,
     playing: playback.playing && cast?.vehicle !== "plane",
     onLiveKnots: setLiveKnots,
+    windSeries: windProfile.series,
+    filmNm: playback.nm,
+  });
+  useWakeLayer(mapRef, {
+    flat: flatRoute,
+    sailNm: cast?.sailNm ?? 0,
+    enabled: simulationMode,
+    mapReady,
   });
 
   const legContext = useMemo(() => {
@@ -853,6 +862,14 @@ export default function App() {
         onPrev={handleSimPrev}
         canPrev={simulationMode && playback.nm > ((escaleMarks[0]?.filmNm ?? escaleMarks[0]?.nm) ?? 0) + 1}
         legContext={legContext}
+        escaleMarks={escaleMarks}
+        filmNm={playback.nm}
+        onSeekEscale={(nm) => {
+          lastArrivalKeyRef.current = "";
+          setArrivalBanner(null);
+          playback.pause();
+          playback.seek(nm, { jump: true });
+        }}
       />
 
       <ToolsSidebar
@@ -971,6 +988,7 @@ export default function App() {
           cinema={cinemaMode}
           onCinema={toggleCinema}
           liveSpeed={expeditionSpeed.live}
+          windKind={expeditionSpeed.kind}
           boatName={polarData?.boat_name}
           clockScale={clockScale}
           onClockScale={setClockScale}
@@ -1028,7 +1046,7 @@ export default function App() {
       )}
 
       <p className="absolute bottom-1 left-1/2 -translate-x-1/2 z-[1500] text-[9px] text-white/50 pointer-events-none">
-        {t("notForNavigation")}
+        {t("creditsLine")}
       </p>
     </div>
   );

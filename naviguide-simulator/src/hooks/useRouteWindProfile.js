@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { trueWindAngle } from "../engine/playSpeeds.js";
+import { polarBoatSpeed } from "../engine/polarSpeed.js";
 import {
   cacheKeyLatLon,
   mapPool,
@@ -63,6 +64,7 @@ export function useRouteWindProfile({ flat, marks, polarData, cruiseKnots, enabl
 
   const cruise = Number(cruiseKnots) > 0 ? Number(cruiseKnots) : 7;
   const expeditionId = polarData?.expedition_id || "";
+  const polarRaw = polarData?.raw;
 
   useEffect(() => {
     if (!enabled || !samples.length) {
@@ -75,19 +77,23 @@ export function useRouteWindProfile({ flat, marks, polarData, cruiseKnots, enabl
     (async () => {
       const rows = await mapPool(samples, 3, async (s) => {
         let tws = null;
+        let windFrom = null;
         let boat = cruise;
         try {
           const wind = await fetchWind(s.lat, s.lon);
           tws = wind.tws;
+          windFrom = wind.from;
           const twa = trueWindAngle(s.heading, wind.from);
-          if (twa != null && expeditionId) {
+          const local = twa != null ? polarBoatSpeed(polarRaw, twa, wind.tws) : null;
+          if (local != null && local > 0) boat = local;
+          else if (twa != null && expeditionId) {
             const k = await fetchPolarKnots(expeditionId, twa, wind.tws);
             if (k != null) boat = k;
           }
         } catch {
           /* croisière seule */
         }
-        return { ...s, tws, boatKnots: boat };
+        return { ...s, tws, windFrom, boatKnots: boat };
       });
       if (!cancelled) {
         setSeries(rows);
@@ -97,7 +103,7 @@ export function useRouteWindProfile({ flat, marks, polarData, cruiseKnots, enabl
     return () => {
       cancelled = true;
     };
-  }, [enabled, sampleKey, samples, expeditionId, cruise]);
+  }, [enabled, sampleKey, samples, expeditionId, cruise, polarRaw]);
 
   return { samples, series, loading };
 }

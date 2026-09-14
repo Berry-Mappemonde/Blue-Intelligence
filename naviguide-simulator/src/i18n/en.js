@@ -100,7 +100,7 @@ export default {
   layerClimatologyTitle: "Wind regime here (step 6)",
   climatologyStub: "Wind regime here: climatology overlay in step 6.",
   notForNavigation: "Not to be used for navigation.",
-  notForNavBody: "OpenSeaMap marks and EMODnet WMS are community / scientific layers, not official nautical charts.",
+  notForNavBody: "OpenSeaMap marks (ODbL), EMODnet WMS (CC-BY) and GEBCO offshore soundings are community / scientific data, not official nautical charts.",
   notForNavAck: "I understand: not for navigation.",
   notForNavAccept: "Accept",
   briefing:           "BRIEFING",
@@ -218,4 +218,9 @@ export default {
   filmArrivalSea:   "{time} at sea",
   filmArrivalHold:  "Stopover",
   filmArrivalNm:    "{nm} nm",
+  escalesList:      "Stops",
+  escalesJump:      "Jump to {name}",
+  filmWindClimo:    "climatology",
+  filmWindAnalyse:  "analysis",
+  creditsLine:      "Leaflet · Esri tiles · OpenSeaMap · EMODnet · GEBCO (offshore sounding). Not for navigation.",
 };

@@ -34,6 +34,7 @@ export function SimulationFilmBar({
   cinema,
   onCinema,
   liveSpeed,
+  windKind,
   boatName,
   phase,
   vehicle,
@@ -103,6 +104,8 @@ export function SimulationFilmBar({
               {boatName && vehicle !== "plane" ? ` · ${boatName}` : ""}
               {profile === "real" && vehicle !== "plane" ? ` · ${t("speedRealHint")}` : ""}
               {liveSpeed && vehicle !== "plane" ? ` · ${t("speedLivePolar")}` : ""}
+              {windKind === "climatology" && vehicle !== "plane" ? ` · ${t("filmWindClimo")}` : ""}
+              {windKind === "analyse" && vehicle !== "plane" ? ` · ${t("filmWindAnalyse")}` : ""}
               {holding ? ` · ${t("filmArrivalHold")}` : ""}
             </div>
           </div>
