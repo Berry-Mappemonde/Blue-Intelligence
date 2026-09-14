@@ -1,17 +1,16 @@
-"""
-osm_validate.py — Validation Bottom-Up des PoE existants via Overpass (OSM).
+"""osm_validate.py — Bottom-Up validation of existing PoE via Overpass (OSM).
 
-Boucle sur les ports d'entrée déjà en base et interroge l'API Overpass autour
-de chaque point (harbour, marina, customs, border_control, seamark…) pour
-assigner un indice de confiance `osm_confidence` — SANS jamais modifier le
-nom, les coordonnées ni refaire l'extraction texte.
+Loop over ports of entry already in the database and query the Overpass API around
+each point (harbour, marina, customs, border_control, seamark…) to
+assign an `osm_confidence` index — WITHOUT ever changing the
+name, coordinates, or redoing text extraction.
 """
 import asyncio
 import time
 
 import httpx
 
-# overpass.openstreetmap.fr est le seul miroir accessible depuis ce conteneur
+# overpass.openstreetmap.fr is the only mirror reachable from this container
 OVERPASS_ENDPOINTS = [
     "https://overpass.openstreetmap.fr/api/interpreter",
     "https://overpass-api.de/api/interpreter",
@@ -66,9 +65,10 @@ async def overpass_around(lat: float, lon: float, radius_m: int = 3000, log=None
 
 
 def score_confidence(elements: list[dict]) -> tuple[float, list[str], int]:
-    """(confidence 0-1, tags trouvés, nb d'éléments).
-    Infrastructure portuaire → max 0.5 ; preuve douanière/frontière → max 0.4 ;
-    terminal ferry / zone portuaire → +0.1."""
+    """(confidence 0-1, tags found, element count).
+    Port infrastructure → max 0.5; customs/border evidence → max 0.4;
+    ferry terminal / port area → +0.1.
+    """
     tags_found = set()
     infra = customs = extra = 0.0
     for el in elements:
@@ -105,8 +105,9 @@ def score_confidence(elements: list[dict]) -> tuple[float, list[str], int]:
 
 async def validate_ports(db, state, only_unchecked: bool = True, limit: int = 0,
                          radius_m: int = 3000) -> dict:
-    """Tâche de fond : enrichit chaque PoE avec osm_confidence / osm_tags.
-    Ne touche NI name NI lat/lon NI les champs d'extraction."""
+    """Background task: enrich each PoE with osm_confidence / osm_tags.
+    Touch NEITHER name NOR lat/lon NOR extraction fields.
+    """
     q: dict = {"lat": {"$ne": None}, "lon": {"$ne": None}}
     if only_unchecked:
         q["osm_checked_at"] = {"$exists": False}

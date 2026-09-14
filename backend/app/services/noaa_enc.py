@@ -1,4 +1,4 @@
-"""NOAA ENC Direct — feux / bouées US via l'API ArcGIS. Pas de fichier S-57."""
+"""NOAA ENC Direct — US lights / buoys via the ArcGIS API. No S-57 file."""
 from __future__ import annotations
 
 from app.core.export_meta import versioned_fc
@@ -7,7 +7,7 @@ from app.core.identity import OVERLAY_RADIUS_KM, find_building
 NOAA_MAPSERVER = "https://gis.charttools.noaa.gov/arcgis/rest/services/encdirect"
 USER_AGENT = "BlueIntelligence/1.0 (+https://blueintelligence.online)"
 
-# H1 (2026-09-14) : layer_id publics feux / bouées. Pas de DEPARE vectorielle.
+# H1 (2026-09-14): public layer_id lights / buoys. No vector DEPARE.
 NOAA_AID_LAYERS: tuple[tuple[str, int, str], ...] = (
     ("enc_harbour", 11, "light"),
     ("enc_harbour", 6, "buoy_lateral"),
@@ -69,7 +69,7 @@ def _geojson_latlon(geom: dict) -> tuple[float, float] | None:
         lon, lat = float(coords[0]), float(coords[1])
         return lat, lon
     if typ in ("Polygon", "MultiPolygon", "LineString") and coords:
-        # centroïde naïf du premier anneau / premier point
+        # naive centroid of the first ring / first point
         ring = coords
         while isinstance(ring, (list, tuple)) and ring and isinstance(ring[0], (list, tuple)):
             ring = ring[0]
@@ -114,7 +114,7 @@ def aid_from_feature(feat: dict, *, service: str, layer_id: int, kind: str) -> d
 
 
 def overlay_osm_light(noaa_doc: dict, osm_pts: list[dict], radius_km: float = OVERLAY_RADIUS_KM):
-    """Même geste 250 m que le bureau : distance seule, pas 500 m same_site."""
+    """Same 250 m gesture as the office: distance only, not 500 m same_site."""
     if not noaa_doc:
         return None
     return find_building(noaa_doc.get("lat"), noaa_doc.get("lon"), osm_pts, radius_km=radius_km)
@@ -122,7 +122,7 @@ def overlay_osm_light(noaa_doc: dict, osm_pts: list[dict], radius_km: float = OV
 
 async def fetch_aids(client, bbox: tuple[float, float, float, float],
                      layers: tuple | None = None) -> list[dict]:
-    """Query tuilée ENC Direct. Zéro appel hors bbox US."""
+    """Tiled ENC Direct query. Zero calls outside the US bbox."""
     if not bbox_intersects_us(bbox):
         return []
     west, south, east, north = bbox

@@ -1,14 +1,13 @@
-"""
-poe_zone_fiche — Fiche de revue d'un polygone VLIZ (lecture seule).
+"""poe_zone_fiche — Review card of a VLIZ polygon (read-only).
 
-Review (union) : toutes les URLs TD uniques, tous les ports (v1 traité
-comme un run + runs prod + graines), toutes les BU par port.
+Review (union): all unique TD URLs, all ports (v1 treated
+as a run + prod runs + seeds), all BU per port.
 
-Carte Formalités : le run unique par défaut. Le snapshot Gold n'apparaît
-que si « Afficher la review » est coché (`visible` / `review`).
+Formalities map: the unique run by default. The Gold snapshot appears
+only if “Show review” is checked (`visible` / `review`).
 
-N'écrit jamais poe_ports / eez_zones. Le WPI n'est pas une source.
-Noonsite et les forums n'entrent pas.
+Never writes poe_ports / eez_zones. WPI is not a source.
+Noonsite and forums do not enter.
 """
 from __future__ import annotations
 
@@ -24,7 +23,7 @@ from app.services.poe_seeds import SEARCH_EXCLUDE_DOMAINS, url_is_excluded_searc
 from app.services.review_gold import is_test_run
 from app.services.territory_ref import curated_td_urls
 
-# Bannière / popup carte : une URL TD (liste/PDF d'abord). Review n'applique pas ce cap.
+# Map banner / popup: one TD URL (list/PDF first). Review does not apply this cap.
 FICHE_TD_URL_CAP = 1
 PUBLISHED_RUN = "published"
 
@@ -44,7 +43,7 @@ def _community_hosts() -> tuple[str, ...]:
 
 
 def url_is_community(url: str) -> bool:
-    """True si Noonsite, wiki, forum, magazine — jamais une preuve d'État."""
+    """True if Noonsite, wiki, forum, magazine — never state evidence."""
     if url_is_excluded_search(url):
         return True
     host = (urlparse(url or "").hostname or "").lower().lstrip(".")
@@ -64,7 +63,7 @@ def _clean_url(raw) -> str:
 
 
 def _url_key(url: str) -> str:
-    """Même page : ignore schéma et www. Des chemins différents restent distincts."""
+    """Same page: ignore scheme and www. Different paths stay distinct."""
     parsed = urlparse(url or "")
     host = (parsed.hostname or "").lower().lstrip(".")
     if host.startswith("www."):
@@ -126,7 +125,7 @@ def _url_rank(rec: dict) -> float:
 
 
 def _cap_sources(recs: list[dict], limit: int = FICHE_TD_URL_CAP) -> list[dict]:
-    """Un URL par domaine, les pages liste/PDF d'abord — bannière carte."""
+    """One URL per domain, list/PDF pages first — map banner."""
     by_dom: dict[str, dict] = {}
     for rec in recs or []:
         dom = (rec.get("domain") or domain_of(rec.get("url") or "") or rec.get("url") or "").lower()
@@ -138,7 +137,7 @@ def _cap_sources(recs: list[dict], limit: int = FICHE_TD_URL_CAP) -> list[dict]:
 
 
 def _rank_sources(recs: list[dict]) -> list[dict]:
-    """Toutes les URLs uniques, liste/PDF en tête. Pas de cap, pas de 1-par-domaine."""
+    """All unique URLs, list/PDF first. No cap, no 1-per-domain."""
     by_url: dict[str, dict] = {}
     for rec in recs or []:
         url = rec.get("url")
@@ -155,7 +154,7 @@ def _best_one(recs: list[dict]) -> dict | None:
 
 
 def _list_like_from_docs(docs: list[dict] | None) -> list[dict]:
-    """Un PDF / décret trouvé en cherchant un port peut être la liste TD."""
+    """A PDF / decree found while searching a port may be the TD list."""
     out: list[dict] = []
     for doc in docs or []:
         for raw in list(doc.get("judge_sources") or []) + list(doc.get("sources_bu") or []):
@@ -166,7 +165,7 @@ def _list_like_from_docs(docs: list[dict] | None) -> list[dict]:
 
 
 def bus_by_port_name(docs: list[dict] | None) -> dict[str, list[dict]]:
-    """Toutes les URLs d'État d'un port (juge / sources_bu), liste/PDF en tête."""
+    """All state URLs of a port (judge / sources_bu), list/PDF first."""
     buckets: dict[str, dict[str, dict]] = {}
     for doc in docs or []:
         key = normalize_name(doc.get("name") or "")
@@ -183,12 +182,12 @@ def bus_by_port_name(docs: list[dict] | None) -> dict[str, list[dict]]:
 
 
 def bu_by_port_name(docs: list[dict] | None) -> dict[str, dict]:
-    """Meilleure URL d'État trouvée en cherchant CE port (juge / sources_bu)."""
+    """Best state URL found while searching THIS port (judge / sources_bu)."""
     return {key: recs[0] for key, recs in bus_by_port_name(docs).items() if recs}
 
 
 def stable_port_id(doc: dict, mrgid: int | None = None) -> str:
-    """Identité Review / Gold : dedup_key, sinon `{mrgid}:{nom normalisé}`."""
+    """Review / Gold identity: dedup_key, else `{mrgid}:{normalized name}`."""
     key = str(doc.get("dedup_key") or "").strip()
     if key:
         return key
@@ -243,11 +242,11 @@ def assemble_zone_fiche(zone: dict, ports: list[dict], *,
                         seeds: list[dict] | None = None,
                         run_ports: list[dict] | None = None,
                         run_zones: list[dict] | None = None) -> dict:
-    """Construit la fiche de revue. 0 écriture Atlas.
+    """Build the review card. 0 Atlas writes.
 
-    ``sources_td`` : toutes les URLs d'État uniques (liste/PDF en tête).
-    ``url_td`` : la meilleure (bannière carte / popup).
-    Chaque port porte ``urls_bu`` (toutes) et ``url_bu`` (la première).
+    ``sources_td``: all unique state URLs (list/PDF first).
+    ``url_td``: the best one (map banner / popup).
+    Each port carries ``urls_bu`` (all) and ``url_bu`` (the first).
     """
     td_raw = [zone.get("sources"), zone.get("sources_td")]
     for rz in run_zones or []:
@@ -336,7 +335,7 @@ _LABEL_PROJ = {
 
 
 async def _label_zone(db, zone: dict) -> dict:
-    """Une fiche = ce mrgid. Le libellé tient compte des autres polygones du souverain."""
+    """One card = this mrgid. The label accounts for the sovereign's other polygons."""
     sov = (zone.get("sovereign") or "").strip()
     if not sov:
         attach_zone_labels([zone])
@@ -412,7 +411,7 @@ def _as_run_port(doc: dict, run_id: str) -> dict:
 
 def _merge_union_ports(v1: list[dict], run_ports: list[dict],
                        seeds: list[dict]) -> list[dict]:
-    """v1 = run `published`, à égalité avec les autres runs ; graines ensuite."""
+    """v1 = `published` run, equal to the other runs; seeds after."""
     by: dict[str, dict] = {}
     for doc in list(v1 or []) + list(run_ports or []):
         key = normalize_name(doc.get("name") or "")
@@ -432,12 +431,12 @@ def _merge_union_ports(v1: list[dict], run_ports: list[dict],
 
 async def build_zone_fiche(db, mrgid: int, run_id: str | None = None,
                            *, union: bool = False) -> dict | None:
-    """Charge Atlas en lecture seule et assemble la fiche.
+    """Load Atlas read-only and assemble the card.
 
-    ``run_id=None`` / ``published`` : ce run-là seulement (l'ancien v1).
-    ``union=True`` (Review) : v1 comme les autres runs + ``poe_run_ports``
-    du polygone + graines, canaris exclus.
-    Un ``run_id`` précis : ports et sources de CE run (debug).
+    ``run_id=None`` / ``published``: that run only (the old v1).
+    ``union=True`` (Review): v1 like the other runs + polygon
+    ``poe_run_ports`` + seeds, canaries excluded.
+    A precise ``run_id``: ports and sources of THIS run (debug).
     """
     mid = int(mrgid)
     zone = await db.eez_zones.find_one({"mrgid": mid}, {"geometry": 0})
@@ -487,7 +486,7 @@ async def build_zone_fiche(db, mrgid: int, run_id: str | None = None,
 
 
 async def build_map_zone_fiche(db, mrgid: int) -> dict | None:
-    """Fiche carte du run certifié : snapshot Gold. Pas de live."""
+    """Map card of the certified run: Gold snapshot. Not live."""
     from app.services.review_choices import snapshot_to_fiche
     from app.services.review_gold import eez_is_published, get_override
 

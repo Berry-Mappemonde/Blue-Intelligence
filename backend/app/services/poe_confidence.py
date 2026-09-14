@@ -1,15 +1,14 @@
-"""
-Score de confiance d'un Port d'Entrée (0–100), lisible et composable.
+"""Confidence score of a Port of Entry (0–100), readable and composable.
 
-Ce n'est pas une vérité officielle : chaque brique (source, lecture, carte,
-contrôles extérieurs) ajoute des points. Un port vu seulement dans une
-synthèse web reste bas ; un décret d'État + deux géocodeurs + OSM monte.
+This is not official truth: each brick (source, reading, map,
+external checks) adds points. A port seen only in a
+web synthesis stays low; a state decree + two geocoders + OSM rises.
 
-Les poids suivent l'audit PoE :
-  source   ≤ 30  (domaine d'État, gazette, repli national)
-  lecture  ≤ 25  (catalogue, LLM, NER, second lecteur Claude)
-  carte    ≤ 25  (ZEE / bord terrestre, accord des géocodeurs)
-  externe  ≤ 20  (listing communautaire, OSM, multi-run)
+Weights follow the PoE audit:
+  source   ≤ 30  (state domain, gazette, national fallback)
+  reading  ≤ 25  (catalogue, LLM, NER, Claude second reader)
+  map      ≤ 25  (EEZ / land edge, geocoder agreement)
+  external ≤ 20  (community listing, OSM, multi-run)
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from app.core.dedup import normalize_name, text_similarity
 
 
 def listing_role(name: str, listing_ports: list[dict] | None) -> str | None:
-    """'poe' | 'other' | None — le listing n'est pas une source de vérité."""
+    """'poe' | 'other' | None — the listing is not a source of truth."""
     if not name or not listing_ports:
         return None
     best, role = 0.0, None

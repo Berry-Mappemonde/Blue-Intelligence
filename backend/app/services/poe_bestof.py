@@ -1,15 +1,14 @@
-"""
-poe_bestof — Comparaison à N runs + synthèse « meilleur des mondes ».
+"""poe_bestof — N-run comparison + “best of worlds” synthesis.
 
-Ne touche JAMAIS poe_ports / eez_zones. La synthèse s'écrit dans un nouveau
-run versionné (poe_run_ports / poe_run_zones / poe_runs).
+NEVER touches poe_ports / eez_zones. The synthesis is written into a new
+versioned run (poe_run_ports / poe_run_zones / poe_runs).
 
-Juges (carte des vrais Ports of Entry, pas un vote moteur) :
-  1. nom de lieu (pas une tournure légale) ;
-  2. point dans la ZEE si géocodé ;
-  3. identité vue dans 2+ sources (v1 et/ou runs) = signal fort ;
-  4. v1 validé est le défaut quand un run wipe ou pollue ;
-  5. greffe d'un run seulement si géocodé + validé + non-légal.
+Judges (map of true Ports of Entry, not an engine vote):
+  1. place name (not a legal turn of phrase);
+  2. point in the EEZ if geocoded;
+  3. identity seen in 2+ sources (v1 and/or runs) = strong signal;
+  4. validated v1 is the default when a run wipes or pollutes;
+  5. graft a run only if geocoded + validated + non-legal.
 """
 from __future__ import annotations
 
@@ -66,7 +65,7 @@ def _geo(port: dict) -> bool:
 
 
 def _match_in(port: dict, pool: list[dict]):
-    """Appariement avec alias Porto de / Port of (le fuzzy seul rate trop)."""
+    """Matching with Porto de / Port of aliases (fuzzy alone misses too many)."""
     if port.get("dedup_key"):
         hit = next((x for x in pool if x.get("dedup_key") == port.get("dedup_key")), None)
         if hit:
@@ -96,7 +95,7 @@ def _slim(port: dict) -> dict:
 
 
 def cluster_zone_ports(origin_lists: dict[str, list[dict]]) -> list[dict]:
-    """Regroupe les ports d'une ZEE par identité. origin_lists = {label: [ports]}."""
+    """Group ports of an EEZ by identity. origin_lists = {label: [ports]}."""
     leftover: list[tuple[str, dict]] = []
     for origin, ports in origin_lists.items():
         for p in ports:
@@ -118,7 +117,7 @@ def cluster_zone_ports(origin_lists: dict[str, list[dict]]) -> list[dict]:
 
 
 def pick_cluster(cluster: dict) -> dict | None:
-    """Choisit le représentant d'un cluster, ou None si tout est du bruit."""
+    """Pick the cluster representative, or None if everything is noise."""
     members: list[tuple[str, dict]] = cluster["members"]
     origins = sorted({o for o, _ in members})
     clean = [(o, p) for o, p in members if not is_legal_fragment(p)]
@@ -161,7 +160,7 @@ def _by_mrgid(ports: list[dict]) -> dict[int, list[dict]]:
 
 
 async def compare_runs(db, run_ids: list[str], include_v1: bool = True) -> dict:
-    """Statistiques d'identité + verdicts de zone. Lecture seule."""
+    """Identity statistics + zone verdicts. Read-only."""
     labels = []
     origin_ports: dict[str, list[dict]] = {}
     if include_v1:
@@ -226,7 +225,7 @@ async def compare_runs(db, run_ids: list[str], include_v1: bool = True) -> dict:
 
 async def synthesize_best_of(db, run_ids: list[str], include_v1: bool = True,
                              dest_run_id: str | None = None, label: str = "") -> dict:
-    """Écrit une carte synthétique dans un nouveau run. poe_ports intact."""
+    """Write a synthetic map into a new run. poe_ports intact."""
     from app.services.poe_runs import new_run_id, ensure_run_indexes
     await ensure_run_indexes(db)
     dest_run_id = dest_run_id or new_run_id()
