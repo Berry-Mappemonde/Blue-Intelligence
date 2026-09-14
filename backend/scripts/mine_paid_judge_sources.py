@@ -1,6 +1,6 @@
-"""Mine les judge_sources déjà payés (Fetch, 0 Search), puis juge le résidu.
+"""Mine already-paid judge_sources (Fetch, 0 Search), then judge the residue.
 
-N'écrit jamais poe_ports. Ne lance pas seeds/build.
+Never writes poe_ports. Does not run seeds/build.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ async def main() -> None:
     p.add_argument("--no-memory", action="store_true")
     p.add_argument("--no-runs", action="store_true")
     p.add_argument("--remembered", action="store_true",
-                   help="Fetch seed_urls mémorisées (0 Search), puis résidu")
+                   help="Fetch memorized seed_urls (0 Search), then residue")
     args = p.parse_args()
 
     from motor.motor_asyncio import AsyncIOMotorClient

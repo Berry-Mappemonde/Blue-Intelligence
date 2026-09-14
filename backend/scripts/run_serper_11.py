@@ -1,4 +1,4 @@
-"""Run isolé des 11 polygones revus, variant=tinyfish."""
+"""Isolated run of the 11 reviewed polygons, variant=tinyfish."""
 from __future__ import annotations
 
 import asyncio
