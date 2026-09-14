@@ -15,7 +15,7 @@ from app.core.llm import (
 )
 from app.static_data.categories import normalize_category
 from app.core.dedup import is_duplicate
-from app.core.extract import extract_cascade
+from app.core.extract import extract_cascade, path_looks_like_image, url_looks_like_image
 from app.core.project_geo import geocode_project_site, site_publishable, valid_coords
 from app.core.rag import select_context
 from app.static_data.seeds import (
@@ -108,6 +108,8 @@ def is_project_fiche_path(path: str, *, apply_blacklist: bool = True) -> bool:
     """Vraie fiche : motif URL_PATTERNS, ≥ 2 segments. Blacklist = Fetch/Search."""
     if not path:
         return False
+    if path_looks_like_image(path):
+        return False
     if apply_blacklist and any(b in path.lower() for b in CRAWL_BLACKLIST):
         return False
     if not any(p in path for p in URL_PATTERNS):
@@ -160,6 +162,8 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
                 continue
         elif _is_skip_listing_domain(d):
             continue
+        if url_looks_like_image(href):
+            continue
         path = urlparse(href).path
         if href in seen:
             continue
@@ -184,6 +188,8 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
             continue
         if not host and _is_skip_listing_domain(d):
             continue
+        if url_looks_like_image(href):
+            continue
         path = urlparse(href).path
         if not _is_soft_fiche_path(path):
             continue
@@ -201,6 +207,8 @@ def _is_soft_fiche_path(path: str) -> bool:
     if not path:
         return False
     low = path.lower()
+    if path_looks_like_image(path):
+        return False
     if any(b in low for b in CRAWL_BLACKLIST):
         return False
     parts = [p for p in path.strip("/").split("/") if p]

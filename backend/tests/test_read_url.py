@@ -38,6 +38,14 @@ class TestPdfUrlAndCaptcha:
             "https://blueactionfund.org/wp-content/uploads/a.pdf") is True
         assert ext.url_looks_like_pdf("https://example.org/projects/") is False
 
+    def test_url_looks_like_image(self):
+        assert ext.url_looks_like_image(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png") is True
+        assert ext.url_looks_like_image(
+            "https://arcticnet.ca/wp-content/uploads/2025/10/SSF-Funding-from-Canada.png") is True
+        assert ext.path_looks_like_image("/photos/team.jpg") is True
+        assert ext.url_looks_like_image("https://example.org/projects/coral") is False
+
     def test_siteground_is_hard_challenge(self):
         html = "<html><body>Checking the site connection security. sg-captcha</body></html>"
         assert ext.looks_hard_challenge(html=html, title="Robot Challenge Screen") is True
@@ -79,6 +87,23 @@ class TestContentIsPdf:
         assert ext.content_is_pdf(
             html, "text/html", "https://gov.example/x",
             'attachment; filename="lista.pdf"') is False
+
+
+class TestContentIsImage:
+    def test_png_magic(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_is_image(png, "text/html", "https://x") is True
+
+    def test_jpeg_magic(self):
+        assert ext.content_is_image(b"\xff\xd8\xff\xe0rest", "application/octet-stream") is True
+
+    def test_html_at_png_url_is_not_image(self):
+        html = b"<!DOCTYPE html><html><body>error</body></html>"
+        assert ext.content_is_image(
+            html, "text/html", "https://cdn.example/portrait.png") is False
+
+    def test_content_type_image(self):
+        assert ext.content_is_image(b"xxxx", "image/png") is True
 
 
 class TestMapsUrl:
@@ -337,6 +362,63 @@ class TestReadUrls:
         links = ext.html_hrefs(html, "https://parc.fr/index")
         assert "https://parc.fr/visite" in links
         assert "https://ext.example/x" in links
+
+    def test_png_url_skips_fetch_and_chromium(self, monkeypatch):
+        fetched = []
+        rendered = []
+        mirrored = []
+
+        async def boom_raw(url, timeout=25):
+            fetched.append(url)
+            raise AssertionError("no fetch on .png url")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on .png url")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return ("portrait page " * 40, "N3-mirror-wayback")
+
+        monkeypatch.setattr(ext, "fetch_raw", boom_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png",
+            min_chars=200))
+        assert fetched == []
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_url"
+        assert page["text"] == ""
+        assert page["render_used"] is False
+
+    def test_image_magic_skips_chromium(self, monkeypatch):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00IHDR" + b"\xff" * 80
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(png, "image/png", url="https://cdn.example/download")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on image bytes")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/download", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_content"
+        assert page["text"] == ""
 
 
 class TestKeepIfLinks:

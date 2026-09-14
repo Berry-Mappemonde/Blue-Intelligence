@@ -115,6 +115,18 @@ def test_filter_exclude_urls_skips_already_eliminated():
     assert out == ["https://example.org/projects/kelp"]
 
 
+def test_filter_drops_image_urls_even_on_soft_path():
+    hits = [
+        {"url": "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png"},
+        {"url": "https://marviva.net/equipo/sandra-vilardy"},
+        {"url": "https://marviva.net/projects/manglares"},
+    ]
+    seed = {"name": "MarViva", "url": "https://marviva.net/"}
+    out = filter_discover_urls(hits, seed, 10)
+    assert out == ["https://marviva.net/projects/manglares"]
+    assert all(not u.endswith(".png") for u in out)
+
+
 def test_filter_soft_keeps_research_when_no_project_path():
     hits = [
         {"url": "https://scripps.edu/science/earth-section/"},
