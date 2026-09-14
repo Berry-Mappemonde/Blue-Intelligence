@@ -41,7 +41,8 @@ bash scripts/climatology/gen_wind_atlas_mac.sh
 The 12 wind months often take **several hours**. `caffeinate`
 prevents the Mac from sleeping. If it stops, rerun **the same
 command**: the current month resumes at the next year. A month already
-in rose form is skipped.
+in rose form is skipped. If Copernicus hangs, the script kills that
+year after 40 minutes and retries it on its own.
 
 Hs P50/P90 (`gen_wave_pct_mac.sh`) is **heavier**: 3 h ×
 1993–2019, one calendar month at a time, Hs histograms (never the
