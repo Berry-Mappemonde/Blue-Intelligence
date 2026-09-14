@@ -495,6 +495,11 @@ async def toggle_gold(db, kind: str, entity_id: str, *,
             payload["snapshot"] = snap
         await db.review_gold.update_one({"_id": cid}, {"$set": payload}, upsert=True)
         pressed = True
+        try:
+            from app.services.review_lessons import record_gold_lesson
+            await record_gold_lesson(db, fiche, ch, comment, kind=kind)
+        except Exception:
+            pass
     return {
         "kind": kind,
         "id": eid,
@@ -562,6 +567,11 @@ async def _toggle_eez_gold(db, eid: str, *, run_id: str | None,
             [rec.get("url") for rec in (snap.get("sources_td") or []) if rec.get("url")],
             [rec.get("url") for rec in (snap.get("dropped_td") or []) if rec.get("url")],
         )
+    except Exception:
+        pass
+    try:
+        from app.services.review_lessons import record_gold_lesson
+        await record_gold_lesson(db, fiche, ch, comment)
     except Exception:
         pass
     payload = {

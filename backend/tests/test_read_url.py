@@ -38,6 +38,21 @@ class TestPdfUrlAndCaptcha:
             "https://blueactionfund.org/wp-content/uploads/a.pdf") is True
         assert ext.url_looks_like_pdf("https://example.org/projects/") is False
 
+    def test_url_looks_like_image(self):
+        assert ext.url_looks_like_image(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png") is True
+        assert ext.url_looks_like_image(
+            "https://arcticnet.ca/wp-content/uploads/2025/10/SSF-Funding-from-Canada.png") is True
+        assert ext.path_looks_like_image("/photos/team.jpg") is True
+        assert ext.url_looks_like_image("https://example.org/projects/coral") is False
+
+    def test_serp_hard_drops_image_urls(self):
+        assert ext.serp_drop_reason(
+            "https://marviva.net/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+        ) == "hard"
+        assert ext.serp_drop_reason(
+            "https://example.org/projects/coral-reef") is None
+
     def test_siteground_is_hard_challenge(self):
         html = "<html><body>Checking the site connection security. sg-captcha</body></html>"
         assert ext.looks_hard_challenge(html=html, title="Robot Challenge Screen") is True
@@ -79,6 +94,32 @@ class TestContentIsPdf:
         assert ext.content_is_pdf(
             html, "text/html", "https://gov.example/x",
             'attachment; filename="lista.pdf"') is False
+
+
+class TestContentIsImage:
+    def test_png_magic(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_is_image(png, "text/html", "https://x") is True
+
+    def test_jpeg_magic(self):
+        assert ext.content_is_image(b"\xff\xd8\xff\xe0rest", "application/octet-stream") is True
+
+    def test_html_at_png_url_is_not_image(self):
+        html = b"<!DOCTYPE html><html><body>error</body></html>"
+        assert ext.content_is_image(
+            html, "text/html", "https://cdn.example/portrait.png") is False
+
+    def test_content_type_image(self):
+        assert ext.content_is_image(b"xxxx", "image/png") is True
+
+
+class TestContentLooksLikeHtml:
+    def test_html_and_png(self):
+        assert ext.content_looks_like_html(
+            b"<!DOCTYPE html><html></html>", "text/html") is True
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_looks_like_html(png, "image/png") is False
+        assert ext.content_looks_like_html(b"\x00\x01\x02\xff", "application/octet-stream") is False
 
 
 class TestMapsUrl:
@@ -338,6 +379,89 @@ class TestReadUrls:
         assert "https://parc.fr/visite" in links
         assert "https://ext.example/x" in links
 
+    def test_png_url_skips_fetch_and_chromium(self, monkeypatch):
+        fetched = []
+        rendered = []
+        mirrored = []
+
+        async def boom_raw(url, timeout=25):
+            fetched.append(url)
+            raise AssertionError("no fetch on .png url")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on .png url")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return ("portrait page " * 40, "N3-mirror-wayback")
+
+        monkeypatch.setattr(ext, "fetch_raw", boom_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png",
+            min_chars=200))
+        assert fetched == []
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_url"
+        assert page["text"] == ""
+        assert page["render_used"] is False
+
+    def test_image_magic_skips_chromium(self, monkeypatch):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00IHDR" + b"\xff" * 80
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(png, "image/png", url="https://cdn.example/download")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on image bytes")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/download", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_content"
+        assert page["text"] == ""
+
+    def test_binary_octet_stream_skips_chromium(self, monkeypatch):
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(b"\x00\x01\x02\xff" * 40, "application/octet-stream",
+                             url="https://cdn.example/blob")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on binary")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/blob", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "binary_content"
+        assert page["text"] == ""
+
 
 class TestKeepIfLinks:
     def test_amp_empty_text_with_links_skips_cascade(self, monkeypatch):
@@ -358,3 +482,108 @@ class TestKeepIfLinks:
             [url], prefer_fetch=True, fetch_key="k", keep_if_links=True, min_chars=200))
         assert called == []
         assert pages[url]["links"] == ["https://parc.fr/visite"]
+
+
+class TestRetiredHostsAndDownloads:
+    def test_sct_mexico_is_retired(self):
+        assert ext.host_is_retired(
+            "https://www.sct.gob.mx/JURE/doc/ley.pdf") is True
+        assert ext.host_is_retired(
+            "https://elmirador.sct.gob.mx/los-puertos") is True
+        assert ext.host_is_retired("https://www.sict.gob.mx/x") is False
+        assert ext.host_is_retired("https://douane.gouv.fr/") is False
+
+    def test_file_download_and_pdf_look_like_download(self):
+        assert ext.url_looks_like_download(
+            "https://www.budget.gouv.fr/documentation/file-download/18633") is True
+        assert ext.url_looks_like_download(
+            "https://example.gov/loi.pdf") is True
+        assert ext.url_looks_like_download(
+            "https://example.gov/page", "attachment; filename=a.bin") is True
+        assert ext.url_looks_like_download("https://example.gov/ports") is False
+
+    def test_skip_screenshot_reasons(self):
+        url = "https://www.sct.gob.mx/x"
+        assert "DNS" in (ext.should_skip_screenshot(url) or "")
+        assert ext.should_skip_screenshot(
+            "https://ok.gov/a", {"fetch_failed": True}) == (
+            "URL déjà morte / fetch N1 échoué")
+        assert ext.should_skip_screenshot(
+            "https://ok.gov/a", {"download": True}) == "téléchargement / PDF"
+        assert ext.should_skip_screenshot("https://ok.gov/ports") is None
+
+    def test_n1_failure_skips_chromium(self, monkeypatch):
+        async def fail(url, timeout=25):
+            raise RuntimeError("down")
+
+        rendered = []
+
+        async def boom_render(url, log=None, **k):
+            rendered.append(url)
+            return None
+
+        async def no_mirror(*a, **k):
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fail)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", no_mirror)
+        page = _run(ext.extract_cascade("https://down.example.gov/ports"))
+        assert page.get("fetch_failed") is True
+        assert rendered == []
+
+    def test_extract_cascade_skips_retired_host(self, monkeypatch):
+        async def boom(*a, **k):
+            raise AssertionError("retired host must not be fetched")
+
+        monkeypatch.setattr(ext, "fetch_raw", boom)
+        page = _run(ext.extract_cascade(
+            "https://www.sct.gob.mx/JURE/doc/ley-navegac-comercio-maritimos.pdf"))
+        assert page["error"] == "dead_host"
+        assert page["text"] == ""
+
+
+class TestJina422AndWaybackPause:
+    def test_jina_422_is_not_retried(self, monkeypatch):
+        calls = []
+
+        async def once(url, headers, timeout):
+            calls.append(url)
+            req = __import__("httpx").Request("GET", url)
+            resp = __import__("httpx").Response(422, request=req)
+            raise __import__("httpx").HTTPStatusError(
+                "422", request=req, response=resp)
+
+        async def no_sleep(_):
+            raise AssertionError("422 must not sleep/retry")
+
+        monkeypatch.setattr(ext, "_fetch_bytes", once)
+        monkeypatch.setattr(ext.asyncio, "sleep", no_sleep)
+        logs = []
+        out = _run(ext._jina_mirror_text("https://example.gov/x", logs.append))
+        assert out is None
+        assert len(calls) == 1
+        assert any("422" in m for m in logs)
+
+    def test_wayback_pauses_after_three_503(self, monkeypatch):
+        ext.reset_wayback_circuit()
+        snaps = []
+
+        async def snap(url):
+            snaps.append(url)
+            req = __import__("httpx").Request("GET", "https://web.archive.org/cdx")
+            resp = __import__("httpx").Response(503, request=req)
+            raise __import__("httpx").HTTPStatusError(
+                "503", request=req, response=resp)
+
+        monkeypatch.setattr(ext, "_wayback_snapshot_url", snap)
+        logs = []
+        for _ in range(3):
+            assert _run(ext._wayback_mirror_text("https://example.gov/x", logs.append)) is None
+        assert len(snaps) == 3
+        assert ext.wayback_circuit_open() is True
+        assert _run(ext._wayback_mirror_text("https://example.gov/y", logs.append)) is None
+        assert len(snaps) == 3
+        assert any("en pause" in m for m in logs)
+        ext.reset_wayback_circuit()
+        assert ext.wayback_circuit_open() is False

@@ -227,29 +227,36 @@ def _sidecar_stat(path: Path) -> str | None:
     return str(stat) if stat else None
 
 
-def snapshot_status() -> dict:
+def snapshot_status(month: int | None = None) -> dict:
+    """Présence et ``stat`` du mois affiché (janvier si ``month`` est omis)."""
     root = climatology_dir()
     wind_dir = root / "wind"
     wave_dir = root / "wave"
     current_dir = root / "current"
     cyc = root / "cyclones" / "ibtracs_since1980.json"
-    wind_present = (wind_dir / "wind-01.npz").is_file()
-    wave_present = (wave_dir / "wave-01.npz").is_file()
-    wind_stat = _sidecar_stat(wind_dir / "wind-01.atlas.json")
+    try:
+        mm = 1 if month is None else int(month)
+    except (TypeError, ValueError):
+        mm = 1
+    if mm < 1 or mm > 12:
+        mm = 1
+    wind_present = (wind_dir / f"wind-{mm:02d}.npz").is_file()
+    wave_present = (wave_dir / f"wave-{mm:02d}.npz").is_file()
+    wind_stat = _sidecar_stat(wind_dir / f"wind-{mm:02d}.atlas.json")
     if wind_present and not wind_stat:
         wind_stat = "rose"
-    wave_stat = _sidecar_stat(wave_dir / "wave-01.json")
+    wave_stat = _sidecar_stat(wave_dir / f"wave-{mm:02d}.json")
     return {
         "wind": wind_present,
         "wave": wave_present,
-        "current": (current_dir / "current-01.npz").is_file(),
+        "current": (current_dir / f"current-{mm:02d}.npz").is_file(),
         "cyclones": cyc.is_file(),
         "wind_stat": wind_stat,
         "wave_stat": wave_stat,
     }
 
 
-def product_meta(product: str) -> dict:
+def product_meta(product: str, month: int | None = None) -> dict:
     periods = {
         "wind": WIND_PERIOD,
         "wave": WAVE_PERIOD,
@@ -262,7 +269,7 @@ def product_meta(product: str) -> dict:
         "current": DOI["current"],
         "cyclone": None,
     }
-    snaps = snapshot_status()
+    snaps = snapshot_status(month)
     provenance = PROVENANCE[product]
     source_id = SOURCE_IDS[product]
     doi = dois[product]

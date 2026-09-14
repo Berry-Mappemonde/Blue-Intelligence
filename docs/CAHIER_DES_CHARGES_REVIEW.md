@@ -351,6 +351,9 @@ Préfixe `/api`.
 | `PUT` | `/review/comment` | Texte |
 | `PUT` | `/review/choice` | garder / blacklister URL ou port |
 | `POST` | `/review/gold` | Gold + carte, **une** fiche |
+| `POST` | `/review/suggest` | Lot **Proposer** (`scope=all`) : pré-remplit toutes les fiches Formalités. Ne Gold pas. |
+| `GET` | `/review/suggest/status` | Avancement du lot |
+| `GET` | `/review/report` | Commentaires, choix, Gold, **écarts Proposer / humain** |
 
 Un `run_id` optionnel sur `fiche` reste permis pour une **vue filtrée debug**. Défaut = union.
 

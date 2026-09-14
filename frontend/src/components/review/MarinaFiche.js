@@ -57,6 +57,24 @@ export default function MarinaFiche({ t, fiche, choices, onChoice }) {
         </div>
       </FicheSection>
 
+      <FicheSection label={t("reviewControlRef")} testId="review-marina-control-ref">
+        {fiche.control_ref?.status === "published_ref" && fiche.control_ref.ref ? (
+          <p className="text-xs text-slate-300 leading-snug" data-testid="review-marina-control-hit">
+            {t("reviewControlPublished")}
+            {" · "}
+            <span className="font-mono text-[11px] text-slate-400">
+              {fiche.control_ref.ref.source || "shom"}
+              {fiche.control_ref.ref.layer ? ` / ${fiche.control_ref.ref.layer}` : ""}
+              {fiche.control_ref.ref.distance_m != null ? ` · ${fiche.control_ref.ref.distance_m} m` : ""}
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-slate-500 leading-snug" data-testid="review-marina-control-osm">
+            {t("reviewControlOsmOnly")}
+          </p>
+        )}
+      </FicheSection>
+
       <FicheSection label={t("reviewGps")} testId="review-marina-gps">
         <div className="flex items-start justify-between gap-2">
           <p className="font-mono text-[11px] text-slate-400">

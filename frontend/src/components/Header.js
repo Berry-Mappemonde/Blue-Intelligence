@@ -1,4 +1,4 @@
-import { Anchor, ClipboardCheck, Compass, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Waves, Wind } from "lucide-react";
+import { Anchor, ClipboardCheck, Compass, Eye, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Waves, Wind } from "lucide-react";
 import RunSelector from "./RunSelector";
 import { HELLOASSO_MEMBERSHIP_URL } from "../config/helloasso";
 import { nextBasemap } from "./map/basemaps";
@@ -16,6 +16,8 @@ export default function Header({
   mode, setMode,
   mapRun, onSelectMapRun,
   isAdmin = false,
+  showReview = false,
+  onToggleShowReview,
 }) {
   return (
     <header className="h-14 shrink-0 flex items-center justify-between px-5 border-b border-line bg-surface z-[1200]">
@@ -185,6 +187,22 @@ export default function Header({
             className={`px-2.5 py-1.5 border-l border-line ${lang === "fr" ? "bg-accent/15 text-accent" : "text-slate-400 hover:bg-raised"}`}
           >FR</button>
         </div>
+        {isAdmin && mode !== "science" && mode !== "climatology" && (
+          <button
+            type="button"
+            data-testid="map-show-review"
+            onClick={() => onToggleShowReview && onToggleShowReview(!showReview)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-sm text-xs font-semibold ${
+              showReview
+                ? "border-accent/50 bg-accent/15 text-accent"
+                : "border-line text-slate-400 hover:text-slate-200 hover:bg-raised"
+            }`}
+            title={t("reviewShowReview")}
+          >
+            <Eye size={13} />
+            <span className="hidden lg:inline">{t("reviewShowReview")}</span>
+          </button>
+        )}
         {(() => {
           const next = nextBasemap(basemap);
           const { Icon, titleKey } = BASEMAP_NEXT_UI[next] || BASEMAP_NEXT_UI.dark;

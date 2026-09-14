@@ -1,8 +1,8 @@
 """API de l'onglet Review — file de fiches + commentaire + interrupteur Gold.
 
-Lecture des runs / v1. Écrit `review_comments`, `review_gold`, `review_choices`.
-N'écrit jamais `projects` / `poe_ports` / `eez_zones` / `marinas` /
-`capitaineries` / `amp_sites`.
+Lecture des runs / v1. Écrit `review_comments`, `review_gold`, `review_choices`,
+`review_suggest`. N'écrit jamais `projects` / `poe_ports` / `eez_zones` /
+`marinas` / `capitaineries` / `amp_sites`.
 """
 import asyncio
 
@@ -16,7 +16,17 @@ from app.services import review_gold, review_queue
 from app.services.review_choices import gold_ready, save_choice
 from app.services.review_gold import GoldNotReady
 from app.services.review_report import REPORT_KINDS, build_report, report_markdown
+from app.services.review_suggest import (
+    BATCH_KINDS,
+    FIELD_KINDS,
+    SUGGEST_KINDS,
+    run_suggest_batch,
+    suggest_one,
+)
 from app.services.poe_zone_fiche import PUBLISHED_RUN
+from app.core.tasks import TaskState
+
+SUGGEST_STATE = TaskState()
 
 router = APIRouter(prefix="/api")
 
@@ -119,7 +129,8 @@ class ExtractBody(BaseModel):
 
 class SuggestBody(BaseModel):
     kind: str
-    id: str
+    id: str | None = None
+    scope: str = "one"
 
 
 async def _extract_gold_safe(entity_id: str) -> None:
@@ -191,14 +202,51 @@ async def review_extract_post(body: ExtractBody):
         raise HTTPException(409, str(e)) from e
 
 
+@router.get("/review/suggest/status")
+async def review_suggest_status():
+    return SUGGEST_STATE.status()
+
+
+def _suggest_value_error(exc: ValueError) -> HTTPException:
+    msg = str(exc)
+    code = 404 if "not found" in msg.lower() else 400
+    return HTTPException(code, msg)
+
+
 @router.post("/review/suggest")
 async def review_suggest_post(body: SuggestBody):
-    if body.kind != "eez":
-        raise HTTPException(400, "suggest is only for eez")
-    if not body.id:
-        raise HTTPException(400, "id required")
-    from app.services.review_doc_picker import suggest_eez_documents
+    kind = (body.kind or "").strip().lower()
+    if kind not in SUGGEST_KINDS:
+        raise HTTPException(
+            400, "suggest is eez|amp|project|marina|capitainerie")
+    scope = (body.scope or "one").strip().lower()
+    if kind in FIELD_KINDS:
+        if scope == "all" or not body.id:
+            raise HTTPException(
+                400, "marina/capitainerie: une fiche à la fois (pas de lot OSM)")
+        try:
+            return await suggest_one(db, kind, body.id)
+        except ValueError as e:
+            raise _suggest_value_error(e) from e
+    if scope == "all" or not body.id:
+        if kind not in BATCH_KINDS:
+            raise HTTPException(400, "batch Proposer is eez|amp|project only")
+        if SUGGEST_STATE.running:
+            raise HTTPException(409, "suggest batch already running")
+        SUGGEST_STATE.start()
+
+        async def _runner():
+            try:
+                await run_suggest_batch(db, kind, SUGGEST_STATE)
+            except Exception as e:
+                SUGGEST_STATE.error = f"{type(e).__name__}: {e}"
+                SUGGEST_STATE.log(f"FATAL: {SUGGEST_STATE.error}")
+            finally:
+                SUGGEST_STATE.finish()
+
+        asyncio.create_task(_runner())
+        return {"status": "started", "scope": "all", "kind": kind}
     try:
-        return await suggest_eez_documents(db, body.id)
+        return await suggest_one(db, kind, body.id)
     except ValueError as e:
-        raise HTTPException(404, str(e)) from e
+        raise _suggest_value_error(e) from e
