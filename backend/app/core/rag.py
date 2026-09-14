@@ -1,13 +1,13 @@
 """
-rag_core.py — RAG sémantique local & Smart Chunking (mutualisé PoE / Projets).
+rag_core.py — Local semantic RAG & smart chunking (shared PoE / Projects).
 
-- Découpage des PDF/rapports longs en blocs de ~500 caractères.
-- Sélection des blocs pertinents par similarité cosinus avant l'appel LLM.
-- Monitoring sémantique des sources (skip ré-extraction si contenu quasi identique).
-- Re-ranking de candidats (géocodage) par similarité sémantique.
+- Split long PDFs/reports into ~500-character blocks.
+- Select relevant blocks by cosine similarity before the LLM call.
+- Semantic source monitoring (skip re-extraction if content is nearly identical).
+- Candidate re-ranking (geocoding) by semantic similarity.
 
-Backend : sentence-transformers (all-MiniLM-L6-v2) si disponible,
-sinon repli TF-IDF (scikit-learn) — même API, zéro dépendance dure.
+Backend: sentence-transformers (all-MiniLM-L6-v2) if available,
+else TF-IDF fallback (scikit-learn) — same API, no hard dependency.
 """
 import re
 
@@ -30,7 +30,7 @@ def _get_st():
 
 
 def _get_ce():
-    """Cross-Encoder ms-marco pour le re-ranking (spec) — chargé paresseusement."""
+    """ms-marco Cross-Encoder for re-ranking (spec) — lazily loaded."""
     global _ce_model, _ce_failed
     if _ce_model is not None or _ce_failed:
         return _ce_model
@@ -47,7 +47,7 @@ def embedding_backend() -> str:
 
 
 def chunk_text(text: str, size: int = 500, overlap: int = 60) -> list[str]:
-    """Smart chunking : blocs ~size chars alignés sur les fins de phrases."""
+    """Smart chunking: ~size-char blocks aligned on sentence ends."""
     text = re.sub(r"\s+", " ", text or "").strip()
     if len(text) <= size:
         return [text] if text else []
@@ -93,7 +93,7 @@ def top_chunks(query: str, text: str, k: int = 8, size: int = 500) -> list[str]:
 
 
 def select_context(query: str, text: str, max_chars: int = 8000, size: int = 500) -> str:
-    """Contexte condensé pour le LLM : uniquement les chunks pertinents."""
+    """Condensed context for the LLM: relevant chunks only."""
     if len(text or "") <= max_chars:
         return text or ""
     k = max(2, max_chars // size)
@@ -110,7 +110,7 @@ _LIST_CHUNK_RE = re.compile(
 
 
 def list_like_score(chunk: str) -> float:
-    """1.0 si le morceau ressemble à une liste / un décret de ports."""
+    """1.0 if the chunk looks like a port list / decree."""
     if not chunk:
         return 0.0
     hits = len(_LIST_CHUNK_RE.findall(chunk))
@@ -120,9 +120,9 @@ def list_like_score(chunk: str) -> float:
 
 def select_list_context(query: str, text: str, max_chars: int = 20000,
                         size: int = 500) -> str:
-    """Comme select_context, mais les morceaux type liste passent devant
-    la seule similarité sémantique (un décret long cache souvent la liste
-    à la fin)."""
+    """Like select_context, but list-like chunks go ahead of
+    semantic similarity alone (a long decree often hides the list
+    at the end)."""
     if len(text or "") <= max_chars:
         return text or ""
     chunks = chunk_text(text, size=size)
@@ -142,8 +142,8 @@ def select_list_context(query: str, text: str, max_chars: int = 20000,
 
 
 def rerank_candidates(query: str, candidates: list[str]) -> list[tuple[int, float]]:
-    """Retourne [(index, score)] triés par pertinence décroissante.
-    Cross-Encoder ms-marco si disponible, sinon bi-encoder/TF-IDF cosinus."""
+    """Return [(index, score)] sorted by decreasing relevance.
+    ms-marco Cross-Encoder if available, else bi-encoder/TF-IDF cosine."""
     if not candidates:
         return []
     if len(candidates) == 1:
@@ -163,7 +163,7 @@ def rerank_candidates(query: str, candidates: list[str]) -> list[tuple[int, floa
 
 
 def semantic_similarity(a: str, b: str) -> float:
-    """Similarité cosinus document-à-document (monitoring des sources)."""
+    """Document-to-document cosine similarity (source monitoring)."""
     if not a or not b:
         return 0.0
     if a == b:
@@ -176,8 +176,8 @@ def semantic_similarity(a: str, b: str) -> float:
 
 
 def content_changed(old_text: str, new_text: str, threshold: float | None = None) -> bool:
-    """Monitoring sémantique : True seulement si le contenu a réellement changé
-    (évite une ré-extraction LLM pour un changement HTML mineur)."""
+    """Semantic monitoring: True only if the content actually changed
+    (avoids an LLM re-extraction for a minor HTML change)."""
     if not old_text or not new_text:
         return True
     if threshold is None:

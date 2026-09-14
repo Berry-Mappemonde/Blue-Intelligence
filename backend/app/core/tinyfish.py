@@ -35,29 +35,29 @@ PROJECTS_LISTING_PURPOSE = (
     "/campaigns/). Not an individual project page, not news, not the homepage."
 )
 
-# Agent = scalpel. 180/300 s brûlait le chrono sur un mauvais hôte (SSE drop).
+# Agent = scalpel. 180/300 s burned the clock on a bad host (SSE drop).
 LISTING_AGENT_DURATION_S = 75
 FICHE_AGENT_DURATION_S = 90
 
-# Une retry 429 ; monkeypatchable dans les tests.
+# One 429 retry; monkeypatchable in tests.
 SEARCH_RETRY_SLEEP_S = 2.0
 FETCH_LEVEL = "N3-mirror-tinyfish"
 
-# Quotas publics PAYG (docs.tinyfish.ai) — Search 30 req/min, Fetch 150 URL/min.
-# Starter = 60 / 300 ; on aligne le bucket sur le plan le plus bas.
+# Public PAYG quotas (docs.tinyfish.ai) — Search 30 req/min, Fetch 150 URL/min.
+# Starter = 60 / 300; we align the bucket on the lowest plan.
 SEARCH_RPM = 30
 FETCH_RPM = 150
 AGENT_CONCURRENCY = 2
-# Plafond historique (crédits / steps). Ne PAS l'envoyer : max_steps est
-# bêta-gate et TinyFish répond 403 FORBIDDEN (docs.tinyfish.ai/agent-api/reference).
+# Historical cap (credits / steps). Do NOT send it: max_steps is
+# beta-gated and TinyFish replies 403 FORBIDDEN (docs.tinyfish.ai/agent-api/reference).
 AGENT_CREDIT_CAP = 40
-POLL_GRACE_S = 45              # file PENDING + arrêt max_duration côté TinyFish
-# Doc Agent SSE : timeout client « N/A » (heartbeats). L'exemple raw HTTP
-# utilise timeout=120. On garde read=None et on coupe au mur
-# max_duration + POLL_GRACE (listing 75+45=120, fiches 90+45=135).
-FETCH_URL_CAP = 10             # max URLs / requête Fetch
-SEARCH_PAGE_CAP = 3            # ~10 hits/page → jusqu'à 30 URLs / graine
-SEARCH_PAGE_MAX = 10           # plafond API TinyFish
+POLL_GRACE_S = 45              # PENDING queue + max_duration stop on TinyFish side
+# Agent SSE doc: client timeout "N/A" (heartbeats). The raw HTTP example
+# uses timeout=120. We keep read=None and cut at the wall
+# max_duration + POLL_GRACE (listing 75+45=120, cards 90+45=135).
+FETCH_URL_CAP = 10             # max URLs / Fetch request
+SEARCH_PAGE_CAP = 3            # ~10 hits/page → up to 30 URLs / seed
+SEARCH_PAGE_MAX = 10           # TinyFish API cap
 
 POE_JUDGE_SCHEMA = {
     "type": "object",
@@ -156,7 +156,7 @@ def _headers(key: str) -> dict:
 
 
 def public_agent_config(cfg: dict | None) -> dict | None:
-    """Champs sûrs hors bêta. max_steps / mode → 403 FORBIDDEN (doc TinyFish)."""
+    """Safe fields outside beta. max_steps / mode → 403 FORBIDDEN (TinyFish doc)."""
     if not cfg:
         return None
     raw = cfg.get("max_duration_seconds")
@@ -172,7 +172,7 @@ def public_agent_config(cfg: dict | None) -> dict | None:
 
 
 def sse_wall_budget_s(max_duration_s) -> float:
-    """Plafond client d'un Agent : max_duration + grâce (exemple raw TF = 120 s)."""
+    """Agent client cap: max_duration + grace (raw TF example = 120 s)."""
     try:
         seconds = int(max_duration_s or 0)
     except (TypeError, ValueError):
@@ -181,12 +181,12 @@ def sse_wall_budget_s(max_duration_s) -> float:
 
 
 def is_sse_stream_end(exc: BaseException) -> bool:
-    """True si le flux SSE s'est fermé sans COMPLETE (pas le plafond wait_for)."""
+    """True if the SSE stream closed without COMPLETE (not the wait_for cap)."""
     return isinstance(exc, TimeoutError) and "SSE stream ended" in str(exc)
 
 
 def sse_http_timeout(timeout=None) -> httpx.Timeout:
-    """SSE : read=None pour les HEARTBEAT. Le plafond est sse_wall_budget_s."""
+    """SSE: read=None for HEARTBEATs. The cap is sse_wall_budget_s."""
     if isinstance(timeout, httpx.Timeout):
         return timeout
     return httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
@@ -205,7 +205,7 @@ async def tf_run_async(url: str, goal: str, schema: dict, key: str, max_duration
 
 
 async def tf_get_run(run_id: str, key: str) -> dict:
-    """GET /v1/runs/{id}. screenshots=none : polls légers (doc Runs)."""
+    """GET /v1/runs/{id}. screenshots=none: light polls (Runs doc)."""
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.get(
             f"{BASE}/runs/{run_id}", headers=_headers(key),
@@ -224,7 +224,7 @@ async def tf_cancel_run(run_id: str, key: str) -> dict:
 
 async def tf_poll_run(run_id: str, key: str, *, budget_s: int, sleep_s: float = 3.0,
                       log=None, on_run=None, should_stop=None) -> dict:
-    """Reprend un run SSE/async jusqu'à COMPLETED / FAILED / CANCELLED."""
+    """Resume an SSE/async run until COMPLETED / FAILED / CANCELLED."""
     log = log or (lambda m: None)
     deadline = time.monotonic() + max(1, int(budget_s))
     last: dict = {}
@@ -274,7 +274,7 @@ async def tf_run_sync(url: str, goal: str, schema: dict, key: str, timeout: int 
 async def tf_run_sse(url: str, goal: str, schema: dict, key: str, on_event=None,
                      timeout=None, browser_profile: str = "lite",
                      agent_config: dict | None = None) -> dict:
-    """Stream TinyFish /run-sse. Ne pas envoyer max_steps (403 hors bêta)."""
+    """TinyFish /run-sse stream. Do not send max_steps (403 outside beta)."""
     payload = {
         "url": url, "goal": goal, "output_schema": schema,
         "browser_profile": browser_profile or "lite",
@@ -323,7 +323,7 @@ def find_live_url(body: dict):
 
 
 # ---------------------------------------------------------------------------
-# Search / Fetch (gratuits) — client httpx, no-op sans clé
+# Search / Fetch (free) — httpx client, no-op without a key
 # ---------------------------------------------------------------------------
 class _TokenBucket:
     """Quota in-process (Search PAYG 30 req/min, Fetch PAYG 150 URL/min)."""
@@ -358,7 +358,7 @@ _agent_cd_lock = asyncio.Lock()
 
 
 def reset_rate_limits():
-    """Réinitialise les buckets et le sémaphore Agent (tests)."""
+    """Reset the buckets and the Agent semaphore (tests)."""
     global _search_bucket, _fetch_bucket, _agent_sem, _agent_cooldown_until
     _search_bucket = _TokenBucket(SEARCH_RPM)
     _fetch_bucket = _TokenBucket(FETCH_RPM)
@@ -372,7 +372,7 @@ def is_http_status(exc, code: int) -> bool:
 
 
 def retry_after_s(exc, default: float = 20.0) -> float:
-    """429 TinyFish : header Retry-After ou error.retry_after (doc Runs)."""
+    """TinyFish 429: Retry-After header or error.retry_after (Runs doc)."""
     resp = getattr(exc, "response", None)
     if resp is None:
         return default
@@ -408,7 +408,7 @@ async def await_agent_cooldown(log=None) -> None:
 
 
 def tf_api_key(settings=None) -> str:
-    """Même résolution que Swarm._tf_key : settings persistés puis env."""
+    """Same resolution as Swarm._tf_key: persisted settings then env."""
     if settings:
         k = (settings.get("tinyfish_api_key") or "").strip()
         if k:
@@ -474,7 +474,7 @@ async def tf_search(query: str, key: str, *, location: str | None = None,
                     language: str | None = None, include_domains=None,
                     exclude_domains=None, purpose: str | None = POE_PURPOSE,
                     page: int = 0, log=None) -> list[dict]:
-    """GET Search API. 401/402/429/timeout → [] (jamais d'exception)."""
+    """GET Search API. 401/402/429/timeout → [] (never an exception)."""
     log = log or (lambda m: None)
     if not (key or "").strip() or not (query or "").strip():
         return []
@@ -590,7 +590,7 @@ async def tf_search_pages(query: str, key: str, *, location: str | None = None,
                           exclude_domains=None, purpose: str | None = POE_PURPOSE,
                           max_pages: int = SEARCH_PAGE_CAP,
                           stop_when=None, log=None) -> list[dict]:
-    """Enchaîne les pages Search (0..max_pages-1) jusqu'à stop_when(hits)."""
+    """Chain Search pages (0..max_pages-1) until stop_when(hits)."""
     log = log or (lambda m: None)
     pages = max(1, min(SEARCH_PAGE_MAX + 1, int(max_pages or 1)))
     hits, seen = [], set()
@@ -636,7 +636,7 @@ def poe_agent_goal(name: str, zone_name: str, iso2: str | None = None) -> str:
 async def tf_poe_agent(url: str, name: str, zone_name: str, key: str, *,
                        iso2: str | None = None, log=None,
                        credit_cap: int = AGENT_CREDIT_CAP) -> dict:
-    """Un Agent par graine : lite puis stealth. 2 concurrents. Pas de max_steps (403)."""
+    """One Agent per seed: lite then stealth. 2 concurrent. No max_steps (403)."""
     log = log or (lambda m: None)
     if not (key or "").strip() or not (url or "").startswith("http"):
         return {}
