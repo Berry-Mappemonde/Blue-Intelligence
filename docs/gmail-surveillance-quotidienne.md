@@ -93,7 +93,9 @@ Les mails importants (humains, factures, sécurité) **ne doivent pas** être fi
 
 ## Si le passage quotidien s’arrête
 
-Le minuteur vit dans la conversation Cursor qui l’a créé. Il expire un jour. Si vous ne recevez plus d’alerte un matin où vous savez qu’un mail important est arrivé :
+Le minuteur vit dans **cette conversation Cursor**. Il expire au bout de **7 jours** s’il n’est pas renouvelé. Chaque passage du matin le recrée, donc il continue tant que la conversation reste ouverte et qu’au moins un passage a lieu dans la semaine.
+
+Ne fermez pas / n’archivez pas cette conversation d’agent. Si vous ne recevez plus d’alerte un matin où vous savez qu’un mail important est arrivé :
 
 1. Rouvrez cette conversation d’agent, ou lancez un nouvel agent avec :  
    « Relance la surveillance Gmail quotidienne décrite dans `docs/gmail-surveillance-quotidienne.md`. »
