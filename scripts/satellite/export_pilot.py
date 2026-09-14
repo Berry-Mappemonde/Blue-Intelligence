@@ -11,10 +11,13 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.science_pilot import wrap_pilot_export  # noqa: E402
+from stamp import stamp_features  # noqa: E402
 
 
 def main() -> int:
@@ -27,7 +30,8 @@ def main() -> int:
     if raw.get("type") != "FeatureCollection":
         print("attendu : FeatureCollection", file=sys.stderr)
         return 2
-    out = wrap_pilot_export(raw, dataset=args.dataset)
+    stamped = stamp_features(raw, args.dataset)
+    out = wrap_pilot_export(stamped, dataset=args.dataset)
     dst = Path(args.dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
