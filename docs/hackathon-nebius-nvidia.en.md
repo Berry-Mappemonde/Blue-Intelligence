@@ -7,7 +7,7 @@
 **Date:** 14 September 2026 — aligned with the *Naviguide simulation cockpit* thread  
 **Français :** [hackathon-nebius-nvidia.md](./hackathon-nebius-nvidia.md)
 
-**Leaflet cockpit plan:** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md) (French)
+**Leaflet cockpit plan (EN):** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md)
 
 **Submission deadline:** Friday 30 October 2026, 10:00 PT  
 **Judging:** 1–15 December 2026 · results around 11 January 2027  
@@ -176,9 +176,8 @@ Blue-Intelligence-Map/
 ├── frontend/ backend/ naviguide/   # PROD — read, do not edit
 ├── naviguide-simulator/            # hackathon PRODUCT (Vite 5174, FastAPI 8010)
 └── docs/
-    ├── hackathon-nebius-nvidia.md     # French source
-    ├── hackathon-nebius-nvidia.en.md  # this file
-    └── PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md
+    ├── hackathon-nebius-nvidia.en.md                         # this file
+    └── PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md  # workshop (EN)
 ```
 
 | Where | Role |
@@ -267,7 +266,7 @@ Skipper order (14 Sep): **film before `ici()`**. Nemotron on a click album = wra
 
 ### Stage 1 — cockpit (shipped, do not break it)
 
-Detail: [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md).
+Detail: [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md).
 
 ```bash
 cd naviguide-simulator

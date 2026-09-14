@@ -7,7 +7,7 @@
 **Date :** 14 septembre 2026 — aligné sur la discussion *Naviguide simulation cockpit*  
 **English :** [hackathon-nebius-nvidia.en.md](./hackathon-nebius-nvidia.en.md)
 
-**Chantier cockpit Leaflet :** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md)
+**Chantier cockpit Leaflet (FR) :** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md)
 
 **Deadline soumission :** vendredi 30 octobre 2026, 10:00 PT  
 **Jugement :** 1–15 décembre 2026 · résultats vers le 11 janvier 2027  
@@ -176,9 +176,8 @@ Blue-Intelligence-Map/
 ├── frontend/ backend/ naviguide/   # PROD — on lit, on n’édite pas
 ├── naviguide-simulator/            # PRODUIT hackathon (Vite 5174, FastAPI 8010)
 └── docs/
-    ├── hackathon-nebius-nvidia.md     # ce fichier (FR)
-    ├── hackathon-nebius-nvidia.en.md  # même cahier, anglais
-    └── PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md
+    ├── hackathon-nebius-nvidia.md                         # ce fichier
+    └── PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md  # chantier FR
 ```
 
 | Où | Rôle |
