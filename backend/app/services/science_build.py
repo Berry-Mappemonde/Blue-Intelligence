@@ -96,6 +96,9 @@ CSR_QUERY = (
 )
 
 SOURCES = ("sextant", "odatis", "edmed", "argo", "csr")
+# Pilotes Sentinel : ingest manuel, jamais dans la moisson.
+PILOT_SOURCE = "sentinel-pilot"
+DISPLAY_SOURCES = SOURCES + (PILOT_SOURCE,)
 
 SOURCE_LABELS = {
     "sextant": "Sextant · Ifremer / SISMER",
@@ -149,6 +152,8 @@ SLIM_PROJECTION = {
     "start": 1,
     "end": 1,
     "fetched_at": 1,
+    "error_m": 1,
+    "method": 1,
 }
 
 _WKT_PAIR_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)")
@@ -604,6 +609,8 @@ def slim_feature(doc: dict) -> dict | None:
             "lat": lat,
             "lon": lon,
             "fetched_at": doc.get("fetched_at"),
+            "error_m": doc.get("error_m"),
+            "method": doc.get("method"),
         },
     }
 
