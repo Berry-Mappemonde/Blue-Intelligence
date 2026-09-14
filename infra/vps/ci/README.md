@@ -9,3 +9,6 @@ Utilisé par `.github/workflows/deploy.yml`. À lancer sur le runner GitHub
 python3 infra/vps/ci/prod_jobs_busy.py --base-url http://127.0.0.1:8001
 # 0 = idle, 10 = occupé, 1 = sonde en échec
 ```
+
+La sonde envoie un `User-Agent` dédié : Cloudflare bloque `Python-urllib/3.x`.
+Un endpoint en 404/410 est ignoré (ex. `generate-batch` retiré).
