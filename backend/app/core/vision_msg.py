@@ -1,4 +1,4 @@
-"""Messages multimodaux (texte + JPEG) pour NIM / OpenRouter / Claude."""
+"""Multimodal messages (text + JPEG) for NIM / OpenRouter / Claude."""
 from __future__ import annotations
 
 import base64
@@ -9,7 +9,7 @@ def _b64(img: bytes) -> str:
 
 
 def openai_user_content(text: str, images: list[bytes] | None = None):
-    """Content OpenAI-compatible : str si pas d'image, sinon liste de parts."""
+    """OpenAI-compatible content: str if no image, else a list of parts."""
     if not images:
         return text
     parts: list[dict] = [{"type": "text", "text": text}]

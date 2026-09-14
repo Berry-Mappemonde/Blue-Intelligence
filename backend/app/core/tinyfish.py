@@ -215,7 +215,7 @@ async def tf_get_run(run_id: str, key: str) -> dict:
 
 
 async def tf_cancel_run(run_id: str, key: str) -> dict:
-    """POST /v1/runs/{id}/cancel — run-async et run-sse seulement."""
+    """POST /v1/runs/{id}/cancel — run-async and run-sse only."""
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{BASE}/runs/{run_id}/cancel", headers=_headers(key))
         r.raise_for_status()

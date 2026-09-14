@@ -1,16 +1,16 @@
-"""Ordre d'enrichissement marina / capitainerie : une chaîne, deux schémas.
+"""Marina / harbormaster enrichment order: one chain, two schemas.
 
-Porte d'entrée : ``run_page_enrich``. Même question partout (« extraire des
-champs d'une fiche déjà nommée, sans inventer »). Les schémas restent
-propres à chaque mode : une marina a des places visiteurs et un tirant
-d'eau, une capitainerie n'a besoin que du téléphone et du VHF.
+Entry point: ``run_page_enrich``. Same question everywhere ("extract
+fields from an already named card, without inventing"). Schemas stay
+mode-specific: a marina has visitor berths and a draft,
+a harbormaster only needs phone and VHF.
 
-  1. Tags déjà là (OSM / SHOM / NOAA).
-  2. Chercher le web seulement s'il manque une URL.
-  3. Lire la page (``read_url``).
-  4. Extraire par règle simple ce qui est trivial (numéro, canal).
-  5. NVIDIA puis OpenRouter seulement s'il reste un trou, sur le texte déjà lu.
-  6. Agent TinyFish seulement si l'URL est officielle — jamais un hit moteur.
+  1. Tags already there (OSM / SHOM / NOAA).
+  2. Search the web only if a URL is missing.
+  3. Read the page (``read_url``).
+  4. Extract trivial bits with a simple rule (number, channel).
+  5. NVIDIA then OpenRouter only if a hole remains, on already-read text.
+  6. TinyFish Agent only if the URL is official — never an engine hit.
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ AgentFn = Callable[..., Awaitable[Optional[dict]]]
 
 
 def url_ok(url: str) -> bool:
-    """Même couperet SERP que le top-down / AMP / recherche nommée."""
+    """Same SERP cut as top-down / AMP / named search."""
     return serp_drop_reason(url) is None
 
 
@@ -46,7 +46,7 @@ def has_holes(working: dict, hole_fields: Sequence[str]) -> bool:
 
 
 def fill_empty(base: dict, incoming: dict | None, fields: Sequence[str]) -> dict:
-    """Remplit seulement les champs vides. Jamais d'écrasement."""
+    """Fill empty fields only. Never overwrite."""
     out = dict(base)
     if not incoming:
         return out
@@ -76,7 +76,7 @@ def apply_incoming(
     fields: Sequence[str],
     merge: Callable[[dict, dict | None], dict],
 ) -> tuple[dict, bool]:
-    """Fusionne un payload ; True si au moins un champ vide a été rempli."""
+    """Merge a payload; True if at least one empty field was filled."""
     if not incoming or not isinstance(incoming, dict):
         return working, False
     payload = {k: v for k, v in incoming.items() if k != "_engine"}
@@ -103,7 +103,7 @@ async def collect_page_urls(
     max_urls: int = 8,
     url_ok_fn: Callable[[str], bool] | None = None,
 ) -> list[str]:
-    """URL officielle d'abord. ``search`` seulement s'il n'en reste aucune."""
+    """Official URL first. ``search`` only if none remain."""
     ok = url_ok_fn or url_ok
     urls: list[str] = []
     seen: set[str] = set()
@@ -137,7 +137,7 @@ async def fetch_pages(
     logger: Optional[LogFn] = None,
     prefer_fetch: Optional[bool] = None,
 ) -> list[dict]:
-    """Fetch d'abord si clé ; cascade (PDF / JS / HTML) dès que le texte manque."""
+    """Fetch first if a key; cascade (PDF / JS / HTML) as soon as text is missing."""
     from app.core.extract import read_urls
     if not urls:
         return []
@@ -189,7 +189,7 @@ def enrich_result(
 
 @dataclass
 class PageEnrichSpec:
-    """Crochets propres à un mode. L'ordre des étapes est fixe."""
+    """Mode-specific hooks. The step order is fixed."""
     fields: tuple[str, ...]
     hole_fields: tuple[str, ...]
     from_tags: Callable[[dict], dict]
