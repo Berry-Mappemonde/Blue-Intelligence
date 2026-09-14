@@ -1,28 +1,27 @@
 """
-ZEE Detection — Phase 8 (Zones Économiques Exclusives).
+EEZ Detection — Phase 8 (Exclusive Economic Zones).
 
-Détecte les ZEE traversées par la route Berry-Mappemonde en croisant les
-segments maritimes avec les polygones EEZ de MarineRegions.org.
+Detects EEZs crossed by the Berry-Mappemonde route by intersecting
+maritime segments with MarineRegions.org EEZ polygons.
 
-Sources de données (par ordre de priorité) :
-  1. Fichier local  data/eez_french.geojson — généré depuis le GeoPackage
-     officiel Maritime Boundaries v12 fourni par l'utilisateur (Flanders
-     Marine Institute, 2023 — doi:10.14284/632, licence CC-BY 4.0).
-     Contient toutes les ZEE de souveraineté française + les ZEE étrangères
-     croisées par la route, géométries simplifiées à 0.01° (~1 km).
-  2. VLIZ GeoServer WFS (MarineRegions:eez, sovereign1='France') — re-télécharge
-     les ZEE françaises si le fichier local est absent, puis simplifie + met en
-     cache.
-  3. Fallback MRGID REST — télécharge chaque ZEE française individuellement.
-  4. Fallback point-in-EEZ — échantillonne la route tous les 100 NM et
-     interroge l'API REST getGazetteerRecordsByLatLng (aucun polygone requis).
+Data sources (priority order):
+  1. Local file  data/eez_french.geojson — generated from the official
+     Maritime Boundaries v12 GeoPackage supplied by the user (Flanders
+     Marine Institute, 2023 — doi:10.14284/632, CC-BY 4.0).
+     Contains every French-sovereignty EEZ + foreign EEZs
+     crossed by the route, geometries simplified to 0.01° (~1 km).
+  2. VLIZ GeoServer WFS (MarineRegions:eez, sovereign1='France') — re-downloads
+     French EEZs if the local file is missing, then simplifies + caches.
+  3. MRGID REST fallback — downloads each French EEZ individually.
+  4. point-in-EEZ fallback — samples the route every 100 NM and
+     queries the getGazetteerRecordsByLatLng REST API (no polygon required).
 
-Intersection : shapely ≥ 2.0 (exécutée dans un thread, CPU-bound).
-Mapping territory : MRGID (clé primaire) → territory_code (territories.json),
-fallback par sous-chaîne sur le geoname. Les ZEE non françaises sont conservées
-dans les crossings avec territory_code=None (elles ne déclenchent pas de
-génération de formalités). Les zones en revendication multiple (pol_type
-"Overlapping claim" / "Joint regime") sont exposées telles quelles.
+Intersection: shapely ≥ 2.0 (run in a thread, CPU-bound).
+Territory mapping: MRGID (primary key) → territory_code (territories.json),
+geoname substring fallback. Non-French EEZs are kept
+in crossings with territory_code=None (they do not trigger
+formalities generation). Multi-claim zones (pol_type
+"Overlapping claim" / "Joint regime") are exposed as-is.
 """
 
 from __future__ import annotations
@@ -62,12 +61,12 @@ VLIZ_WFS_PARAMS: dict = {
 MRGID_GEOJSON_URL = "https://www.marineregions.org/rest/getGazetteerGeometryAsGeoJson.json/"
 MRGID_LATLON_URL = "https://www.marineregions.org/rest/getGazetteerRecordsByLatLng.json/"
 
-# Tolérance de simplification appliquée avant mise en cache (degrés).
+# Simplification tolerance applied before caching (degrees).
 SIMPLIFY_TOLERANCE_DEG = 0.01
 
 # ---------------------------------------------------------------------------
 # Mapping MRGID (MarineRegions v12) → territory_code (territories.json)
-# MRGIDs vérifiés sur les données réelles VLIZ WFS + GeoPackage v12 (2026-06).
+# MRGIDs verified on real VLIZ WFS + GeoPackage v12 data (2026-06).
 # ---------------------------------------------------------------------------
 MRGID_TO_TERRITORY: dict[int, str | None] = {
     5677: "france_metropolitaine",     # French Exclusive Economic Zone (métropole)
@@ -85,7 +84,7 @@ MRGID_TO_TERRITORY: dict[int, str | None] = {
     8338: "la_reunion",                # Réunion EEZ
     48944: "mayotte",                  # Overlapping claim Mayotte: France / Comores
     8494: "saint_pierre_et_miquelon",  # Saint-Pierre and Miquelon EEZ
-    # TAAF — îles Éparses + districts austraux
+    # TAAF — Scattered Islands + southern districts
     48946: "taaf",                     # Overlapping claim Ile Tromelin: France / Madagascar / Mauritius
     48945: "taaf",                     # Overlapping claim Glorioso Islands: France / Madagascar
     8341: "taaf",                      # Europa Island EEZ
@@ -97,8 +96,8 @@ MRGID_TO_TERRITORY: dict[int, str | None] = {
     8401: None,                        # Clipperton Island — française mais hors territories.json
 }
 
-# Fallback : correspondance par sous-chaîne sur le geoname (lower-cased),
-# du plus spécifique au plus générique.
+# Fallback: substring match on the geoname (lower-cased),
+# from most specific to most generic.
 _EEZ_NAME_PATTERNS: list[tuple[str, str | None]] = [
     ("french polynesia", "polynesie_francaise"),
     ("polynésie", "polynesie_francaise"),
@@ -136,7 +135,7 @@ _EEZ_NAME_PATTERNS: list[tuple[str, str | None]] = [
     ("saint-pierre", "saint_pierre_et_miquelon"),
     ("saint pierre", "saint_pierre_et_miquelon"),
     ("st. pierre", "saint_pierre_et_miquelon"),
-    # Catchall : autres libellés contenant France → métropole (joint regimes)
+    # Catchall: other labels containing France → mainland (joint regimes)
     ("france", "france_metropolitaine"),
     ("french", "france_metropolitaine"),
 ]
@@ -147,7 +146,7 @@ def _map_geoname_to_territory(
     sovereign: str = "",
     mrgid: int | None = None,
 ) -> str | None:
-    """MRGID connu > sous-chaîne geoname (si souveraineté française) > None."""
+    """Known MRGID > geoname substring (if French sovereignty) > None."""
     if mrgid and mrgid in MRGID_TO_TERRITORY:
         return MRGID_TO_TERRITORY[mrgid]
     lower = (geoname or "").lower()
@@ -161,12 +160,12 @@ def _map_geoname_to_territory(
 
 
 # ---------------------------------------------------------------------------
-# Simplification (avant mise en cache) — réduit ~80 MB de WFS brut à ~2 MB
+# Simplification (before caching) — reduces ~80 MB of raw WFS to ~2 MB
 # ---------------------------------------------------------------------------
 
 def _simplify_and_strip(features: list[dict], tolerance_deg: float = SIMPLIFY_TOLERANCE_DEG) -> list[dict]:
-    """Simplifie chaque géométrie (shapely, topology-preserving) et ne garde
-    que les propriétés utiles. Synchrone/CPU-bound — appeler via to_thread."""
+    """Simplify each geometry (shapely, topology-preserving) and keep
+    only useful properties. Synchronous/CPU-bound — call via to_thread."""
     from shapely.geometry import mapping as _mapping, shape as _shape
     try:
         from shapely.validation import make_valid as _make_valid
@@ -206,7 +205,7 @@ def _simplify_and_strip(features: list[dict], tolerance_deg: float = SIMPLIFY_TO
 # ---------------------------------------------------------------------------
 
 async def _download_via_wfs(client: httpx.AsyncClient, *, logger: Callable | None = None) -> dict:
-    """ZEE françaises via le WFS VLIZ. Lève une exception en cas d'échec."""
+    """French EEZs via the VLIZ WFS. Raises on failure."""
     if logger:
         logger("[zee-wfs] Connecting to VLIZ GeoServer (MarineRegions:eez, sovereign1='France')…")
     resp = await client.get(
@@ -226,7 +225,7 @@ async def _download_via_wfs(client: httpx.AsyncClient, *, logger: Callable | Non
 
 
 async def _download_via_mrgid_rest(client: httpx.AsyncClient, *, logger: Callable | None = None) -> dict:
-    """Fallback : télécharge chaque ZEE française individuellement via MRGID."""
+    """Fallback: download each French EEZ individually via MRGID."""
     targets = {m: c for m, c in MRGID_TO_TERRITORY.items() if c is not None}
     if logger:
         logger(f"[zee-mrgid] Downloading {len(targets)} French EEZs via MRGID REST…")
@@ -266,9 +265,9 @@ async def ensure_eez_file(
     logger: Callable | None = None,
 ) -> dict:
     """
-    Garantit qu'un fichier EEZ local valide est disponible ; le charge.
-    Local (GeoPackage v12 pré-extrait ou cache WFS) → WFS → MRGID REST.
-    Le résultat téléchargé est simplifié puis mis en cache.
+    Guarantee a valid local EEZ file is available; load it.
+    Local (pre-extracted v12 GeoPackage or WFS cache) → WFS → MRGID REST.
+    The downloaded result is simplified then cached.
     """
     if eez_path.exists() and not force_download:
         try:
@@ -351,8 +350,8 @@ async def _crossings_via_point_api(
     *,
     logger: Callable | None = None,
 ) -> list[dict]:
-    """Fallback sans polygone : transitions ZEE par échantillonnage tous les
-    step_nm NM + API REST. Moins précis (pas d'entrée/sortie exactes)."""
+    """Polygon-free fallback: EEZ transitions by sampling every
+    step_nm NM + REST API. Less precise (no exact entry/exit)."""
     NM_TO_DEG = 1.0 / 60.0
     sample_points: list[tuple[int, float, float, str, str]] = []
 
@@ -426,7 +425,7 @@ async def _crossings_via_point_api(
 # ---------------------------------------------------------------------------
 
 def _build_eez_polys(eez_features: list[dict], *, logger: Callable | None = None) -> list[dict]:
-    """GeoJSON features → polygones shapely validés + métadonnées mappées."""
+    """GeoJSON features → validated shapely polygons + mapped metadata."""
     try:
         from shapely.geometry import shape as _shape
     except ImportError as exc:
@@ -483,10 +482,10 @@ def _build_eez_polys(eez_features: list[dict], *, logger: Callable | None = None
 
 def _sync_compute_crossings(maritime_segments: list[dict], eez_polys: list[dict]) -> list[dict]:
     """
-    Intersection synchrone (via asyncio.to_thread). Chaque segment maritime
-    est intersecté avec chaque polygone ZEE ; les entrées/sorties sont
-    interpolées sur la frontière ; l'ordre route est préservé ; les traversées
-    consécutives d'une même ZEE sont fusionnées.
+    Synchronous intersection (via asyncio.to_thread). Each maritime segment
+    is intersected with each EEZ polygon; entries/exits are
+    interpolated on the boundary; route order is preserved; consecutive
+    crossings of the same EEZ are merged.
     """
     from shapely.geometry import LineString as _LS, Point as _P
 
@@ -583,8 +582,8 @@ def _sync_compute_crossings(maritime_segments: list[dict], eez_polys: list[dict]
 
     raw.sort(key=lambda c: c["_sort_key"])
 
-    # Fusion des traversées consécutives d'une même ZEE (ex. 3 segments
-    # successifs dans la ZEE métropole → 1 seule entrée dans la liste).
+    # Merge consecutive crossings of the same EEZ (e.g. 3 successive
+    # segments in the mainland EEZ → 1 single list entry).
     merged: list[dict] = []
     for c in raw:
         del c["_sort_key"]
@@ -618,10 +617,10 @@ async def build_zee_crossings(
     logger: Callable | None = None,
 ) -> list[dict]:
     """
-    1. Charge/télécharge les polygones EEZ.
-    2. Intersecte les segments maritimes de route.geojson (shapely, thread).
-    3. Fallback point-in-EEZ REST si shapely/le fichier échoue.
-    Retourne la liste ordonnée des traversées.
+    1. Load/download EEZ polygons.
+    2. Intersect maritime segments of route.geojson (shapely, thread).
+    3. point-in-EEZ REST fallback if shapely/the file fails.
+    Return the ordered list of crossings.
     """
     start = time.time()
 
@@ -714,5 +713,5 @@ def crossings_to_summary(crossings: list[dict]) -> dict:
 
 
 def filter_french_territories(crossings: list[dict]) -> list[dict]:
-    """Ne garde que les traversées mappées sur un territoire de territories.json."""
+    """Keep only crossings mapped onto a territory in territories.json."""
     return [c for c in crossings if c.get("territory_code") is not None]
