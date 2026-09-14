@@ -1,16 +1,16 @@
 """
-render_core — Rendu navigateur local (Playwright + Chromium headless).
+render_core — Local browser render (Playwright + headless Chromium).
 
-``render_html`` (cascade Complet / PoE) lance Chromium dans un *sous-processus*
-(``app.core.render_worker``). Un crash natif (munmap_chunk sous MemoryHigh=2G)
-tue uniquement l'enfant : le Complet continue, la RAM est rendue.
+``render_html`` (Complet / PoE cascade) launches Chromium in a *subprocess*
+(``app.core.render_worker``). A native crash (munmap_chunk under MemoryHigh=2G)
+kills only the child: Complet continues, RAM is released.
 
-``render_screenshot`` (vision Review) reste in-process : un appel ponctuel,
-pas une rafale de 200 pages.
+``render_screenshot`` (Review vision) stays in-process: a one-off call,
+not a burst of 200 pages.
 
-Dégradation propre : si playwright ou son navigateur n'est pas installé,
-render_html retourne None et la cascade continue sans rendu.
-Installation : pip install playwright && playwright install chromium
+Clean degradation: if playwright or its browser is not installed,
+render_html returns None and the cascade continues without render.
+Install: pip install playwright && playwright install chromium
 """
 import asyncio
 import os
@@ -27,14 +27,14 @@ UA_BROWSER = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
 _pw = None
 _browser = None
 _lock = asyncio.Lock()
-# Un Chromium à la fois : l'API idle ~1,3 Go, MemoryHigh=2G.
+# One Chromium at a time: idle API ~1.3 GB, MemoryHigh=2G.
 _sem = asyncio.Semaphore(1)
 _unavailable = False
 RENDER_SUBPROCESS_GRACE_S = 20
 
 
 class RenderUnavailable(Exception):
-    """Playwright / navigateur absent — désactive les rendus suivants."""
+    """Playwright / browser missing — disable subsequent renders."""
 
 
 def _render_worker_env() -> dict:
@@ -48,7 +48,7 @@ def _render_worker_env() -> dict:
 
 
 def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> str | None:
-    """Spawn ``app.core.render_worker`` — hookable depuis les tests."""
+    """Spawn ``app.core.render_worker`` — hookable from tests."""
     with tempfile.TemporaryDirectory(prefix="bi-render-") as tmp:
         out = Path(tmp) / "page.html"
         try:
@@ -72,7 +72,7 @@ def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> str | None:
 
 
 async def _get_browser(log):
-    """Navigateur partagé (screenshots Review seulement). None si Playwright absent."""
+    """Shared browser (Review screenshots only). None if Playwright is missing."""
     global _pw, _browser, _unavailable
     if _unavailable:
         return None
@@ -94,7 +94,7 @@ async def _get_browser(log):
 
 
 async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=None) -> str | None:
-    """HTML rendu par Chromium isolé (DOM après JavaScript), ou None."""
+    """HTML rendered by isolated Chromium (DOM after JavaScript), or None."""
     global _unavailable
     log = log or (lambda m: None)
     if _unavailable:
@@ -185,7 +185,7 @@ async def render_screenshot(url: str, timeout_s: int = 45, settle_ms: int = 2500
 
 
 async def shutdown_render():
-    """Fermeture propre (appelée au shutdown de l'app)."""
+    """Clean shutdown (called on app shutdown)."""
     global _pw, _browser
     try:
         if _browser is not None:

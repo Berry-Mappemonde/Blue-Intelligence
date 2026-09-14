@@ -1,7 +1,7 @@
-"""Sous-processus : premières pages d'un PDF en JPEG (vision Review).
+"""Subprocess: first pages of a PDF as JPEG (Review vision).
 
-Le process parent n'importe jamais ``fitz``.
-Lancé via ``python -m app.core.pdf_preview IN.pdf OUTDIR [max_pages]``.
+The parent process never imports ``fitz``.
+Launched via ``python -m app.core.pdf_preview IN.pdf OUTDIR [max_pages]``.
 """
 from __future__ import annotations
 

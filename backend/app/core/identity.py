@@ -1,18 +1,18 @@
-"""Identité : deux règles, deux codes.
+"""Identity: two rules, two codes.
 
-Même famille taxonomique (« est-ce déjà là ? »), deux décisions métier.
-On ne les mélange pas.
+Same taxonomic family ("is it already there?"), two business decisions.
+Do not mix them.
 
-* ``same_site`` — fusionner deux fiches du même *lieu d'action*
-  (Projets / ports d'entrée). 500 m **et** un nom proche, ou 90 % de
-  similarité seule. Une seule fiche enrichie.
-* ``find_building`` — superposer un calque officiel (SHOM / NOAA) sur un
-  bureau OSM. 250 m, **distance seule**. Un nom différent n'empêche pas
-  le calque ; un nom proche à 400 m ne colle pas deux bureaux.
+* ``same_site`` — merge two cards of the same *action place*
+  (Projects / ports of entry). 500 m **and** a close name, or 90%
+  similarity alone. One enriched card.
+* ``find_building`` — overlay an official layer (SHOM / NOAA) on an
+  OSM office. 250 m, **distance only**. A different name does not block
+  the overlay; a close name at 400 m does not glue two offices.
 
-Réutiliser ``same_site`` pour les capitaineries collerait des bureaux trop
-loin, ou refuserait un calque légitime. Ce n'est pas un chantier
-d'unification Overpass (déjà partagé). C'est un garde-fou.
+Reusing ``same_site`` for harbormasters would glue offices too
+far, or refuse a legitimate overlay. This is not an Overpass
+unification project (already shared). It is a guardrail.
 """
 from __future__ import annotations
 
@@ -26,12 +26,12 @@ from app.core.geo import haversine_km
 OVERLAY_RADIUS_KM = 0.25
 _KM_PER_DEG = 111.32
 _BBOX_SLACK = 1.05
-_EPS_KM = 1e-6  # 1 mm : Haversine et destination_point ne tombent pas au bit près
+_EPS_KM = 1e-6  # 1 mm: Haversine and destination_point do not land bit-exact
 
 
 @dataclass(frozen=True)
 class OverlayHit:
-    """Calque : le bureau le plus proche, et à quelle distance."""
+    """Overlay: the nearest office, and at what distance."""
 
     doc: dict
     distance_km: float
@@ -44,20 +44,20 @@ def same_site(
     lon_key: str = "lon",
     title_key: str = "title",
 ) -> bool:
-    """Même site d'action (Projets / PoE). Pas un calque de bâtiment."""
+    """Same action site (Projects / PoE). Not a building overlay."""
     return is_duplicate(
         doc_a, doc_b, lat_key=lat_key, lon_key=lon_key, title_key=title_key,
     )
 
 
 def building_radius_km() -> float:
-    """Rayon du calque OSM↔SHOM↔NOAA. Catalogue ``capitaineries.merge_km``."""
+    """OSM↔SHOM↔NOAA overlay radius. Catalogue ``capitaineries.merge_km``."""
     from app.core.run_rules import get_rule
     return float(get_rule("capitaineries.merge_km", OVERLAY_RADIUS_KM))
 
 
 def coords_of(doc: dict, lat_key: str = "lat", lon_key: str = "lon"):
-    """(lat, lon) ou None. Pas de NaN, pas de chaîne vide déguisée."""
+    """(lat, lon) or None. No NaN, no disguised empty string."""
     try:
         lat, lon = doc.get(lat_key), doc.get(lon_key)
         if lat is None or lon is None or lat == "" or lon == "":
@@ -78,7 +78,7 @@ def _lon_delta_deg(a: float, b: float) -> float:
 
 
 def _in_bbox(lat: float, lon: float, plat: float, plon: float, radius_km: float) -> bool:
-    """Préfiltre degré : évite un haversine sur tout le dump mondial."""
+    """Degree prefilter: avoid a haversine over the whole world dump."""
     reach = radius_km * _BBOX_SLACK
     if abs(plat - lat) * _KM_PER_DEG > reach:
         return False
@@ -94,10 +94,10 @@ def find_building(
     lat_key: str = "lat",
     lon_key: str = "lon",
 ) -> OverlayHit | None:
-    """Bureau le plus proche à ≤ ``radius_km`` (défaut 250 m).
+    """Nearest office within ≤ ``radius_km`` (default 250 m).
 
-    Distance seule : le nom n'entre pas dans la décision. En cas d'égalité
-    stricte, le premier document de la liste gagne (stable, pas last-wins).
+    Distance only: the name does not enter the decision. On a strict
+    tie, the first document in the list wins (stable, not last-wins).
     """
     try:
         lat_f, lon_f = float(lat), float(lon)

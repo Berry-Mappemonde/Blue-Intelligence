@@ -1,9 +1,9 @@
-"""Seeds de découverte Projets.
+"""Project discovery seeds.
 
-Les 21 listings curés donnent des URLs de listing fiables. `MASTER_SEEDS`
-charge l'union v1 (~861 financeurs) depuis `data/master_seeds.json` (CDC C5).
-Sans fichier, repli = les 21 curés. File Complet = `queue=crawl` seulement
-(home officielle ou page-liste). Le reste est `resolve` / `skip`.
+The 21 curated listings give reliable listing URLs. `MASTER_SEEDS`
+loads the v1 union (~861 funders) from `data/master_seeds.json` (CDC C5).
+Without a file, fallback = the 21 curated ones. Complet queue = `queue=crawl` only
+(official home or list page). The rest is `resolve` / `skip`.
 """
 
 CURATED_SEEDS = [
@@ -61,7 +61,7 @@ CRAWL_BLACKLIST = (
     "nos-ambassadeurs",
 )
 
-# Import tardif : master_seeds.py importe CURATED_SEEDS depuis ce module.
+# Late import: master_seeds.py imports CURATED_SEEDS from this module.
 from app.services.master_seeds import load_master_seeds  # noqa: E402
 
 MASTER_SEEDS = load_master_seeds()

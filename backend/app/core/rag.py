@@ -89,7 +89,7 @@ def top_chunks(query: str, text: str, k: int = 8, size: int = 500) -> list[str]:
     except Exception:
         return chunks[:k]
     ranked = sorted(range(len(chunks)), key=lambda i: scores[i], reverse=True)[:k]
-    return [chunks[i] for i in sorted(ranked)]  # ordre d'origine préservé
+    return [chunks[i] for i in sorted(ranked)]  # original order preserved
 
 
 def select_context(query: str, text: str, max_chars: int = 8000, size: int = 500) -> str:

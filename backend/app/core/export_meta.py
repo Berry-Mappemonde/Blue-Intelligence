@@ -1,16 +1,16 @@
 """
-app.core.export_meta — Exports GeoJSON versionnés (inspiration Open Waters: Seamap).
+app.core.export_meta — Versioned GeoJSON exports (inspired by Open Waters: Seamap).
 
-Chaque FeatureCollection exportée porte un bloc ``metadata`` auto-descriptif :
-nom du jeu de données, horodatage UTC, comptage, empreinte de contenu
-(sha256 tronqué à 12 hex) et avertissement légal. La version
-``AAAA-MM-JJ.<hash12>`` identifie le contenu de façon stable : deux exports au
-contenu identique portent la même empreinte, deux contenus différents ne
-peuvent pas la partager.
+Each exported FeatureCollection carries a self-describing ``metadata`` block:
+dataset name, UTC timestamp, count, content fingerprint
+(sha256 truncated to 12 hex) and legal warning. The version
+``YYYY-MM-DD.<hash12>`` identifies content stably: two exports with
+identical content share the same fingerprint, two different contents
+cannot share it.
 
-La discipline de l'avertissement (« pas pour la navigation ») suit le README
-de seamap : les données sont participatives / extraites automatiquement, aucune
-autorité hydrographique ou douanière ne les vérifie.
+The warning discipline ("not for navigation") follows the seamap
+README: data are participatory / automatically extracted; no
+hydrographic or customs authority verifies them.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ DISCLAIMER_FR = (
 
 
 def content_fingerprint(features: list) -> str:
-    """Empreinte stable du contenu : sha256 des features canonisées, 12 hex."""
+    """Stable content fingerprint: sha256 of canonicalized features, 12 hex."""
     canon = json.dumps(features, sort_keys=True, ensure_ascii=False,
                        separators=(",", ":"), default=str)
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:12]
@@ -49,10 +49,10 @@ def versioned_fc(fc: dict, dataset: str, *, license_note: str | None = None,
                  source_ids: list | None = None,
                  doi: str | None = None,
                  extra_metadata: dict | None = None) -> dict:
-    """Retourne une copie superficielle de ``fc`` avec le bloc ``metadata``.
+    """Return a shallow copy of ``fc`` with the ``metadata`` block.
 
-    Les features ne sont jamais modifiées ; les clés existantes de la
-    FeatureCollection (``attribution``…) sont préservées.
+    Features are never modified; existing FeatureCollection keys
+    (``attribution``…) are preserved.
     """
     now = now or datetime.now(timezone.utc)
     features = fc.get("features") or []
@@ -86,7 +86,7 @@ def versioned_fc(fc: dict, dataset: str, *, license_note: str | None = None,
 
 def export_response(fc: dict, dataset: str, filename: str, *,
                     license_note: str | None = None) -> JSONResponse:
-    """Réponse d'export uniformisée : metadata + Content-Disposition + version HTTP."""
+    """Uniform export response: metadata + Content-Disposition + HTTP version."""
     out = versioned_fc(fc, dataset, license_note=license_note)
     return JSONResponse(out, headers={
         "Content-Disposition": f"attachment; filename={filename}",
