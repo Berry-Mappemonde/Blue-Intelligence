@@ -12,6 +12,7 @@ const SOURCE_FILTERS = [
   { id: "edmed", label: "EDMED" },
   { id: "argo", label: "Argo" },
   { id: "csr", label: "CSR" },
+  { id: "sentinel-pilot", labelKey: "scienceFilterSentinel" },
 ];
 
 const WMS_LAYERS = [

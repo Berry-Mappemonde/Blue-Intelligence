@@ -14,6 +14,12 @@ import AuditView from "./components/AuditView";
 import ReviewView from "./components/ReviewView";
 import SettingsPanel from "./components/SettingsPanel";
 import ReportModal from "./components/ReportModal";
+import NotForNavModal from "./components/map/NotForNavModal";
+import {
+  readNotForNavAccepted,
+  restrictedIntentNeedsAccept,
+  writeNotForNavAccepted,
+} from "./components/map/notForNav";
 
 const RUNS_LIST_EP = {
   projects: "/projects/runs",
@@ -97,6 +103,20 @@ export default function App() {
     try { localStorage.setItem("bi.basemap", v); } catch (_) { /* ignore */ }
   }, []);
   const [scienceSourceFilter, setScienceSourceFilter] = useState("argo");
+  const [overlayOn, setOverlayOn] = useState(true);
+  const [showReview, setShowReviewRaw] = useState(false);
+  const showReviewRef = useRef(false);
+  const setShowReview = useCallback((v) => {
+    const on = !!v;
+    showReviewRef.current = on;
+    setShowReviewRaw(on);
+  }, []);
+  const [notForNavOk, setNotForNavOk] = useState(() => {
+    const t0 = makeT(readInitialLang());
+    return readNotForNavAccepted(
+      undefined, t0("seaMapDisclaimerTitle"), t0("seaMapDisclaimerBody"),
+    );
+  });
   const [ampLfpFilter, setAmpLfpFilter] = useState("All");
   const [flyToProject, setFlyToProject] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -178,6 +198,18 @@ export default function App() {
   // creates a fresh `t` → MapView props change → the formalities marker
   // rebuild useEffect re-fires and the DOM briefly drops to 0 markers.
   const t = useMemo(() => makeT(lang), [lang]);
+  useEffect(() => {
+    setNotForNavOk(readNotForNavAccepted(
+      undefined, t("seaMapDisclaimerTitle"), t("seaMapDisclaimerBody"),
+    ));
+  }, [t]);
+  const nauticalAllowed = notForNavOk;
+  const notForNavOpen = restrictedIntentNeedsAccept(notForNavOk, {
+    basemap,
+    overlay: overlayOn,
+    wms: scienceWms,
+    satellite: mode === "science" && scienceSourceFilter === "sentinel-pilot",
+  });
   const lastTotalRef = useRef(-1);
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -209,6 +241,14 @@ export default function App() {
 
   const fetchProjects = useCallback(async (force = false) => {
     try {
+      if (showReviewRef.current) {
+        const f = await api.get("/funders", { params: { visible: true } });
+        setFunders(f.data);
+        const p = await api.get("/projects", { params: { visible: true } });
+        setProjects(p.data);
+        lastTotalRef.current = -1;
+        return;
+      }
       const run = mapRunsRef.current.projects;
       if (run?.id) {
         const p = await api.get(`/projects/runs/${run.id}/geojson`);
@@ -257,9 +297,11 @@ export default function App() {
           && (marinasRef.current?.features?.length || 0) > 0) {
         return;
       }
-      const { data } = run?.id
-        ? await api.get(`/marinas/runs/${run.id}/geojson`, { timeout: 300000 })
-        : await api.get("/marinas", { timeout: 300000 });
+      const { data } = showReviewRef.current
+        ? await api.get("/marinas", { timeout: 300000, params: { visible: true } })
+        : run?.id
+          ? await api.get(`/marinas/runs/${run.id}/geojson`, { timeout: 300000 })
+          : await api.get("/marinas", { timeout: 300000 });
       setMarinas(data);
       if (run?.id) {
         const n = data?.features?.length || 0;
@@ -280,9 +322,11 @@ export default function App() {
     try {
       const run = mapRunsRef.current.capitaineries;
       if (!force && !run?.id && (capitaineriesRef.current?.features?.length || 0) > 0) return;
-      const { data } = run?.id
-        ? await api.get(`/capitaineries/runs/${run.id}/geojson`)
-        : await api.get("/capitaineries");
+      const { data } = showReviewRef.current
+        ? await api.get("/capitaineries", { params: { visible: true } })
+        : run?.id
+          ? await api.get(`/capitaineries/runs/${run.id}/geojson`)
+          : await api.get("/capitaineries");
       setCapitaineries(data);
       if (run?.id) {
         const n = data?.features?.length || 0;
@@ -327,7 +371,9 @@ export default function App() {
 
   const fetchPoeZones = useCallback(async () => {
     try {
-      const { data } = await api.get("/poe/zones");
+      const { data } = await api.get("/poe/zones", {
+        params: showReviewRef.current ? { visible: true } : {},
+      });
       setPoeZones(data);
     } catch (e) { /* transient */ }
     finally { setPoeZonesLoading(false); }
@@ -340,9 +386,11 @@ export default function App() {
     try {
       const run = mapRunsRef.current.formalities;
       if (!force && !run?.id && (poePortsRef.current?.features?.length || 0) > 0) return;
-      const { data } = run?.id
-        ? await api.get(`/poe/runs/${run.id}/ports`)
-        : await api.get("/poe/ports");
+      const { data } = showReviewRef.current
+        ? await api.get("/poe/ports", { params: { visible: true } })
+        : run?.id
+          ? await api.get(`/poe/runs/${run.id}/ports`)
+          : await api.get("/poe/ports");
       setPoePorts(data);
     } catch (e) { /* transient */ }
   }, []);
@@ -667,6 +715,11 @@ export default function App() {
         mapRun={mapRuns[mode] || null}
         onSelectMapRun={handleSelectMapRun}
         isAdmin={isAdmin}
+        showReview={showReview}
+        onToggleShowReview={(on) => {
+          setShowReview(on);
+          refreshMapData();
+        }}
       />
       <div className="flex flex-1 min-h-0">
         {view !== "review" && mode === "projects" && (
@@ -757,6 +810,11 @@ export default function App() {
               science={science}
               flyToScience={flyToScience}
               scienceWms={scienceWms}
+              onToggleWms={toggleScienceWms}
+              overlayOn={overlayOn}
+              onToggleOverlay={setOverlayOn}
+              nauticalAllowed={nauticalAllowed}
+              showReview={showReview}
               scienceSourceFilter={scienceSourceFilter}
               climoMonth={climoMonth}
               climoFilters={climoFilters}
@@ -774,7 +832,7 @@ export default function App() {
               flyToAmp={flyToAmp}
               flyToProject={flyToProject}
               fitRunBounds={fitRunBounds}
-              ampRunId={mapRuns.amp?.id || null}
+              ampRunId={showReview ? null : (mapRuns.amp?.id || null)}
               onAmpSites={setAmpSites}
               zoneFiche={zoneFiche}
               funderFilter={funderFilter} searchQuery={searchQuery} t={t}
@@ -820,6 +878,27 @@ export default function App() {
       {showReport && (
         <ReportModal t={t} onClose={() => setShowReport(false)} onSubmitted={() => { setShowReport(false); }} />
       )}
+      <NotForNavModal
+        t={t}
+        open={notForNavOpen}
+        onAccept={() => {
+          writeNotForNavAccepted(
+            undefined, t("seaMapDisclaimerTitle"), t("seaMapDisclaimerBody"),
+          );
+          setNotForNavOk(true);
+          setOverlayOn(true);
+        }}
+        onStayOnOsm={() => {
+          setBasemap("dark");
+          setOverlayOn(false);
+          setScienceWms(() => {
+            const off = { bathymetry: false, cables: false, substrate: false };
+            try { localStorage.setItem("bi.scienceWms", JSON.stringify(off)); } catch (_) { /* ignore */ }
+            return off;
+          });
+          if (scienceSourceFilter === "sentinel-pilot") setScienceSourceFilter("argo");
+        }}
+      />
     </div>
   );
 }

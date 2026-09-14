@@ -22,6 +22,8 @@ export const PANES = [
   // Atlas du 7ᵉ mode — allumés seulement si mode === "climatology".
   { name: "climatology-raster", zIndex: 250, pointerEvents: "none" },
   { name: "climatology-vector", zIndex: 260, pointerEvents: "none" },
+  // Overlay hebdomadaire tippecanoe — au-dessus du GL Seamap, sous la route.
+  { name: "bi-overlay", zIndex: 270, pointerEvents: "none" },
   // Route NAVIGUIDE — sous les clusters et marqueurs.
   { name: "route", zIndex: 380 },
   // Polygones AMP — au-dessus de l'overlayPane, sous les escales.
