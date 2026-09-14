@@ -11,9 +11,11 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
                            pour les pages JavaScript et les challenges « soft ».
-                           Jamais sur une URL .pdf ni un captcha dur (SiteGround,
-                           Akamai) — Chromium plante le process sous MemoryHigh.
-                           Allumé seulement si le HTML simple ET Fetch ont échoué.
+                           Chromium tourne dans un sous-processus (comme
+                           PyMuPDF) : un ABRT ne tue plus l'API. Jamais sur une
+                           URL .pdf, une image (.png/.jpg…) ni un captcha dur
+                           (SiteGround, Akamai). Allumé seulement si le HTML
+                           simple ET Fetch ont échoué.
   Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
 
 TinyFish Fetch n'est pas supprimé : c'est le bon outil quand on a besoin du
@@ -37,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unicodedata
 from contextvars import ContextVar
 from pathlib import Path
@@ -89,7 +92,9 @@ SERP_HARD_RE = re.compile(
     r"|doordash\.com"
     r"|//unblock\.|\.unblock\.|/cdn-cgi/|captcha|datadome|perimeterx"
     r"|queue-it\.net|incapsula|distilnetworks"
-    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?))",
+    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?)"
+    r"|\.png($|\?)|\.jpe?g($|\?)|\.gif($|\?)|\.webp($|\?)|\.svg($|\?)"
+    r"|\.bmp($|\?)|\.ico($|\?)|\.tiff?($|\?)|\.avif($|\?))",
     re.I,
 )
 
@@ -187,6 +192,155 @@ def url_looks_like_pdf(url: str | None) -> bool:
     """Chemin .pdf — même si le serveur sert un HTML de captcha à la place."""
     path = (urlparse(url or "").path or "").lower()
     return path.endswith(".pdf")
+
+
+# Ministères renommés / DNS NXDOMAIN connus (SCT mexicain → SICT, etc.).
+RETIRED_HOST_SUFFIXES = (
+    "sct.gob.mx",
+)
+
+_DOWNLOAD_PATH_RE = re.compile(
+    r"/file-download/|/download\.php\b",
+    re.I,
+)
+
+_FETCH_FAIL_ERRORS = frozenset({
+    "ConnectError", "ConnectTimeout", "ReadTimeout", "TimeoutException",
+    "NetworkError", "ProxyError", "RemoteProtocolError",
+})
+
+_WAYBACK_PAUSE_AFTER = 3
+_WAYBACK_PAUSE_S = 15 * 60
+_wayback_503s = 0
+_wayback_pause_until = 0.0
+
+
+def url_host(url: str | None) -> str:
+    return (urlparse(url or "").hostname or "").lower().rstrip(".")
+
+
+def host_is_retired(url: str | None) -> bool:
+    """Hôte dont le DNS est mort — ne pas fetcher ni capturer."""
+    host = url_host(url)
+    if not host:
+        return False
+    return any(host == suf or host.endswith("." + suf)
+               for suf in RETIRED_HOST_SUFFIXES)
+
+
+def url_looks_like_download(url: str | None, disposition: str = "") -> bool:
+    """Fichier à télécharger (PDF, attachment) — Chromium ne peut pas le photographier."""
+    if "attachment" in (disposition or "").lower():
+        return True
+    if url_looks_like_pdf(url):
+        return True
+    path = urlparse(url or "").path or ""
+    return bool(_DOWNLOAD_PATH_RE.search(path))
+
+
+def should_skip_screenshot(url: str | None, page: dict | None = None) -> str | None:
+    """Raison de sauter la capture Review, ou None."""
+    page = page or {}
+    if host_is_retired(url) or host_is_retired(page.get("final_url")):
+        return "hôte retiré (DNS mort)"
+    if page.get("error") == "dead_host":
+        return "hôte retiré (DNS mort)"
+    if page.get("is_pdf"):
+        return "PDF"
+    if page.get("download") or url_looks_like_download(
+            url, page.get("disposition") or ""):
+        return "téléchargement / PDF"
+    if page.get("fetch_failed") or page.get("error") in _FETCH_FAIL_ERRORS:
+        return "URL déjà morte / fetch N1 échoué"
+    if page.get("blocked"):
+        return "anti-bot"
+    return None
+
+
+def reset_wayback_circuit() -> None:
+    """Tests : rouvre le circuit Wayback."""
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s = 0
+    _wayback_pause_until = 0.0
+
+
+def wayback_circuit_open(now: float | None = None) -> bool:
+    return (now if now is not None else time.time()) < _wayback_pause_until
+
+
+def _note_wayback_503() -> None:
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s += 1
+    if _wayback_503s >= _WAYBACK_PAUSE_AFTER:
+        _wayback_pause_until = time.time() + _WAYBACK_PAUSE_S
+        _wayback_503s = 0
+
+
+def _note_wayback_ok() -> None:
+    global _wayback_503s
+    _wayback_503s = 0
+
+
+_IMAGE_EXTS = frozenset({
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "avif",
+})
+
+
+def path_looks_like_image(path: str | None) -> bool:
+    """Dernier segment .png/.jpg/… — portraits WordPress, pas une fiche."""
+    name = unquote((path or "").split("?")[0]).rsplit("/", 1)[-1].lower()
+    if "." not in name:
+        return False
+    return name.rsplit(".", 1)[-1] in _IMAGE_EXTS
+
+
+def url_looks_like_image(url: str | None) -> bool:
+    """URL d'image — Chromium + trafilatura dessus font exploser la RAM."""
+    return path_looks_like_image(urlparse(url or "").path)
+
+
+def content_is_image(content: bytes | None, content_type: str = "",
+                     url: str = "") -> bool:
+    """Vrais octets image (magic / Content-Type). Un HTML d'erreur n'en est pas une."""
+    blob = content or b""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:3] == b"\xff\xd8\xff":
+        return True
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    if len(blob) >= 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    head = blob.lstrip()[:80].lower()
+    if head.startswith(b"<") or head.startswith(b"{") or head.startswith(b"<!doctype"):
+        return False
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    if ctype.startswith("image/"):
+        return True
+    return bool(url_looks_like_image(url) and blob[:1] not in (b"<", b"{"))
+
+
+_HTMLISH_TYPES = frozenset({
+    "text/html", "application/xhtml+xml", "application/xhtml",
+    "text/xml", "application/xml", "text/plain",
+})
+
+
+def content_looks_like_html(content: bytes | None, content_type: str = "") -> bool:
+    """Vrai document à parser. Un PNG lu comme de l'UTF-8 n'en est pas un."""
+    blob = content or b""
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    head = blob.lstrip()[:80]
+    if head.startswith(b"<") or head.lower().startswith(b"<!doctype"):
+        return True
+    if ctype.startswith("image/") or ctype in {
+        "application/pdf", "application/zip", "application/octet-stream",
+        "application/gzip", "audio/mpeg", "video/mp4",
+    }:
+        return False
+    if ctype in _HTMLISH_TYPES or ctype.startswith("text/"):
+        return True
+    return False
 
 
 def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
@@ -1641,9 +1795,16 @@ async def _wayback_snapshot_url(url: str) -> str | None:
         return f"https://web.archive.org/web/{ts}id_/{orig}"
 
 
-def _mirror_http_err(exc: Exception) -> str:
+def _mirror_http_status(exc: Exception) -> int | None:
     if isinstance(exc, httpx.HTTPStatusError):
-        return f"HTTP {exc.response.status_code}"
+        return exc.response.status_code
+    return None
+
+
+def _mirror_http_err(exc: Exception) -> str:
+    code = _mirror_http_status(exc)
+    if code is not None:
+        return f"HTTP {code}"
     return type(exc).__name__
 
 
@@ -1710,6 +1871,8 @@ async def _jina_mirror_text(url: str, log) -> str | None:
                 log(f"miroir Jina: texte inutilisable ({len(text)} chars)")
         except Exception as e:
             log(f"miroir Jina: indisponible ({_mirror_http_err(e)})")
+            if _mirror_http_status(e) == 422:
+                return None
             if attempt == 0:
                 await asyncio.sleep(1.2)
     return None
@@ -1762,6 +1925,9 @@ async def _jorf_reader_text(url: str, log) -> str | None:
 
 
 async def _wayback_mirror_text(url: str, log) -> str | None:
+    if wayback_circuit_open():
+        log("miroir Wayback: en pause (503 répétés)")
+        return None
     try:
         snap = await _wayback_snapshot_url(url)
         if snap:
@@ -1772,9 +1938,12 @@ async def _wayback_mirror_text(url: str, log) -> str | None:
                 parsed = await dual_parse_html(content.decode("utf-8", errors="replace"))
                 text = parsed.get("text") or ""
             if _mirror_usable(text):
+                _note_wayback_ok()
                 log(f"miroir Wayback: {len(text)} chars")
                 return text
     except Exception as e:
+        if _mirror_http_status(e) == 503:
+            _note_wayback_503()
         log(f"miroir Wayback: indisponible ({_mirror_http_err(e)})")
     return None
 
@@ -1837,9 +2006,19 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
     log = log or (lambda m: None)
     out = empty_page(url)
 
+    if host_is_retired(url):
+        log(f"hôte retiré (DNS mort) — cascade sautée ({url_host(url)})")
+        out["error"] = "dead_host"
+        return out
+
     if is_maps_render_url(url):
         log("URL Google Maps — cascade locale sautée (DOM JS, Fetch seulement)")
         out["error"] = "maps_render_url"
+        return out
+
+    if url_looks_like_image(url):
+        log("URL image — cascade sautée (pas une fiche, pas de Chromium)")
+        out["error"] = "image_url"
         return out
 
     content = None
@@ -1852,12 +2031,24 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
         ctype = (resp.headers.get("content-type") or "").lower()
         disposition = resp.headers.get("content-disposition") or ""
         out["final_url"] = str(resp.url) or url
+        out["disposition"] = disposition
+        out["download"] = "attachment" in disposition.lower()
     except Exception as e:
         log(f"N1 fetch: échec ({type(e).__name__})")
+        out["fetch_failed"] = True
+        out["error"] = type(e).__name__
 
     if content is not None:
         out["md5"] = hashlib.md5(content).hexdigest()
+        if content_is_image(content, ctype, out["final_url"] or url):
+            log("contenu image — cascade sautée, pas de Chromium")
+            out["error"] = "image_content"
+            return out
         is_pdf = content_is_pdf(content, ctype, out["final_url"] or url, disposition)
+        if not is_pdf and not content_looks_like_html(content, ctype):
+            log("contenu binaire — cascade sautée, pas de Chromium")
+            out["error"] = "binary_content"
+            return out
         out["is_pdf"] = is_pdf
         if keep_raw and content:
             out["raw"] = content
@@ -1904,7 +2095,10 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
     pdf_url = url_looks_like_pdf(url) or url_looks_like_pdf(out.get("final_url"))
     hard = looks_hard_challenge(
         out.get("text") or "", out.get("html") or "", out.get("title") or "")
-    skip_chromium = bool(out["is_pdf"] or pdf_url or hard or out["blocked"])
+    skip_chromium = bool(
+        out["is_pdf"] or pdf_url or hard or out["blocked"]
+        or out.get("fetch_failed") or out.get("download")
+        or url_looks_like_download(url, out.get("disposition") or ""))
     short = len(out["text"]) < min_chars
     # 205 chars de page captcha ne doivent pas empêcher TinyFish Fetch (≥ 400).
     want_mirror = bool(out["blocked"] or short or (pdf_url and not out["is_pdf"] and len(out["text"]) < 400))

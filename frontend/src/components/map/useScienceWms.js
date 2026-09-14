@@ -38,7 +38,7 @@ export const SCIENCE_WMS_LAYERS = [
 
 /** z-index : plus le chiffre est haut, plus la couche est devant. */
 export const SCIENCE_WMS_PANES = {
-  "science-wms-bathy": 250,
+  "science-wms-bathy": 240,
   "science-wms-substrate": 310,
   "science-wms-cables": 370,
 };
@@ -70,7 +70,7 @@ function wmsDebug() {
   return window.__biDebug.wms;
 }
 
-export default function useScienceWms({ mapObj, mode, enabled }) {
+export default function useScienceWms({ mapObj, enabled }) {
   const layersRef = useRef({});
   const bathy = !!(enabled && enabled.bathymetry);
   const substrate = !!(enabled && enabled.substrate);
@@ -85,7 +85,7 @@ export default function useScienceWms({ mapObj, mode, enabled }) {
     dbg.floors = {};
 
     SCIENCE_WMS_LAYERS.forEach((spec) => {
-      const on = mode === "science" && !!(enabled && enabled[spec.id]);
+      const on = !!(enabled && enabled[spec.id]);
       let lyr = layersRef.current[spec.id];
 
       if (lyr && lyr.options.pane !== spec.pane) {
@@ -126,5 +126,5 @@ export default function useScienceWms({ mapObj, mode, enabled }) {
         map.removeLayer(lyr);
       }
     });
-  }, [mapObj, mode, enabled, bathy, substrate, cables]);
+  }, [mapObj, enabled, bathy, substrate, cables]);
 }

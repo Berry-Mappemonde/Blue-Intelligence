@@ -121,7 +121,7 @@ class TestAskYesNoCascade:
 
         yes = _run(yn.ask_yes_no("sys", "user", role="json"))
         assert yes.accepted is True
-        assert yes.engine == "nvidia-deepseek"
+        assert yes.engine == "nvidia-gpt-oss"
         assert yes.raw["score"] == 0.9
 
     def test_complete_json_cascade_nvidia_429_then_openrouter(self, monkeypatch):

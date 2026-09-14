@@ -3,7 +3,8 @@ File de revue humaine — une fiche à la fois, commentaire persisté.
 
 Ne lit que les collections de run / v1. N'écrit JAMAIS dans `projects`,
 `poe_ports`, `eez_zones`, `marinas`, `capitaineries` ni `amp_sites`. Mutées :
-`review_comments`, `review_gold`, `review_choices`.
+`review_comments`, `review_gold`, `review_choices`,
+`review_suggest`, `review_lessons`.
 """
 from __future__ import annotations
 
@@ -99,6 +100,8 @@ async def ensure_review_indexes(db) -> None:
         await db.capitaineries.create_index("name")
         await review_gold.ensure_gold_indexes(db)
         await ensure_choice_indexes(db)
+        from app.services.review_lessons import ensure_lesson_indexes
+        await ensure_lesson_indexes(db)
     except Exception:
         pass
 
@@ -644,6 +647,7 @@ def _marina_fiche(doc: dict) -> dict:
         "services_disponibles": doc.get("services_disponibles"),
         "telephone_capitainerie": doc.get("telephone_capitainerie"),
         "resume_avis": doc.get("resume_avis"),
+        "field_sources": doc.get("field_sources") or {},
         "website": website,
         "website_status": doc.get("website_status"),
         "maps_place_url": maps_place,
@@ -678,6 +682,7 @@ def _capitainerie_fiche(doc: dict) -> dict:
         "enrichment_source": doc.get("enrichment_source"),
         "canal_vhf": doc.get("canal_vhf"),
         "telephone": doc.get("telephone"),
+        "field_sources": doc.get("field_sources") or {},
         "website": doc.get("website"),
         "maps_url": (
             google_maps_url(doc.get("name"), doc["lat"], doc["lon"])
@@ -953,6 +958,8 @@ async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
         if not doc:
             return None
         fiche = _marina_fiche(doc)
+        from app.services.control_ref import marina_control_ref
+        fiche["control_ref"] = await marina_control_ref(db, doc)
 
     comment = await get_comment(db, kind, rid, eid)
     source = doc if kind in ("project", "marina", "capitainerie", "amp") else None
