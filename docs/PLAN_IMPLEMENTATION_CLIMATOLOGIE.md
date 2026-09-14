@@ -618,6 +618,8 @@ inchangée).
 - Plugin OpenCPN `climatology_pi` (manuel, `gendata/`, `ClimatologyOverlayFactory.h`)
   et `weather_routing_pi` (MOST_LIKELY, crossings).
 - `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/PRD.md`.
+- `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
+  satellite : métiers distincts de l’atlas mensuel.
 - Code : `getWind.py`, `getWave.py`, `getCurrent.py`, `climatology.py`,
   `isochrone.py`, `useScienceWms.js`, `layerOrder.js`, `MaritimeLayers.jsx`,
   `export_meta.py`, `meteo_agent.py`.

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.core.tasks import BuildState
 from app.db import db, get_settings
 from app.services.science_build import (
+    DISPLAY_SOURCES,
     SCHEMA,
     SLIM_PROJECTION,
     SOURCES,
@@ -47,7 +48,7 @@ async def science_count():
     total = await db.science_items.count_documents({})
     located = await db.science_items.count_documents({"lat": {"$ne": None}})
     by_source = {}
-    for source in SOURCES:
+    for source in DISPLAY_SOURCES:
         by_source[source] = await db.science_items.count_documents({"source": source})
     return {
         "total": total,
@@ -122,7 +123,7 @@ async def import_science_geojson(fc: dict = Body(...)):
             if not name:
                 invalid += 1
                 continue
-            source = p.get("source") if p.get("source") in SOURCES else None
+            source = p.get("source") if p.get("source") in DISPLAY_SOURCES else None
             mid = str(p.get("id") or "").strip() or (
                 f"{source or 'science'}:{uuid.uuid4()}"
             )
@@ -130,6 +131,8 @@ async def import_science_geojson(fc: dict = Body(...)):
                 "_id": mid,
                 "kind": p.get("kind") or "dataset",
                 "source": source or "sextant",
+                "error_m": p.get("error_m"),
+                "method": p.get("method"),
                 "native_id": p.get("native_id") or mid.split(":", 1)[-1],
                 "name": name[:240],
                 "abstract": str(p.get("abstract") or "")[:600],
