@@ -1,0 +1,15 @@
+{
+  "$schema_comment": "Exemple pour scripts/validate-extraction-pack.ts — une entrée par URL de wayback_best_captures",
+  "entries": [
+    {
+      "url": "https://www.cruiserswiki.org/wiki/Ports_-_Example/Some_Port",
+      "include": true,
+      "lat": 43.7,
+      "lng": 15.9
+    },
+    {
+      "url": "https://www.cruiserswiki.org/wiki/Some_Noise_Page",
+      "include": false
+    }
+  ]
+}
