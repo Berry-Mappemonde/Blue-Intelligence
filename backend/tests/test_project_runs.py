@@ -416,6 +416,75 @@ def test_s_ocean_at_min_marine_score_stays_site(monkeypatch):
     asyncio.run(run())
 
 
+def test_process_url_rejects_image_url_without_cascade(monkeypatch):
+    import app.services.swarm_pipeline as sp
+
+    async def boom(*a, **k):
+        raise AssertionError("cascade must not run on a portrait PNG")
+
+    monkeypatch.setattr(sp, "extract_cascade", boom)
+
+    async def run():
+        db = _FakeDB(projects=[_v1_treasure()])
+        before = await db.projects.count_documents({})
+        opened = await project_runs.open_run(
+            db, mode="test", settings={}, to_file=False)
+        sw = Swarm(db)
+        sw.run_id = opened["run_id"]
+        sw.recorder = opened["recorder"]
+        sw.settings = {}
+        url = "https://marviva.net/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+        out = await sw._process_url({
+            "url": url, "funder": "MarViva", "source": "test",
+        })
+        assert out["status"] == "rejected"
+        assert await db.projects.count_documents({}) == before
+        row = await db.project_run_projects.find_one(
+            {"run_id": opened["run_id"], "url": url})
+        assert row["verdict"] == "rejected"
+        assert "image" in row["reason"].lower()
+        failed = await db.failed.find_one({"url": url})
+        assert failed["stage"] == "image"
+
+    asyncio.run(run())
+
+
+def test_process_url_rejects_image_content_from_cascade(monkeypatch):
+    _patch_extract(
+        monkeypatch,
+        page={
+            "text": "",
+            "title": "",
+            "meta_desc": "",
+            "image": None,
+            "ext_links": [],
+            "level": "failed",
+            "error": "image_content",
+        },
+    )
+
+    async def run():
+        db = _FakeDB(projects=[_v1_treasure()])
+        opened = await project_runs.open_run(
+            db, mode="test", settings={}, to_file=False)
+        sw = Swarm(db)
+        sw.run_id = opened["run_id"]
+        sw.recorder = opened["recorder"]
+        sw.settings = {}
+        url = "https://cdn.example/download"
+        out = await sw._process_url({
+            "url": url, "funder": "MarViva", "source": "test",
+        })
+        assert out["status"] == "rejected"
+        row = await db.project_run_projects.find_one(
+            {"run_id": opened["run_id"], "url": url})
+        assert row["verdict"] == "rejected"
+        failed = await db.failed.find_one({"url": url})
+        assert failed["stage"] == "image"
+
+    asyncio.run(run())
+
+
 def test_rejected_writes_run_not_v1(monkeypatch):
     _patch_extract(monkeypatch, gk={"accepted": False, "reason": "terrestrial", "engine": "heuristic"})
 
