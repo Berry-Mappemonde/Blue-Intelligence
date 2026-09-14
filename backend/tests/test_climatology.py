@@ -39,7 +39,7 @@ def _client() -> TestClient:
 
 @pytest.fixture
 def no_cmems_snapshots(tmp_path, monkeypatch):
-    """Isole les tests « snapshot absent » des grilles CMEMS commitées."""
+    """Isolate “missing snapshot” tests from committed CMEMS grids."""
     root = tmp_path / "climatology"
     for name in ("wind", "wave", "current", "cyclones"):
         (root / name).mkdir(parents=True)
@@ -142,13 +142,13 @@ def test_crossings_martinique_azores():
 def test_land_mask_recipe():
     assert is_land(23.0, 5.0) is True          # Sahara
     assert is_land(-33.0, -70.0) is True       # Andes
-    assert is_land(15.0, -25.0) is False       # alizés Atlantique
+    assert is_land(15.0, -25.0) is False       # Atlantic trade winds
     assert is_land(26.0, -80.0) is False       # Gulf Stream
     assert is_land(-40.0, 10.0) is False       # 40°S mer
 
 
 def test_wind_from_uv_comes_from():
-    # u ouest→est, v sud→nord : vent d'où ? atan2(-u,-v)
+    # u west→east, v south→north: wind from where? atan2(-u,-v)
     kn, coming = wind_from_uv(5.0, 0.0)
     assert kn == pytest.approx(5.0 * 1.94384)
     assert coming == pytest.approx(270.0, abs=0.5)
@@ -176,7 +176,7 @@ def test_ibtracs_basin_recipe():
 
 
 # ---------------------------------------------------------------------------
-# Snapshots CMEMS honnêtes + fixtures locales
+# Honest CMEMS snapshots + local fixtures
 # ---------------------------------------------------------------------------
 
 def test_atlas_absent_returns_none(no_cmems_snapshots):
@@ -254,6 +254,41 @@ def test_wave_mean_is_not_labelled_p90(tmp_path, monkeypatch):
     assert fc["features"] == []
 
 
+def test_snapshot_status_follows_month_sidecar(tmp_path, monkeypatch):
+    root = tmp_path / "climatology"
+    for name in ("wind", "wave", "current", "cyclones"):
+        (root / name).mkdir(parents=True)
+    (root / "wave" / "wave-01.json").write_text('{"stat":"mean"}', encoding="utf-8")
+    (root / "wave" / "wave-07.json").write_text('{"stat":"p50_p90"}', encoding="utf-8")
+    (root / "wave" / "wave-01.npz").write_bytes(b"x")
+    (root / "wave" / "wave-07.npz").write_bytes(b"x")
+    monkeypatch.setattr(common, "CLIMATOLOGY_DIR", root)
+    monkeypatch.setattr(common, "climatology_dir", lambda: root)
+    jan = common.snapshot_status(1)
+    jul = common.snapshot_status(7)
+    assert jan["wave_stat"] == "mean"
+    assert jul["wave_stat"] == "p50_p90"
+    assert jan["wave"] is True
+    assert jul["wave"] is True
+
+
+def test_cmems_auth_accepts_id_mdp(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "climatology"))
+    import cmems_auth
+
+    monkeypatch.delenv("COPERNICUS_USERNAME", raising=False)
+    monkeypatch.delenv("COPERNICUS_USER", raising=False)
+    monkeypatch.delenv("COPERNICUSMARINE_SERVICE_USERNAME", raising=False)
+    monkeypatch.delenv("COPERNICUS_PASSWORD", raising=False)
+    monkeypatch.delenv("COPERNICUSMARINE_SERVICE_PASSWORD", raising=False)
+    monkeypatch.setenv("COPERNICUS_ID", "user@example.com")
+    monkeypatch.setenv("COPERNICUS_MDP", "secret")
+    monkeypatch.setattr(cmems_auth, "load_cmems_env", lambda: None)
+    user, password = cmems_auth.credentials()
+    assert user == "user@example.com"
+    assert password == "secret"
+
+
 def test_wave_p90_gt_p50(tmp_path, monkeypatch):
     wave_dir = tmp_path / "wave"
     wave_dir.mkdir()
@@ -275,6 +310,13 @@ def test_wave_p90_gt_p50(tmp_path, monkeypatch):
     assert w["hs_p90_m"] > w["hs_p50_m"] > 0
     assert w["stat"] == "p50_p90"
     assert wave_mod.is_wave_hazard(-40.0, 10.0, 7) is True
+    fc = wave_mod.wave_geojson(7, stat="p90", spacing_deg=0.5)
+    assert fc["features"]
+    assert fc["features"][0]["properties"]["stat"] == "p90"
+    assert fc["features"][0]["properties"]["period_s"] == 11.0
+    assert fc["features"][0]["properties"]["dir_deg"] == 250.0
+    p50 = wave_mod.wave_geojson(7, stat="p50", spacing_deg=0.5)
+    assert p50["features"][0]["properties"]["hs_m"] == 2.1
 
 
 def test_current_below_threshold_flagged(tmp_path, monkeypatch):
@@ -303,7 +345,7 @@ def test_wind_average_is_not_labelled_rose(tmp_path, monkeypatch):
     wind_dir.mkdir()
     lats = np.array([14.5, 15.0, 15.5])
     lons = np.array([-25.5, -25.0, -24.5])
-    # Alizé : u négatif (vers l'ouest), v négatif (vers le sud) → vient du NE
+    # Trade wind: negative u (westward), negative v (southward) → from the NE
     _write_grid(
         wind_dir / "wind-03.npz",
         lats=lats, lons=lons,
@@ -433,7 +475,7 @@ def test_naviguide_query_not_painted():
 
 
 def test_live_cmems_snapshots_are_honest():
-    """Recette A sur les grilles commitées — skip si la génération n'a pas tourné."""
+    """Recipe A on committed grids — skip if generation has not run."""
     if not (wind_mod.has_snapshot(3) and wave_mod.has_snapshot(7) and current_mod.has_snapshot(2)):
         pytest.skip("snapshots CMEMS absents")
     wind_mod._load_month.cache_clear()

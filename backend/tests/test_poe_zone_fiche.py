@@ -1,4 +1,4 @@
-"""Fiche ZEE — PoE + URLs TD/BU, jamais une preuve Noonsite, 0 écriture Atlas."""
+"""EEZ card — PoE + TD/BU URLs, never Noonsite evidence, 0 Atlas writes."""
 import asyncio
 import sys
 from pathlib import Path
@@ -216,6 +216,47 @@ def test_france_hexagon_uses_curated_pleasure_list():
     fiche = asyncio.run(build_zone_fiche(db, 5677))
     assert "plaisance" in (fiche["url_td"]["url"] or "").lower()
     assert "information-available-english" not in (fiche["url_td"]["url"] or "")
+
+
+def test_new_caledonia_drops_metropolitan_france_pages():
+    zone = {
+        "mrgid": 8312, "name": "New Caledonia", "iso2": "NC",
+        "sov_iso2": "FR", "sovereign": "France", "status": "ia",
+        "poe_count": 0, "sources": [
+            {"url": "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000047858148",
+             "domain": "legifrance.gouv.fr", "official": True},
+            {"url": "https://www.mer.gouv.fr/acteurs-reseau-et-activites-portuaires-en-france",
+             "domain": "mer.gouv.fr"},
+            {"url": "https://www.france.fr/en/", "domain": "france.fr"},
+            {"url": "https://dictionary.cambridge.org/dictionary/english/official",
+             "domain": "cambridge.org"},
+            {"url": "https://douane.gouv.nc/particuliers/formalites-douanieres-pour-les-navires-de-plaisance",
+             "domain": "douane.gouv.nc", "official": True},
+        ],
+    }
+    fiche = assemble_zone_fiche(zone, [])
+    urls = [s["url"] for s in fiche["sources_td"]]
+    assert any("douane.gouv.nc" in u for u in urls)
+    assert not any("legifrance" in u for u in urls)
+    assert not any("mer.gouv.fr" in u for u in urls)
+    assert not any("france.fr" in u for u in urls)
+    assert not any("cambridge.org" in u for u in urls)
+
+
+def test_france_hexagon_keeps_legifrance():
+    zone = {
+        "mrgid": 5677, "name": "France", "iso2": "FR", "sov_iso2": "FR",
+        "sovereign": "France", "status": "ia", "poe_count": 0, "sources": [
+            {"url": "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000047858148",
+             "domain": "legifrance.gouv.fr", "official": True},
+            {"url": "https://www.mer.gouv.fr/acteurs-reseau",
+             "domain": "mer.gouv.fr"},
+        ],
+    }
+    fiche = assemble_zone_fiche(zone, [])
+    urls = [s["url"] for s in fiche["sources_td"]]
+    assert any("legifrance" in u for u in urls)
+    assert any("mer.gouv.fr" in u for u in urls)
 
 
 def test_mayotte_does_not_inherit_metropolitan_pdf():

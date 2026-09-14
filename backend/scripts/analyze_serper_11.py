@@ -1,7 +1,7 @@
-"""Analyse le run des 11 : needles, serper/google_style, graines SX/AL.
+"""Analyze the run of the 11: needles, serper/google_style, SX/AL seeds.
 
-Lit d'abord le JSONL local (backend/data/runs/<run_id>.jsonl) pour ne pas
-dépendre d'un primary Mongo. Mongo reste un complément si disponible.
+Read the local JSONL first (backend/data/runs/<run_id>.jsonl) so we do not
+depend on a Mongo primary. Mongo stays a complement if available.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ SEEDS = {
     21803: "sintmaartengov.org",
     5670: "dogana.gov.al",
 }
-# Plancher poe_count après le correctif catalog_skip (listes sans GPS).
+# poe_count floor after the catalog_skip fix (lists without GPS).
 MIN_POE = {
     5677: 10,   # liste PPF
     8429: 10,   # habilitados turística

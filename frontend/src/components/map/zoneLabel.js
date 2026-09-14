@@ -1,4 +1,4 @@
-/** Libellé d'une ZEE : un polygone VLIZ, jamais un agrégat pays. */
+/** EEZ label: one VLIZ polygon, never a country aggregate. */
 
 export function zoneDisplayName(z, t) {
   if (!z) return "";

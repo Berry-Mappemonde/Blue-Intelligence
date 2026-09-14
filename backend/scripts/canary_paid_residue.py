@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Canari : un pays déjà catalogué + N graines aux extraits déjà payés.
+"""Canary: one already-catalogued country + N seeds with already-paid excerpts.
 
-Fetch des judge_sources uniquement (0 Search). N'écrit pas poe_ports.
-Par défaut n'écrit pas non plus poe_seed_ports (--write pour persister).
+Fetch judge_sources only (0 Search). Does not write poe_ports.
+By default does not write poe_seed_ports either (--write to persist).
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ async def main() -> None:
     from pymongo import ReadPreference
     from app.db import get_settings
 
-    # Canari lecture : les secondaires suffisent si le primary Atlas est down.
+    # Read canary: secondaries are enough if the Atlas primary is down.
     pref = (ReadPreference.PRIMARY if args.write
             else ReadPreference.SECONDARY_PREFERRED)
     db = AsyncIOMotorClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]]

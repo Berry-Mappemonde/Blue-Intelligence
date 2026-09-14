@@ -1,8 +1,8 @@
-"""Client Serper — SERP Google JSON (organiques uniquement).
+"""Serper client — Google SERP JSON (organics only).
 
-Une requête = 1 crédit si num <= 10. Au-delà Serper compte 2 crédits :
-on force num=10. knowledgeGraph / answerBox / peopleAlsoAsk sont ignorés
-(ce ne sont pas des sources de ports).
+One query = 1 credit if num <= 10. Beyond that Serper counts 2 credits:
+force num=10. knowledgeGraph / answerBox / peopleAlsoAsk are ignored
+(they are not port sources).
 """
 import asyncio
 import os
@@ -17,7 +17,7 @@ TIMEOUT_S = 8.0
 
 
 def serper_api_key(settings=None) -> str:
-    """Settings UI prioritaire, sinon SERPER_API_KEY."""
+    """UI settings first, else SERPER_API_KEY."""
     if settings:
         k = (settings.get("serper_api_key") or "").strip()
         if k:
@@ -51,7 +51,7 @@ def _map_organic(payload: dict) -> list[dict]:
 
 async def serper_search(query: str, key: str, *, gl: str | None = None,
                         hl: str = "en", log=None) -> list[dict]:
-    """POST google.serper.dev/search. 400/401/402/429/timeout → [] (pas d'exception)."""
+    """POST google.serper.dev/search. 400/401/402/429/timeout → [] (no exception)."""
     log = log or (lambda m: None)
     if not (key or "").strip() or not (query or "").strip():
         return []

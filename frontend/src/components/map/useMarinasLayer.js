@@ -10,7 +10,7 @@ const esc = (value) => String(value ?? "")
   .replace(/"/g, "&quot;");
 
 /**
- * Couche Marinas : dump mondial OSM, pastilles canvas, sans cluster.
+ * Marinas layer: worldwide OSM dump, canvas dots, no clustering.
  */
 export default function useMarinasLayer({ mapObj, marinaClusterRef, marinaMarkersById, marinas, tRef }) {
   const marinaSigRef = useRef("");

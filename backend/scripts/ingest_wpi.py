@@ -1,9 +1,9 @@
 """Ingest NGA World Port Index (Pub 150) → backend/data/wpi_ports.json.
 
-Ne touche pas poe_ports / poe_seed_ports. Pas de seeds/build.
+Does not touch poe_ports / poe_seed_ports. No seeds/build.
 
 Usage:
-  python scripts/ingest_wpi.py /chemin/UpdatedPub150.csv
+  python scripts/ingest_wpi.py /path/UpdatedPub150.csv
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from app.services.wpi_ports import ingest_wpi_csv, write_wpi_snapshot  # noqa: E
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("csv", type=Path, help="UpdatedPub150.csv (NGA, domaine public US)")
+    p.add_argument("csv", type=Path, help="UpdatedPub150.csv (NGA, US public domain)")
     p.add_argument("-o", "--out", type=Path, default=None, help="wpi_ports.json")
     args = p.parse_args()
     if not args.csv.is_file():

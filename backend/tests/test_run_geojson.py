@@ -1,4 +1,4 @@
-"""Sélecteur de run carte : GeoJSON des runs + import v1 (projets, AMP)."""
+"""Map run selector: run GeoJSON + v1 import (projects, AMP)."""
 from __future__ import annotations
 
 import os
@@ -29,14 +29,14 @@ def test_run_projects_to_geojson_keeps_image_and_filters_unlocated():
     assert fc["type"] == "FeatureCollection"
     assert fc["run_id"] == "v1"
     assert fc["wrote_projects"] is False
-    assert len(fc["features"]) == 2          # b est écarté (pas de coords)
+    assert len(fc["features"]) == 2          # b is dropped (no coords)
     a = fc["features"][0]["properties"]
     assert a["image"] == "https://img/a.jpg"
     assert a["funder"] == "Fondation X"
     assert a["run_id"] == "v1"
     assert fc["features"][0]["geometry"]["coordinates"] == [5.4, 43.3]
     c = fc["features"][1]["properties"]
-    assert c["funder"] == "F1, F2"           # funders (liste) → chaîne
+    assert c["funder"] == "F1, F2"           # funders (list) → string
 
 
 def test_feature_to_run_project_preserves_photo():
@@ -81,7 +81,7 @@ def test_amp_site_to_run_doc_keeps_geometry_and_isolation():
     assert doc["source_id"] == "AMP123"
     assert doc["wrote_amp_sites"] is False
     assert doc["geometry"]["type"] == "Polygon"
-    assert live.get("run_id") is None        # le doc live n'est pas muté
+    assert live.get("run_id") is None        # the live doc is not mutated
 
 
 def test_mongo_kind_guard():

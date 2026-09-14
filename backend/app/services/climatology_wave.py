@@ -1,4 +1,4 @@
-"""Houle mensuelle P50 / P90 (WAVERYS). Interdit de labeller une moyenne P90."""
+"""Monthly swell P50 / P90 (WAVERYS). Do not label a mean as P90."""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -38,7 +38,7 @@ def has_snapshot(month: int | None = None) -> bool:
 
 
 @lru_cache(maxsize=12)
-def _load_month(month: int):
+def _load_month(month: int, mtime: float):
     if np is None:
         return None
     path = wave_npz_path(month)
@@ -46,6 +46,15 @@ def _load_month(month: int):
         return None
     data = np.load(path, allow_pickle=False)
     return {k: data[k] for k in data.files}
+
+
+def _bundle(month: int):
+    if np is None:
+        return None
+    path = wave_npz_path(month)
+    if not path.is_file():
+        return None
+    return _load_month(month, path.stat().st_mtime)
 
 
 def _nearest_index(arr, value) -> int:
@@ -56,7 +65,7 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     month = parse_month(month)
     if is_land(lat, lon):
         return None
-    bundle = _load_month(month)
+    bundle = _bundle(month)
     if bundle is None:
         return None
     lats, lons = bundle["lats"], bundle["lons"]
@@ -83,7 +92,7 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     hs_p50 = _val(p50)
     hs_p90 = _val(p90)
     hs_mean = _val(mean)
-    # Un snapshot V0 (P1M mean) n'a pas le droit de s'appeler P90.
+    # A V0 snapshot (P1M mean) must not call itself P90.
     stat = str(bundle["stat"][0]) if "stat" in bundle else (
         "p50_p90" if hs_p90 is not None else "mean"
     )
@@ -114,12 +123,21 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     }
 
 
+def _val_cell(arr, i: int, j: int):
+    if arr is None:
+        return None
+    v = float(arr[i, j])
+    if np is not None and np.isnan(v):
+        return None
+    return v
+
+
 def _round(v):
     return None if v is None else round(float(v), 1)
 
 
 def is_wave_hazard(lat: float, lon: float, month: int) -> bool | None:
-    """True si Hs P90 > seuil. ``None`` si le P90 n'est pas disponible (pas un mean déguisé)."""
+    """True if Hs P90 > threshold. ``None`` if P90 is unavailable (not a disguised mean)."""
     w = wave_at(lat, lon, month)
     if not w or w.get("stat") != "p50_p90" or w.get("hs_p90_m") is None:
         return None
@@ -136,7 +154,7 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
     features: list[dict] = []
     snapshot_stat = None
     if np is not None and has_snapshot(month):
-        bundle = _load_month(month)
+        bundle = _bundle(month)
         if bundle is not None:
             snapshot_stat = str(bundle["stat"][0]) if "stat" in bundle else None
             lats, lons = bundle["lats"], bundle["lons"]
@@ -146,7 +164,7 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                 "p90": "hs_p90",
                 "mean": "hs_mean",
             }[want]
-            # Jamais servir une moyenne sous le nom P90.
+            # Never serve a mean under the name P90.
             if want == "p90" and (field_name not in bundle or snapshot_stat == "mean"):
                 field_name = None
             arr = bundle.get(field_name) if field_name else None
@@ -159,6 +177,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                         v = float(arr[i, j])
                         if np.isnan(v) or v <= 0:
                             continue
+                        period_s = _round(_val_cell(bundle.get("period"), i, j))
+                        dir_deg = _round(_val_cell(bundle.get("dir"), i, j))
                         features.append({
                             "type": "Feature",
                             "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
@@ -167,6 +187,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                                 "month": month,
                                 "stat": want if want != "p90" or snapshot_stat != "mean" else "mean",
                                 "hs_m": round(v, 2),
+                                "period_s": period_s,
+                                "dir_deg": dir_deg,
                             },
                         })
     return {

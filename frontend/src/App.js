@@ -14,6 +14,14 @@ import AuditView from "./components/AuditView";
 import ReviewView from "./components/ReviewView";
 import SettingsPanel from "./components/SettingsPanel";
 import ReportModal from "./components/ReportModal";
+import NotForNavModal from "./components/map/NotForNavModal";
+import { DEFAULT_SCIENCE_WMS } from "./components/MapLayersSidebar";
+import { DEFAULT_SAFETY_M } from "./components/map/safetyIsobathSpec";
+import {
+  readNotForNavAccepted,
+  siteEntryNeedsAccept,
+  writeNotForNavAccepted,
+} from "./components/map/notForNav";
 
 const RUNS_LIST_EP = {
   projects: "/projects/runs",
@@ -73,8 +81,8 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-  // Mode admin — Console et Review ne sont visibles qu'après validation de la
-  // clé (?admin=<clé> dans l'URL, mémorisée par api.js) par le backend.
+  // Admin mode — Console and Review are visible only after the backend
+  // validates the key (?admin=<key> in the URL, stored by api.js).
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
     if (!hasAdminKey()) return;
@@ -97,6 +105,20 @@ export default function App() {
     try { localStorage.setItem("bi.basemap", v); } catch (_) { /* ignore */ }
   }, []);
   const [scienceSourceFilter, setScienceSourceFilter] = useState("argo");
+  const [overlayOn, setOverlayOn] = useState(true);
+  const [showReview, setShowReviewRaw] = useState(false);
+  const showReviewRef = useRef(false);
+  const setShowReview = useCallback((v) => {
+    const on = !!v;
+    showReviewRef.current = on;
+    setShowReviewRaw(on);
+  }, []);
+  const [notForNavOk, setNotForNavOk] = useState(() => {
+    const t0 = makeT(readInitialLang());
+    return readNotForNavAccepted(
+      undefined, t0("notForNavTitle"), t0("notForNavBody"),
+    );
+  });
   const [ampLfpFilter, setAmpLfpFilter] = useState("All");
   const [flyToProject, setFlyToProject] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -107,25 +129,15 @@ export default function App() {
   const [flyToMarina, setFlyToMarina] = useState(null); // {id, lat, lon} used as a one-shot signal
   const [capitaineries, setCapitaineries] = useState({ type: "FeatureCollection", features: [] });
   const [flyToCapitainerie, setFlyToCapitainerie] = useState(null);
-  // Mode Science — catalogues océano + flotteurs Argo
+  // Science mode — ocean catalogues + Argo floats
   const [science, setScience] = useState({ type: "FeatureCollection", features: [] });
   const [flyToScience, setFlyToScience] = useState(null);
-  const [scienceWms, setScienceWms] = useState(() => {
-    try {
-      const raw = localStorage.getItem("bi.scienceWms");
-      if (raw) {
-        return { bathymetry: false, cables: false, substrate: false, ...JSON.parse(raw) };
-      }
-    } catch (_) { /* ignore */ }
-    return { bathymetry: false, cables: false, substrate: false };
-  });
+  const [scienceWms, setScienceWms] = useState(() => ({ ...DEFAULT_SCIENCE_WMS }));
   const toggleScienceWms = useCallback((id, on) => {
-    setScienceWms((prev) => {
-      const next = { ...prev, [id]: !!on };
-      try { localStorage.setItem("bi.scienceWms", JSON.stringify(next)); } catch (_) { /* ignore */ }
-      return next;
-    });
+    setScienceWms((prev) => ({ ...prev, [id]: !!on }));
   }, []);
+  const [safetyM, setSafetyM] = useState(DEFAULT_SAFETY_M);
+  const [noaaAidsOn, setNoaaAidsOn] = useState(false);
   const [climoMonth, setClimoMonth] = useState(() => new Date().getMonth() + 1);
   const [climoFilters, setClimoFilters] = useState(() => {
     try {
@@ -165,8 +177,8 @@ export default function App() {
   const [flyToPoe, setFlyToPoe] = useState(null);
   const [ampSites, setAmpSites] = useState({ type: "FeatureCollection", features: [] });
   const [flyToAmp, setFlyToAmp] = useState(null);
-  // Sélecteur de run (bouton " > " de l'onglet Map) — { [mode]: {id,label} | null }.
-  // Quand un run est sélectionné, la carte affiche ses données au lieu du live.
+  // Run selector (">" button on the Map tab) — { [mode]: {id,label} | null }.
+  // When a run is selected, the map shows that run's data instead of live.
   const [mapRuns, setMapRuns] = useState({});
   const mapRunsRef = useRef(mapRuns);
   mapRunsRef.current = mapRuns;
@@ -178,11 +190,18 @@ export default function App() {
   // creates a fresh `t` → MapView props change → the formalities marker
   // rebuild useEffect re-fires and the DOM briefly drops to 0 markers.
   const t = useMemo(() => makeT(lang), [lang]);
+  useEffect(() => {
+    setNotForNavOk(readNotForNavAccepted(
+      undefined, t("notForNavTitle"), t("notForNavBody"),
+    ));
+  }, [t]);
+  const nauticalAllowed = notForNavOk;
+  const notForNavOpen = siteEntryNeedsAccept(notForNavOk);
   const lastTotalRef = useRef(-1);
   const viewRef = useRef(view);
   viewRef.current = view;
 
-  // Sans droits admin, les vues Console (audit) et Review sont inaccessibles.
+  // Without admin rights, Console (audit) and Review views are unreachable.
   useEffect(() => {
     if (!isAdmin && (view === "audit" || view === "review")) setView("map");
   }, [isAdmin, view]);
@@ -209,11 +228,19 @@ export default function App() {
 
   const fetchProjects = useCallback(async (force = false) => {
     try {
+      if (showReviewRef.current) {
+        const f = await api.get("/funders", { params: { visible: true } });
+        setFunders(f.data);
+        const p = await api.get("/projects", { params: { visible: true } });
+        setProjects(p.data);
+        lastTotalRef.current = -1;
+        return;
+      }
       const run = mapRunsRef.current.projects;
       if (run?.id) {
         const p = await api.get(`/projects/runs/${run.id}/geojson`);
         setProjects(p.data);
-        lastTotalRef.current = -1;   // retour au live => refetch complet
+        lastTotalRef.current = -1;   // back to live => full refetch
         const n = p.data?.features?.length || 0;
         const key = `projects:${run.id}:${n}`;
         if (n && lastFitKeyRef.current !== key) {
@@ -257,9 +284,11 @@ export default function App() {
           && (marinasRef.current?.features?.length || 0) > 0) {
         return;
       }
-      const { data } = run?.id
-        ? await api.get(`/marinas/runs/${run.id}/geojson`, { timeout: 300000 })
-        : await api.get("/marinas", { timeout: 300000 });
+      const { data } = showReviewRef.current
+        ? await api.get("/marinas", { timeout: 300000, params: { visible: true } })
+        : run?.id
+          ? await api.get(`/marinas/runs/${run.id}/geojson`, { timeout: 300000 })
+          : await api.get("/marinas", { timeout: 300000 });
       setMarinas(data);
       if (run?.id) {
         const n = data?.features?.length || 0;
@@ -280,9 +309,11 @@ export default function App() {
     try {
       const run = mapRunsRef.current.capitaineries;
       if (!force && !run?.id && (capitaineriesRef.current?.features?.length || 0) > 0) return;
-      const { data } = run?.id
-        ? await api.get(`/capitaineries/runs/${run.id}/geojson`)
-        : await api.get("/capitaineries");
+      const { data } = showReviewRef.current
+        ? await api.get("/capitaineries", { params: { visible: true } })
+        : run?.id
+          ? await api.get(`/capitaineries/runs/${run.id}/geojson`)
+          : await api.get("/capitaineries");
       setCapitaineries(data);
       if (run?.id) {
         const n = data?.features?.length || 0;
@@ -304,8 +335,8 @@ export default function App() {
     } catch (e) { /* transient */ }
   }, []);
 
-  // Mode Science — le GeoJSON vient de la collection live science_items
-  // (moisson non destructive) ; pas de variante par run ni de filtre review.
+  // Science mode — GeoJSON comes from the live science_items collection
+  // (non-destructive harvest); no per-run variant and no review filter.
   const fetchScience = useCallback(async () => {
     try {
       const { data } = await api.get("/science");
@@ -327,7 +358,9 @@ export default function App() {
 
   const fetchPoeZones = useCallback(async () => {
     try {
-      const { data } = await api.get("/poe/zones");
+      const { data } = await api.get("/poe/zones", {
+        params: showReviewRef.current ? { visible: true } : {},
+      });
       setPoeZones(data);
     } catch (e) { /* transient */ }
     finally { setPoeZonesLoading(false); }
@@ -340,9 +373,11 @@ export default function App() {
     try {
       const run = mapRunsRef.current.formalities;
       if (!force && !run?.id && (poePortsRef.current?.features?.length || 0) > 0) return;
-      const { data } = run?.id
-        ? await api.get(`/poe/runs/${run.id}/ports`)
-        : await api.get("/poe/ports");
+      const { data } = showReviewRef.current
+        ? await api.get("/poe/ports", { params: { visible: true } })
+        : run?.id
+          ? await api.get(`/poe/runs/${run.id}/ports`)
+          : await api.get("/poe/ports");
       setPoePorts(data);
     } catch (e) { /* transient */ }
   }, []);
@@ -477,8 +512,8 @@ export default function App() {
     fetchMarinas();
     fetchScience();
     fetchClimoMeta(new Date().getMonth() + 1);
-    // Les 6 connexions HTTP/1.1 de Chrome vers cette origine saturent si
-    // on lance tous les dumps en parallèle (marinas ~15 Mo + chunks maplibre).
+    // Chrome's 6 HTTP/1.1 connections to this origin saturate if we fire
+    // every dump in parallel (marinas ~15 MB + maplibre chunks).
     const later = setTimeout(() => {
       fetchCategories();
       fetchCapitaineries();
@@ -505,8 +540,8 @@ export default function App() {
       }
       await fetchMarinas();
     };
-    // Polls espacés (fluidité) : les GeoJSON complets sont lourds ; les
-    // panneaux forcent un refresh ciblé dès qu'un build se termine.
+    // Staggered polls (keep the UI fluid): full GeoJSON payloads are heavy;
+    // panels force a targeted refresh as soon as a build finishes.
     const s = setInterval(fetchStatus, 4000);
     const p = setInterval(unlessReview(() => fetchProjects()), 30000);
     const c = setInterval(fetchCategories, 60000);
@@ -523,14 +558,14 @@ export default function App() {
     };
   }, [fetchStatus, fetchProjects, fetchSettings, fetchCategories, fetchMarinas, fetchCapitaineries, fetchAnchorages, fetchScience, fetchClimoMeta, fetchPoeZones, fetchPoePorts]);
 
-  // Sélection d'un run à afficher (null = carte live) pour le mode courant.
+  // Select a run to display (null = live map) for the current mode.
   const handleSelectMapRun = useCallback((run) => {
     userPickedRunRef.current[mode] = true;
     lastFitKeyRef.current = "";
     setMapRuns((prev) => ({ ...prev, [mode]: run || null }));
   }, [mode]);
 
-  // Couche Map par défaut = run isolé du mode (contrat §8). Formalités inchangée.
+  // Default Map layer = the mode's isolated run (contract §8). Formalities unchanged.
   useEffect(() => {
     if (mode === "formalities" || mode === "science" || mode === "climatology") return undefined;
     const ep = RUNS_LIST_EP[mode];
@@ -587,7 +622,7 @@ export default function App() {
     }
   }, [ampSites, mapRuns]);
 
-  // Changement de run sélectionné => re-fetch immédiat du dataset concerné.
+  // Selected run changed => immediately re-fetch the affected dataset.
   const prevMapRunsRef = useRef({});
   useEffect(() => {
     const prev = prevMapRunsRef.current;
@@ -667,6 +702,11 @@ export default function App() {
         mapRun={mapRuns[mode] || null}
         onSelectMapRun={handleSelectMapRun}
         isAdmin={isAdmin}
+        showReview={showReview}
+        onToggleShowReview={(on) => {
+          setShowReview(on);
+          refreshMapData();
+        }}
       />
       <div className="flex flex-1 min-h-0">
         {view !== "review" && mode === "projects" && (
@@ -725,8 +765,6 @@ export default function App() {
             onRefresh={fetchScience}
             sourceFilter={scienceSourceFilter}
             onSourceFilter={setScienceSourceFilter}
-            scienceWms={scienceWms}
-            onToggleWms={toggleScienceWms}
           />
         )}
         {view !== "review" && mode === "climatology" && (
@@ -757,6 +795,11 @@ export default function App() {
               science={science}
               flyToScience={flyToScience}
               scienceWms={scienceWms}
+              overlayOn={overlayOn}
+              nauticalAllowed={nauticalAllowed}
+              safetyM={safetyM}
+              noaaAidsOn={noaaAidsOn}
+              showReview={showReview}
               scienceSourceFilter={scienceSourceFilter}
               climoMonth={climoMonth}
               climoFilters={climoFilters}
@@ -774,7 +817,7 @@ export default function App() {
               flyToAmp={flyToAmp}
               flyToProject={flyToProject}
               fitRunBounds={fitRunBounds}
-              ampRunId={mapRuns.amp?.id || null}
+              ampRunId={showReview ? null : (mapRuns.amp?.id || null)}
               onAmpSites={setAmpSites}
               zoneFiche={zoneFiche}
               funderFilter={funderFilter} searchQuery={searchQuery} t={t}
@@ -804,6 +847,15 @@ export default function App() {
           {showSettings && (
           <SettingsPanel t={t} lang={lang} mode={mode} settings={settings}
             isAdmin={isAdmin}
+            overlayOn={overlayOn}
+            onToggleOverlay={setOverlayOn}
+            scienceWms={scienceWms}
+            onToggleWms={toggleScienceWms}
+            safetyM={safetyM}
+            onSafetyM={setSafetyM}
+            noaaAidsOn={noaaAidsOn}
+            onToggleNoaaAids={setNoaaAidsOn}
+            showNoaa={mode === "capitaineries"}
             onSaved={fetchSettings}
             // 2026-08-24 bug-fix — import router-callback receives the mode
             // that was actually imported so we only refresh the affected
@@ -820,6 +872,16 @@ export default function App() {
       {showReport && (
         <ReportModal t={t} onClose={() => setShowReport(false)} onSubmitted={() => { setShowReport(false); }} />
       )}
+      <NotForNavModal
+        t={t}
+        open={notForNavOpen}
+        onAccept={() => {
+          writeNotForNavAccepted(
+            undefined, t("notForNavTitle"), t("notForNavBody"),
+          );
+          setNotForNavOk(true);
+        }}
+      />
     </div>
   );
 }

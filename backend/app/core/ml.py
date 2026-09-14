@@ -1,14 +1,14 @@
 """
-ml_core.py — Bootstrapping ML / Weak Supervision sur les données existantes.
+ml_core.py — ML bootstrapping / weak supervision on existing data.
 
-Les enregistrements déjà en base (projets + PoE) servent de jeu d'entraînement
-initial ("trésor") — AUCUNE écriture destructive sur ces collections.
+Records already in the database (projects + PoE) serve as the initial
+training set ("treasure") — NO destructive writes on these collections.
 
-- Classifieur de pertinence (Gatekeeper local) : TF-IDF + LogisticRegression
-  entraîné sur les projets validés (positifs) vs corpus terrestre (négatifs).
-- Détection d'anomalies spatiales sur les PoE : IsolationForest (offsets par
-  zone) + DBSCAN haversine par zone (corroboration). Flags non-destructifs.
-- Export d'un dataset NER (PORT_NAME / PROJECT_NAME / LOCATION) pour spaCy.
+- Relevance classifier (local Gatekeeper): TF-IDF + LogisticRegression
+  trained on validated projects (positives) vs terrestrial corpus (negatives).
+- Spatial anomaly detection on PoEs: IsolationForest (per-zone offsets)
+  + per-zone haversine DBSCAN (corroboration). Non-destructive flags.
+- NER dataset export (PORT_NAME / PROJECT_NAME / LOCATION) for spaCy.
 """
 import asyncio
 import json
@@ -28,7 +28,7 @@ _gatekeeper_cache = None
 _ner_cache = None
 _serp_cache = None
 
-# Corpus terrestre synthétique — complète les négatifs réels (db.failed) trop rares.
+# Synthetic terrestrial corpus — fills in real negatives (db.failed) that are too rare.
 _LAND_NEGATIVES = [
     "Reforestation of the Amazon rainforest canopy to protect terrestrial biodiversity",
     "Mountain gorilla habitat protection in the Virunga highlands and inland forests",
@@ -54,7 +54,7 @@ _LAND_NEGATIVES = [
 
 
 # ---------------------------------------------------------------------------
-# Statistiques dataset (Bottom-Up : la BDD est le jeu d'entraînement)
+# Dataset statistics (Bottom-Up: the DB is the training set)
 # ---------------------------------------------------------------------------
 async def dataset_stats(db) -> dict:
     projects = await db.projects.count_documents({})
@@ -104,7 +104,7 @@ def models_status() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Classifieur de pertinence (Gatekeeper local — weak supervision)
+# Relevance classifier (local Gatekeeper — weak supervision)
 # ---------------------------------------------------------------------------
 async def build_gatekeeper_dataset(db, max_docs: int = 8000):
     positives = []
@@ -118,7 +118,7 @@ async def build_gatekeeper_dataset(db, max_docs: int = 8000):
         if "terrestrial" in reason or "freshwater" in reason or "not marine" in reason.lower():
             negatives.append(f"{f.get('url', '')} {reason}")
     n_real_neg = len(negatives)
-    # Weak supervision : compléter avec le corpus terrestre synthétique
+    # Weak supervision: fill in with the synthetic terrestrial corpus
     target_neg = max(len(_LAND_NEGATIVES) * 10, len(positives) // 3)
     i = 0
     while len(negatives) < target_neg:
@@ -184,7 +184,7 @@ def _load_gatekeeper():
 
 
 def predict_relevance(text: str):
-    """Score marin [0-1] du classifieur local, ou None si modèle absent/trop faible."""
+    """Marine score [0-1] from the local classifier, or None if the model is missing/too weak."""
     bundle = _load_gatekeeper()
     if not bundle or bundle.get("n_pos", 0) < 500 or not text:
         return None
@@ -197,7 +197,7 @@ def predict_relevance(text: str):
 
 
 # ---------------------------------------------------------------------------
-# Anomalies spatiales des PoE (IsolationForest + DBSCAN — non-destructif)
+# PoE spatial anomalies (IsolationForest + DBSCAN — non-destructive)
 # ---------------------------------------------------------------------------
 async def scan_poe_anomalies(db, state=None, contamination: float = 0.05) -> dict:
     from app.core.geo import isolation_forest_scores, dbscan_noise_flags, haversine_km
@@ -209,7 +209,7 @@ async def scan_poe_anomalies(db, state=None, contamination: float = 0.05) -> dic
         state.total = len(ports)
     log(f"{len(ports)} PoE géocodés chargés (jeu Bottom-Up)")
 
-    # Regroupement par zone + médiane de zone
+    # Group by zone + zone median
     zones: dict[int, list[dict]] = {}
     for p in ports:
         zones.setdefault(p.get("mrgid") or 0, []).append(p)
@@ -271,7 +271,7 @@ async def scan_poe_anomalies(db, state=None, contamination: float = 0.05) -> dic
 
 
 # ---------------------------------------------------------------------------
-# Dataset NER (préparation spaCy — PORT_NAME / PROJECT_NAME / LOCATION)
+# NER dataset (spaCy prep — PORT_NAME / PROJECT_NAME / LOCATION)
 # ---------------------------------------------------------------------------
 def _ner_spans(text: str, needle: str, label: str) -> list | None:
     if not needle:
@@ -283,8 +283,8 @@ def _ner_spans(text: str, needle: str, label: str) -> list | None:
 
 
 def _regulatory_port_examples(name: str, city: str, zone: str) -> list[dict]:
-    """Phrases réglementaires autour d'un vrai nom de port — le catalogue
-    `{name}, {city} ({zone})` seul laissait le NER muet sur du HTML officiel."""
+    """Regulatory sentences around a real port name — the catalog
+    `{name}, {city} ({zone})` alone left NER mute on official HTML."""
     city = (city or "").strip()
     zone = (zone or "").strip()
     templates = [
@@ -343,14 +343,14 @@ async def export_ner_dataset(db) -> dict:
             f.write(json.dumps({"text": text[:500], "entities": ents}, ensure_ascii=False) + "\n")
             lines += 1
             n_ports += 1
-            # 2 phrases réglementaires par port (toutes) + 3 de plus pour un
-            # échantillon, pour apprendre le contexte sans exploser le dataset.
+            # 2 regulatory sentences per port (all) + 3 more for a
+            # sample, to learn context without exploding the dataset.
             extra = _regulatory_port_examples(name, city, zone)
             chosen = extra[:2] if n_ports % 4 else extra
             for row in chosen:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 lines += 1
-        # Ancres dures : les tests et le run réel citent ces formulations.
+        # Hard anchors: tests and the real run cite these phrasings.
         for name, city, zone in (
             ("Port de Papeete", "Tahiti", "French Polynesia"),
             ("Alofi", "Alofi", "Niue"),
@@ -364,7 +364,7 @@ async def export_ner_dataset(db) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# NER spaCy sur mesure (PORT_NAME / PROJECT_NAME / LOCATION) — sans LLM
+# Custom spaCy NER (PORT_NAME / PROJECT_NAME / LOCATION) — no LLM
 # ---------------------------------------------------------------------------
 def _train_ner_sync(n_iter: int = 12, log=print) -> dict:
     import random
@@ -419,8 +419,8 @@ def _train_ner_sync(n_iter: int = 12, log=print) -> dict:
 
 
 async def train_ner(db, log=None, n_iter: int = 12) -> dict:
-    """Bootstrapping NER : régénère le dataset depuis la BDD (weak supervision)
-    puis entraîne un modèle spaCy local. Aucune écriture sur les collections."""
+    """NER bootstrapping: rebuild the dataset from the DB (weak supervision)
+    then train a local spaCy model. No writes on the collections."""
     global _ner_cache
     log = log or (lambda m: None)
     ds = await export_ner_dataset(db)
@@ -452,7 +452,7 @@ def _load_ner():
 
 
 def extract_entities(text: str) -> list[dict]:
-    """Extraction d'entités locale (PORT_NAME / PROJECT_NAME / LOCATION), sans LLM."""
+    """Local entity extraction (PORT_NAME / PROJECT_NAME / LOCATION), no LLM."""
     nlp = _load_ner()
     if nlp is None or not text:
         return []
@@ -472,10 +472,10 @@ def extract_entities(text: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Classifieur SERP (weak supervision) — prédit si une URL de résultat de
-# recherche mène à une liste officielle de ports, AVANT tout téléchargement.
-# Positifs : URLs sources ayant réellement produit des PoE en base.
-# Négatifs : corpus synthétique d'URLs touristiques/blogs/agrégateurs.
+# SERP classifier (weak supervision) — predicts whether a search-result URL
+# leads to an official port list, BEFORE any download.
+# Positives: source URLs that actually produced PoEs in the DB.
+# Negatives: synthetic corpus of tourism/blog/aggregator URLs.
 # ---------------------------------------------------------------------------
 _SERP_NEG_TEMPLATES = [
     "https://www.tripadvisor.com/Attractions-g{i}-Activities-{c}.html",
@@ -580,8 +580,8 @@ def _load_serp():
 
 
 def predict_serp(url: str):
-    """Probabilité [0-1] que l'URL mène à une liste officielle de ports.
-    None si le modèle est absent ou entraîné sur trop peu de données."""
+    """Probability [0-1] that the URL leads to an official port list.
+    None if the model is missing or trained on too little data."""
     bundle = _load_serp()
     if not bundle or bundle.get("n_pos", 0) < 50 or not url:
         return None

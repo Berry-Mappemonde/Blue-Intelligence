@@ -1,18 +1,17 @@
-"""
-Enrichissement marina.
+"""Marina enrichment.
 
-Chaîne (coût croissant, partagée avec les capitaineries via ``run_page_enrich``) :
-    1. Tags OSM déjà là
-    2. URL officielle ; ``search_named`` seulement s'il n'y en a pas
-    3. Lecture de page (``read_url``)
-    4. Regex téléphone / canal VHF
-    5. NVIDIA NIM chaîne `page`, puis OpenRouter, s'il reste un trou
-    6. Agent TinyFish — site officiel uniquement (jamais un hit moteur)
+Chain (rising cost, shared with harbormasters via ``run_page_enrich``):
+    1. OSM tags already there
+    2. Official URL; ``search_named`` only if there is none
+    3. Page read (``read_url``)
+    4. Phone / VHF-channel regex
+    5. NVIDIA NIM `page` chain, then OpenRouter, if a hole remains
+    6. TinyFish Agent — official site only (never an engine hit)
 
-Claude n'est pas appelé ici (contrat claude.py : pas les marinas).
+Claude is not called here (claude.py contract: not marinas).
 
-Le schéma marina n'est pas celui des capitaineries : places visiteurs,
-tirant d'eau, services. Un champ déjà rempli n'est pas écrasé.
+The marina schema is not the harbormaster one: visitor berths,
+draft, services. An already filled field is not overwritten.
 
 Credit guards:
     - OpenRouter: GET /v1/key before spending. Respect OPENROUTER_MIN_CREDITS
@@ -68,7 +67,7 @@ ENRICH_FIELDS = (
     "resume_avis",
 )
 
-# Champs qui justifient de payer un modèle. resume_avis / score ne suffisent pas.
+# Fields that justify paying a model. resume_avis / score are not enough.
 HOLE_FIELDS = (
     "canal_vhf",
     "places_visiteurs",
@@ -155,7 +154,7 @@ async def openrouter_check_credit(
 
 
 def marina_site_query(marina: dict) -> str:
-    """Requête propre au mode marina — pas une requête de port d'entrée."""
+    """Marina-mode query — not a port-of-entry query."""
     name = str(marina.get("name") or "").strip()
     bits = [f'"{name}"' if name else "marina", "marina", "harbour", "port"]
     try:
@@ -170,7 +169,7 @@ async def duckduckgo_html_search(
     client: httpx.AsyncClient | None = None,
     max_results: int = 3,
 ) -> list[dict]:
-    """Rétrocompat : le filet DDG vit dans ``app.core.search``."""
+    """Back-compat: the DDG net lives in ``app.core.search``."""
     from app.core.search import duckduckgo_html_search as _ddg
     return await _ddg(query, client=client, max_results=max_results)
 
@@ -192,7 +191,7 @@ async def discover_marina_urls(
     tinyfish_key: Optional[str] = None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> list[str]:
-    """Tag OSM d'abord ; sinon ``search_named`` (TinyFish, DDG si pas de clé)."""
+    """OSM tag first; else ``search_named`` (TinyFish, DDG if no key)."""
     from app.core.enrich import collect_page_urls
     from app.core.search import search_named
 
@@ -221,7 +220,7 @@ async def resolve_marina_website(
     key: str | None = None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> str | None:
-    """Tag OSM d'abord ; sinon ``search_named`` (TinyFish, DDG si pas de clé)."""
+    """OSM tag first; else ``search_named`` (TinyFish, DDG if no key)."""
     urls = await discover_marina_urls(marina, tinyfish_key=key, logger=logger)
     picked = urls[0] if urls else None
     if picked and logger:
@@ -245,10 +244,10 @@ async def fetch_marina_pages(
 
 async def fetch_readable(url: str, client: httpx.AsyncClient | None = None,
                          timeout: int = 20) -> tuple[str, str]:
-    """Texte d'une URL via la porte unique (cascade PDF / HTML / JS).
+    """Text of a URL via the single door (PDF / HTML / JS cascade).
 
-    ``client`` est ignoré : la cascade gère httpx, PDF et le navigateur.
-    Conservé pour le contrat d'appel des enrichisseurs marina.
+    ``client`` is ignored: the cascade handles httpx, PDF and the browser.
+    Kept for the marina enricher call contract.
     """
     pages = await fetch_marina_pages([url], tinyfish_key=None)
     if not pages:
@@ -258,13 +257,16 @@ async def fetch_readable(url: str, client: httpx.AsyncClient | None = None,
 
 
 def marina_from_pages(pages: list[dict]) -> dict:
-    """Tél / VHF par règle simple — pas les places ni le tirant."""
+    """Phone / VHF by a simple rule — not berths or draft."""
+    from app.core.nav_rule import should_write_vhf
     from app.services.capitainerie_world import contact_from_text
     phone = vhf = None
     for page in pages or []:
-        p, v = contact_from_text(page.get("text") or "")
+        text = page.get("text") or ""
+        p, v = contact_from_text(text)
         phone = phone or p
-        vhf = vhf or v
+        if v and should_write_vhf(text, v):
+            vhf = vhf or v
         if phone and vhf:
             break
     return {"telephone_capitainerie": phone, "canal_vhf": vhf}
@@ -516,7 +518,7 @@ def enrich_from_osm_tags(marina: dict) -> dict:
 
 
 def marina_from_tags(marina: dict) -> dict:
-    """Champs doc déjà là, puis tags OSM dans les vides."""
+    """Doc fields already there, then OSM tags into the empties."""
     base = {k: marina.get(k) for k in ENRICH_FIELDS}
     return fill_empty(base, enrich_from_osm_tags(marina), ENRICH_FIELDS)
 
@@ -583,7 +585,7 @@ async def enrich_via_nvidia(
     settings: dict | None = None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> Optional[dict]:
-    """Chaîne `page` : Pro → gpt-oss → Muse. `_engine` = modèle réellement servi."""
+    """`page` chain: Pro → gpt-oss → Muse. `_engine` = model actually served."""
     from app.core import nvidia
     if not context or not nvidia.nvidia_enabled(settings):
         return None

@@ -1,23 +1,23 @@
-"""Mode Science — moissonnage des catalogues océanographiques ouverts.
+"""Science mode — harvest of open oceanographic catalogs.
 
-Contrat :
-  * objet = jeu de données scientifique localisé (fiche catalogue) ou
-    flotteur Argo (dernière position de profil) — jamais une mesure brute
-  * identité = ``{source}:{id natif}`` (uuid GeoNetwork, n° EDMED, WMO Argo)
-  * chaque fiche porte l'URL de sa page portail (+ DOI quand présent)
-  * pas de purge (upsert non destructif), pas de LLM, pas de scraping :
-    uniquement des API structurées (Elasticsearch GeoNetwork, SPARQL, ERDDAP)
-  * fiches sans emprise exploitable (globales ou sans géométrie) : conservées
-    en base mais jamais posées sur la carte
+Contract:
+  * object = localized scientific dataset (catalog card) or
+    Argo float (last profile position) — never a raw measurement
+  * identity = ``{source}:{native id}`` (GeoNetwork uuid, EDMED no., Argo WMO)
+  * each card carries the URL of its portal page (+ DOI when present)
+  * no purge (non-destructive upsert), no LLM, no scraping:
+    structured APIs only (GeoNetwork Elasticsearch, SPARQL, ERDDAP)
+  * cards without a usable footprint (global or no geometry): kept
+    in the DB but never placed on the map
 
-Sources :
-  * ``sextant`` — catalogue Sextant (Ifremer / SISMER), API JSON GeoNetwork 4
-  * ``odatis``  — sous-portail ODATIS (pôle océan Data Terra) du même GeoNetwork
-  * ``edmed``   — répertoire EDMED de SeaDataNet, endpoint SPARQL (WKT)
-  * ``argo``    — index des profils Argo (ERDDAP Ifremer / Coriolis),
-    dernière position par flotteur sur une fenêtre glissante
-  * ``csr``     — Cruise Summary Reports SeaDataNet (SPARQL Ifremer),
-    tracés WKT ``hasTrack`` (sous-échantillonnés)
+Sources:
+  * ``sextant`` — Sextant catalog (Ifremer / SISMER), GeoNetwork 4 JSON API
+  * ``odatis``  — ODATIS sub-portal (Data Terra ocean pole) of the same GeoNetwork
+  * ``edmed``   — SeaDataNet EDMED directory, SPARQL endpoint (WKT)
+  * ``argo``    — Argo profile index (Ifremer / Coriolis ERDDAP),
+    last position per float on a sliding window
+  * ``csr``     — SeaDataNet Cruise Summary Reports (Ifremer SPARQL),
+    ``hasTrack`` WKT tracks (subsampled)
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from app.services.marina_build import USER_AGENT
 SCHEMA = "science_v1"
 
 GN_ES_PAGE_SIZE = 200
-GN_ES_HARD_CAP = 10_000  # au-delà, l'API Elasticsearch exige search_after
+GN_ES_HARD_CAP = 10_000  # beyond that, the Elasticsearch API requires search_after
 DEFAULT_CATALOG_MAX = 2000
 DEFAULT_ARGO_DAYS = 30
 DEFAULT_CSR_MAX = 500
@@ -73,9 +73,9 @@ ARGO_FLOAT_URL = "https://fleetmonitoring.euro-argo.eu/float/{wmo}"
 
 CSR_SPARQL = "https://sparql.ifremer.fr/csr/query"
 CSR_REPORT_URL = "https://csr.seadatanet.org/report/{native}"
-# Uniquement les campagnes qui ont un tracé (hasTrack). ORDER BY DESC(?r)
-# pour les plus récentes d'abord. Les tracks WKT peuvent dépasser 1 Mo :
-# on pagine petit et on sous-échantillonne côté Python.
+# Only cruises that have a track (hasTrack). ORDER BY DESC(?r)
+# for the most recent first. WKT tracks can exceed 1 MB:
+# we page small and subsample on the Python side.
 CSR_QUERY = (
     "PREFIX csr: <http://purl.org/org/iode/po/voc/cruise-summary-reports#> "
     "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
@@ -96,6 +96,9 @@ CSR_QUERY = (
 )
 
 SOURCES = ("sextant", "odatis", "edmed", "argo", "csr")
+# Sentinel pilots: manual ingest, never in the harvest.
+PILOT_SOURCE = "sentinel-pilot"
+DISPLAY_SOURCES = SOURCES + (PILOT_SOURCE,)
 
 SOURCE_LABELS = {
     "sextant": "Sextant · Ifremer / SISMER",
@@ -105,7 +108,7 @@ SOURCE_LABELS = {
     "csr": "CSR · campagnes SeaDataNet",
 }
 
-# Codes DAC de l'index Argo (colonne institution) — jamais inventés.
+# DAC codes from the Argo index (institution column) — never invented.
 ARGO_INSTITUTIONS = {
     "AO": "AOML (USA)",
     "BO": "BODC (UK)",
@@ -122,8 +125,8 @@ ARGO_INSTITUTIONS = {
 }
 ARGO_OCEANS = {"A": "Atlantic", "P": "Pacific", "I": "Indian"}
 
-# Emprise « globale » : la fiche couvre (presque) tout le globe — la poser
-# au centre (0, 0) n'aurait aucun sens de localisation.
+# “Global” extent: the card covers (almost) the whole globe — placing it
+# at the center (0, 0) would have no location meaning.
 GLOBAL_MIN_WIDTH_DEG = 350.0
 GLOBAL_MIN_HEIGHT_DEG = 160.0
 
@@ -149,6 +152,8 @@ SLIM_PROJECTION = {
     "start": 1,
     "end": 1,
     "fetched_at": 1,
+    "error_m": 1,
+    "method": 1,
 }
 
 _WKT_PAIR_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)")
@@ -169,7 +174,7 @@ def now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 def _iter_positions(coords: Any):
-    """Descend récursivement une structure de coordonnées GeoJSON."""
+    """Recursively walk a GeoJSON coordinate structure."""
     if not isinstance(coords, (list, tuple)) or not coords:
         return
     head = coords[0]
@@ -192,9 +197,9 @@ def _bbox_of_pairs(pairs: list[tuple[float, float]]) -> tuple[float, float, floa
     lats = [p[1] for p in pts]
     w, e = min(lons), max(lons)
     s, n = min(lats), max(lats)
-    # Antiméridien : si l'étendue naïve dépasse 180°, retenter en 0–360.
-    # Garde-fou : une emprise mondiale [-180, 180] dégénère en largeur ~0
-    # après le modulo — on la laisse alors telle quelle (fiche « globale »).
+    # Antimeridian: if the naive extent exceeds 180°, retry in 0–360.
+    # Guard: a worldwide footprint [-180, 180] degenerates to width ~0
+    # after the modulo — then leave it as-is ("global" card).
     if e - w > 180.0:
         shifted = [lon % 360.0 for lon in lons]
         w2, e2 = min(shifted), max(shifted)
@@ -206,7 +211,7 @@ def _bbox_of_pairs(pairs: list[tuple[float, float]]) -> tuple[float, float, floa
 
 
 def bbox_from_geom(geom: Any) -> tuple[float, float, float, float] | None:
-    """bbox (w, s, e, n) d'une géométrie GeoJSON (ou d'une liste de géométries)."""
+    """bbox (w, s, e, n) of a GeoJSON geometry (or a list of geometries)."""
     geoms = geom if isinstance(geom, list) else [geom]
     pairs: list[tuple[float, float]] = []
     for g in geoms:
@@ -217,7 +222,7 @@ def bbox_from_geom(geom: Any) -> tuple[float, float, float, float] | None:
 
 
 def bbox_from_wkt(wkt: str | None) -> tuple[float, float, float, float] | None:
-    """bbox d'un WKT EDMED (POLYGON / MULTIPOLYGON / POINT, ordre lon lat)."""
+    """bbox of an EDMED WKT (POLYGON / MULTIPOLYGON / POINT, lon lat order)."""
     if not wkt or not str(wkt).strip():
         return None
     pairs = [(float(a), float(b)) for a, b in _WKT_PAIR_RE.findall(str(wkt))]
@@ -243,7 +248,7 @@ def bbox_center(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
 
 
 def pairs_from_wkt(wkt: str | None) -> list[tuple[float, float]]:
-    """Paires (lon, lat) d'un WKT POINT / LINESTRING / POLYGON."""
+    """(lon, lat) pairs of a POINT / LINESTRING / POLYGON WKT."""
     if not wkt or not str(wkt).strip():
         return []
     out: list[tuple[float, float]] = []
@@ -258,7 +263,7 @@ def subsample_line(
     pairs: list[tuple[float, float]],
     max_points: int = TRACK_MAX_POINTS,
 ) -> list[list[float]]:
-    """Réduit un tracé à ``max_points`` en gardant le premier et le dernier."""
+    """Reduce a track to ``max_points`` while keeping the first and last."""
     if max_points < 2:
         max_points = 2
     if len(pairs) <= max_points:
@@ -341,7 +346,7 @@ def _gn_date(src: dict) -> str | None:
 
 
 def dataset_from_gn_hit(hit: dict, source: str) -> dict | None:
-    """Fiche Science depuis un hit de l'API de recherche GeoNetwork 4."""
+    """Science card from a GeoNetwork 4 search API hit."""
     src = hit.get("_source") or {}
     uuid = str(src.get("uuid") or hit.get("_id") or "").strip()
     title = _first_str(src.get("resourceTitleObject"))
@@ -385,7 +390,7 @@ def _binding_value(binding: dict, key: str) -> str | None:
 
 
 def dataset_from_edmed_binding(binding: dict) -> dict | None:
-    """Fiche Science depuis une ligne SPARQL EDMED (une ligne par géométrie)."""
+    """Science card from an EDMED SPARQL row (one row per geometry)."""
     subject = _binding_value(binding, "s")
     title = _binding_value(binding, "title")
     if not subject or not title:
@@ -417,11 +422,11 @@ def dataset_from_edmed_binding(binding: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# CSR (SeaDataNet) — binding SPARQL → tracé de campagne
+# CSR (SeaDataNet) — SPARQL binding → cruise track
 # ---------------------------------------------------------------------------
 
 def cruise_from_csr_binding(binding: dict) -> dict | None:
-    """Fiche campagne depuis une ligne SPARQL CSR (tracé WKT + métadonnées)."""
+    """Cruise card from a CSR SPARQL row (WKT track + metadata)."""
     subject = _binding_value(binding, "r")
     title = _binding_value(binding, "label")
     if not subject or not title or title.strip() == "-":
@@ -468,11 +473,11 @@ def cruise_from_csr_binding(binding: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Argo (Coriolis / ERDDAP) — index des profils → dernière position par flotteur
+# Argo (Coriolis / ERDDAP) — profile index → last position per float
 # ---------------------------------------------------------------------------
 
 def wmo_from_file(path: str | None) -> tuple[str | None, str | None, int | None]:
-    """(wmo, dac, cycle) depuis un chemin d'index ``aoml/1901514/profiles/R1901514_538.nc``."""
+    """(wmo, dac, cycle) from an index path ``aoml/1901514/profiles/R1901514_538.nc``."""
     if not path:
         return None, None, None
     parts = str(path).split("/")
@@ -488,7 +493,7 @@ def wmo_from_file(path: str | None) -> tuple[str | None, str | None, int | None]
 
 
 def argo_docs_from_index(table: dict) -> list[dict]:
-    """Docs flotteurs (dernière position par WMO) depuis la table ERDDAP."""
+    """Float docs (last position per WMO) from the ERDDAP table."""
     cols = table.get("columnNames") or []
     rows = table.get("rows") or []
     idx = {name: i for i, name in enumerate(cols)}
@@ -539,15 +544,15 @@ def argo_docs_from_index(table: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Persistance (upsert non destructif) et GeoJSON maigre
+# Persistence (non-destructive upsert) and lean GeoJSON
 # ---------------------------------------------------------------------------
 
-#: Portails GeoNetwork partageant les mêmes uuid de fiche (ODATIS est un
-#: sous-portail de Sextant) — une fiche commune ne doit exister qu'une fois.
+#: GeoNetwork portals sharing the same card uuids (ODATIS is a
+#: Sextant sub-portal) — a shared card must exist only once.
 GN_TWIN_SOURCES = ("sextant", "odatis")
 
-#: Champs conservés du doc existant lors d'une fusion inter-portail : la
-#: fiche garde l'identité et le lien du portail qui l'a moissonnée en premier.
+#: Fields kept from the existing doc on an inter-portal merge: the
+#: card keeps the identity and link of the portal that harvested it first.
 _GN_MERGE_KEEP = ("_id", "source", "url")
 
 
@@ -604,6 +609,8 @@ def slim_feature(doc: dict) -> dict | None:
             "lat": lat,
             "lon": lon,
             "fetched_at": doc.get("fetched_at"),
+            "error_m": doc.get("error_m"),
+            "method": doc.get("method"),
         },
     }
 
@@ -635,7 +642,7 @@ async def ensure_indexes(coll) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fetchers réseau (injectables pour les tests)
+# Network fetchers (injectable for tests)
 # ---------------------------------------------------------------------------
 
 async def fetch_gn_page(client: httpx.AsyncClient, es_url: str, frm: int, size: int) -> list[dict]:
@@ -678,7 +685,7 @@ async def fetch_argo_index(client: httpx.AsyncClient, days: int) -> dict:
     )
     r = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=180)
     if r.status_code == 404:
-        # ERDDAP répond 404 quand la contrainte ne matche aucune ligne.
+        # ERDDAP returns 404 when the constraint matches no row.
         return {"columnNames": [], "rows": []}
     r.raise_for_status()
     data = r.json()
@@ -739,7 +746,7 @@ async def build_science(
     fetch_csr: FetchCsr | None = None,
     run_id: str | None = None,
 ) -> dict:
-    """Moissonne les sources demandées vers la collection live (upsert, no purge)."""
+    """Harvest requested sources into the live collection (upsert, no purge)."""
     state.running = True
     state.started_at = time.time()
     state.finished_at = None
@@ -804,8 +811,8 @@ async def build_science(
                         bindings = await (fetch_edmed or fetch_edmed_page)(http, limit, offset)
                         if not bindings:
                             break
-                        # Une ligne SPARQL par géométrie : on garde une fiche
-                        # par identifiant, de préférence localisée.
+                        # One SPARQL row per geometry: keep one card
+                        # per identifier, preferably localized.
                         page_docs: dict[str, dict] = {}
                         for b in bindings:
                             doc = dataset_from_edmed_binding(b)

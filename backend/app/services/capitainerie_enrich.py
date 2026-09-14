@@ -1,15 +1,15 @@
-"""Enrichissement capitainerie : tags, Search/Fetch, regex, NIM, OpenRouter.
+"""Harbormaster enrichment: tags, Search/Fetch, regex, NIM, OpenRouter.
 
-Chaîne (coût croissant, partagée avec les marinas via ``run_page_enrich``) :
-  1. tags OSM/SHOM/NOAA
-  2. URL officielle ; ``search_named`` seulement s'il n'y en a pas
-  3. Lecture de page (``read_url``) — stop si tél et VHF
-  4. Regex téléphone / canal VHF
-  5. NVIDIA NIM chaîne `page`, puis OpenRouter, s'il reste un trou
-  6. Agent TinyFish (site officiel uniquement, dernier recours)
+Chain (rising cost, shared with marinas via ``run_page_enrich``):
+  1. OSM/SHOM/NOAA tags
+  2. Official URL; ``search_named`` only if there is none
+  3. Page read (``read_url``) — stop if phone and VHF
+  4. Phone / VHF-channel regex
+  5. NVIDIA NIM `page` chain, then OpenRouter, if a hole remains
+  6. TinyFish Agent (official site only, last resort)
 
-Le schéma n'est pas celui des marinas : téléphone et VHF seulement.
-Jamais inventé. Un champ déjà rempli n'est pas écrasé.
+The schema is not the marina one: phone and VHF only.
+Never invented. An already filled field is not overwritten.
 """
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ def _normalise_contact(payload: dict | None) -> dict:
 
 
 def merge_contact_payload(doc: dict, incoming: dict | None) -> dict:
-    """Tags / site : ne remplit que les vides."""
+    """Tags / site: fill empty fields only."""
     base = {
         "telephone": doc.get("telephone"),
         "canal_vhf": doc.get("canal_vhf"),
@@ -119,7 +119,7 @@ def _has_coords(doc: dict) -> bool:
 
 
 def allow_web_lookup(doc: dict) -> bool:
-    """Site officiel, nom distinct, ou GPS (libellé générique « Capitainerie » + coords)."""
+    """Official site, distinct name, or GPS (generic "Capitainerie" label + coords)."""
     if official_website(doc):
         return True
     if (doc.get("tags") or {}).get("website"):
@@ -130,7 +130,7 @@ def allow_web_lookup(doc: dict) -> bool:
 
 
 def rank_enrich_candidates(docs: list[dict]) -> list[dict]:
-    """Site officiel d'abord, puis nom distinct, puis générique avec GPS."""
+    """Official site first, then distinct name, then generic with GPS."""
     def key(d: dict):
         site = 1 if official_website(d) else 0
         named = 1 if _has_distinct_name(d) else 0
@@ -147,7 +147,7 @@ def _coords_fragment(doc: dict) -> str:
 
 
 def contact_search_query(doc: dict) -> str:
-    """Requête Search : nom distinct, sinon « capitainerie » + GPS."""
+    """Search query: distinct name, else "capitainerie" + GPS."""
     name = str(doc.get("name") or "").strip()
     coords = _coords_fragment(doc)
     if name and name.lower() not in GENERIC_OFFICE_NAMES:
@@ -164,7 +164,7 @@ def contact_search_query(doc: dict) -> str:
 
 
 def _url_ok(url: str) -> bool:
-    """Même couperet SERP que le top-down / AMP."""
+    """Same SERP cut as top-down / AMP."""
     return url_ok(url)
 
 
@@ -220,7 +220,7 @@ async def discover_contact_urls(
     tinyfish_key: Optional[str] = None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> list[str]:
-    """URL officielle d'abord ; ``search_named`` seulement s'il n'y en a pas."""
+    """Official URL first; ``search_named`` only if there is none."""
     from app.core.enrich import collect_page_urls
 
     official = official_website(doc)
@@ -253,7 +253,7 @@ async def fetch_contact_pages(
     tinyfish_key: Optional[str] = None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> list[dict]:
-    """Fetch d'abord si clé ; cascade (PDF / JS / HTML) dès que le texte manque."""
+    """Fetch first if a key; cascade (PDF / JS / HTML) as soon as text is missing."""
     return await fetch_pages(
         urls,
         purpose=CAPITAINERIE_PURPOSE,
@@ -279,7 +279,7 @@ async def enrich_via_nvidia(
     settings: dict | None,
     logger: Optional[Callable[[str], None]] = None,
 ) -> Optional[dict]:
-    """Chaîne `page` : Pro → gpt-oss → Muse. `_engine` = modèle réellement servi."""
+    """`page` chain: Pro → gpt-oss → Muse. `_engine` = model actually served."""
     from app.core import nvidia
     if not context or not nvidia.nvidia_enabled(settings):
         return None
@@ -307,7 +307,7 @@ async def enrich_via_nvidia(
 
 
 async def enrich_via_nvidia_muse(*args, **kwargs):
-    """Alias : le pin Muse a été retiré (chaîne `page`, Pro en tête)."""
+    """Alias: the Muse pin was removed (`page` chain, Pro first)."""
     return await enrich_via_nvidia(*args, **kwargs)
 
 

@@ -1,76 +1,76 @@
 # Blue Intelligence — PRD
 
 ## Original Problem Statement
-Application OSINT de cartographie à deux pipelines : (1) scraper de Ports d'Entrée maritimes douaniers (PoE, approche Top-Down par ZEE mondiales VLIZ) et (2) scraper de Projets de conservation marine financés par des fondations. React (Leaflet) + FastAPI + MongoDB.
+OSINT mapping application with two pipelines: (1) scraper of maritime customs Ports of Entry (PoE, Top-Down approach by worldwide VLIZ EEZs) and (2) scraper of marine conservation projects funded by foundations. React (Leaflet) + FastAPI + MongoDB.
 
-**Refactoring massif 2026-08** : mutualisation des deux pipelines en architecture Core, cascade d'extraction hybride pour préserver les crédits TinyFish, bootstrapping ML (weak supervision) sur les données existantes, validation Bottom-Up.
+**Massive 2026-08 refactor**: both pipelines shared into a Core architecture, hybrid extraction cascade to preserve TinyFish credits, ML bootstrapping (weak supervision) on existing data, Bottom-Up validation.
 
-**CONTRAINTE ABSOLUE** : les données en base (4463 projets + 1171+ PoE) sont un trésor (jeu d'entraînement) — aucune purge, upsert non-destructif partout.
+**ABSOLUTE CONSTRAINT**: data in the database (4,463 projects + 1,171+ PoE) is a treasure (training set) — no purge, non-destructive upsert everywhere.
 
-## Architecture Core (refactor 2026-08-26)
-- `llm_core.py` — Adaptateur LLM universel : cascade Gemini REST (si clé) → Emergent (gemini-2.5-flash) → OpenRouter (gpt-4o-mini JSON mode) avec fallback auto. Gatekeeper marin (ML local → LLM → heuristique), extraction JSON stricte des PoE, recherche groundée (Gemini google_search ou OpenRouter :online avec annotations).
-- `geo_core.py` — Géocodage Nominatim (rate-limit 1.1s + cache) → GeoNames, variantes de noms de ports, re-ranking sémantique des candidats, snap_to_ocean/masque terrestre, point-in-EEZ shapely, IsolationForest/DBSCAN.
-- `dedup_core.py` — Haversine <500m + fuzzy >60% (ratio brut/normalisé/tokens triés), >90% seul. merge_docs non-destructif, upsert_with_dedup.
-- `extract_core.py` — Cascade N1 (httpx + trafilatura/PyMuPDF, gratuit) → N2 (Readability/BS4) → N3 (TinyFish, capé 120s, opt-in). Filtrage SERP regex, métadonnées page, depth=2 sélectif (liens /annuaire, /contacts, /clearance).
-- `rag_core.py` — Chunking 500 chars aligné phrases, sentence-transformers all-MiniLM-L6-v2 (installé, fallback TF-IDF), top_chunks/select_context, monitoring sémantique (content_changed ≥0.95 = skip), rerank_candidates.
-- `ml_core.py` — Gatekeeper TF-IDF+LogReg entraîné sur 4462 projets BDD (acc 1.0), scan anomalies PoE (IsolationForest offsets zone + DBSCAN haversine, flags additifs), export dataset NER (5634 lignes, PORT_NAME/PROJECT_NAME/LOCATION).
-- `osm_validate.py` — Validation Bottom-Up Overpass (harbour/marina/customs/border_control/seamark) → osm_confidence 0-1, sans toucher nom/coords. Miroir fr accessible.
-- `ai.py` / `geo.py` — wrappers de rétrocompat vers llm_core/geo_core.
-- `pipeline.py` (Swarm projets) — discovery N1 crawler d'abord, TinyFish N3 dernier recours ; extraction via cascade + RAG (>6000 chars) ; dedup via dedup_core.
-- `poe.py` — monitoring MD5 + sémantique, Level-2 Retry Query (organisation douanière), cascade N1/N2 + 1 seul TinyFish max/zone, RAG >15000 chars, stockage upsert non-destructif (préserve osm_*, anomalies).
+## Core architecture (refactor 2026-08-26)
+- `llm_core.py` — Universal LLM adapter: Gemini REST cascade (if a key) → Emergent (gemini-2.5-flash) → OpenRouter (gpt-4o-mini JSON mode) with auto fallback. Marine gatekeeper (local ML → LLM → heuristic), strict JSON PoE extraction, grounded search (Gemini google_search or OpenRouter :online with annotations).
+- `geo_core.py` — Nominatim geocoding (1.1 s rate-limit + cache) → GeoNames, port-name variants, semantic re-ranking of candidates, snap_to_ocean/land mask, shapely point-in-EEZ, IsolationForest/DBSCAN.
+- `dedup_core.py` — Haversine <500 m + fuzzy >60% (raw/normalised/sorted-token ratio), >90% alone. Non-destructive merge_docs, upsert_with_dedup.
+- `extract_core.py` — Cascade N1 (httpx + trafilatura/PyMuPDF, free) → N2 (Readability/BS4) → N3 (TinyFish, 120 s cap, opt-in). Regex SERP filter, page metadata, selective depth=2 (links /annuaire, /contacts, /clearance).
+- `rag_core.py` — 500-char sentence-aligned chunking, sentence-transformers all-MiniLM-L6-v2 (installed, TF-IDF fallback), top_chunks/select_context, semantic monitoring (content_changed ≥0.95 = skip), rerank_candidates.
+- `ml_core.py` — TF-IDF+LogReg gatekeeper trained on 4,462 DB projects (acc 1.0), PoE anomaly scan (IsolationForest zone offsets + Haversine DBSCAN, additive flags), NER dataset export (5,634 rows, PORT_NAME/PROJECT_NAME/LOCATION).
+- `osm_validate.py` — Bottom-Up Overpass validation (harbour/marina/customs/border_control/seamark) → osm_confidence 0-1, without touching name/coords. Accessible `.fr` mirror.
+- `ai.py` / `geo.py` — back-compat wrappers to llm_core/geo_core.
+- `pipeline.py` (Projects Swarm) — N1 crawler discovery first, TinyFish N3 last resort; extraction via cascade + RAG (>6,000 chars); dedup via dedup_core.
+- `poe.py` — MD5 + semantic monitoring, Level-2 Retry Query (customs organisation), N1/N2 cascade + 1 TinyFish max/zone, RAG >15,000 chars, non-destructive upsert storage (preserves osm_*, anomalies).
 - `ml_routes.py` — /api/ml/status, /train/gatekeeper, /gatekeeper/predict, /anomalies/scan+report, /ner/export-dataset.
 - `poe_routes.py` — + /api/poe/validate-osm (start/status/cancel).
 
-## Environnement
-- Clés (backend/.env) : EMERGENT_LLM_KEY, OPENROUTER_API_KEY, TINYFISH_API_KEY, GEONAMES_USERNAME=BerryMappemonde. Pas de clé Gemini directe.
-- sentence-transformers + torch CPU installés (~2 Go — impact taille image de déploiement).
-- SearXNG bloqué depuis le pod → fallback OpenRouter :online opérationnel.
-- Fond de carte : Esri Dark/Light Gray Canvas (CARTO watermarkait "API KEY REQUIRED").
+## Environment
+- Keys (backend/.env): EMERGENT_LLM_KEY, OPENROUTER_API_KEY, TINYFISH_API_KEY, GEONAMES_USERNAME=[REDACTED]. No direct Gemini key. <!-- pragma: allowlist secret -->
+- sentence-transformers + torch CPU installed (~2 GB — deploy image size impact).
+- SearXNG blocked from the pod → OpenRouter :online fallback operational.
+- Basemap: Esri Dark/Light Gray Canvas (CARTO watermarked “API KEY REQUIRED”).
 
-## Données (restaurées 2026-08-26)
-- projects: 4463 (import GeoJSON), poe_ports: 1171+ (1169 restaurés — l'export ne contenait que les géocodés sur 1864), eez_zones: 285 (165 backfillées "ia").
-- Restauration : /app/scripts/restore_data.py + POST /api/import/geojson.
+## Data (restored 2026-08-26)
+- projects: 4,463 (GeoJSON import), poe_ports: 1,171+ (1,169 restored — the export only contained the geocoded ones out of 1,864), eez_zones: 285 (165 backfilled “ia”).
+- Restore: /app/scripts/restore_data.py + POST /api/import/geojson.
 
-## What's been implemented (historique)
-- [avant fork] App complète : Swarm projets, PoE ZEE, marinas, formalities UI, batch hub, crowdsourcing "Projet manquant ?", exports GeoJSON.
-- [2026-08-26] Refactor Core complet (étapes 1-3 du ticket), restauration BDD, bascule tuiles Esri, tests 25/25 (pytest) + validation testing agent (non-destructivité prouvée par diff Mongo champ-à-champ).
-- [2026-08-26 soir] Itération conformité spec + 4 features (testing agent 16/16 + 5/5 flows frontend) :
-  - NER spaCy local entraîné (F1=0.968, 5041 train) — POST /api/ml/train/ner, POST /api/ml/ner/extract, fallback sans-LLM dans extract_ports_llm. Modèle: backend/models/ner_spacy/.
-  - Qualification UNCLOS des 120 ZEE sans PoE (sovereign_entry 69, uninhabited 14, overlapping_claim 25, joint_regime 12) — POST /api/poe/qualify-unclos, bloc bleu "§ Legal status (UNCLOS)" dans le popup de zone. Effacé automatiquement ($unset) quand une zone gagne des ports.
-  - Badges carte : popup PoE affiche confiance OSM (vert ≥0.5 / ambre / gris ∅) + badge rouge anomalie spatiale (data-testid: poe-osm-badge, poe-anomaly-badge, zone-unclos-block).
-  - Validation OSM Overpass complète lancée sur les 1171 PoE (résumable via only_unchecked ; tuée par tout hot-reload backend — relancer POST /api/poe/validate-osm {"only_unchecked":true}).
-  - Conformité : plafonds par pays supprimés (plus de ports[:25], coerce 150), tronquage 10k supprimé (60k/source + RAG), matrice requêtes multilingues 16 langues (localized_query), regex SERP élargie (brochures/tourisme/bagages/VTS/duty-free), Cross-Encoder ms-marco pour re-ranking géocodage (fallback bi-encoder), PDF 60 pages.
+## What's been implemented (history)
+- [before fork] Complete app: Projects Swarm, EEZ PoE, marinas, formalities UI, batch hub, “Missing project?” crowdsourcing, GeoJSON exports.
+- [2026-08-26] Full Core refactor (ticket steps 1-3), DB restore, Esri tiles switch, 25/25 tests (pytest) + testing-agent validation (non-destructiveness proven by field-by-field Mongo diff).
+- [2026-08-26 evening] Spec-compliance iteration + 4 features (testing agent 16/16 + 5/5 frontend flows):
+  - Local trained spaCy NER (F1=0.968, 5,041 train) — POST /api/ml/train/ner, POST /api/ml/ner/extract, no-LLM fallback in extract_ports_llm. Model: backend/models/ner_spacy/.
+  - UNCLOS qualification of the 120 EEZs without PoE (sovereign_entry 69, uninhabited 14, overlapping_claim 25, joint_regime 12) — POST /api/poe/qualify-unclos, blue “§ Legal status (UNCLOS)” block in the zone popup. Automatically cleared ($unset) when a zone gains ports.
+  - Map badges: PoE popup shows OSM confidence (green ≥0.5 / amber / grey ∅) + red spatial-anomaly badge (data-testid: poe-osm-badge, poe-anomaly-badge, zone-unclos-block).
+  - Full Overpass OSM validation launched on the 1,171 PoE (resumable via only_unchecked; killed by any backend hot-reload — re-run POST /api/poe/validate-osm {"only_unchecked":true}).
+  - Compliance: per-country caps removed (no more ports[:25], coerce 150), 10k truncation removed (60k/source + RAG), multilingual query matrix 16 languages (localized_query), SERP regex widened (brochures/tourism/luggage/VTS/duty-free), ms-marco Cross-Encoder for geocode re-ranking (bi-encoder fallback), PDF 60 pages.
 
-- [2026-08-26 nuit] Classifieur SERP + Reprise auto (testing agent 17/17 + 35/36 régression) :
-  - Classifieur SERP (ml_core) : TF-IDF char n-grams sur URL + LogReg, weak supervision (195 URLs sources réelles vs négatifs synthétiques touristiques), acc=0.987/f1=0.983. Endpoints POST /api/ml/train/serp, POST /api/ml/serp/predict {"url"}. Intégré au pipeline PoE via poe.rank_candidates_ml (tri avant téléchargement + drop score<0.1 si ≥3 alternatives), appelé après serp_filter et après le Level-2 retry.
-  - Reprise auto des jobs : état persisté dans db.jobs (_id='osm_validation', desired/params/resumed), poe_routes._start_osm_task + schedule_job_resume() (délai 20s) appelé au startup de server.py. Respecte params.only_unchecked. Validé E2E (kill simulé → reprise → desired=false) + cas "reprise inutile".
-  - Validation OSM COMPLÈTE terminée : 1171/1171 PoE vérifiés, 678 haute confiance (≥0.5), 154 sans tag OSM à 3 km.
-  - Tests de régression réutilisables : tests/test_serp_ml_resume.py (rapide, sans coût LLM).
+- [2026-08-26 night] SERP classifier + auto resume (testing agent 17/17 + 35/36 regression):
+  - SERP classifier (ml_core): TF-IDF char n-grams on URL + LogReg, weak supervision (195 real source URLs vs synthetic tourist negatives), acc=0.987/f1=0.983. Endpoints POST /api/ml/train/serp, POST /api/ml/serp/predict {"url"}. Wired into the PoE pipeline via poe.rank_candidates_ml (sort before download + drop score<0.1 if ≥3 alternatives), called after serp_filter and after the Level-2 retry.
+  - Auto job resume: state persisted in db.jobs (_id='osm_validation', desired/params/resumed), poe_routes._start_osm_task + schedule_job_resume() (20 s delay) called at server.py startup. Honours params.only_unchecked. Validated E2E (simulated kill → resume → desired=false) + “resume unnecessary” case.
+  - OSM validation COMPLETE: 1,171/1,171 PoE checked, 678 high confidence (≥0.5), 154 with no OSM tag within 3 km.
+  - Reusable regression tests: tests/test_serp_ml_resume.py (fast, no LLM cost).
 
-- [2026-09-10] Mode Science (6e mode, violet #a78bfa) — jeux de données océano localisés sur la carte + lien vers leur fiche portail :
-  - Sources (API structurées uniquement — pas de LLM, pas de scraping) : Sextant/SISMER + sous-portail ODATIS via l'API JSON Elasticsearch de GeoNetwork 4 (`/geonetwork/{srv|ODATIS}/api/search/records/_search`, geom GeoJSON natif), EDMED SeaDataNet via SPARQL (WKT sur le nœud dct:spatial), flotteurs Argo actifs via l'index ERDDAP Ifremer (`ArgoFloats-index`, dernier profil par WMO, lien fleetmonitoring.euro-argo.eu).
-  - Backend : services/science_build.py (bbox GeoJSON/WKT + antiméridien, détection bbox "monde" → fiche conservée mais non placée, upsert non destructif `_id={source}:{native_id}`), routers/science.py (geojson/count/build/status/cancel/runs/export/import), collections science_items + science_runs (snapshot de règles → onglet Runs).
-  - Règles catalogue : science.catalog_max_records (2000, cap dur ES 10000), science.argo_window_days (30 j).
-  - Frontend : SciencePanel (recherche, filtre par source, légende datasets/Argo), useScienceLayer (popup organisme/résumé/DOI/WMO/cycle + bouton fiche portail), ScienceCard console (sources cochables), Review non branchée (placeholder), export/import science.geojson.
-  - Tests : tests/test_science.py (unitaires, fetchers injectés — bbox antiméridien, dédup EDMED, dernier profil Argo, isolation d'erreur par source, re-run 100 % updated) + tests/test_depth.py (parseur EMODnet + cache).
-  - Compléments 2026-09-10 (soir) : profondeur d'approche `GET /api/depth` (REST EMODnet Bathymetry, cache `depth_samples`, popups marinas/mouillages) ; couches WMS togglables (bathymétrie ombrée `mean_multicolour`, substrat `seabed_substrate_1m`, câbles `telecablesactual`+`powercables`) ; tracés de campagnes CSR SeaDataNet (SPARQL `https://sparql.ifremer.fr/csr/query`, `hasTrack` WKT sous-échantillonné à 160 points, règle `science.csr_max_records`=500). EDMERP (3628 projets européens) n'a **aucune** géométrie (`dct:spatial` = 0) : non cartographié ; les organismes et zones d'étude restent ceux des fiches catalogue + CSR.
+- [2026-09-10] Science mode (6th mode, violet #a78bfa) — oceanographic datasets placed on the map + link to their portal sheet:
+  - Sources (structured APIs only — no LLM, no scraping): Sextant/SISMER + ODATIS sub-portal via GeoNetwork 4 Elasticsearch JSON API (`/geonetwork/{srv|ODATIS}/api/search/records/_search`, native GeoJSON geom), SeaDataNet EDMED via SPARQL (WKT on the dct:spatial node), active Argo floats via the Ifremer ERDDAP index (`ArgoFloats-index`, last profile per WMO, fleetmonitoring.euro-argo.eu link).
+  - Backend: services/science_build.py (GeoJSON/WKT bbox + antimeridian, “world” bbox detection → sheet kept but not placed, non-destructive upsert `_id={source}:{native_id}`), routers/science.py (geojson/count/build/status/cancel/runs/export/import), science_items + science_runs collections (rules snapshot → Runs tab).
+  - Catalogue rules: science.catalog_max_records (2000, hard ES cap 10000), science.argo_window_days (30 d).
+  - Frontend: SciencePanel (search, source filter, datasets/Argo legend), useScienceLayer (organisation/summary/DOI/WMO/cycle popup + portal-sheet button), ScienceCard console (checkable sources), Review not wired (placeholder), science.geojson export/import.
+  - Tests: tests/test_science.py (unit, injected fetchers — antimeridian bbox, EDMED dedup, last Argo profile, per-source error isolation, re-run 100% updated) + tests/test_depth.py (EMODnet parser + cache).
+  - Complements 2026-09-10 (evening): approach depth `GET /api/depth` (EMODnet Bathymetry REST, `depth_samples` cache, marina/anchorage popups); togglable WMS layers (shaded bathymetry `mean_multicolour`, substrate `seabed_substrate_1m`, cables `telecablesactual`+`powercables`); SeaDataNet CSR campaign tracks (SPARQL `https://sparql.ifremer.fr/csr/query`, `hasTrack` WKT subsampled to 160 points, `science.csr_max_records`=500 rule). EDMERP (3,628 European projects) has **no** geometry (`dct:spatial` = 0): not mapped; organisations and study areas remain those of catalogue sheets + CSR.
 
-- [2026-09-13] Mode Climatologie (7e mode, teal #2dd4bf) — atlas mensuel sourcé, pas une prévision :
-  - Phrase : **BI montre l’atlas. NAVIGUIDE s’en sert.** `kind: "climatology"` partout. Deux kind distincts : getWind/getWave/getCurrent restent NRT/ANFC.
-  - Backend : `GET /api/climatology/{meta,point,crossings,wind|wave|current|cyclones.geojson}`. `null` sur terre / snapshot manquant / NaN. Snapshots dans `backend/data/climatology/` (IBTrACS v04r01 commité ; vent/houle/courant CMEMS générés sur le Mac). `export_meta` étendu (`period`, `month`, `source_ids`, `doi`).
-  - Règles : famille `climatology.*` (18) — lois `kind_is_climatology`, `no_llm_for_numbers`, `wave_stat` (interdit de labeller une moyenne P90), périodes écrites.
-  - Frontend : bouton `data-testid="mode-toggle-climatology"`, ClimatologyPanel (curseur 1–12, filtres Vent/Houle/Courant/Cyclones), panes `climatology-raster@250` / `climatology-vector@260` (`pointer-events: none`), useClimatologyLayer uniquement si `mode === "climatology"`. Review / Gold non branchés (C8, comme Science).
-  - NAVIGUIDE : pastilles ZEE/WPI hors UI (données encore fetchables) ; ETA simulation selon le mois ; isochrone MOST_LIKELY + courant + no-go P90 + crossings ; agent météo cite un entier IBTrACS. Pas de 8ᵉ pastille « Climatologie ».
-  - Hors V1 : GFS/IFS/ICON/AIFS, Review/Gold, cubes horaires sur le VPS, StormGlass comme source du mode.
+- [2026-09-13] Climatology mode (7th mode, teal #2dd4bf) — sourced monthly atlas, not a forecast:
+  - Phrase: **BI shows the atlas. NAVIGUIDE uses it.** `kind: "climatology"` everywhere. Two distinct kinds: getWind/getWave/getCurrent stay NRT/ANFC.
+  - Backend: `GET /api/climatology/{meta,point,crossings,wind|wave|current|cyclones.geojson}`. `null` on land / missing snapshot / NaN. Snapshots in `backend/data/climatology/` (IBTrACS v04r01 committed; CMEMS wind/swell/current generated on the Mac). `export_meta` extended (`period`, `month`, `source_ids`, `doi`).
+  - Rules: `climatology.*` family (18) — `kind_is_climatology`, `no_llm_for_numbers`, `wave_stat` laws (forbidden to label a mean as P90), written periods.
+  - Frontend: `data-testid="mode-toggle-climatology"` button, ClimatologyPanel (1–12 slider, Wind/Swell/Current/Cyclones filters), `climatology-raster@250` / `climatology-vector@260` panes (`pointer-events: none`), useClimatologyLayer only if `mode === "climatology"`. Review / Gold not wired (C8, same as Science).
+  - NAVIGUIDE: EEZ/WPI pills off UI (data still fetchable); simulation ETA by month; isochrone MOST_LIKELY + current + P90 no-go + crossings; weather agent cites an IBTrACS integer. No 8th “Climatology” pill.
+  - Out of V1: GFS/IFS/ICON/AIFS, Review/Gold, hourly cubes on the VPS, StormGlass as mode source.
 
-## Conformité spec (Document sans titre (6).md)
-- ✅ 23/25 items pleinement conformes (classifieur SERP maintenant fait).
-- ⚠️ Partiels : traduction NLP requêtes (matrice statique 16 langues au lieu d'opus-mt local) ; crowdsourcing PoE avec lien de loi (le module existant couvre les projets).
+## Spec compliance (Untitled document (6).md)
+- ✅ 23/25 items fully compliant (SERP classifier now done).
+- ⚠️ Partial: NLP query translation (static 16-language matrix instead of local opus-mt); PoE crowdsourcing with a law link (the existing module covers projects).
 
-## Backlog priorisé
-- P1 : Crowdsourcing PoE (proposition skipper + lien texte de loi + vérification auto).
-- P2 : opus-mt local pour traduction dynamique des requêtes ; filtre confiance OSM sur la carte ; croisement projets ↔ douanes ; ré-import des ~695 PoE non géocodés (nécessite sauvegarde complète) ; simplification géométrie ZEE à bas zoom (perfs carte) ; découpage server.py/marinas.py (>700 lignes, dette technique).
+## Prioritised backlog
+- P1: PoE crowdsourcing (skipper proposal + statute link + auto verification).
+- P2: local opus-mt for dynamic query translation; OSM confidence filter on the map; projects ↔ customs cross-link; re-import of the ~695 ungeocoded PoE (needs a full backup); EEZ geometry simplification at low zoom (map perf); split of server.py/marinas.py (>700 lines, tech debt).
 
-## Notes testing
-- Regression rapide : `cd /app/backend && python3 -m pytest tests/ -p no:randomly` (test_ner_unclos_osm.py = 16 tests non-destructifs).
-- INTERDIT : /api/deploy clear_db=true, generate-batch sans limite. Toute écriture .py sous /app/backend tue les jobs de fond (uvicorn --reload).
+## Testing notes
+- Fast regression: `cd /app/backend && python3 -m pytest tests/ -p no:randomly` (test_ner_unclos_osm.py = 16 non-destructive tests).
+- FORBIDDEN: /api/deploy clear_db=true, generate-batch without a limit. Any .py write under /app/backend kills background jobs (uvicorn --reload).

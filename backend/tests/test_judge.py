@@ -1,4 +1,4 @@
-"""Porte unique ask_yes_no — aucun réseau."""
+"""Single door ask_yes_no — no network."""
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +31,7 @@ class TestAsBool:
         assert yn.as_bool(True) is True
         assert yn.as_bool(0) is False
         assert yn.as_bool(None) is None
-        assert bool("false") is True  # le piège que l'adaptateur évite
+        assert bool("false") is True  # the trap the adapter avoids
 
 
 class TestParseYesNo:
@@ -121,7 +121,7 @@ class TestAskYesNoCascade:
 
         yes = _run(yn.ask_yes_no("sys", "user", role="json"))
         assert yes.accepted is True
-        assert yes.engine == "nvidia-deepseek"
+        assert yes.engine == "nvidia-gpt-oss"
         assert yes.raw["score"] == 0.9
 
     def test_complete_json_cascade_nvidia_429_then_openrouter(self, monkeypatch):

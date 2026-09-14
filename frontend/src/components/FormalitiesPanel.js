@@ -59,12 +59,12 @@ export default function FormalitiesPanel({ t, zones, zonesLoading, selectedZone,
       className="w-[360px] shrink-0 flex flex-col border-r border-line bg-surface min-h-0"
       data-testid="formalities-panel"
     >
-      {/* En-tête + recherche — structure uniforme des 4 modes */}
+      {/* Header + search — same structure as the other four modes */}
       <div className="p-4 border-b border-line shrink-0">
         <div className="flex items-center gap-2 mb-3">
           <ScrollText size={18} className="text-amberx" />
-          {/* Même libellé que le bouton de mode dans l'en-tête (cohérence),
-              le sous-titre précise le contenu (Ports d'Entrée). */}
+          {/* Same label as the mode button in the header (consistency);
+              the subtitle spells out the content (Ports of Entry). */}
           <h2 className="font-heading font-bold text-white text-base">{t("modeFormalities")}</h2>
           <span className="font-mono text-[10px] text-slate-500">· {t("poeTitle")}</span>
           <span className="ml-auto font-mono text-[10px] text-slate-500" data-testid="poe-zones-count">
@@ -92,7 +92,7 @@ export default function FormalitiesPanel({ t, zones, zonesLoading, selectedZone,
           />
         </div>
 
-        {/* Filtre par statut */}
+        {/* Filter by status */}
         <label className="font-mono text-[9px] uppercase tracking-widest text-slate-500 block mb-1" htmlFor="poe-status-filter">
           {t("poeAllStatuses")}
         </label>
@@ -110,7 +110,7 @@ export default function FormalitiesPanel({ t, zones, zonesLoading, selectedZone,
           <option value="erreur">{t("poeStatusErreur")}</option>
         </select>
 
-        {/* Légende — cohérence avec le mode Projets */}
+        {/* Legend — same pattern as Projects mode */}
         <div className="mt-3" data-testid="poe-legend">
           <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-1.5">{t("legend")}</p>
           <div className="space-y-1">

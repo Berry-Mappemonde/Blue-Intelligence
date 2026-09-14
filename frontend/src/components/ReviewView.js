@@ -25,6 +25,16 @@ function kindLabelKey(kind) {
   return "reviewKindProject";
 }
 
+const SUGGEST_BATCH = new Set(["eez", "amp", "project"]);
+const SUGGEST_ONE = new Set(["marina", "capitainerie"]);
+
+function suggestHintKey(kind) {
+  if (kind === "amp") return "reviewSuggestHintAmp";
+  if (kind === "project") return "reviewSuggestHintProject";
+  if (kind === "marina" || kind === "capitainerie") return "reviewSuggestHintField";
+  return "reviewSuggestHint";
+}
+
 export default function ReviewView({ t, mode, onMapDirty }) {
   const kind = kindFromMode(mode);
   const [runId, setRunId] = useState("published");
@@ -46,6 +56,8 @@ export default function ReviewView({ t, mode, onMapDirty }) {
   const [goldOn, setGoldOn] = useState(false);
   const [goldBusy, setGoldBusy] = useState(false);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [suggestJob, setSuggestJob] = useState(null);
+  const [ficheTick, setFicheTick] = useState(0);
   const [goldReady, setGoldReady] = useState(false);
   const [choices, setChoices] = useState({ td: {}, ports: {}, bu: {} });
   const dirtyRef = useRef(false);
@@ -143,7 +155,7 @@ export default function ReviewView({ t, mode, onMapDirty }) {
         pendingIndexRef.current = 0;
         setIndex(items.length ? Math.min(Math.max(want, 0), items.length - 1) : 0);
       } catch (e) {
-        /* Garde la file précédente : Atlas peut dépasser le timeout. */
+        /* Keep the previous queue: Atlas can exceed the timeout. */
       } finally {
         if (!cancelled) setQueueLoading(false);
       }
@@ -204,7 +216,7 @@ export default function ReviewView({ t, mode, onMapDirty }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [kind, effectiveRunId, current?.id, current?.source_run_id]);
+  }, [kind, effectiveRunId, current?.id, current?.source_run_id, ficheTick]);
 
   const go = useCallback(async (delta) => {
     if (!total) return;
@@ -307,28 +319,48 @@ export default function ReviewView({ t, mode, onMapDirty }) {
   };
 
   const suggestDocs = async () => {
-    if (!current || suggestBusy || kind !== "eez") return;
+    if (suggestBusy) return;
+    if (SUGGEST_ONE.has(kind)) {
+      if (!current?.id) return;
+      try {
+        setSuggestBusy(true);
+        await api.post("/review/suggest", { kind, scope: "one", id: current.id });
+        setFicheTick((n) => n + 1);
+      } catch (e) {
+        /* transient */
+      } finally {
+        setSuggestBusy(false);
+      }
+      return;
+    }
+    if (!SUGGEST_BATCH.has(kind)) return;
     try {
       setSuggestBusy(true);
-      const { data } = await api.post("/review/suggest", { kind, id: current.id });
-      setChoices(data.choices || { td: {}, ports: {}, bu: {} });
-      if (data.comment != null) {
-        setComment(data.comment);
-        commentRef.current = data.comment;
-        dirtyRef.current = false;
-      }
-      if (data.comment_updated_at) setSavedAt(data.comment_updated_at);
-      setGoldReady(Boolean(data.gold_ready));
-      setQueue((items) => items.map((it) => (
-        it.id === current.id
-          ? { ...it, has_comment: Boolean((data.comment || "").trim()) }
-          : it
-      )));
+      await api.post("/review/suggest", { kind, scope: "all" });
     } catch (e) {
-      /* transient */
-    } finally {
-      setSuggestBusy(false);
+      const status = e?.response?.status;
+      if (status !== 409) {
+        setSuggestBusy(false);
+        return;
+      }
     }
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const { data } = await api.get("/review/suggest/status");
+        setSuggestJob(data);
+        if (data.running) {
+          window.setTimeout(poll, 2000);
+          return;
+        }
+        setSuggestBusy(false);
+        setFicheTick((n) => n + 1);
+      } catch (err) {
+        setSuggestBusy(false);
+      }
+    };
+    poll();
   };
 
   const renderFiche = () => {
@@ -524,15 +556,22 @@ export default function ReviewView({ t, mode, onMapDirty }) {
             >
               {saving ? t("reviewSaving") : t("reviewSave")}
             </button>
-            {kind === "eez" ? (
+            {SUGGEST_BATCH.has(kind) || SUGGEST_ONE.has(kind) ? (
               <button
                 type="button"
                 data-testid="review-suggest"
+                title={t(suggestHintKey(kind))}
                 onClick={suggestDocs}
-                disabled={!current || suggestBusy}
+                disabled={suggestBusy || (SUGGEST_ONE.has(kind) && !current)}
                 className="px-3 py-1.5 text-[11px] font-semibold border border-line rounded-sm text-slate-300 hover:bg-raised disabled:opacity-40"
               >
-                {suggestBusy ? t("reviewSuggesting") : t("reviewSuggest")}
+                {suggestBusy
+                  ? (SUGGEST_ONE.has(kind)
+                    ? t("reviewSuggestingOne")
+                    : `${t("reviewSuggesting")} ${suggestJob?.total
+                      ? `${suggestJob.progress || 0}/${suggestJob.total}`
+                      : ""}`.trim())
+                  : t("reviewSuggest")}
               </button>
             ) : null}
             <button

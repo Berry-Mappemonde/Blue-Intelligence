@@ -1,11 +1,11 @@
-"""Règles de publication d'un site projet (CDC v2).
+"""Publication rules for a project site (CDC v2).
 
-Pas de snap_to_ocean, pas de ocean_fallback_coords : un point n'est
-publiable que s'il est déjà en mer ou assez près de la côte (havre).
-Les seuils viennent des settings, pas de constantes magiques du pipeline.
+No snap_to_ocean, no ocean_fallback_coords: a point is
+publishable only if it is already at sea or close enough to the coast (haven).
+Thresholds come from settings, not magic pipeline constants.
 
-Le géocodage du toponyme est ``geocode_name`` (Nominatim ∥ GeoNames).
-Le test d'espace reste ici : havre, pas polygone VLIZ.
+Toponym geocoding is ``geocode_name`` (Nominatim ∥ GeoNames).
+The space test stays here: haven, not a VLIZ polygon.
 """
 from app.core.geo import geocode_name, is_ocean, coast_distance_km
 
@@ -39,11 +39,11 @@ def site_publishable(lat, lon, settings: dict | None = None) -> tuple[bool, str]
 
 
 def apply_havre(hit: dict, settings: dict | None = None) -> dict:
-    """Test d'espace Projet : mer ou havre. Pas un polygone VLIZ.
+    """Project space test: sea or haven. Not a VLIZ polygon.
 
-    Si le point choisi est inland, on bascule sur l'autre annuaire s'il
-    passe le havre — même geste que PoE après le départage, autre géographie.
-    ``haiku_none`` : les deux points sont hors sujet, on n'en sauve aucun.
+    If the chosen point is inland, switch to the other gazetteer if it
+    passes the haven — same gesture as PoE after the tie-break, other geography.
+    ``haiku_none``: both points are off-topic, save neither.
     """
     settings = settings or {}
     hit = dict(hit or {})
@@ -105,10 +105,10 @@ async def geocode_project_site(
     settings: dict | None = None,
     log=None,
 ) -> dict:
-    """Géocode un lieu d'action Projet : dual + départage, puis havre.
+    """Geocode a Project action place: dual + tie-break, then haven.
 
-    Pas de polygone VLIZ, pas de snap, pas de ocean_fallback.
-    ``llm_geocode`` seulement si les deux annuaires sont muets.
+    No VLIZ polygon, no snap, no ocean_fallback.
+    ``llm_geocode`` only if both gazetteers are silent.
     """
     log = log or (lambda m: None)
     settings = settings or {}

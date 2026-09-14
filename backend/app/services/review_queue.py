@@ -1,9 +1,9 @@
-"""
-File de revue humaine — une fiche à la fois, commentaire persisté.
+"""Human review queue — one card at a time, persisted comment.
 
-Ne lit que les collections de run / v1. N'écrit JAMAIS dans `projects`,
-`poe_ports`, `eez_zones`, `marinas`, `capitaineries` ni `amp_sites`. Mutées :
-`review_comments`, `review_gold`, `review_choices`.
+Reads only run / v1 collections. NEVER writes `projects`,
+`poe_ports`, `eez_zones`, `marinas`, `capitaineries` or `amp_sites`. Mutated:
+`review_comments`, `review_gold`, `review_choices`,
+`review_suggest`, `review_lessons`.
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def now_iso() -> str:
 
 
 def comment_key(kind: str, entity_id: str, run_id: str | None = None) -> str:
-    """Clé union `{mode}:{entity_id}`. `run_id` ignoré (legacy debug)."""
+    """Union key `{mode}:{entity_id}`. `run_id` ignored (legacy debug)."""
     del run_id
     return f"{kind}:{_sid(entity_id)}"
 
@@ -99,6 +99,8 @@ async def ensure_review_indexes(db) -> None:
         await db.capitaineries.create_index("name")
         await review_gold.ensure_gold_indexes(db)
         await ensure_choice_indexes(db)
+        from app.services.review_lessons import ensure_lesson_indexes
+        await ensure_lesson_indexes(db)
     except Exception:
         pass
 
@@ -139,7 +141,7 @@ async def _count(coll, q: dict | None = None) -> int:
 
 
 async def list_runs(db, kind: str) -> dict:
-    """Runs disponibles pour un type de fiche, plus la carte publiée (v1)."""
+    """Runs available for a card type, plus the published map (v1)."""
     if kind not in KINDS:
         raise ValueError("kind must be project|eez|poe|marina|capitainerie|amp")
     published_count = 0
@@ -233,7 +235,7 @@ async def list_runs(db, kind: str) -> dict:
 async def _label_zones(db, zones: list[dict]) -> list[dict]:
     if not zones:
         return zones
-    # Libellés : un polygone = une fiche (France hexagone ≠ Mayotte).
+    # Labels: one polygon = one card (France hexagon ≠ Mayotte).
     all_sibs: list[dict] = []
     try:
         all_sibs = await db.eez_zones.find(
@@ -644,6 +646,7 @@ def _marina_fiche(doc: dict) -> dict:
         "services_disponibles": doc.get("services_disponibles"),
         "telephone_capitainerie": doc.get("telephone_capitainerie"),
         "resume_avis": doc.get("resume_avis"),
+        "field_sources": doc.get("field_sources") or {},
         "website": website,
         "website_status": doc.get("website_status"),
         "maps_place_url": maps_place,
@@ -678,6 +681,7 @@ def _capitainerie_fiche(doc: dict) -> dict:
         "enrichment_source": doc.get("enrichment_source"),
         "canal_vhf": doc.get("canal_vhf"),
         "telephone": doc.get("telephone"),
+        "field_sources": doc.get("field_sources") or {},
         "website": doc.get("website"),
         "maps_url": (
             google_maps_url(doc.get("name"), doc["lat"], doc["lon"])
@@ -829,7 +833,7 @@ def _amp_fiche(doc: dict) -> dict:
 
 
 async def _project_union_extras(db, doc: dict) -> list[dict]:
-    """Occurrences run du même projet (url / _id / same_site), hors canaris."""
+    """Run occurrences of the same project (url / _id / same_site), no canaries."""
     if not doc:
         return []
     eid = _sid(doc.get("_id") or doc.get("url"))
@@ -897,7 +901,7 @@ async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
             db, mid, run_id=fiche_run, union=union)
         if fiche is None:
             return None
-        # `kind` reste le verdict pipeline (none / general_list / …).
+        # `kind` stays the pipeline verdict (none / general_list / …).
         fiche["review_kind"] = "eez"
         fiche["id"] = str(mid)
 
@@ -953,6 +957,8 @@ async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
         if not doc:
             return None
         fiche = _marina_fiche(doc)
+        from app.services.control_ref import marina_control_ref
+        fiche["control_ref"] = await marina_control_ref(db, doc)
 
     comment = await get_comment(db, kind, rid, eid)
     source = doc if kind in ("project", "marina", "capitainerie", "amp") else None

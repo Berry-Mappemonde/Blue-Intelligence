@@ -1,30 +1,30 @@
-"""Graines OSM pour l'union PoE — Overpass + cache Mongo + rattachement VLIZ.
+"""OSM seeds for the PoE union — Overpass + Mongo cache + VLIZ attachment.
 
-OSM n'a pas d'objet unique « port ». Deux couches distinctes :
+OSM has no single "port" object. Distinct layers:
 
-  1. Contrôle / PoE (wiki + Taginfo, pas Key:port_of_entry qui est 404) :
-     government=customs, amenity=customs (déprécié), barrier=border_control,
+  1. Control / PoE (wiki + Taginfo, not Key:port_of_entry which is 404):
+     government=customs, amenity=customs (deprecated), barrier=border_control,
      government=border_control|immigration, seamark:building:function=customs.
-     OpenSeaMap/Harbour : port_of_entry=* est un champ d'almanach (59 yes).
+     OpenSeaMap/Harbour: port_of_entry=* is an almanac field (59 yes).
 
-  2. Infrastructure portuaire (Harbour / CATHAF) :
+  2. Port infrastructure (Harbour / CATHAF):
      harbour=yes, industrial=port, landuse=harbour|port, water=harbour,
-     HBRFAC commerciaux / sans catégorie.
+     commercial / uncategorized HBRFAC.
 
-  3. Plaisance (graine P, pas un PoE) :
-     leisure=marina / CATHAF marina* seulement si une douane, un
-     border_control ou un port_of_entry se trouve à ≤ 800 m. On ne
-     prend pas les 31 792 marinas.
+  3. Pleasure craft (P seed, not a PoE):
+     leisure=marina / CATHAF marina* only if a customs office, a
+     border_control or a port_of_entry is within ≤ 800 m. We do not
+     take all 31,792 marinas.
 
-L'ancienne requête (harbour=yes ∪ seamark:type=harbour ∪ industrial=port)
-inondait l'union de marinas : 21 344 seamark:type=harbour portent aussi
-leisure=marina. v2 excluait à tort douanes et border_control (bureaux ≠ havre).
-v3 les réintroduit comme graines PoE ; les aéroports sont filtrés ; le
-rattachement VLIZ (in_eez / coastal_land) écarte les postes terrestres inland.
-v4 : marinas près d'un contrôle = graines P (requête Overpass around.ctrl:800).
+The old query (harbour=yes ∪ seamark:type=harbour ∪ industrial=port)
+flooded the union with marinas: 21,344 seamark:type=harbour also carry
+leisure=marina. v2 wrongly excluded customs and border_control (offices ≠ haven).
+v3 reintroduces them as PoE seeds; airports are filtered; VLIZ
+attachment (in_eez / coastal_land) drops inland land posts.
+v4: marinas near a control = P seeds (Overpass around.ctrl:800 query).
 
-GET /seeds/union lit le cache. Le refresh Overpass est explicite
-(POST /seeds/osm/refresh ou scripts/refresh_osm_seeds.py).
+GET /seeds/union reads the cache. Overpass refresh is explicit
+(POST /seeds/osm/refresh or scripts/refresh_osm_seeds.py).
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ CACHE_META = "osm_port_seeds_meta"
 CACHE_SCHEMA = "port-candidates-v3"
 OSM_SOURCE = "osm"
 
-# Snapshot Taginfo mesuré 2026-09-05 (data_until). Live overlay dans taginfo_snapshot.
+# Taginfo snapshot measured 2026-09-05 (data_until). Live overlay in taginfo_snapshot.
 TAGINFO_DATA_UNTIL = "2026-09-05T00:59:10Z"
 
 WIKI = {
@@ -80,7 +80,7 @@ WIKI = {
     "seamark_buildings": "https://wiki.openstreetmap.org/wiki/Seamarks/Buildings",
 }
 
-# CATHAF commerciaux (IHO / OpenSeaMap). marina* est volontairement absent.
+# Commercial CATHAF (IHO / OpenSeaMap). marina* is left out on purpose.
 COMMERCIAL_CATHAF = frozenset({
     "roro", "ferry", "fishing", "naval", "container", "cargo", "passenger",
     "tanker", "bulk", "shipyard", "service_repair", "offshore_support",
@@ -92,11 +92,11 @@ HARBOUR_COMMERCIAL_VALUES = frozenset({
     "fishing", "passenger", "terminal", "customs", "tanker",
 })
 POE_YES = frozenset({"yes", "all"})
-# CDC : marina = graine P seulement si contrôle à ≤ 800 m.
+# CDC: marina = P seed only if a control is within ≤ 800 m.
 MARINA_CONTROL_RADIUS_M = 800
 MARINA_CONTROL_RADIUS_KM = MARINA_CONTROL_RADIUS_M / 1000.0
 
-# Regex Overpass POSIX : une catégorie commerciale dans une liste « a;b ».
+# POSIX Overpass regex: a commercial category in an "a;b" list.
 _CATHAF_ALT = "|".join(sorted(COMMERCIAL_CATHAF))
 COMMERCIAL_CATHAF_REGEX = rf"(^|;)({_CATHAF_ALT})(;|$)"
 _MARINA_CATHAF_ALT = "|".join(sorted(MARINA_CATHAF))
@@ -113,7 +113,7 @@ _AIRPORT_NAME_RE = re.compile(
     re.I,
 )
 
-# Clauses Overpass : ports documentés + contrôles / douanes (PoE).
+# Overpass clauses: documented ports + controls / customs (PoE).
 OSM_SEED_CLAUSES: tuple[tuple, ...] = (
     ("eq", "port_of_entry", "yes"),
     ("eq", "port_of_entry", "all"),
@@ -141,7 +141,7 @@ OSM_SEED_CLAUSES: tuple[tuple, ...] = (
     ("eq", "landuse", "border_control"),
 )
 
-# Sous-ensemble contrôle : set Overpass `.ctrl` pour around:800 (pas les 32k marinas).
+# Control subset: Overpass `.ctrl` set for around:800 (not the 32k marinas).
 OSM_CONTROL_CLAUSES: tuple[tuple, ...] = (
     ("eq", "port_of_entry", "yes"),
     ("eq", "port_of_entry", "all"),
@@ -160,7 +160,7 @@ MARINA_NEAR_CONTROL_CLAUSES: tuple[tuple, ...] = (
     ("regex", "seamark:harbour:category", MARINA_CATHAF_REGEX),
 )
 
-# Égalités encore utiles pour osm_tag_list / tests. Ce n'est plus LA requête.
+# Equalities still useful for osm_tag_list / tests. This is no longer THE query.
 OSM_POE_TAGS = (
     ("port_of_entry", "yes"),
     ("harbour", "yes"),
@@ -189,7 +189,7 @@ OSM_EXCLUDED_TAGS = (
     ("waterway", "dock"),
 )
 
-# Catalogue documenté : rôle + compte Taginfo du 2026-09-05.
+# Documented catalog: role + Taginfo count from 2026-09-05.
 TAGINFO_CATALOG: tuple[dict[str, Any], ...] = (
     {
         "tag": "port_of_entry=yes", "key": "port_of_entry", "value": "yes",
@@ -381,10 +381,10 @@ TAGINFO_CATALOG: tuple[dict[str, Any], ...] = (
     },
 )
 
-# Golfe de Gascogne — tuile Console Test (WORLD_TILES[0] est trop vaste).
+# Bay of Biscay — Console Test tile (WORLD_TILES[0] is too large).
 TEST_TILE: tuple[float, float, float, float] = (46.0, -2.0, 48.5, 0.5)
 
-# (south, west, north, east) — assez petits pour Overpass public ; split auto sinon.
+# (south, west, north, east) — small enough for public Overpass; auto-split otherwise.
 WORLD_TILES: tuple[tuple[float, float, float, float], ...] = (
     (-60.0, -180.0, -15.0, -90.0),
     (-60.0, -90.0, -15.0, 0.0),
@@ -418,7 +418,7 @@ def has_commercial_category(tags: dict[str, str]) -> bool:
 
 
 def is_airport_like(name: str, tags: dict[str, str] | None = None) -> bool:
-    """Aéroport / aérodrome : un bureau de douane là n'ancre pas une marina."""
+    """Airport / airfield: a customs office there does not anchor a marina."""
     tags = tags or {}
     if tags.get("aeroway"):
         return True
@@ -430,7 +430,7 @@ def is_airport_like(name: str, tags: dict[str, str] | None = None) -> bool:
 
 
 def is_control_facility(tags: dict[str, str]) -> bool:
-    """Douane / border / port_of_entry — signal de proximité, pas un havre."""
+    """Customs / border / port_of_entry — proximity signal, not a haven."""
     if (tags.get("port_of_entry") or "").strip().lower() in POE_YES:
         return True
     if split_categories(tags.get("government")) & CONTROL_GOVERNMENT:
@@ -449,7 +449,7 @@ def is_control_facility(tags: dict[str, str]) -> bool:
 
 
 def control_kind_flags(tags: dict[str, str]) -> tuple[bool, bool]:
-    """(customs, border) d'après les tags du point de contrôle le plus proche."""
+    """(customs, border) from the tags of the nearest control point."""
     gov = split_categories(tags.get("government"))
     customs = (
         "customs" in gov
@@ -473,7 +473,7 @@ def nearest_control(
     controls: list[tuple[float, float, dict]],
     radius_km: float | None = None,
 ) -> tuple[float, dict] | None:
-    """Contrôle le plus proche à ≤ radius_km, sinon None."""
+    """Nearest control within ≤ radius_km, else None."""
     from app.core.run_rules import get_rule
     if radius_km is None:
         radius_km = float(get_rule("formalities.marina_control_m", MARINA_CONTROL_RADIUS_M)) / 1000.0
@@ -489,7 +489,7 @@ def nearest_control(
 
 
 def collect_control_points(docs: list[dict]) -> list[tuple[float, float, dict]]:
-    """Points de contrôle utilisables (hors aéroport) depuis extraits OSM / cache."""
+    """Usable control points (except airport) from OSM extracts / cache."""
     out: list[tuple[float, float, dict]] = []
     for raw in docs or []:
         tags = {str(k): str(v) for k, v in (raw.get("tags") or {}).items()}
@@ -511,9 +511,9 @@ def collect_control_points(docs: list[dict]) -> list[tuple[float, float, dict]]:
 
 
 def is_marina_only(tags: dict[str, str]) -> bool:
-    """Plaisance sans signal port / PoE sur le même objet.
+    """Pleasure craft without a port / PoE signal on the same object.
 
-    Ce n'est pas un rejet définitif : graine P si near_control (≤ 800 m).
+    This is not a final reject: P seed if near_control (≤ 800 m).
     """
     if (tags.get("port_of_entry") or "").strip().lower() in POE_YES:
         return False
@@ -539,7 +539,7 @@ def is_marina_only(tags: dict[str, str]) -> bool:
 
 
 def is_seed_candidate(tags: dict[str, str], *, near_control: bool = False) -> bool:
-    """True si l'objet OSM est un candidat port, ou une marina près d'un contrôle."""
+    """True if the OSM object is a port candidate, or a marina near a control."""
     if (tags.get("port_of_entry") or "").strip().lower() in POE_YES:
         return True
     if is_marina_only(tags):
@@ -619,7 +619,7 @@ def _catalog_row(entry: dict[str, Any], live: int | None) -> dict[str, Any]:
 
 
 def how_many_ports(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Il n'y a pas un nombre unique de « ports OSM » — réponses par couche."""
+    """There is no single count of "OSM ports" — answers per layer."""
     by_tag = {r["tag"]: r.get("count") for r in rows}
 
     def n(tag: str) -> int | None:
@@ -637,7 +637,7 @@ def how_many_ports(rows: list[dict[str, Any]]) -> dict[str, Any]:
         n("seamark:harbour:category=marina_no_facilities") or 0)
     uncategorized = None
     if harbour_facilities is not None:
-        # 24 113 objets ont seamark:harbour:category (clé, pas une valeur).
+        # 24,113 objects have seamark:harbour:category (a key, not a value).
         uncategorized = max(0, harbour_facilities - 24113)
     return {
         "no_single_count": True,
@@ -723,7 +723,7 @@ def element_name(tags: dict[str, str]) -> str:
 
 
 def osm_tag_list(tags: dict[str, str]) -> list[str]:
-    """Tags pertinents présents — pas seulement les 3 anciens tags."""
+    """Relevant tags present — not only the 3 old tags."""
     out: list[str] = []
     seen: set[str] = set()
 
@@ -783,7 +783,7 @@ def osm_confidence(name: str, tags: dict[str, str], in_eez: bool,
 
 
 def cache_doc_to_seed(doc: dict) -> dict | None:
-    """Convertit un doc du cache en graine union (même schéma que _slim)."""
+    """Convert a cache doc into a union seed (same schema as _slim)."""
     try:
         lat = float(doc["lat"])
         lon = float(doc["lon"])
@@ -871,7 +871,7 @@ def _overpass_marina_near_control_query(
     south: float, west: float, north: float, east: float,
     radius_m: int | None = None,
 ) -> str:
-    """Marinas dans un rayon (m) d'un contrôle — pas le dump leisure=marina mondial."""
+    """Marinas within a radius (m) of a control — not the worldwide leisure=marina dump."""
     from app.core.run_rules import get_rule
     if radius_m is None:
         radius_m = int(get_rule("formalities.marina_control_m", MARINA_CONTROL_RADIUS_M))
@@ -1046,7 +1046,7 @@ def load_eez_index_sync(zone_docs: list[dict]) -> list[dict]:
 
 
 def assign_eez_point(lat: float, lon: float, zones: list[dict]) -> dict | None:
-    """Première ZEE VLIZ qui accepte le point (polygone, sliver, côte ≤ 15 km)."""
+    """First VLIZ EEZ that accepts the point (polygon, sliver, coast ≤ 15 km)."""
     hits: list[tuple[float, dict]] = []
     for z in zones:
         if not _bbox_hit(z.get("_bbox"), lon, lat):
@@ -1160,7 +1160,7 @@ async def load_cached_osm(db, *, in_eez_only: bool = True) -> list[dict]:
 
 
 async def refresh_osm_cache(db, log=None) -> dict[str, Any]:
-    """Télécharge Overpass, rattache VLIZ, réécrit osm_port_seeds. Lent."""
+    """Download Overpass, attach VLIZ, rewrite osm_port_seeds. Slow."""
     log = log or (lambda m: logger.info("%s", m))
     log("Overpass : candidats port + marinas ≤ 800 m d'un contrôle…")
     elements = await fetch_osm_elements(log=log)
@@ -1191,7 +1191,7 @@ async def refresh_osm_cache(db, log=None) -> dict[str, Any]:
 
 
 async def osm_inventory(db) -> dict[str, Any]:
-    """Taginfo (monde) + état du cache local. Pas d'Overpass."""
+    """Taginfo (world) + local cache state. No Overpass."""
     taginfo = await asyncio.to_thread(taginfo_snapshot)
     stats = await cache_stats(db)
     return {

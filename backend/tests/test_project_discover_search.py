@@ -1,4 +1,4 @@
-"""Découverte Projets : N1 motifs → Fetch → Search TF ∥ Serper (1 shot). Sans réseau."""
+"""Projects discovery: N1 motifs → Fetch → Search TF ∥ Serper (1 shot). No network."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +16,8 @@ import pytest
 from app.core.tinyfish import POE_PURPOSE, PROJECTS_DISCOVERY_PURPOSE, PROJECTS_LISTING_PURPOSE
 from app.services import run_journal
 from app.services.swarm_pipeline import (
-    Swarm, filter_discover_urls, official_site_from_hits, project_search_query,
+    Swarm, _is_soft_fiche_path, filter_discover_urls, is_project_fiche_path,
+    official_site_from_hits, project_search_query,
 )
 from tests.test_project_runs import _FakeDB
 
@@ -113,6 +114,24 @@ def test_filter_exclude_urls_skips_already_eliminated():
     out = filter_discover_urls(
         hits, SEED, 10, exclude_urls=["https://example.org/projects/coral"])
     assert out == ["https://example.org/projects/kelp"]
+
+
+def test_portrait_png_is_not_a_project_fiche():
+    path = "/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+    assert is_project_fiche_path(path) is False
+    assert _is_soft_fiche_path(path) is False
+
+
+def test_filter_drops_image_urls_even_on_soft_path():
+    hits = [
+        {"url": "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png"},
+        {"url": "https://marviva.net/equipo/sandra-vilardy"},
+        {"url": "https://marviva.net/projects/manglares"},
+    ]
+    seed = {"name": "MarViva", "url": "https://marviva.net/"}
+    out = filter_discover_urls(hits, seed, 10)
+    assert out == ["https://marviva.net/projects/manglares"]
+    assert all(not u.endswith(".png") for u in out)
 
 
 def test_filter_soft_keeps_research_when_no_project_path():
@@ -392,7 +411,7 @@ def test_no_serper_hard_cap_still_calls_serper(monkeypatch):
 
 
 def test_home_internal_links_are_not_n1_fiches(monkeypatch):
-    """Sur un catalogue, About/News ne comptent pas comme fiches — Search tourne."""
+    """On a catalogue, About/News do not count as cards — Search runs."""
     _HtmlClient.html = HOME_HTML
     sw = _swarm()
     search = {"tf": 0, "sp": 0}
@@ -673,7 +692,7 @@ def test_no_serper_key_still_runs_tf_search(monkeypatch):
 
 
 def test_mode_test_journal_shows_n1_then_search(monkeypatch, tmp_path):
-    """Run mode=test simulé (1 graine home) : N1 → Search dans le journal, pas de full 776."""
+    """Simulated mode=test run (1 home seed): N1 → Search in the journal, no full 776."""
     monkeypatch.setattr(run_journal, "RUNS_DIR", tmp_path)
     sw = _swarm()
     sw.run_id = "20260912-193000-test01"

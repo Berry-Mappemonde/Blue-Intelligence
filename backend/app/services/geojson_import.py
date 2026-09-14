@@ -1,4 +1,4 @@
-"""Validation commune des FeatureCollection à l'import."""
+"""Shared FeatureCollection validation on import."""
 
 
 def parse_feature_collection(fc) -> tuple[str, list]:

@@ -1,13 +1,13 @@
-"""Profondeur d'approche — sondage ponctuel EMODnet Bathymetry.
+"""Approach depth — point sounding from EMODnet Bathymetry.
 
 ``GET https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(lon lat)``
-renvoie le DTM (champ ``avg``, mètres). Convention mixte observée : une
-valeur positive est une profondeur sous le niveau de la mer, une valeur
-négative est une altitude DTM (on prend l'opposé).
+returns the DTM (``avg`` field, metres). Mixed convention observed: a
+positive value is a depth below sea level, a
+negative value is a DTM altitude (take the opposite).
 
-Cache Mongo ``depth_samples`` (clé lat/lon arrondis à 4 décimales, ~11 m)
-en upsert non destructif — le DTM ne bouge pas d'un jour à l'autre.
-Les échecs réseau ne sont pas mis en cache, pour pouvoir réessayer.
+Mongo cache ``depth_samples`` (lat/lon key rounded to 4 decimals, ~11 m)
+as a non-destructive upsert — the DTM does not move day to day.
+Network failures are not cached, so they can be retried.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from app.services.science_build import now_iso
 DEPTH_URL = "https://rest.emodnet-bathymetry.eu/depth_sample"
 SOURCE = "emodnet-bathymetry"
 DECIMALS = 4
-# Au-dessous de ce seuil (m), on considère le point émergé / estran.
+# Below this threshold (m), treat the point as emerged / foreshore.
 DRY_M = 0.3
 
 FetchDepth = Callable[[float, float], Awaitable[dict]]
@@ -32,7 +32,7 @@ def cache_key(lat: float, lon: float) -> str:
 
 
 def depth_from_emodnet(payload: dict | None) -> dict:
-    """Interprète la réponse JSON ``depth_sample`` → profondeur positive sous NM."""
+    """Interpret the ``depth_sample`` JSON response → positive depth below SL."""
     if not isinstance(payload, dict) or payload.get("avg") is None:
         return {"depth_m": None, "on_land": None, "raw": None}
     try:
@@ -89,7 +89,7 @@ async def sample_depth(
     *,
     fetch: Optional[FetchDepth] = None,
 ) -> dict:
-    """Sondage (cache d'abord, sinon EMODnet). Jamais d'exception vers l'API."""
+    """Sounding (cache first, else EMODnet). Never raise toward the API."""
     key = cache_key(lat, lon)
     rlat, rlon = round(lat, DECIMALS), round(lon, DECIMALS)
     try:

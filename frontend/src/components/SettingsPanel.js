@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Download, FileDown, Upload, X } from "lucide-react";
 import api, { BACKEND_URL } from "../api";
+import MapLayersSidebar from "./MapLayersSidebar";
 
-// Settings : docs, import/export, zoom / max markers.
-// Les seuils métier vivent dans Console → Règles (catalogue).
-// Les clés API vivent dans Console → Clés API (admin uniquement, 2026-09).
-// Pour les visiteurs non admin : téléchargements + export seulement.
+// Settings: docs, import/export, zoom / max markers.
+// Business thresholds live in Console → Rules (catalogue).
+// API keys live in Console → API keys (admin only, 2026-09).
+// For non-admin visitors: downloads + export only.
 
 function Field({ label, children }) {
   return (
@@ -45,7 +46,11 @@ const IMPORT_TOTAL_KEY = {
   science:     "total_science",
 };
 
-export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSaved, onImported, onProjectsCleared, onClose }) {
+export default function SettingsPanel({
+  t, mode, settings, isAdmin = false, onSaved, onImported, onProjectsCleared, onClose,
+  overlayOn, onToggleOverlay, scienceWms, onToggleWms, safetyM, onSafetyM,
+  noaaAidsOn, onToggleNoaaAids, showNoaa = false,
+}) {
   const [form, setForm] = useState(null);
   const [saved, setSaved] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -55,12 +60,10 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
     if (settings) setForm({ ...settings });
   }, [settings]);
 
-  if (!form) return null;
-
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
-    // Seuls les réglages carte restent éditables ici — envoi ciblé.
+    // Only map settings remain editable here — targeted PUT.
     await api.put("/settings", {
       min_zoom: parseInt(form.min_zoom, 10) || undefined,
       max_markers: parseInt(form.max_markers, 10) || undefined,
@@ -154,6 +157,19 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
         </div>
       </div>
       <div className="p-4 space-y-5">
+        <MapLayersSidebar
+          t={t}
+          overlayOn={overlayOn}
+          onToggleOverlay={onToggleOverlay}
+          scienceWms={scienceWms}
+          onToggleWms={onToggleWms}
+          safetyM={safetyM}
+          onSafetyM={onSafetyM}
+          noaaAidsOn={noaaAidsOn}
+          onToggleNoaaAids={onToggleNoaaAids}
+          showNoaa={showNoaa}
+        />
+
         {/* Docs */}
         <section>
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70 mb-2">{t("downloads")}</p>
@@ -202,8 +218,8 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
 
         {/* Phase 7 — Marine filtering block migrated to Audit → Projects card. */}
 
-        {/* Map — transverse (écriture protégée par la clé admin) */}
-        {isAdmin && (
+        {/* Map — cross-cutting (writes gated by the admin key) */}
+        {form && isAdmin && (
           <section className="space-y-2.5">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70">{t("mapSettings")}</p>
             <Field label={t("minZoom")}>
@@ -215,7 +231,7 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
           </section>
         )}
 
-        {/* API keys — déplacées dans Console → Clés API (2026-09). */}
+        {/* API keys — moved to Console → API keys (2026-09). */}
 
         {/* Save button removed 2026-06 — settings now auto-save on field blur
             (see the onBlur={save} handlers above). */}

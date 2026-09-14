@@ -1,0 +1,67 @@
+{
+  "categories": [
+    {
+      "name": "Category:Ports - Greece",
+      "pageCount": 226,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Ports - Italy",
+      "pageCount": 312,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Ports - Spain",
+      "pageCount": 105,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Marinas - Greece",
+      "pageCount": 106,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Marinas - Italy",
+      "pageCount": 161,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Marinas - Spain",
+      "pageCount": 141,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Anchorages - Greece",
+      "pageCount": 377,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Anchorages - Italy",
+      "pageCount": 106,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Anchorages - Croatia",
+      "pageCount": 158,
+      "subcategoryCount": 0
+    },
+    {
+      "name": "Category:Countries",
+      "pageCount": 112,
+      "subcategoryCount": 0
+    }
+  ],
+  "totalPortPages": 643,
+  "topLevelRegions": [
+    "Mediterranean Cruising Guide",
+    "Atlantic Ocean Cruising Guides",
+    "Indian Ocean Cruising Guides",
+    "Pacific Ocean Cruising Guides",
+    "Red Sea Cruising",
+    "South East Asia",
+    "North Atlantic Cruising Guide",
+    "South Atlantic Cruising Guide"
+  ],
+  "structureSummary": "The cruiserswiki.org structure follows a hierarchical MediaWiki organization. Main categories such as Category:Ports, Category:Marinas, and Category:Anchorages act as top-level buckets. These are typically subdivided by country (e.g., Category:Ports - Spain). Cruising guides are organized by major oceanic regions (e.g., Mediterranean Cruising Guide) which then drill down into specific coastal areas and ports. Due to Cloudflare access restrictions on the live site, data was mapped using a combination of web archives and search engine metadata.",
+  "totalMarinaPages": 408
+}

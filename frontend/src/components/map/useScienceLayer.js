@@ -16,6 +16,7 @@ const SOURCE_LABELS = {
   edmed: "EDMED · SeaDataNet",
   argo: "Argo · Coriolis",
   csr: "CSR · SeaDataNet",
+  "sentinel-pilot": "Sentinel · pilote corridor",
 };
 
 const OCEAN_LABELS = { A: "Atlantique", P: "Pacifique", I: "Indien" };
@@ -95,8 +96,8 @@ function applyFilter(markers, tracks, group, tracksLayer, sourceFilter) {
 }
 
 /**
- * Couche Science : pastilles canvas + tracés CSR. Le filtre source
- * montre / cache les couches déjà construites (pas de clear+rebuild).
+ * Science layer: canvas dots + CSR tracks. The source filter
+ * shows / hides already-built layers (no clear+rebuild).
  */
 export default function useScienceLayer({
   mapObj, clusterRef, tracksLayerRef, markersById, science, tRef,

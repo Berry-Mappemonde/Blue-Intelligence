@@ -6,7 +6,11 @@
     "GLOBAL_MULTIYEAR_WAV_001_032"
   ],
   "doi": "10.48670/moi-00022",
-  "stat": "mean",
-  "note": "V0 mean overlay \u2014 not a P90. Direction absent from P1M climatology.",
-  "generated_at": "2026-09-13T11:13:56Z"
+  "dataset": "cmems_mod_glo_wav_my_0.2deg_PT3H-i",
+  "stat": "p50_p90",
+  "note": "Hs P50/P90 from PT3H histograms (0.05 m bins). Not a P1M mean. Direction is circular mean of VMDR.",
+  "grid_spacing_deg": 0.4,
+  "years": "1993-2019",
+  "hs_bin_m": 0.05,
+  "generated_at": "2026-09-14T04:03:01Z"
 }

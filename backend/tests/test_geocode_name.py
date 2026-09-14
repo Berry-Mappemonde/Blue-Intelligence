@@ -1,4 +1,4 @@
-"""Porte unique geocode_name — Nominatim ∥ GeoNames, deux tests d'espace. Aucun réseau."""
+"""Single door geocode_name — Nominatim ∥ GeoNames, two space tests. No network."""
 from __future__ import annotations
 
 import ast

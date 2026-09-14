@@ -53,12 +53,12 @@ function matchesLfp(feat, lfpFilter) {
 }
 
 /**
- * Couche AMP : polygones + pastilles pour les géométries Point.
- * Le filtre LFP s'applique à la carte, pas seulement à la liste.
+ * MPA layer: polygons + dots for Point geometries.
+ * The LFP filter applies to the map, not only to the list.
  */
 export default function useAmpLayer({
   mapObj, ampLayerRef, ampLayersById, mode, tRef, onSites, flyToAmp,
-  runId = null, lfpFilter = "All",
+  runId = null, lfpFilter = "All", visible = false,
 }) {
   const timerRef = useRef(null);
   const lastKeyRef = useRef("");
@@ -102,14 +102,16 @@ export default function useAmpLayer({
         Math.max(-180, b.getWest()), Math.max(-85, b.getSouth()),
         Math.min(180, b.getEast()), Math.min(85, b.getNorth()),
       ].map((n) => n.toFixed(4)).join(",");
-      const key = `${zoom}:${bbox}`;
+      const key = `${zoom}:${bbox}:v${visible ? 1 : 0}`;
       if (key === lastKeyRef.current && rawRef.current) {
         paint(rawRef.current);
         return;
       }
       lastKeyRef.current = key;
       try {
-        const { data } = await api.get("/amp", { params: { bbox } });
+        const params = { bbox };
+        if (visible) params.visible = true;
+        const { data } = await api.get("/amp", { params });
         rawRef.current = data;
         paint(data);
       } catch (_) {
@@ -130,7 +132,7 @@ export default function useAmpLayer({
       map.off("zoomend", schedule);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [mode, mapObj, ampLayerRef, ampLayersById, onSites, tRef, runId, lfpFilter]);
+  }, [mode, mapObj, ampLayerRef, ampLayersById, onSites, tRef, runId, lfpFilter, visible]);
 
   useEffect(() => {
     if (rawRef.current) paint(rawRef.current);

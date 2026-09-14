@@ -1,8 +1,8 @@
 /**
- * NAVIGUIDE — Traductions françaises
+ * NAVIGUIDE — French translations
  */
 export default {
-  // ── Mode dessin ────────────────────────────────────────────────────────────
+  // ── Drawing mode ────────────────────────────────────────────────────────────
   drawStart:      "Choisissez votre point de départ",
   drawFirstStop:  "Choisissez votre première escale",
   drawNextStop:   "Choisissez votre prochaine escale",
@@ -12,7 +12,7 @@ export default {
   calculatingRoutes: "Calcul des routes…",
   routesProgress: "Routes {done}/{total}",
 
-  // ── Marqueurs carte ────────────────────────────────────────────────────────
+  // ── Map markers ────────────────────────────────────────────────────────
   strongWindWave: "Vent fort + Vagues hautes",
   strongWind:     "Vent fort",
   highWaves:      "Vagues hautes",
@@ -75,8 +75,10 @@ export default {
   gettingStartedText: "Cliquez sur un point de la route pour obtenir les données vent, vague et courant. Tracez votre propre route ou lancez la simulation.",
   searouteUnavailable: "Route officielle (searoute indisponible).",
   searouteDrawFailed: "searoute a échoué — corde temporaire.",
-  berryLocalBriefing: "Expédition Berry-Mappemonde : départ de Saint-Maur (Berry) vers La Rochelle, puis les escales outre-mer. Lancez la simulation pour lire la route comme un film (Play, quatre vitesses dont la vitesse réelle du bateau). Le dossier cockpit (sac ici) se remplira à l’étape 2.", // pragma: allowlist secret
+  berryLocalBriefing: "Expédition Berry-Mappemonde : départ de Saint-Maur (Berry) vers La Rochelle, puis les escales outre-mer. Lancez la simulation : le briefing raconte alors le sac autour du bateau — quelle ZEE, quels ports d’entrée, ce qu’il y a dans 30 nm — pas toute la carte.", // pragma: allowlist secret
   cockpitDossier: "Dossier cockpit",
+  iciBriefingLoading: "Le sac se remplit autour du bateau…",
+  iciBriefingFallback: "Le sac autour du bateau n’a pas encore de récit.",
   brandTitle: "NAVIGUIDE simulator",
   layerSextant: "Sextant",
   layerSextantTitle: "Sextant · Ifremer/SISMER",
@@ -98,13 +100,16 @@ export default {
   layerClimatologyTitle: "Régime de vent ici (étape 6)",
   climatologyStub: "Régime de vent ici : overlay climatologie à l’étape 6.",
   notForNavigation: "Ne convient pas à la navigation.",
+  notForNavBody: "Balisage OpenSeaMap (ODbL), WMS EMODnet (CC-BY) et sondage GEBCO au large : données communautaires / scientifiques, pas une carte marine officielle.",
+  notForNavAck: "Je comprends : ne convient pas à la navigation.",
+  notForNavAccept: "Accepter",
   briefing:           "BRIEFING",
   briefingPlaceholder: "Connectez-vous à l'orchestrateur NAVIGUIDE pour générer votre briefing d'expédition.",
   criticalAlerts:     "Alertes critiques",
   noAlerts:           "✅ Aucune alerte critique — la route semble sûre.",
   dominantRisk:       "Dominant",
 
-  // ── Mode Simulation ────────────────────────────────────────────────────────
+  // ── Simulation mode ────────────────────────────────────────────────────────
   simulationMarkerTitle: "Catamaran — cliquez pour les métriques",
   simulationDragPrompt:  "Faites glisser le catamaran sur la route…",
   exitSimulation:        "Quitter la simulation",
@@ -146,7 +151,7 @@ export default {
   polarUpwind:            "↑ Près",
   polarDownwind:          "↓ Portant",
 
-  // ── Couches maritimes (MaritimeLayersPanel) ─────────────────────────────────
+  // ── Maritime layers (MaritimeLayersPanel) ─────────────────────────────────
   layerZee:        "ZEE",
   layerZeeTitle:   "Zones Économiques Exclusives (VLIZ)",
   layerPorts:      "Ports WPI",
@@ -157,7 +162,7 @@ export default {
   layersApiHint:   "ZEE et Ports nécessitent naviguide-api (port 8000)",
   layersStartHint: "Lancer ./naviguide_workspace/start_local.sh",
 
-  // ── Couches Blue Intelligence (Sidebar) ─────────────────────────────────────
+  // ── Blue Intelligence layers (Sidebar) ─────────────────────────────────────
   biLayersLabel:             "Blue Intelligence",
   layerBiProjects:           "Projets",
   layerBiProjectsTitle:      "Projets de conservation marine",
@@ -183,7 +188,7 @@ export default {
   play:  "Lecture",
   pause: "Pause",
 
-  // ── Lecteur film ──────────────────────────────────────────────────────────
+  // ── Film player ──────────────────────────────────────────────────────────
   speedReal:        "réelle",
   speedRead:        "lecture",
   speedNormal:      "normale",
@@ -202,4 +207,51 @@ export default {
   filmPhaseAirReturn: "Retour aérien — le bateau reprend ensuite la route",
   filmPhaseSide:    "Voile Halifax — Saint-Pierre-et-Miquelon",
   filmAirVehicle:   "avion",
+  filmClockNm:      "nm",
+  filmClockDays:    "jours",
+  filmClockToggle:  "Échelle : milles ou jours de mer (T)",
+  filmSeaDays:      "jours de mer",
+  filmSpeedProfile: "Vent et nœuds le long du trait",
+  filmWindLegend:   "vent",
+  filmKnotsLegend:  "nœuds",
+  filmArrivalNext:  "Ensuite : {name}",
+  filmArrivalSea:   "{time} de mer",
+  filmArrivalHold:  "Escale",
+  filmArrivalNm:    "{nm} nm",
+  escalesList:      "Escales",
+  escalesJump:      "Aller à {name}",
+  filmWindClimo:    "climatologie",
+  filmWindForecast: "prévision",
+  filmWindAnalyse:  "analyse",
+  departureTitle:   "Date de départ",
+  departureDate:    "Jour (UTC)",
+  departureTimeUtc: "Heure UTC",
+  departureStartAt: "Départ mer",
+  departureLaRochelle: "La Rochelle",
+  departureSaintMaur:  "Depuis Saint-Maur (4 h de terre)",
+  voyageClockDisclaimer: "Vent typique du mois, pas la météo de demain.",
+  voyageKindClimatology: "climatologie · {month}",
+  voyageAtQuay:     "à quai {days} j",
+  voyageTwa:        "TWA {deg}°",
+  voyageLocalKnots: "{knots} kt",
+  escalesQuay:      "{days} j à quai",
+  virtualBoatLabel: "Bateau virtuel (prévision 10 j)",
+  followModeLabel:  "Mode Suivre",
+  previewBadge:     "aperçu",
+  returnToLive:     "Revenir au live (L)",
+  departsIn:        "Appareillage dans {hours}",
+  forecastPending:  "Prévision en cours de chargement — horloge climatologie en attendant.",
+  forecastUnavailable: "Prévision indisponible, climatologie.",
+  recomputeButton:  "Recalculer l’itinéraire",
+  recomputeBusy:    "Calcul isochrone…",
+  recomputeTitle:   "Nouveau trait jusqu’à la prochaine escale",
+  recomputeTo:      "Vers {name}",
+  recomputeSearoute: "Searoute",
+  recomputeProposed: "Proposé",
+  recomputeHint:    "Une jambe seulement. Accepter remplace le trait ; l’aval reste searoute.",
+  recomputeKeep:    "Garder searoute",
+  recomputeAccept:  "Accepter",
+  voyageKindForecast: "{model} · +{lead} h",
+  voyageForecastDisclaimer: "Prévision 0–10 j (modèle nommé), climatologie ensuite. Ne convient pas à la navigation.",
+  creditsLine:      "Leaflet · tuiles Esri · OpenSeaMap · EMODnet · GEBCO (sondage au large). Ne convient pas à la navigation.",
 };

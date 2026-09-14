@@ -1,5 +1,5 @@
-"""app.routers.projects — Projets marins : liste, imports/exports, catégories,
-enrichissement à la demande, signalements communautaires."""
+"""app.routers.projects — Marine projects: list, imports/exports, categories,
+on-demand enrichment, community reports."""
 import asyncio
 import difflib
 import os

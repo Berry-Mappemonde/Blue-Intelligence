@@ -71,6 +71,9 @@ function popupHtml(kind, p, t) {
     }
   } else if (kind === "wave") {
     rows.push(`Hs ${esc(p.stat)}: ${esc(p.hs_m)} m`);
+    if (p.period_s != null) rows.push(`T ${esc(p.period_s)} s`);
+    if (p.dir_deg != null) rows.push(`dir ${esc(p.dir_deg)}°`);
+    if (p.stat === "p50") rows.push(esc(t("climoWaveP50Hint")));
     if (p.stat === "p90") rows.push(esc(t("climoWaveP90Hint")));
     if (p.stat === "mean") rows.push(esc(t("climoWaveMeanHint")));
   } else if (kind === "current") {
@@ -89,8 +92,8 @@ function popupHtml(kind, p, t) {
 }
 
 /**
- * Couches du 7ᵉ mode uniquement. pointer-events none sur les panes :
- * le clic carte interroge /point (pas un overlay sur les autres modes).
+ * 7th-mode layers only. pointer-events none on the panes:
+ * a map click queries /point (not an overlay on other modes).
  */
 export default function useClimatologyLayer({
   mapObj, mode, month, filters, waveStat, tRef, onPoint,

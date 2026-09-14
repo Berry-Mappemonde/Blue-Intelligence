@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# À lancer sur le Mac, depuis n'importe où :
+# Run on the Mac, from anywhere:
 #   bash infra/vps/naviguide/publish-simulator-from-mac.sh
 #
-# 1) construit le site (npm) sur le Mac — évite un npm sur le VPS (8 Go)
-# 2) copie seulement le simulateur + ces fichiers infra (pas Blue Intelligence)
-# 3) lance deploy-simulator.sh sur le VPS (venv, nginx à part, certificat)
+# 1) builds the site (npm) on the Mac — avoids npm on the VPS (8 GB)
+# 2) copies only the simulator + these infra files (not Blue Intelligence)
+# 3) runs deploy-simulator.sh on the VPS (venv, separate nginx, certificate)
 #
-# Prérequis : tu te connectes déjà en SSH (même clé que d'habitude).
-# Variables optionnelles :
+# Prerequisites: you already connect over SSH (same key as usual).
+# Optional variables:
 #   NAVIGUIDE_VPS=ubuntu@135.125.226.16
 #   NAVIGUIDE_SSH_IDENTITY=/chemin/vers/cle_privee
 set -euo pipefail
@@ -48,6 +48,8 @@ rsync -az --delete -e "${RSH[*]}" \
   --exclude __pycache__ \
   --exclude .env \
   --exclude server/polar_data/*.json \
+  --exclude server/voyage_data/ \
+  --exclude server/forecast_cache/ \
   "$SIM/" "$VPS:$REMOTE_APP/naviguide-simulator/"
 
 echo "→ Copie des fichiers infra simulateur…"

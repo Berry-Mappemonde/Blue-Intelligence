@@ -1,4 +1,4 @@
-"""app.state — Singletons partagés entre routers (swarm de découverte)."""
+"""app.state — Singletons shared across routers (discovery swarm)."""
 from app.db import db
 from app.services.swarm_pipeline import Swarm
 

@@ -15,7 +15,7 @@ from app.core.llm import (
 )
 from app.static_data.categories import normalize_category
 from app.core.dedup import is_duplicate
-from app.core.extract import extract_cascade
+from app.core.extract import extract_cascade, path_looks_like_image, url_looks_like_image
 from app.core.project_geo import geocode_project_site, site_publishable, valid_coords
 from app.core.rag import select_context
 from app.static_data.seeds import (
@@ -108,6 +108,8 @@ def is_project_fiche_path(path: str, *, apply_blacklist: bool = True) -> bool:
     """Vraie fiche : motif URL_PATTERNS, ≥ 2 segments. Blacklist = Fetch/Search."""
     if not path:
         return False
+    if path_looks_like_image(path):
+        return False
     if apply_blacklist and any(b in path.lower() for b in CRAWL_BLACKLIST):
         return False
     if not any(p in path for p in URL_PATTERNS):
@@ -117,7 +119,7 @@ def is_project_fiche_path(path: str, *, apply_blacklist: bool = True) -> bool:
 
 
 def project_search_query(seed: dict) -> str:
-    """Une seule phrase : site:{domaine} … ocean project, ou \"{nom}\" marine conservation."""
+    """One sentence: site:{domain} … ocean project, or "{name}" marine conservation."""
     name = (seed.get("name") or "").strip() if isinstance(seed, dict) else ""
     url = (seed.get("url") or "").strip() if isinstance(seed, dict) else ""
     domain = domain_of(url)
@@ -131,7 +133,7 @@ def project_search_query(seed: dict) -> str:
 
 
 def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str]:
-    """Même hôte (ou domaine trouvé), URL_PATTERNS, hors blacklist, http, dédup."""
+    """Same host (or found domain), URL_PATTERNS, off blacklist, http, dedup."""
     try:
         cap = max(0, int(max_urls or 0))
     except (TypeError, ValueError):
@@ -160,6 +162,8 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
                 continue
         elif _is_skip_listing_domain(d):
             continue
+        if url_looks_like_image(href):
+            continue
         path = urlparse(href).path
         if href in seen:
             continue
@@ -170,7 +174,7 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
                 break
     if urls:
         return urls[:cap]
-    # Même hôte, page profonde, pas news/donate : Scripps /research/… n'a pas /project/.
+    # Same host, deep page, not news/donate: Scripps /research/… has no /project/.
     for hit in hits or []:
         raw = _hit_url(hit)
         if not raw.startswith("http"):
@@ -183,6 +187,8 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
         if host and d != host:
             continue
         if not host and _is_skip_listing_domain(d):
+            continue
+        if url_looks_like_image(href):
             continue
         path = urlparse(href).path
         if not _is_soft_fiche_path(path):
@@ -197,10 +203,12 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
 
 
 def _is_soft_fiche_path(path: str) -> bool:
-    """Page interne utilisable si aucun motif /project/ n'a matché."""
+    """Usable internal page if no /project/ pattern matched."""
     if not path:
         return False
     low = path.lower()
+    if path_looks_like_image(path):
+        return False
     if any(b in low for b in CRAWL_BLACKLIST):
         return False
     parts = [p for p in path.strip("/").split("/") if p]
@@ -208,10 +216,10 @@ def _is_soft_fiche_path(path: str) -> bool:
 
 
 def official_site_from_hits(hits, funder_name: str = "") -> str:
-    """Vrai site de l'organisme : jeton du nom (ou acronyme) dans le domaine.
+    """The organization's real site: name token (or acronym) in the domain.
 
-    Jamais le 1er hit SERP « parce qu'il reste » (BMKG ≠ nature.com).
-    Journaux / éditeurs et hubs partagés exclus. Rien de propre → vide.
+    Never the first leftover SERP hit (BMKG ≠ nature.com).
+    Journals / publishers and shared hubs excluded. Nothing of our own → empty.
     """
     scored: list[tuple[int, int, str]] = []
     for i, hit in enumerate(hits or []):
@@ -236,7 +244,7 @@ def official_site_from_hits(hits, funder_name: str = "") -> str:
 
 
 def agent_host_is_worthwhile(url: str, name: str) -> bool:
-    """L'Agent TinyFish ne part que si l'hôte est (probablement) l'organisme."""
+    """The TinyFish Agent only starts if the host is (probably) the organization."""
     if not (url or "").strip():
         return False
     d = domain_of(url)
@@ -255,7 +263,7 @@ def _links_from_fetch_record(rec: dict | None, base_url: str) -> list[str]:
         if not raw:
             continue
         href = urljoin(base_url, raw).split("#")[0].split("?")[0]
-        if href.startswith("http"):
+        if href.startswith("http") and not url_looks_like_image(href):
             out.append(href)
     return out
 
@@ -299,7 +307,7 @@ class Swarm:
         self._persist_journal(entry)
 
     def _persist_journal(self, entry: dict):
-        """Écrit le récit complet (fichier + Mongo). La carte live n'est pas touchée."""
+        """Write the full narrative (file + Mongo). The live map is not touched."""
         rid = self.run_id
         if not rid:
             return
@@ -316,7 +324,7 @@ class Swarm:
             pass
 
     async def _write_journal_header(self):
-        """Première ligne du journal : paramètres + règles. Après reset seq."""
+        """First journal line: parameters + rules. After seq reset."""
         rid = self.run_id
         if not rid:
             return
@@ -409,7 +417,7 @@ class Swarm:
 
     async def _ensure_isolated_run(self, *, mode: str, settings: dict | None = None,
                                    force_rescan: bool = False, label: str = ""):
-        """Ouvre un run project_run_* si aucun n'est déjà attaché. N'écrit pas `projects`."""
+        """Open a project_run_* if none is already attached. Does not write `projects`."""
         if self.run_id:
             return self.run_id
         from app.services.project_runs import open_run
@@ -422,7 +430,7 @@ class Swarm:
         return self.run_id
 
     async def _write_verdict(self, item: dict, verdict: str, **fields):
-        """Persiste une ligne de run. Interdit toute écriture dans `projects`."""
+        """Persist a run row. Forbids any write into `projects`."""
         if not self.run_id:
             raise RuntimeError("isolated run required — no write to projects")
         from app.services.project_runs import COUNTER_FOR_VERDICT, write_run_project
@@ -469,9 +477,9 @@ class Swarm:
 
     # ---------- lifecycle ----------
     def _bump_saturation(self, new_project: bool):
-        # From scratch re-extrait les URLs déjà sur la carte live : beaucoup
-        # d'unlocated / merged d'affilée. L'Auto-Stop global (conçu pour un
-        # listing épuisé) couperait un run mondial au bout de ~50 extraits.
+        # From scratch re-extracts URLs already on the live map: many
+        # unlocated / merged in a row. Global Auto-Stop (designed for an
+        # exhausted listing) would cut a world run after ~50 extracts.
         if getattr(self, "force_rescan", False):
             return
         if new_project:
@@ -535,7 +543,7 @@ class Swarm:
         self._tf_live_runs.pop(aid, None)
 
     async def _tf_cancel_live_runs(self):
-        """POST /v1/runs/{id}/cancel — sinon un Complet stoppé laisse des PENDING."""
+        """POST /v1/runs/{id}/cancel — else a stopped Complet leaves PENDING runs."""
         live = list(self._tf_live_runs.items())
         if not live:
             return
@@ -704,7 +712,7 @@ class Swarm:
 
     # ---------- discovery (home→catalogue, puis N1 → Fetch → Search → Agent fiches) ----------
     async def _wait_extract_and_recursive(self):
-        """File d'extraction + découvertes FTM déjà lancées."""
+        """Extraction queue + FTM discoveries already launched."""
         while True:
             await self.queue.join()
             pending = [t for t in self.recursive_tasks if not t.done()]
@@ -800,7 +808,7 @@ class Swarm:
         return await self._discover_fiches(seed, max_urls, depth, known_urls)
 
     async def _resolve_official_home(self, seed):
-        """Hub partagé ou pas d'URL → vrai site de l'organisme, puis hop listing."""
+        """Shared hub or no URL → the organization's real site, then listing hop."""
         name = (seed.get("name") or "").strip()
         if not name:
             self.log("[?] site officiel — nom manquant", "warn")
@@ -855,7 +863,7 @@ class Swarm:
             return None
 
     async def _resolve_listing(self, seed):
-        """Home → une URL catalogue. N'écrit pas de fiches. Pas d'échec run si 0."""
+        """Home → one catalog URL. Does not write cards. No run failure if 0."""
         name = seed.get("name") or seed.get("url")
         key = self._tf_key()
         aid = self.new_agent("Listing N1", "listing", seed["url"], seed["name"])
@@ -1002,7 +1010,7 @@ class Swarm:
             return None
 
     async def _infer_listing_from_live(self, seed) -> str | None:
-        """Indice : préfixe commun des fiches v1 du même financeur (pas un dump extraction)."""
+        """Hint: common prefix of v1 cards of the same funder (not an extraction dump)."""
         name = (seed.get("name") or "").strip()
         if not name:
             return None
@@ -1039,7 +1047,7 @@ class Swarm:
         return None
 
     async def _remember_listing(self, seed, listing_url: str):
-        """Mémoire in-process + Mongo. Jamais `projects`."""
+        """In-process memory + Mongo. Never `projects`."""
         domain = domain_of(listing_url) or domain_of(seed.get("url") or "")
         name = seed.get("name") or ""
         for item in self.master_seeds or []:
@@ -1186,6 +1194,8 @@ class Swarm:
                 self.agent_log(aid, f"{len(urls)} project URLs discovered ({used_engine})")
                 self.log(f"[{seed['name']}] {len(urls)} project pages found via {used_engine} → DeepLinkCache + queue")
                 for u in urls:
+                    if url_looks_like_image(u):
+                        continue
                     await self.db.deeplink_pages.update_one(
                         {"url": u}, {"$set": {"url": u, "funder": seed["name"], "source": seed["url"], "ts": now_iso()},
                                      "$setOnInsert": {"_id": str(uuid.uuid4())}}, upsert=True)
@@ -1241,7 +1251,7 @@ class Swarm:
         return on_run, should_stop
 
     async def _tf_agent_run(self, aid, seed, key, goal, schema, max_duration_s):
-        """SSE ; 429 → pause + retry ; flux coupé → poll ; plafond → cancel."""
+        """SSE; 429 → pause + retry; stream cut → poll; cap → cancel."""
         cfg = public_agent_config({"max_duration_seconds": max_duration_s})
         run_id = {"id": None}
         inner = self._tf_agent_on_event(aid)
@@ -1353,7 +1363,7 @@ class Swarm:
             self._tf_untrack_run(aid)
 
     async def _tinyfish_listing_discover(self, aid, seed, key):
-        """Agent TinyFish n°1 : une URL catalogue, pas de fiches individuelles."""
+        """TinyFish Agent #1: one catalogue URL, no individual cards."""
         self.set_agent(aid, status="RUNNING")
         goal = listing_goal(seed["name"])
         result = await self._tf_agent_run(
@@ -1366,7 +1376,7 @@ class Swarm:
         return accept_listing_url(href, seed)
 
     async def _tinyfish_discover(self, aid, seed, key, max_urls, known_urls=None):
-        """Agent TinyFish n°2 : fiches individuelles (SSE puis poll du même run)."""
+        """TinyFish Agent #2: individual cards (SSE then poll of the same run)."""
         self.set_agent(aid, status="RUNNING")
         goal = discovery_goal(seed["name"], known_urls)
         result = await self._tf_agent_run(
@@ -1418,17 +1428,20 @@ class Swarm:
         return urls
 
     async def _crawl_listing(self, seed, max_urls=LISTING_JUDGE_CAP):
-        """Liens internes : hygiène (le raccourci feuille est appliqué plus haut)."""
+        """Internal links: hygiene (the leaf shortcut is applied higher up)."""
         hrefs = await self._crawl_page_links(seed)
         return hygiene_listing_urls([{"url": u} for u in hrefs], seed, max_urls)
 
     async def _crawl_discover(self, seed, max_urls):
-        """1er passage fiches : chemins URL_PATTERNS (≥ 2 segments). Les 8
-        liens internes hors blacklist ne comptent pas comme vraies fiches —
-        sinon les homes sauteraient Fetch/Search."""
+        """1st card pass: URL_PATTERNS paths (≥ 2 segments). The 8
+        internal links outside the blacklist do not count as real cards —
+        else homes would skip Fetch/Search.
+        """
         hrefs = await self._crawl_page_links(seed)
         urls = []
         for href in hrefs:
+            if url_looks_like_image(href):
+                continue
             path = urlparse(href).path
             if is_project_fiche_path(path, apply_blacklist=False):
                 urls.append(href)
@@ -1451,7 +1464,7 @@ class Swarm:
         return hygiene_listing_urls(hits, seed, LISTING_JUDGE_CAP)
 
     async def _fetch_discover(self, seed, max_urls, log=None):
-        """TinyFish Fetch de la même URL (miroir JS) → mêmes filtres motifs fiches."""
+        """TinyFish Fetch of the same URL (JS mirror) → same card-pattern filters."""
         key = self._tf_key()
         url = (seed.get("url") or "").strip()
         if not key or not url:
@@ -1489,7 +1502,7 @@ class Swarm:
     async def _search_with_filter(self, seed, query, max_urls, *,
                                   filter_fn, purpose, log=None,
                                   retry_query=None):
-        """Un shot TF ∥ Serper, puis retry seulement si des hits ont été filtrés à 0."""
+        """One TF ∥ Serper shot, then retry only if hits were filtered down to 0."""
         tf_hits, sp_hits = await asyncio.gather(
             self._tf_search_discover(query, seed, log=log, purpose=purpose),
             self._serper_discover(query, log=log),
@@ -1522,7 +1535,7 @@ class Swarm:
             retry_query=listing_search_retry_query(seed))
 
     async def _search_discover(self, seed, max_urls, log=None, retry_query=None):
-        """TinyFish Search ∥ Serper, union filtrée fiches. Jamais 2 shots EN/FR."""
+        """TinyFish Search ∥ Serper, filtered card union. Never 2 EN/FR shots."""
         return await self._search_with_filter(
             seed, project_search_query(seed), max_urls,
             filter_fn=filter_discover_urls,
@@ -1530,7 +1543,7 @@ class Swarm:
             retry_query=retry_query)
 
     async def _search_partner_site(self, name: str, log=None) -> str:
-        """Même Search que l'étape B : « official site », pas « marine conservation »."""
+        """Same Search as step B: "official site", not "marine conservation"."""
         seed = {"name": name, "url": ""}
         query = official_site_query(name)
         retry = official_site_retry_query(name)
@@ -1812,7 +1825,7 @@ class Swarm:
         if not force:
             v1 = await self.db.projects.find_one({"url": url})
             if v1:
-                # Skip crawl (crédits) mais trace dans le run — ne compte pas pour l'Auto-Stop
+                # Skip crawl (credits) but trace in the run — does not count for Auto-Stop
                 await self._write_verdict(
                     item, "seen_v1",
                     title=v1.get("title") or url,
@@ -1823,6 +1836,14 @@ class Swarm:
                 )
                 return {"status": "seen_v1", "url": url}
 
+        if url_looks_like_image(url):
+            reason = "URL image — portrait ou média, pas une fiche projet"
+            await self._write_verdict(item, "rejected", title=url, reason=reason)
+            await self.add_failed(url, source, funder, reason, "image")
+            await self._emit("rejected", url=url, reason=reason)
+            self._bump_saturation(False)
+            return {"status": "rejected", "url": url}
+
         aid = self.new_agent("Cascade N1→N2", "extract", url, source)
         t0 = time.time()
         await self._emit("extract_start", url=url, funder=funder, source=source)
@@ -1831,6 +1852,23 @@ class Swarm:
             self.agent_log(aid, "Cascade hybride: N1 trafilatura/PyMuPDF → N2 Readability")
             page = await extract_cascade(url, min_chars=200,
                                          log=lambda m: self.agent_log(aid, m))
+            err = page.get("error")
+            if err in {"image_url", "image_content", "binary_content"}:
+                reason = (
+                    "contenu image — pas une fiche projet"
+                    if err.startswith("image")
+                    else "contenu binaire — pas une fiche projet"
+                )
+                self.set_agent(aid, status="REJECTED")
+                self.agent_log(aid, f"REJECTED: {reason}")
+                await self._write_verdict(item, "rejected", title=url, reason=reason)
+                await self._emit("rejected", url=url, reason=reason)
+                await self.telemetry(
+                    url, "Cascade N1→N2", "REJECTED",
+                    (time.time() - t0) * 1000, 0, reason)
+                await self.add_failed(url, source, funder, reason, "image")
+                self._bump_saturation(False)
+                return {"status": "rejected", "url": url}
             if not page["text"]:
                 raise ValueError(f"cascade N1/N2 sans texte exploitable ({page['level']})")
             page_title = (page["title"] or "").strip() or url
@@ -1856,7 +1894,7 @@ class Swarm:
                 self._bump_saturation(False)
                 return {"status": "rejected", "url": url}
 
-            # RAG local : sur les pages longues, seuls les chunks pertinents partent au LLM
+            # Local RAG: on long pages, only relevant chunks go to the LLM
             llm_text = text
             if len(text) > 6000:
                 llm_text = select_context(f"marine ocean coastal conservation project {page_title}",
@@ -1893,7 +1931,7 @@ class Swarm:
             if not valid_coords(lat, lon):
                 lat = lon = None
             elif not site_publishable(lat, lon, self.settings)[0]:
-                # Siège / ville intérieure extraits : tenter le toponyme avant unlocated.
+                # HQ / inland city extracted: try the toponym before unlocated.
                 lat = lon = None
             if lat is None:
                 geo = await geocode_project_site(
@@ -1984,7 +2022,7 @@ class Swarm:
             return {"status": "failed", "url": url}
 
     async def _dedup_merge(self, proj, url, funder, lat, lon):
-        """Dédup dans le run, puis lecture seule de v1. N'écrit jamais `projects`."""
+        """Dedup in the run, then read-only v1. Never writes `projects`."""
         from app.services.project_runs import write_run_project
         candidate = {"title": proj["title"], "lat": lat, "lon": lon}
         run_docs = await self.db.project_run_projects.find(
@@ -2017,7 +2055,7 @@ class Swarm:
                 await self._emit("dedup", url=url, into=c.get("url"), how="merged_run")
                 return "merged_run"
 
-        # From scratch : on ré-extrait dans le run, même si la fiche existe en v1.
+        # From scratch: re-extract in the run, even if the card exists in v1.
         if getattr(self, "force_rescan", False):
             return None
         v1_docs = await self.db.projects.find(

@@ -1,521 +1,524 @@
-# Cahier des charges — Onglet Review
+# Specification — Review tab
 
-Document de cadrage de la **fonctionnalité Review** et de l’**onglet Review** de Blue Intelligence.
+Scoping document for the **Review feature** and the **Review tab** of Blue Intelligence.
 
-Il relit le code (`review_queue`, `poe_zone_fiche`, `ReviewView`), les cahiers Formalités (PoE) et Projets, la PR #34 (7 septembre 2026), et la **revue Word du 8 septembre 2026** (Berry-Mappemonde, 20 commentaires).
+It rereads the code (`review_queue`, `poe_zone_fiche`, `ReviewView`), the Formalities (PoE) and Projects specifications, PR #34 (7 September 2026), and the **Word review of 8 September 2026** (Berry-Mappemonde, 20 comments).
 
-Écrit en langage simple : c’est le **contrat** de ce que l’on cherche, et de ce que l’on refuse.
+Written in plain language: it is the **contract** of what we are looking for, and what we refuse.
 
-Version **1.1** — 8 septembre 2026. Les corrections Word sont tracées au §22.
+Version **1.1** — 8 September 2026. The Word corrections are traced in §22.
 
-**Sommaire**
+**Contents**
 
-1. En une phrase
-2. Pourquoi cet onglet existe
-3. Le contrat
-4. Ce que l’on veut obtenir
-5. Ce que l’on ne veut pas
-6. Vocabulaire
-7. Les trois files (les trois modes)
-8. Fiche Formalités multi-runs
-9. Contrats de fiche
-10. Commentaire, motifs, règles
-11. Bouton Gold
-12. Le code — où vit chaque brique
+1. In one sentence
+2. Why this tab exists
+3. The contract
+4. What we want to obtain
+5. What we do not want
+6. Vocabulary
+7. The three queues (the three modes)
+8. Multi-run Formalities sheet
+9. Sheet contracts
+10. Comment, motives, rules
+11. Gold button
+12. The code — where each piece lives
 13. API
-14. Modèle de données
-15. Ce que voit l’utilisateur
-16. Qui fait quoi
-17. Quel espace de travail pour le job
-18. État actuel et écarts
-19. Recette
-20. Risques
-21. Hors périmètre
-22. Trace des commentaires de revue (Word 8 sept)
-23. Documents dont ce cahier hérite
+14. Data model
+15. What the user sees
+16. Who does what
+17. Which workspace for the job
+18. Current state and gaps
+19. Acceptance tests
+20. Risks
+21. Out of scope
+22. Trace of the review comments (Word 8 Sep)
+23. Documents this specification inherits from
 
 ---
 
-## 1. En une phrase
+## 1. In one sentence
 
-Relire **une fiche à la fois**, dans **un des trois modes** (Projets, Marinas, Formalités), voir **tous les résultats déjà payés dédupliqués**, commenter, **choisir** les bonnes preuves, **écarter** les mauvaises, puis **Gold** : poser la fiche acceptée sur la carte.
-
----
-
-## 2. Pourquoi cet onglet existe
-
-La carte et la Console **produisent**. Review **juge**, puis **publie l’accepté**.
-
-Les cahiers Formalités et Projets exigent une **relecture humaine** avant toute publication (§12 PoE : liste officielle par polygone ; phase D Projets : Gold). Sans écran dédié, la revue reste un script Mongo ou un clic carte trop chargé.
-
-Le geste Formalités : **une fiche par polygone VLIZ** (France hexagone ≠ Mayotte — **pas** une fiche « France » ni une fiche par pays), les URLs Top-Down **de tous les runs**, la **liste des PoE dédupliquée**, les URLs Bottom-Up **par port**, **sans bouton Générer**. Le même geste, adapté, vaut pour un projet et pour une marina.
-
-Blue Intelligence a **trois modes**, pas quatre : **Projets**, **Marinas**, **Formalités** (PoE + polygone **sur la même fiche**). Review est le **troisième onglet** (Map / Console / Review). Ce n’est pas un quatrième mode. L’onglet Review ouvre la file du **mode actif**.
+Reread **one sheet at a time**, in **one of the three modes** (Projects, Marinas, Formalities), see **all already-paid results deduplicated**, comment, **choose** the good evidence, **discard** the bad, then **Gold**: put the accepted sheet on the map.
 
 ---
 
-## 3. Le contrat
+## 2. Why this tab exists
 
-Cette section **prime** sur l’UI, les labels et les implémentations dès qu’il y a conflit. Elle prime aussi, pour l’écran Review, sur la phrase PoE « n’afficher qu’une URL TD » : en Review on **montre tout**, on **choisit**.
+The map and the Console **produce**. Review **judges**, then **publishes the accepted**.
 
-### 3.1 Objet
+The Formalities and Projects specifications require a **human reread** before any publication (§12 PoE: official list per polygon; Projects phase D: Gold). Without a dedicated screen, review remains a Mongo script or an overloaded map click.
 
-Review est une **file de relecture qui aboutit au Gold**.
+The Formalities gesture: **one sheet per VLIZ polygon** (France hexagone ≠ Mayotte — **not** a “France” sheet nor a sheet per country), the Top-Down URLs **of all runs**, the **deduplicated PoE list**, the Bottom-Up URLs **per port**, **without a Generate button**. The same gesture, adapted, applies to a project and to a marina.
 
-Elle n’est pas une carte. Elle n’est pas un crawler. Elle n’est pas un « goldiseur silencieux » (sauver un commentaire ≠ Gold).
+Blue Intelligence has **three modes**, not four: **Projects**, **Marinas**, **Formalities** (PoE + polygon **on the same sheet**). Review is the **third tab** (Map / Console / Review). It is not a fourth mode. The Review tab opens the queue of the **active mode**.
 
-Une **fiche** = l’objet du mode, **cumul dédupliqué de tous les runs** (plus la v1), affiché **seul**, avec un commentaire et des **choix** (garder / écarter).
+---
 
-### 3.2 Trois files = trois modes
+## 3. The contract
 
-Pas un kind `eez` à côté d’un kind `poe`. Formalités = **une** file, **une** fiche par polygone.
+This section **prevails** over the UI, labels and implementations as soon as there is a conflict. For the Review screen, it also prevails over the PoE sentence “display only one TD URL”: in Review we **show everything**, we **choose**.
 
-| Mode | Une fiche = | Identifiant | Ce qu’on y voit |
-|------|-------------|-------------|-----------------|
-| **Projets** | un projet | `_id` ou `url` | v1 + occurrences `project_run_*` du même projet, dédupliquées |
-| **Formalités** | **un polygone VLIZ** (`mrgid`) | `str(mrgid)` | URLs TD de tous les runs + ports dédupliqués + 1+ URLs BU par port |
-| **Marinas** | une marina | `_id` | `marinas` (pas de `marina_run_*` aujourd’hui) |
+### 3.1 Object
 
-**Pourquoi l’implémentation v1.0 a séparé `eez` et `poe`.** Deux collections Mongo (`eez_zones` / `poe_ports`) ont produit deux onglets. Ce n’est **pas** une règle métier. Le réviseur Formalités juge **le polygone et ses ports ensemble**. Un port sans son polygone, ou un polygone sans ses ports, n’est pas le geste.
+Review is a **review queue that results in Gold**.
 
-Pas de cinquième file « listing ». Pas d’agrégat pays à la place d’un `mrgid`.
+It is not a map. It is not a crawler. It is not a “silent goldiser” (saving a comment ≠ Gold).
 
-### 3.3 Grain VLIZ (Formalités)
+A **sheet** = the object of the mode, **deduplicated accumulation of all runs** (plus v1), displayed **alone**, with a comment and **choices** (keep / discard).
 
-Une fiche Formalités = **un polygone** (`mrgid`), jamais un pays. La France a 23 fiches. `France (hexagone)` ≠ `France (Mayotte)`.
+### 3.2 Three queues = three modes
 
-Les **règles** extraites de la revue (domaines à garder, blacklist) s’éditent au grain polygone et peuvent s’**agréger par souverain** quand c’est le même droit.
+Not a kind `eez` beside a kind `poe`. Formalities = **one** queue, **one** sheet per polygon.
 
-### 3.4 Fiche Formalités — contrat UI
+| Mode | One sheet = | Identifier | What we see there |
+|------|-------------|------------|-------------------|
+| **Projects** | one project | `_id` or `url` | v1 + `project_run_*` occurrences of the same project, deduplicated |
+| **Formalities** | **one VLIZ polygon** (`mrgid`) | `str(mrgid)` | TD URLs of all runs + deduplicated ports + 1+ BU URLs per port |
+| **Marinas** | one marina | `_id` | `marinas` (no `marina_run_*` today) |
 
-Pour chaque `mrgid`, **sans** bouton Générer :
+**Why the v1.0 implementation separated `eez` and `poe`.** Two Mongo collections (`eez_zones` / `poe_ports`) produced two tabs. That is **not** a business rule. The Formalities reviewer judges **the polygon and its ports together**. A port without its polygon, or a polygon without its ports, is not the gesture.
 
-| Élément | Sens | Interdit |
-|---------|------|----------|
-| **URLs Top-Down** | **Toutes** les pages/PDF d’État déjà trouvés pour **ce** polygone, **tous runs confondus**, **dédupliquées**, **cliquables** | En cacher une « pour simplifier » ; home douane sans liste présentée comme *la* liste ; Noonsite ; wiki ; forum |
-| **Liste des PoE** | Ports rattachés à **ce** `mrgid`, **tous runs + v1 + graines**, dédupliqués par identité (`dedup_key` / nom) | Agrégat pays ; un run qui **remplace** les autres |
-| **URLs Bottom-Up par port** | Pages d’État ouvertes en cherchant **ce** nom, **tous runs**, dédupliquées, cliquables | Une seule URL cachée ; pile BU orpheline au niveau zone sans port |
+No fifth “listing” queue. No country aggregate in place of an `mrgid`.
 
-Le réviseur **sélectionne** la ou les meilleures URLs TD. Il **désélectionne** celles à côté de la plaque. Les écartées vont en **blacklist** (domaine et/ou URL), mémoire pour les règles de crawl.
+### 3.3 VLIZ grain (Formalities)
 
-Même URL vue TD **et** BU = `from_arm = both` (source d’or). ZEE sans source ni port : `kind = none` + bloc UNCLOS si un code existe.
+One Formalities sheet = **one polygon** (`mrgid`), never a country. France has 23 sheets. `France (hexagone)` ≠ `France (Mayotte)`.
 
-**WPI = preuve inverse.** Les ports WPI sont de **pêche industrielle, d’industrie ou de commerce**. Un hit WPI **n’est pas** un PoE plaisance, **sauf** s’il est **explicitement mixte** (décret / catalogue qui le dit). WPI n’est jamais une URL de fiche. Noonsite n’apparaît pas sur la fiche.
+The **rules** extracted from review (domains to keep, blacklist) are edited at polygon grain and can be **aggregated by sovereign** when it is the same law.
 
-### 3.5 Écritures
+### 3.4 Formalities sheet — UI contract
 
-| Écriture | Quand | Où |
-|----------|-------|-----|
-| Commentaire | Enregistrer / autosave navigation | `review_comments` |
-| Choix (URL gardée, URL blacklist, port accepté / écarté) | Clic garder / écarter | collections de revue + **règles** (grain polygone, agrégat pays) |
-| **Gold** | Clic **Gold** sur une fiche acceptée | jeu Gold **et** couche carte du mode |
+For each `mrgid`, **without** a Generate button:
 
-Sauver un commentaire **ne touche pas** `projects` / `poe_ports` / `eez_zones` / `marinas`.
+| Element | Meaning | Forbidden |
+|---------|---------|-----------|
+| **Top-Down URLs** | **All** State pages/PDFs already found for **this** polygon, **all runs combined**, **deduplicated**, **clickable** | Hiding one “to simplify”; a customs home without a list presented as *the* list; Noonsite; wiki; forum |
+| **PoE list** | Ports attached to **this** `mrgid`, **all runs + v1 + seeds**, deduplicated by identity (`dedup_key` / name) | Country aggregate; one run that **replaces** the others |
+| **Bottom-Up URLs per port** | State pages opened by searching **this** name, **all runs**, deduplicated, clickable | A single hidden URL; an orphan BU pile at zone level without a port |
 
-Le clic **Gold** est le **seul** geste Review qui pose l’accepté sur la carte. Ce n’est pas un `generate-batch`. Ce n’est pas une mutation silencieuse.
+The reviewer **selects** the best TD URL or URLs. They **deselect** those that miss the mark. The discarded ones go into the **blacklist** (domain and/or URL), memory for the crawl rules.
 
-`generate` / `generate-batch` : **code mort à supprimer** du produit (routes déjà 410). Ils n’apparaissent plus dans le contrat Review.
+The same URL seen TD **and** BU = `from_arm = both` (gold source). EEZ with neither source nor port: `kind = none` + UNCLOS block if a code exists.
 
-**Phrase de test, dite simplement.** Un test qui enregistre un commentaire, puis voit `poe_ports` ou `projects` changés **sans** clic Gold, **casse le contrat**. Un test qui clique Gold et ne voit **ni** le Gold **ni** la carte mise à jour **casse aussi le contrat**.
+**WPI = inverse evidence.** WPI ports are **industrial fishing, industry or commerce**. A WPI hit is **not** a recreational PoE, **unless** it is **explicitly mixed** (a decree / catalogue that says so). WPI is never a sheet URL. Noonsite does not appear on the sheet.
 
-### 3.6 Commentaire
+### 3.5 Writes
 
-- Texte libre dès le premier passage.
-- Les **motifs récurrents** (TD pourrie, port cargo, mauvais polygone…) se **décèlent en reviewant**. On en fera des verdicts structurés **au fur et à mesure**, pas un enum figé avant d’avoir lu 285 fiches.
-- Clé de commentaire : `{mode}:{entity_id}` sur la fiche **multi-runs** (un seul fil par polygone / projet / marina). Un `run_id` n’est plus la clé du job.
-- Vider le texte et sauver = commentaire vide (le point vert disparaît).
-- Persister avant de changer de fiche ou de mode (bouton **et** autosave).
+| Write | When | Where |
+|-------|------|-------|
+| Comment | Save / navigation autosave | `review_comments` |
+| Choice (URL kept, URL blacklist, port accepted / discarded) | Keep / discard click | review collections + **rules** (polygon grain, country aggregate) |
+| **Gold** | **Gold** click on an accepted sheet | Gold set **and** map layer of the mode |
 
-### 3.7 L’espace de travail du job = fiche unique multi-runs
+Saving a comment **does not touch** `projects` / `poe_ports` / `eez_zones` / `marinas`.
 
-Le libellé UI « Published map (v1) » est **trompeur**. Le job n’est pas « relire la v1 parce qu’elle est publiée ». Le job est : **une fiche qui cumule v1 + tous les runs, dédupliqués**.
+The **Gold** click is the **only** Review gesture that puts the accepted onto the map. It is not a `generate-batch`. It is not a silent mutation.
 
-Un sélecteur « un run isolé » peut rester pour **déboguer un pipeline**. Il n’est **pas** l’espace Gold. On ne goldise pas un canari.
+`generate` / `generate-batch`: **dead code to remove** from the product (routes already 410). They no longer appear in the Review contract.
+
+**Test sentence, said simply.** A test that saves a comment, then sees `poe_ports` or `projects` changed **without** a Gold click, **breaks the contract**. A test that clicks Gold and sees **neither** Gold **nor** the map updated **also breaks the contract**.
+
+### 3.6 Comment
+
+- Free text from the first pass.
+- **Recurring motives** (rotten TD, cargo port, wrong polygon…) are **detected while reviewing**. We will make structured verdicts **as we go**, not a frozen enum before having read 285 sheets.
+- Comment key: `{mode}:{entity_id}` on the **multi-run** sheet (one thread per polygon / project / marina). A `run_id` is no longer the job key.
+- Clearing the text and saving = empty comment (the green dot disappears).
+- Persist before changing sheet or mode (button **and** autosave).
+
+### 3.7 The job workspace = unique multi-run sheet
+
+The UI label “Published map (v1)” is **misleading**. The job is not “reread v1 because it is published”. The job is: **one sheet that accumulates v1 + all runs, deduplicated**.
+
+An “isolated run” selector may remain to **debug a pipeline**. It is **not** the Gold workspace. We do not goldise a canary.
 
 ### 3.8 Navigation
 
-- Une fiche visible. Précédent / suivant. Flèches clavier (hors champ texte).
-- Liste latérale + filtre (`q`).
-- Pagination `offset` / `limit` (défaut 500, max 2000). Le `total` ne se perd pas.
-- Compteur `position / total`.
+- One sheet visible. Previous / next. Keyboard arrows (outside a text field).
+- Side list + filter (`q`).
+- Pagination `offset` / `limit` (default 500, max 2000). The `total` is not lost.
+- Counter `position / total`.
 
-### 3.9 Ce que Review décide / ne décide pas
+### 3.9 What Review decides / does not decide
 
-| Review **fait** | Review **ne fait pas** |
-|-----------------|------------------------|
-| Commenter | Relancer un crawl |
-| Choisir / blacklister des URLs | Prendre Noonsite pour preuve |
-| Choisir les pages / PDF d’État (pas chaque port) | Écraser la v1 par un batch SERP |
-| **Gold** : fiche acceptée → Gold + carte | Goldiser en silence via « Enregistrer » |
-| Nourrir les **règles** (blacklist, domaines) | Inventer un GPS |
-
----
-
-## 4. Ce que l’on veut obtenir
-
-Trois livrables, indissociables :
-
-1. **La file relisible.**  
-   Trois modes, une fiche complète **multi-runs**, un commentaire, un parcours clavier. Volumes : ~4 465 projets, 285 polygones (ports **dessus**), marinas de la route.
-
-2. **La mémoire exploitable.**  
-   Commentaires + choix + blacklist dans une base dont on **édite des règles** (polygone, puis pays). Pas un pad jetable.
-
-3. **Le Gold visible.**  
-   Les fiches reviewées **et acceptées** (bouton **Gold**) s’affichent sur la carte du mode. C’est le but, pas un à-côté.
+| Review **does** | Review **does not** |
+|-----------------|---------------------|
+| Comment | Relaunch a crawl |
+| Choose / blacklist URLs | Take Noonsite as evidence |
+| Choose State pages / PDFs (not each port) | Overwrite v1 with a SERP batch |
+| **Gold**: accepted sheet → Gold + map | Goldise in silence via “Save” |
+| Feed the **rules** (blacklist, domains) | Invent a GPS |
 
 ---
 
-## 5. Ce que l’on ne veut pas
+## 4. What we want to obtain
 
-- Un bouton **Générer** / `generate-batch` / `force`.
-- Une écriture carte **sans** clic Gold.
-- Un pays à la place d’un `mrgid`.
-- Une file « ports » **séparée** de la file polygones Formalités.
-- Noonsite, wiki, forum comme preuve. WPI comme preuve **positive** de plaisance.
-- Republier un run SERP parce que le compteur dit 285.
-- Confondre « Published map (v1) » et « carte Formalités publiée ».
-- Un commentaire global au run (le commentaire est **par fiche**).
-- Poller la carte pendant que Review est ouvert.
-- Afficher les sidebars Swarm / Marinas / Formalités dans Review.
-- Cacher des URLs TD « pour n’en garder qu’une » avant le réviseur.
+Three deliverables, inseparable:
 
----
+1. **The rereadable queue.**  
+   Three modes, one complete **multi-run** sheet, a comment, a keyboard path. Volumes: ~4,465 projects, 285 polygons (ports **on them**), route marinas.
 
-## 6. Vocabulaire
+2. **The usable memory.**  
+   Comments + choices + blacklist in a database from which we **edit rules** (polygon, then country). Not a disposable pad.
 
-| Mot | Sens ici |
-|-----|----------|
-| **Onglet Review** | `view === "review"`, à côté de Map et Console (`audit`). |
-| **Mode** | Projets \| Marinas \| Formalités. **Trois.** Review n’en ajoute pas un quatrième. |
-| **Fiche** | Vue **multi-runs dédupliquée** d’un projet, d’un polygone (+ ses ports), ou d’une marina. |
-| **File** | Liste paginée des fiches du **mode**. |
-| **v1 affichable** | `projects` / `poe_ports` / `marinas` d’aujourd’hui. Pas une publication métier. |
-| **Run isolé** | Snapshot `project_run_*` / `poe_run_*`. Utile pour comparer un moteur, **pas** pour goldiser. |
-| **Commentaire** | Note reviewer. Les motifs répétés deviendront des verdicts. |
-| **Blacklist** | URL ou domaine écarté par le réviseur. Alimente les règles. |
-| **Gold** | Fiche **acceptée** par un humain + preuves d’État (Formalités) ou critères Projets. **S’affiche sur la carte.** |
-| **Bouton Gold** | Geste explicite : cette fiche entre dans le Gold **et** sur la carte. |
-| **Listing-control** | Contrôle Noonsite. Reste en Console. Pas une file Review. |
+3. **The visible Gold.**  
+   Sheets reviewed **and accepted** (**Gold** button) display on the mode’s map. That is the goal, not a side effect.
 
 ---
 
-## 7. Les trois files (les trois modes)
+## 5. What we do not want
 
-### 7.1 Projets
+- A **Generate** / `generate-batch` / `force` button.
+- A map write **without** a Gold click.
+- A country in place of an `mrgid`.
+- A “ports” queue **separate** from the Formalities polygons queue.
+- Noonsite, wiki, forum as evidence. WPI as **positive** evidence of recreational use.
+- Republishing a SERP run because the counter says 285.
+- Confusing “Published map (v1)” and “published Formalities map”.
+- A comment global to the run (the comment is **per sheet**).
+- Polling the map while Review is open.
+- Displaying the Swarm / Marinas / Formalities sidebars in Review.
+- Hiding TD URLs “to keep only one” before the reviewer.
 
-File : titre A–Z. Sous-titre = financeurs ou verdict.
+---
 
-Fiche : titre, URL(s) de tous les runs, financeurs, lieu, GPS, `s_ocean`, catégorie, `sites[]`, `snapped`. Occurrences run dédupliquées sur **la même** fiche.
+## 6. Vocabulary
 
-Job : URL de **projet** (pas une home fondation) ? GPS = lieu d’action visitable ? `snapped` / fallback = à noter, exclu du Gold tant que non accepté.
+| Word | Meaning here |
+|------|--------------|
+| **Review tab** | `view === "review"`, beside Map and Console (`audit`). |
+| **Mode** | Projects \| Marinas \| Formalities. **Three.** Review does not add a fourth. |
+| **Sheet** | **Deduplicated multi-run** view of a project, a polygon (+ its ports), or a marina. |
+| **Queue** | Paginated list of the **mode**’s sheets. |
+| **Displayable v1** | Today’s `projects` / `poe_ports` / `marinas`. Not a business publication. |
+| **Isolated run** | `project_run_*` / `poe_run_*` snapshot. Useful to compare an engine, **not** to goldise. |
+| **Comment** | Reviewer note. Repeated motives will become verdicts. |
+| **Blacklist** | URL or domain discarded by the reviewer. Feeds the rules. |
+| **Gold** | Sheet **accepted** by a human + State evidence (Formalities) or Projects criteria. **Displays on the map.** |
+| **Gold button** | Explicit gesture: this sheet enters Gold **and** the map. |
+| **Listing-control** | Noonsite control. Stays in Console. Not a Review queue. |
 
-### 7.2 Formalités (polygone + ports)
+---
 
-File : libellé désambiguïsé (`zoneDisplayName`). Sous-titre = souverain. Extra : nombre de ports **dédupliqués**.
+## 7. The three queues (the three modes)
 
-Fiche : contrat §3.4. **Pas** de second onglet « Ports d’Entrée ».
+### 7.1 Projects
 
-Job : parmi les TD cliquables, laquelle (ou lesquelles) est *la* liste d’État de **ce** polygone ? Gold sur ces documents. Les ports listés par les runs sont un aperçu. L’extraction Gold relit seulement les URLs gardées. Sinon UNCLOS.
+Queue: title A–Z. Subtitle = funders or verdict.
+
+Sheet: title, URL(s) of all runs, funders, place, GPS, `s_ocean`, category, `sites[]`, `snapped`. Run occurrences deduplicated on **the same** sheet.
+
+Job: **project** URL (not a foundation home)? GPS = visitable action place? `snapped` / fallback = to note, excluded from Gold until accepted.
+
+### 7.2 Formalities (polygon + ports)
+
+Queue: disambiguated label (`zoneDisplayName`). Subtitle = sovereign. Extra: count of **deduplicated** ports.
+
+Sheet: contract §3.4. **No** second “Ports of Entry” tab.
+
+Job: among the clickable TDs, which one (or which ones) is *the* State list of **this** polygon? Gold on those documents. Ports listed by the runs are a preview. Gold extraction rereads only the kept URLs. Otherwise UNCLOS.
 
 ### 7.3 Marinas
 
-File : `marinas` (tant qu’il n’y a pas de runs marinas).
+Queue: `marinas` (as long as there are no marina runs).
 
-Fiche : nom, source, GPS, enrichissement, VHF, places, tirant, capitainerie, services, avis.
+Sheet: name, source, GPS, enrichment, VHF, berths, draught, harbour master's office, services, reviews.
 
-Job : marina visitable le long d’une route, **pas** un PoE. Une marina + douane ≤ 800 m = graine P côté Formalités, pas une preuve sur la fiche polygone.
-
----
-
-## 8. Fiche Formalités multi-runs
-
-C’est **plus simple à reviewer** qu’un sélecteur de 15 runs.
-
-| Couche | Source | Sur la fiche |
-|--------|--------|--------------|
-| Référentiel | `eez_zones` | libellé, UNCLOS, souverain |
-| Ports v1 | `poe_ports` | dans la liste, marqués v1 |
-| Ports des runs | `poe_run_ports` **tous** `run_id` de ce `mrgid` | fusionnés, dédupliqués |
-| Graines | `poe_seed_ports` | URLs BU + candidats absents de v1 |
-| TD | `sources` / `sources_td` de `eez_zones` **et** de **toutes** les `poe_run_zones` du `mrgid` | **toutes** cliquables, dédupliquées par URL |
-| BU | `judge_sources` / `sources_bu` seeds + ports (tous runs) | **par port**, toutes cliquables |
-
-Le réviseur voit d’où vient chaque preuve (quels `run_id`) **sans** changer de fiche.
-
-Les mondiaux SERP restent du **stock à comparer**, déjà **versés dans la fiche**. On ne les republie pas tels quels. Canaris 12 ZEE = NO-GO comme vérité, mais leurs URLs peuvent apparaître : le réviseur les écarte.
-
-Le compteur `(285)` = référentiel VLIZ, pas la qualité.
+Job: marina visitable along a route, **not** a PoE. A marina + customs ≤ 800 m = P seed on the Formalities side, not evidence on the polygon sheet.
 
 ---
 
-## 9. Contrats de fiche (détail)
+## 8. Multi-run Formalities sheet
 
-### 9.1 Formalités
+This is **simpler to review** than a 15-run selector.
 
-- Nettoyage URL : `http` seulement ; Noonsite / forums / magazines exclus de la preuve.
-- Dédup : une URL = une ligne ; un port = une identité.
-- Rang **proposé** (page liste/PDF, `official`, `both`) : c’est un **tri**, pas un filtre qui cache.
-- WPI : badge « commerce / industrie » = **contre-preuve** plaisance, sauf mixte explicite.
-- `wrote_poe_ports: false` tant que Gold n’a pas été cliqué.
+| Layer | Source | On the sheet |
+|-------|--------|--------------|
+| Referential | `eez_zones` | label, UNCLOS, sovereign |
+| v1 ports | `poe_ports` | in the list, marked v1 |
+| Run ports | `poe_run_ports` **all** `run_id` of this `mrgid` | merged, deduplicated |
+| Seeds | `poe_seed_ports` | BU URLs + candidates absent from v1 |
+| TD | `sources` / `sources_td` of `eez_zones` **and** of **all** `poe_run_zones` of the `mrgid` | **all** clickable, deduplicated by URL |
+| BU | `judge_sources` / `sources_bu` seeds + ports (all runs) | **per port**, all clickable |
 
-### 9.2 Projets / Marinas
+The reviewer sees where each piece of evidence comes from (which `run_id`) **without** changing sheet.
 
-Même esprit : cumul dédupliqué, lecture jusqu’au Gold. Projet sans URL : « Pas d’URL ». Marina : pas d’URL d’État exigée.
+The SERP world runs remain **stock to compare**, already **poured into the sheet**. We do not republish them as-is. 12-EEZ canaries = NO-GO as truth, but their URLs may appear: the reviewer discards them.
+
+The `(285)` counter = VLIZ reference, not quality.
 
 ---
 
-## 10. Commentaire, motifs, règles
+## 9. Sheet contracts (detail)
+
+### 9.1 Formalities
+
+- URL cleanup: `http` only; Noonsite / forums / magazines excluded from evidence.
+- Dedup: one URL = one line; one port = one identity.
+- **Proposed** rank (list/PDF page, `official`, `both`): this is a **sort**, not a filter that hides.
+- WPI: “commerce / industry” badge = recreational **counter-evidence**, except explicit mixed.
+- `wrote_poe_ports: false` until Gold has been clicked.
+
+### 9.2 Projects / Marinas
+
+Same spirit: deduplicated accumulation, reading until Gold. Project without URL: “No URL”. Marina: no State URL required.
+
+---
+
+## 10. Comment, motives, rules
 
 ```
 review_comments
   _id        = "{mode}:{entity_id}"
   mode       = projects | formalities | marinas
-  entity_id  = id de file
-  comment    = texte
+  entity_id  = queue id
+  comment    = text
   updated_at = ISO-8601
 ```
 
-La file expose `has_comment` (point vert).
+The queue exposes `has_comment` (green dot).
 
-**Motifs.** On ne fige pas `accept` / `reject` / `edit-gps` avant d’avoir lu. Quand le même texte revient (« home douane », « cargo WPI », « mauvais mrgid »), on **extrait une règle** et, plus tard, un verdict cliquable.
+**Motives.** We do not freeze `accept` / `reject` / `edit-gps` before having read. When the same text comes back (“customs home”, “WPI cargo”, “wrong mrgid”), we **extract a rule** and, later, a clickable verdict.
 
-**Règles.** Chaque garder / écarter (URL, domaine, port) s’écrit dans une base **exploitable** :
+**Rules.** Each keep / discard (URL, domain, port) is written into a **usable** database:
 
-- grain = `mrgid` (et `iso2` / souverain pour l’agrégat) ;
-- type = `keep_td` | `blacklist_url` | `blacklist_domain` | `keep_port` | `drop_port` ;
-- sert au **prochain** crawl et à la fiche (pré-coché).
+- grain = `mrgid` (and `iso2` / sovereign for the aggregate);
+- type = `keep_td` | `blacklist_url` | `blacklist_domain` | `keep_port` | `drop_port`;
+- serves the **next** crawl and the sheet (pre-checked).
 
-Autosave commentaire : quitter la fiche, changer de mode, Précédent / Suivant, clic liste.
-
----
-
-## 11. Bouton Gold
-
-On en a parlé : il est **dans le contrat**, pas hors périmètre.
-
-### 11.1 Quand il est actif
-
-Sur la fiche courante, si le réviseur a de quoi accepter :
-
-- Formalités : au moins une URL TD **gardée** (ou URL collée dans le commentaire, ou UNCLOS `kind = none` justifié). Les ports des runs sont un aperçu, **pas** un verdict Gold ;
-- Projets : URL de projet + site visitable accepté (pas un `snapped` laissé tel quel) ;
-- Marinas : identité + GPS acceptés.
-
-Sans cela, Gold est **désactivé** (ou demande confirmation explicite « Gold incomplet » — à trancher à l’implémentation, défaut = désactivé).
-
-### 11.2 Ce que le clic fait
-
-1. **Fige** la fiche : URLs gardées, ports acceptés, commentaire, horodatage, auteur si connu.
-2. **Écrit le Gold** (collection / export du mode). Ce n’est pas Noonsite. Ce n’est pas un run SERP.
-3. **Affiche sur la carte** du mode les objets acceptés (ports Formalités, sites Projets, marina). La v1 historique **reste** en mémoire comme étape ; la couche **montrée** au skipper devient le Gold là où une fiche a été goldisée.
-4. **Pousse les règles** (blacklist / domaines / ports écartés) vers le store de règles.
-5. Marque la fiche « Gold » dans la file (point distinct du simple commentaire).
-
-### 11.3 Ce que le clic ne fait pas
-
-- Il n’écrase pas les 285 polygones d’un coup.
-- Il n’écrit pas si on a seulement tapé un commentaire.
-- Il ne relance pas de crawl.
-- Il ne goldise pas un listing Noonsite.
-
-On s’en **approche** dès que Review + choix d’URLs existent. Le bouton est l’écart **prioritaire** de l’UI actuelle.
+Comment autosave: leave the sheet, change mode, Previous / Next, list click.
 
 ---
 
-## 12. Le code — où vit chaque brique
+## 11. Gold button
 
-| Brique | Rôle aujourd’hui | Écart 1.1 |
-|--------|------------------|-----------|
-| `app/routers/review.py` | GET/PUT commentaire | Gold + choix + blacklist |
-| `app/services/review_queue.py` | 4 kinds, un `run_id` | 3 modes, fiche union |
-| `app/services/poe_zone_fiche.py` | 1 TD affiché (`FICHE_TD_URL_CAP = 1`) | toutes les TD, cliquables |
-| `app/services/poe_zone_label.py` | France hexagone ≠ Mayotte | inchangé |
-| `frontend/src/components/ReviewView.js` | 4 onglets kind + sélecteur run | 3 modes ; Gold ; multi-select URLs |
-| `ZoneFiche.js` | 1 TD + liste ports | toutes TD + ports union |
-| `PoeFiche.js` | file ports séparée | **à fusionner** dans la fiche polygone |
-| `Header.js` / `App.js` | Map / Console / Review | inchangé (onglets) |
+We have talked about it: it is **in the contract**, not out of scope.
 
-Tests à étendre : union multi-runs, Gold n’écrit pas sans clic, commentaire n’écrit pas la carte.
+### 11.1 When it is active
 
----
+On the current sheet, if the reviewer has enough to accept:
 
-## 13. API (cible 1.1)
+- Formalities: at least one TD URL **kept** (or URL pasted in the comment, or UNCLOS `kind = none` justified). Run ports are a preview, **not** a Gold verdict;
+- Projects: project URL + accepted visitable site (not a `snapped` left as-is);
+- Marinas: identity + GPS accepted.
 
-Préfixe `/api`.
+Without that, Gold is **disabled** (or asks for explicit confirmation “incomplete Gold” — to be decided at implementation, default = disabled).
 
-| Méthode | Route | Rôle |
-|---------|-------|------|
-| `GET` | `/review/queue?mode=&offset=&limit=&q=` | File du mode (`formalities` = polygones) |
-| `GET` | `/review/fiche?mode=&id=` | Fiche **union** + commentaire + choix |
-| `PUT` | `/review/comment` | Texte |
-| `PUT` | `/review/choice` | garder / blacklister URL ou port |
-| `POST` | `/review/gold` | Gold + carte, **une** fiche |
+### 11.2 What the click does
 
-Un `run_id` optionnel sur `fiche` reste permis pour une **vue filtrée debug**. Défaut = union.
+1. **Freezes** the sheet: kept URLs, accepted ports, comment, timestamp, author if known.
+2. **Writes Gold** (collection / export of the mode). This is not Noonsite. This is not a SERP run.
+3. **Displays on the mode’s map** the accepted objects (Formalities ports, Projects sites, marina). Historical v1 **remains** in memory as a step; the layer **shown** to the skipper becomes Gold where a sheet has been goldised.
+4. **Pushes the rules** (blacklist / domains / discarded ports) to the rules store.
+5. Marks the sheet “Gold” in the queue (a dot distinct from a simple comment).
 
-`limit` borné à `[1, 2000]`.
+### 11.3 What the click does not do
 
-L’API actuelle (`kind=project\|eez\|poe\|marina`, `run_id`) est l’écart v1.0.
+- It does not overwrite the 285 polygons at once.
+- It does not write if we have only typed a comment.
+- It does not relaunch a crawl.
+- It does not goldise a Noonsite listing.
+
+We **approach** it as soon as Review + URL choices exist. The button is the **priority** gap of the current UI.
 
 ---
 
-## 14. Modèle de données
+## 12. The code — where each piece lives
 
-| Collection | Rôle |
+| Piece | Role today | 1.1 gap |
+|-------|------------|---------|
+| `app/routers/review.py` | GET/PUT comment | Gold + choices + blacklist |
+| `app/services/review_queue.py` | 4 kinds, one `run_id` | 3 modes, union sheet |
+| `app/services/poe_zone_fiche.py` | 1 TD displayed (`FICHE_TD_URL_CAP = 1`) | all TDs, clickable |
+| `app/services/poe_zone_label.py` | France hexagone ≠ Mayotte | unchanged |
+| `frontend/src/components/ReviewView.js` | 4 kind tabs + run selector | 3 modes; Gold; multi-select URLs |
+| `ZoneFiche.js` | 1 TD + port list | all TDs + union ports |
+| `PoeFiche.js` | separate ports queue | **to merge** into the polygon sheet |
+| `Header.js` / `App.js` | Map / Console / Review | unchanged (tabs) |
+
+Tests to extend: multi-run union, Gold does not write without a click, comment does not write the map.
+
+---
+
+## 13. API (1.1 target)
+
+Prefix `/api`.
+
+| Method | Route | Role |
+|--------|-------|------|
+| `GET` | `/review/queue?mode=&offset=&limit=&q=` | Queue of the mode (`formalities` = polygons) |
+| `GET` | `/review/fiche?mode=&id=` | **Union** sheet + comment + choices |
+| `PUT` | `/review/comment` | Text |
+| `PUT` | `/review/choice` | keep / blacklist URL or port |
+| `POST` | `/review/gold` | Gold + map, **one** sheet |
+| `POST` | `/review/suggest` | **Propose** batch (`scope=all`): pre-fills all Formalities sheets. Does not Gold. |
+| `GET` | `/review/suggest/status` | Batch progress |
+| `GET` | `/review/report` | Comments, choices, Gold, **Propose / human gaps** |
+
+An optional `run_id` on `fiche` remains allowed for a **filtered debug view**. Default = union.
+
+`limit` bounded to `[1, 2000]`.
+
+The current API (`kind=project\|eez\|poe\|marina`, `run_id`) is the v1.0 gap.
+
+---
+
+## 14. Data model
+
+| Collection | Role |
 |------------|------|
-| `review_comments` | texte, clé mode + id |
-| `review_choices` (cible) | keep / blacklist, URL, port, `mrgid` |
-| `review_gold` (cible) | snapshot accepté + `golded_at` |
-| règles (cible, ou `run_rules` / store Formalités) | domaines / URLs / motifs **éditables par pays / polygone** |
+| `review_comments` | text, mode + id key |
+| `review_choices` (target) | keep / blacklist, URL, port, `mrgid` |
+| `review_gold` (target) | accepted snapshot + `golded_at` |
+| rules (target, or `run_rules` / Formalities store) | domains / URLs / motives **editable by country / polygon** |
 
-**Lues** pour assembler : `projects`, `project_run_projects`, `eez_zones`, `poe_ports`, `poe_run_zones`, `poe_run_ports`, `poe_seed_ports`, `marinas`.
+**Read** to assemble: `projects`, `project_run_projects`, `eez_zones`, `poe_ports`, `poe_run_zones`, `poe_run_ports`, `poe_seed_ports`, `marinas`.
 
-**Écrites par Review** : commentaires, choix, Gold. **Carte v1 / `poe_ports` / `projects` : seulement via Gold**, objet par objet.
+**Written by Review**: comments, choices, Gold. **v1 map / `poe_ports` / `projects`: only via Gold**, object by object.
 
-Index au boot (non fatals) : commentaires `(mode, entity_id)` ; choix `(mode, entity_id)` ; Gold `entity_id`.
+Indexes at boot (non-fatal): comments `(mode, entity_id)`; choices `(mode, entity_id)`; Gold `entity_id`.
 
 ---
 
-## 15. Ce que voit l’utilisateur
+## 15. What the user sees
 
-**En-tête.** Map · Console · Review.
+**Header.** Map · Console · Review.
 
 **Review.**
 
-- Gauche : file du **mode** + filtre.
-- Haut : le mode (déjà celui de l’app) · compteur · Précédent / Suivant · **Gold**.
-- Centre : **une** fiche union. Formalités : **toutes** les TD cliquables (cases garder / écarter) + ports dédupliqués + BU par port.
-- Bas : commentaire + Enregistrer.
+- Left: **mode** queue + filter.
+- Top: the mode (already that of the app) · counter · Previous / Next · **Gold**.
+- Centre: **one** union sheet. Formalities: **all** clickable TDs (keep / discard checkboxes) + deduplicated ports + BU per port.
+- Bottom: comment + Save.
 
-Pas de quatrième interrupteur « Ports d’Entrée » à côté de « Polygones ZEE ».
+No fourth “Ports of Entry” switch beside “EEZ Polygons”.
 
-EN / FR. Hint : *une fiche à la fois ; tout ce qui a déjà été trouvé est là, dédupliqué ; Gold pose l’accepté sur la carte.*
-
----
-
-## 16. Qui fait quoi
-
-| Acteur | Il fait | Il ne fait pas |
-|--------|---------|----------------|
-| **Réviseur** | Défile, ouvre **toutes** les URLs, choisit, commente, **Gold** | Crawler, vider la base, goldiser Noonsite |
-| **Opérateur** | Ouvre Review dans le bon mode ; debug run isolé si besoin | Prendre un canari pour vérité |
-| **Skipper** | Voit la **carte Gold** là où une fiche l’est | Ouvrir Review |
-| **Pipeline** | Alimente v1 et `*_run_*` | Écrire `review_comments` / Gold |
-| **Review (code)** | Union + upsert commentaire / choix / Gold | Mutation carte sans Gold |
+EN / FR. Hint: *one sheet at a time; everything already found is there, deduplicated; Gold puts the accepted onto the map.*
 
 ---
 
-## 17. Quel espace de travail pour le job
+## 16. Who does what
 
-**La fiche union (v1 + tous les runs, dédupliquée).** Pas « Published map (v1) parce que c’est publié ». Pas `bestof3-v2` parce que le compteur dit 285.
-
-Un run isolé sert à **comprendre un moteur**. Le Gold se décide sur l’union.
-
-Canaris, `smoke-3-zones`, `seed-enrich` : hors vérité. `example-official-sources` : bac à sable du geste, pas le tour du monde.
-
-Un seul fil de commentaire par fiche union : on ne perd plus les notes en changeant de run.
-
----
-
-## 18. État actuel et écarts
-
-### En place (PR #34)
-
-Onglet Review, pagination, commentaire persisté, fiche polygone, pas de Générer, pas d’écriture carte au commentaire, poll carte coupé.
-
-### Écarts — le contrat 1.1 n’est pas encore l’UI
-
-| Écart | Détail | Priorité |
-|-------|--------|----------|
-| **Bouton Gold** | Parlé, comportement §11, **absent** de l’UI | **P0** |
-| Files `eez` ≠ `poe` | Accident d’implémentation ; métier = **une** fiche Formalités | **P0** |
-| Une seule TD affichée | Montrer **toutes**, cliquables, garder / blacklister | **P0** |
-| Sélecteur de run comme espace de travail | L’union est le défaut ; le run isolé = debug | P1 |
-| Pas de choix persistés | `review_choices` + règles pays / polygone | P1 |
-| Verdicts structurés | **Viennent au fil de la review** (motifs), pas un gap bloquant | P2 |
-| Libellé « Published map » | Dire « union / v1+runs » | P2 |
-| `generate*` encore dans le dépôt | **Code à supprimer** (déjà 410) | P2 |
-| Marinas sans runs | OK tant qu’il n’y en a pas | — |
+| Actor | They do | They do not |
+|-------|---------|-------------|
+| **Reviewer** | Scrolls, opens **all** URLs, chooses, comments, **Gold** | Crawler, empty the database, goldise Noonsite |
+| **Operator** | Opens Review in the right mode; isolated-run debug if needed | Take a canary as truth |
+| **Skipper** | Sees the **Gold map** where a sheet is goldised | Open Review |
+| **Pipeline** | Feeds v1 and `*_run_*` | Write `review_comments` / Gold |
+| **Review (code)** | Union + upsert comment / choices / Gold | Map mutation without Gold |
 
 ---
 
-## 19. Recette
+## 17. Which workspace for the job
 
-1. En-tête : Map, Console, Review.
-2. Review : pas de sidebar Swarm / Formalités.
-3. Mode Formalités : **285** fiches polygone ; **pas** une seconde file de 1 280 ports.
-4. Fiche Albanie : **plusieurs** TD cliquables si plusieurs runs en ont trouvé ; ports dédupliqués ; BU par port.
-5. Désélectionner une TD pourrie → blacklist ; elle ne revient pas comme « meilleure » à la fiche suivante du même souverain si la règle est agrégée.
-6. Enregistrer un commentaire → `review_comments` ; **`poe_ports` inchangé**.
-7. **Gold** → Gold écrit + ports acceptés **visibles sur la carte** Formalités.
-8. Suivant : autre polygone ; commentaire / Gold Albanie inchangés.
-9. Mode Projets / Marinas : une fiche, pas de `/generate`.
-10. Flèches ← → hors textarea.
+**The union sheet (v1 + all runs, deduplicated).** Not “Published map (v1) because it is published”. Not `bestof3-v2` because the counter says 285.
 
-Tests actuels : `tests/test_review_queue.py`, `tests/test_poe_zone_fiche.py` (à réécrire quand l’union et Gold arrivent).
+An isolated run serves to **understand an engine**. Gold is decided on the union.
+
+Canaries, `smoke-3-zones`, `seed-enrich`: out of truth. `example-official-sources`: sandbox of the gesture, not the world tour.
+
+One comment thread per union sheet: we no longer lose notes when changing run.
 
 ---
 
-## 20. Risques
+## 18. Current state and gaps
 
-| Risque | Contre-mesure |
-|--------|----------------|
-| Écraser v1 « pour corriger » sans Gold | §3.5 : commentaire ≠ carte |
-| Goldiser Noonsite | Hors fiche |
-| Relire un canari comme vérité | §17 : union, puis choix humain |
-| Perdre des commentaires en changeant de run | Clé **sans** `run_id` de job |
-| Timeout si on charge tous les `poe_run_ports` mondiaux | Filtrer **par `mrgid`** ; pas un scan planète |
-| Confondre marina et PoE | Modes séparés ; marina n’est pas une preuve Formalités |
-| Cacher des TD « pour faire propre » | §3.4 : tout cliquable |
+### In place (PR #34)
 
----
+Review tab, pagination, persisted comment, polygon sheet, no Generate, no map write on comment, map poll cut.
 
-## 21. Hors périmètre (1.1)
+### Gaps — the 1.1 contract is not yet the UI
 
-File listing-control dans Review. Comparateur *split screen* run A \| run B (remplacé par l’union). Crowdsourcing skipper. Relance de crawl depuis Review. Édition libre du GPS sans passage Gold Projets. Deuxième mode « ports seuls ».
-
-**Plus hors périmètre :** bouton Gold, toutes les TD visibles, fiche Formalités unique, blacklist → règles, affichage carte des fiches acceptées.
-
----
-
-## 22. Trace des commentaires de revue (Word 8 sept 2026)
-
-| # | Passage | Décision reprise |
-|---|---------|------------------|
-| 0 | « une fiche par polygone VLIZ » | **Oui** : polygone, **pas** une fiche pays / « par ZEE » agrégée |
-| 1 | « eez et poe sont séparés » / « il n’y a que trois modes » | **Trois modes.** Formalités = PoE **sur** la fiche polygone |
-| 2, 3, 5 | 1 TD / liste PoE / 1 BU | **Tous les runs, dédupliqués**, sur **une** fiche |
-| 4 | « WPI comme preuve » | **Preuve inverse** : commerce / industrie / pêche, sauf **mixte explicite** |
-| 6 | Une seule TD affichée | **Toutes** visibles ; garder / **blacklister** |
-| 7 | `review_comments` seule écriture | Commentaires **et** choix dans une base **pour éditer des règles** (pays / polygone) |
-| 8 | `generate` / `generate-batch` | **Code à supprimer** ; hors contrat Review |
-| 9 | « Un test qui voit une mutation v1… » | Reformulé §3.5 : commentaire sans Gold **ne** mute pas la carte ; Gold **doit** la muter |
-| 10 | « Texte libre » | **Oui** au début ; les **motifs** structurent ensuite |
-| 11 | « meilleure parmi les runs » | **Les afficher toutes**, cliquables |
-| 12 | « Review ne goldise pas » | **Si** : on **veut** goldiser et **afficher** les fiches acceptées |
-| 13 | `eez \| poe` | **Même fiche** par polygone |
-| 14 | Fiche = `(kind, run_id, id)` | Fiche = **union multi-runs** |
-| 15 | « Gold n’existe pas encore » | On **s’en approche** ; le bouton manque |
-| 16 | UI sans Gold | **Manque le bouton Gold** |
-| 17 | Pas de verdict structuré | **Ça vient au fil** de la review |
-| 18 | Pas de comparateur côte-à-côte | **Une fiche multi-runs** à la place |
-| 19 | Gold hors périmètre | **Dans le contrat** ; comportement §11 |
+| Gap | Detail | Priority |
+|-----|--------|----------|
+| **Gold button** | Discussed, behaviour §11, **absent** from the UI | **P0** |
+| `eez` ≠ `poe` queues | Implementation accident; business = **one** Formalities sheet | **P0** |
+| Only one TD displayed | Show **all**, clickable, keep / blacklist | **P0** |
+| Run selector as workspace | Union is the default; isolated run = debug | P1 |
+| No persisted choices | `review_choices` + country / polygon rules | P1 |
+| Structured verdicts | **Come as review goes** (motives), not a blocking gap | P2 |
+| “Published map” label | Say “union / v1+runs” | P2 |
+| `generate*` still in the repo | **Code to remove** (already 410) | P2 |
+| Marinas without runs | OK as long as there are none | — |
 
 ---
 
-## 23. Documents dont ce cahier hérite
+## 19. Acceptance tests
 
-- `docs/CAHIER_DES_CHARGES_POE.md` v1.4 — grain VLIZ, D∩P, §12, WPI contre-liste. **Sauf** « n’afficher qu’une TD » : Review 1.1 montre toutes.
-- `docs/CAHIER_DES_CHARGES_PROJETS.md` v2.0 — v1 trésor, phase D revue / Gold.
-- `docs/REGLES_PARAMETRES.md` — les règles que la revue doit pouvoir **écrire**.
+1. Header: Map, Console, Review.
+2. Review: no Swarm / Formalities sidebar.
+3. Formalities mode: **285** polygon sheets; **not** a second queue of 1,280 ports.
+4. Albania sheet: **several** clickable TDs if several runs found them; deduplicated ports; BU per port.
+5. Deselect a rotten TD → blacklist; it does not come back as “best” on the next sheet of the same sovereign if the rule is aggregated.
+6. Save a comment → `review_comments`; **`poe_ports` unchanged**.
+7. **Gold** → Gold written + accepted ports **visible on the Formalities map**.
+8. Next: another polygon; Albania comment / Gold unchanged.
+9. Projects / Marinas mode: one sheet, no `/generate`.
+10. ← → arrows outside the textarea.
+
+Current tests: `tests/test_review_queue.py`, `tests/test_poe_zone_fiche.py` (to rewrite when union and Gold arrive).
+
+---
+
+## 20. Risks
+
+| Risk | Counter-measure |
+|------|-----------------|
+| Overwrite v1 “to correct” without Gold | §3.5: comment ≠ map |
+| Goldise Noonsite | Off the sheet |
+| Reread a canary as truth | §17: union, then human choice |
+| Lose comments when changing run | Key **without** job `run_id` |
+| Timeout if we load all world `poe_run_ports` | Filter **by `mrgid`**; not a planet scan |
+| Confuse marina and PoE | Separate modes; marina is not Formalities evidence |
+| Hide TDs “to look clean” | §3.4: everything clickable |
+
+---
+
+## 21. Out of scope (1.1)
+
+Listing-control queue in Review. *Split screen* run A \| run B comparator (replaced by the union). Skipper crowdsourcing. Crawl relaunch from Review. Free GPS edit without a Projects Gold pass. Second “ports only” mode.
+
+**No longer out of scope:** Gold button, all TDs visible, unique Formalities sheet, blacklist → rules, map display of accepted sheets.
+
+---
+
+## 22. Trace of the review comments (Word 8 Sep 2026)
+
+| # | Passage | Decision taken up |
+|---|---------|-------------------|
+| 0 | “one sheet per VLIZ polygon” | **Yes**: polygon, **not** a country / aggregated “per EEZ” sheet |
+| 1 | “eez and poe are separate” / “there are only three modes” | **Three modes.** Formalities = PoE **on** the polygon sheet |
+| 2, 3, 5 | 1 TD / PoE list / 1 BU | **All runs, deduplicated**, on **one** sheet |
+| 4 | “WPI as evidence” | **Inverse evidence**: commerce / industry / fishing, except **explicit mixed** |
+| 6 | Only one TD displayed | **All** visible; keep / **blacklist** |
+| 7 | `review_comments` only write | Comments **and** choices in a database **to edit rules** (country / polygon) |
+| 8 | `generate` / `generate-batch` | **Code to remove**; out of the Review contract |
+| 9 | “A test that sees a v1 mutation…” | Reformulated §3.5: comment without Gold **does not** mutate the map; Gold **must** mutate it |
+| 10 | “Free text” | **Yes** at the start; **motives** structure afterwards |
+| 11 | “best among the runs” | **Display them all**, clickable |
+| 12 | “Review does not goldise” | **Yes it does**: we **want** to goldise and **display** accepted sheets |
+| 13 | `eez \| poe` | **Same sheet** per polygon |
+| 14 | Sheet = `(kind, run_id, id)` | Sheet = **multi-run union** |
+| 15 | “Gold does not exist yet” | We **approach** it; the button is missing |
+| 16 | UI without Gold | **The Gold button is missing** |
+| 17 | No structured verdict | **It comes as** review goes |
+| 18 | No side-by-side comparator | **One multi-run sheet** instead |
+| 19 | Gold out of scope | **In the contract**; behaviour §11 |
+
+---
+
+## 23. Documents this specification inherits from
+
+- `docs/CAHIER_DES_CHARGES_POE.md` v1.4 — VLIZ grain, D∩P, §12, WPI counter-list. **Except** “display only one TD”: Review 1.1 shows all.
+- `docs/CAHIER_DES_CHARGES_PROJETS.md` v2.0 — v1 treasure, phase D review / Gold.
+- `docs/REGLES_PARAMETRES.md` — the rules that review must be able to **write**.
 - `docs/ARCHITECTURE.md`, `docs/PRD.md`.
-- `docs/CONTRATS_REVIEW_PAR_MODE.md` — même geste Review pour les cinq modes ; Gold = run certifié ; Map via **Afficher la review**.
-- PR #34 — premier onglet, API commentaire.
+- `docs/CONTRATS_REVIEW_PAR_MODE.md` — same Review gesture for the five modes; Gold = certified run; Map via **Show the review**.
+- PR #34 — first tab, comment API.
 
-En cas de conflit sur **le grain** (pays vs polygone), §3.3 prime.  
-En cas de conflit sur **une écriture live**, §3.5 prime : pas de live sans Gold, pas de Gold silencieux.  
-En cas de conflit sur **ce que Map affiche**, `docs/CONTRATS_REVIEW_PAR_MODE.md` §8 prime : couche par défaut du run unique ; le run certifié seulement si **Afficher la review** est coché.  
-En cas de conflit sur **eez vs poe**, §3.2 prime : **une** fiche Formalités.
+In case of conflict on **the grain** (country vs polygon), §3.3 prevails.  
+In case of conflict on **a live write**, §3.5 prevails: no live without Gold, no silent Gold.  
+In case of conflict on **what Map displays**, `docs/CONTRATS_REVIEW_PAR_MODE.md` §8 prevails: default layer of the unique run; the certified run only if **Show the review** is checked.  
+In case of conflict on **eez vs poe**, §3.2 prevails: **one** Formalities sheet.
 
-*Fin du cahier des charges Review v1.1. Toute évolution de règle Formalités se fait d’abord ici ; les autres modes dans `CONTRATS_REVIEW_PAR_MODE.md`, puis dans le code.*
+*End of the Review specification v1.1. Any evolution of a Formalities rule is done first here; the other modes in `CONTRATS_REVIEW_PAR_MODE.md`, then in the code.*

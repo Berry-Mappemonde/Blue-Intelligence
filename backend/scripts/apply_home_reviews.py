@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Applique la revue manuelle des homes B (hors Complet).
+"""Apply the manual review of B homes (outside Complet).
 
-Gagne sur les journaux Search. N'écrit pas `projects`.
+Wins over Search journals. Does not write `projects`.
 
     python3 scripts/apply_home_reviews.py --apply
 """
@@ -27,7 +27,7 @@ from app.services.seed_catalog import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Applique la revue manuelle des homes")
+    p = argparse.ArgumentParser(description="Apply the manual home review")
     p.add_argument("--seeds", type=Path, default=MASTER_SEEDS_PATH)
     p.add_argument("--reviews", type=Path, default=HOME_REVIEW_PATH)
     p.add_argument("--audit-out", type=Path, default=AUDIT_PATH)

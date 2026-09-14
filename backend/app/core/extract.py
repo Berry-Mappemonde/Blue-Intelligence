@@ -1,30 +1,32 @@
 """
-extract_core.py — Lecture d'URL : une porte, une cascade.
+extract_core.py — URL reading: one door, one cascade.
 
-Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
-(« donne-moi le texte de cette URL »), y compris PDF et pages JavaScript.
+Entry point: ``read_url`` / ``read_urls``. Same question everywhere
+("give me the text of this URL"), including PDFs and JavaScript pages.
 
-  N1/N2 (gratuit, ms)    : httpx direct + DOUBLE PARSING comparé
-                           trafilatura ∥ Readability/BS4 (le plus riche gagne,
-                           la similarité entre les deux est un signal de qualité)
-                           PDF : magie %PDF- / Content-Type / Content-Disposition,
-                           puis PyMuPDF (+ OCR si scan).
-  N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
-                           pour les pages JavaScript et les challenges « soft ».
-                           Jamais sur une URL .pdf ni un captcha dur (SiteGround,
-                           Akamai) — Chromium plante le process sous MemoryHigh.
-                           Allumé seulement si le HTML simple ET Fetch ont échoué.
-  Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
+  N1/N2 (free, ms)       : direct httpx + compared DUAL PARSING
+                           trafilatura ∥ Readability/BS4 (the richer wins,
+                           similarity between the two is a quality signal)
+                           PDF: %PDF- / Content-Type / Content-Disposition magic,
+                           then PyMuPDF (+ OCR if scanned).
+  N3 (free, local)       : Playwright/Chromium browser render (render_core)
+                           for JavaScript pages and "soft" challenges.
+                           Chromium runs in a subprocess (like
+                           PyMuPDF): an ABRT no longer kills the API. Never on a
+                           .pdf URL, an image (.png/.jpg…) or a hard captcha
+                           (SiteGround, Akamai). On only if simple HTML
+                           AND Fetch have already failed.
+  Mirror                 : Jina ∥ TinyFish Fetch (if key), then Wayback.
 
-TinyFish Fetch n'est pas supprimé : c'est le bon outil quand on a besoin du
-DOM après JavaScript (fiche Google Maps /place/). La cascade ne parse pas
-une fiche Maps comme un décret. ``prefer_fetch=True`` (bottom-up, AMP,
-capitaineries) tente Fetch d'abord ; un texte utilisable évite Chromium.
+TinyFish Fetch is not removed: it is the right tool when we need the
+DOM after JavaScript (Google Maps /place/ card). The cascade does not parse
+a Maps card as a decree. ``prefer_fetch=True`` (bottom-up, AMP,
+harbormasters) tries Fetch first; usable text avoids Chromium.
 
-Fournit aussi : filtrage SERP par regex (agrégateurs, réseaux sociaux, pages
-interstitielles anti-bot), détection des pages de blocage (un challenge n'est
-JAMAIS ingéré comme du contenu), métadonnées de page (og:image, liens externes)
-et suivi sélectif des liens internes (depth=2 : /annuaire, /contacts…).
+Also provides: SERP regex filtering (aggregators, social networks, anti-bot
+interstitial pages), blocked-page detection (a challenge is NEVER
+ingested as content), page metadata (og:image, external links)
+and selective internal-link follow-up (depth=2: /annuaire, /contacts…).
 """
 import asyncio
 import difflib
@@ -37,32 +39,33 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unicodedata
 from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlparse
 
-# Désactivé pour les variants v1/v2 (SearXNG only) — TinyFish Fetch reste
-# réservé au variant « tinyfish ». Défaut True pour ne pas casser le Swarm.
+# Disabled for v1/v2 variants (SearXNG only) — TinyFish Fetch stays
+# reserved for the "tinyfish" variant. Default True so Swarm is not broken.
 allow_tinyfish_fetch: ContextVar[bool] = ContextVar("allow_tinyfish_fetch", default=True)
 
 import httpx
 from bs4 import BeautifulSoup
 
-# PyMuPDF n'est pas sûr dans le process API (crash natif « double free »).
-# Extraction dans un sous-processus + cache disque sha256 → texte.
-# Le sémaphore limite la RAM (gazettes jusqu'à 180 pages), ce n'est plus un
-# verrou de sûreté : plusieurs PDF peuvent avancer en parallèle.
+# PyMuPDF is not safe in the API process (native "double free" crash).
+# Extraction in a subprocess + sha256 disk cache → text.
+# The semaphore limits RAM (gazettes up to 180 pages); it is no longer a
+# safety lock: several PDFs can proceed in parallel.
 from app.config import BACKEND_DIR, DATA_DIR
 
 PDF_CACHE_DIR = DATA_DIR / "cached_pdfs"
-# OCR d'une Gaceta scannée (5 pages) dépasse largement 25 s.
+# OCR of a scanned Gaceta (5 pages) far exceeds 25 s.
 PDF_SUBPROCESS_TIMEOUT_S = 90
 PDF_MAX_CONCURRENT = 3
 _pdf_slots = threading.Semaphore(PDF_MAX_CONCURRENT)
 
 UA_BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
-# r.jina.ai renvoie 403 (Cloudflare) si on se présente comme Chrome ; un UA lecteur suffit.
+# r.jina.ai returns 403 (Cloudflare) if we pose as Chrome; a reader UA is enough.
 UA_READER = {
     "User-Agent": "Mozilla/5.0 (compatible; BlueIntelligence-Reader/1.0)",
     "Accept": "text/plain, */*;q=0.8",
@@ -76,8 +79,8 @@ HARD_CHALLENGE_RE = re.compile(
     re.I,
 )
 
-# --- Filtrage SERP : exclusion regex avant tout parsing -----------------------
-# Couperet DUR : réseaux, OTA, dictionnaires, challenges — jamais une source PoE.
+# --- SERP filter: regex exclusion before any parsing --------------------------
+# HARD cut: networks, OTAs, dictionaries, challenges — never a PoE source.
 SERP_HARD_RE = re.compile(
     r"(tripadvisor|booking\.com|expedia|airbnb|pinterest|facebook\.com|instagram\.com"
     r"|tiktok\.|youtube\.com|twitter\.com|/x\.com|linkedin\.com|reddit\.com|quora\.com"
@@ -89,18 +92,20 @@ SERP_HARD_RE = re.compile(
     r"|doordash\.com"
     r"|//unblock\.|\.unblock\.|/cdn-cgi/|captcha|datadome|perimeterx"
     r"|queue-it\.net|incapsula|distilnetworks"
-    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?))",
+    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?)"
+    r"|\.png($|\?)|\.jpe?g($|\?)|\.gif($|\?)|\.webp($|\?)|\.svg($|\?)"
+    r"|\.bmp($|\?)|\.ico($|\?)|\.tiff?($|\?)|\.avif($|\?))",
     re.I,
 )
 
-# Couperet SOUPLE : mots touristiques qui existent aussi sur des pages d'État
-# (…/tourism-yacht-clearance). Un domaine officiel n'est pas jeté pour ça.
+# SOFT cut: tourism words that also exist on state pages
+# (…/tourism-yacht-clearance). An official domain is not dropped for that.
 SERP_SOFT_RE = re.compile(
     r"(brochure|touris[mt]|baggage|luggage|duty.?free|/vts[-_/.]|vts.?manual)",
     re.I,
 )
 
-# Rétrocompat Swarm / tests : dur + souple (sans protection de domaine).
+# Backward compat Swarm / tests: hard + soft (no domain protection).
 SERP_EXCLUDE_RE = re.compile(
     r"(?:%s)|(?:%s)" % (SERP_HARD_RE.pattern, SERP_SOFT_RE.pattern),
     re.I,
@@ -112,7 +117,7 @@ _OFFICIAL_URL_RE = re.compile(
     re.I,
 )
 
-# --- Détection des pages de blocage (challenges anti-bot, interstitiels) ------
+# --- Blocked-page detection (anti-bot challenges, interstitials) -------------
 BLOCKED_MARKERS_RE = re.compile(
     r"checking your browser|just a moment|verify (?:that )?you are (?:a )?human"
     r"|are you a robot|enable javascript and cookies|cf-browser-verification"
@@ -140,12 +145,12 @@ FOLLOWUP_PATTERNS = (
 
 
 def looks_official_url(url: str) -> bool:
-    """Domaine ou chemin qui sent l'État / la douane (pas une preuve, un filet)."""
+    """Domain or path that smells like the state / customs (not proof, a net)."""
     return bool(url and _OFFICIAL_URL_RE.search(url))
 
 
 def serp_drop_reason(url: str, extra_re=None, protect: bool = False) -> str | None:
-    """Pourquoi jeter cette URL, ou None pour la garder. Auditable."""
+    """Why drop this URL, or None to keep it. Auditable."""
     if not (url or "").startswith("http"):
         return "not_http"
     if SERP_HARD_RE.search(url):
@@ -159,7 +164,7 @@ def serp_drop_reason(url: str, extra_re=None, protect: bool = False) -> str | No
 
 def audit_serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
                       protect_fn=None) -> list[dict]:
-    """Journal {url, kept, reason} — pour relire ce que le filtre a fait."""
+    """Log {url, kept, reason} — to review what the filter did."""
     out = []
     for r in results:
         u = r.get(url_key) or ""
@@ -172,8 +177,8 @@ def audit_serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
 
 def serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
                 protect_fn=None) -> list[dict]:
-    """Rejette les URLs non pertinentes. Un domaine d'État n'est jamais
-    écarté pour un mot touristique dans le chemin."""
+    """Drop irrelevant URLs. A state domain is never discarded
+    for a tourism word in the path."""
     out = []
     for r in results:
         u = r.get(url_key) or ""
@@ -184,13 +189,162 @@ def serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
 
 
 def url_looks_like_pdf(url: str | None) -> bool:
-    """Chemin .pdf — même si le serveur sert un HTML de captcha à la place."""
+    """Path .pdf — even if the server serves captcha HTML instead."""
     path = (urlparse(url or "").path or "").lower()
     return path.endswith(".pdf")
 
 
+# Ministères renommés / DNS NXDOMAIN connus (SCT mexicain → SICT, etc.).
+RETIRED_HOST_SUFFIXES = (
+    "sct.gob.mx",
+)
+
+_DOWNLOAD_PATH_RE = re.compile(
+    r"/file-download/|/download\.php\b",
+    re.I,
+)
+
+_FETCH_FAIL_ERRORS = frozenset({
+    "ConnectError", "ConnectTimeout", "ReadTimeout", "TimeoutException",
+    "NetworkError", "ProxyError", "RemoteProtocolError",
+})
+
+_WAYBACK_PAUSE_AFTER = 3
+_WAYBACK_PAUSE_S = 15 * 60
+_wayback_503s = 0
+_wayback_pause_until = 0.0
+
+
+def url_host(url: str | None) -> str:
+    return (urlparse(url or "").hostname or "").lower().rstrip(".")
+
+
+def host_is_retired(url: str | None) -> bool:
+    """Hôte dont le DNS est mort — ne pas fetcher ni capturer."""
+    host = url_host(url)
+    if not host:
+        return False
+    return any(host == suf or host.endswith("." + suf)
+               for suf in RETIRED_HOST_SUFFIXES)
+
+
+def url_looks_like_download(url: str | None, disposition: str = "") -> bool:
+    """Fichier à télécharger (PDF, attachment) — Chromium ne peut pas le photographier."""
+    if "attachment" in (disposition or "").lower():
+        return True
+    if url_looks_like_pdf(url):
+        return True
+    path = urlparse(url or "").path or ""
+    return bool(_DOWNLOAD_PATH_RE.search(path))
+
+
+def should_skip_screenshot(url: str | None, page: dict | None = None) -> str | None:
+    """Raison de sauter la capture Review, ou None."""
+    page = page or {}
+    if host_is_retired(url) or host_is_retired(page.get("final_url")):
+        return "hôte retiré (DNS mort)"
+    if page.get("error") == "dead_host":
+        return "hôte retiré (DNS mort)"
+    if page.get("is_pdf"):
+        return "PDF"
+    if page.get("download") or url_looks_like_download(
+            url, page.get("disposition") or ""):
+        return "téléchargement / PDF"
+    if page.get("fetch_failed") or page.get("error") in _FETCH_FAIL_ERRORS:
+        return "URL déjà morte / fetch N1 échoué"
+    if page.get("blocked"):
+        return "anti-bot"
+    return None
+
+
+def reset_wayback_circuit() -> None:
+    """Tests : rouvre le circuit Wayback."""
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s = 0
+    _wayback_pause_until = 0.0
+
+
+def wayback_circuit_open(now: float | None = None) -> bool:
+    return (now if now is not None else time.time()) < _wayback_pause_until
+
+
+def _note_wayback_503() -> None:
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s += 1
+    if _wayback_503s >= _WAYBACK_PAUSE_AFTER:
+        _wayback_pause_until = time.time() + _WAYBACK_PAUSE_S
+        _wayback_503s = 0
+
+
+def _note_wayback_ok() -> None:
+    global _wayback_503s
+    _wayback_503s = 0
+
+
+_IMAGE_EXTS = frozenset({
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "avif",
+})
+
+
+def path_looks_like_image(path: str | None) -> bool:
+    """Last segment .png/.jpg/… — WordPress portraits, not a card."""
+    name = unquote((path or "").split("?")[0]).rsplit("/", 1)[-1].lower()
+    if "." not in name:
+        return False
+    return name.rsplit(".", 1)[-1] in _IMAGE_EXTS
+
+
+def url_looks_like_image(url: str | None) -> bool:
+    """Image URL — Chromium + trafilatura on it blows RAM."""
+    return path_looks_like_image(urlparse(url or "").path)
+
+
+def content_is_image(content: bytes | None, content_type: str = "",
+                     url: str = "") -> bool:
+    """Real image bytes (magic / Content-Type). Error HTML is not one."""
+    blob = content or b""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:3] == b"\xff\xd8\xff":
+        return True
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    if len(blob) >= 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    head = blob.lstrip()[:80].lower()
+    if head.startswith(b"<") or head.startswith(b"{") or head.startswith(b"<!doctype"):
+        return False
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    if ctype.startswith("image/"):
+        return True
+    return bool(url_looks_like_image(url) and blob[:1] not in (b"<", b"{"))
+
+
+_HTMLISH_TYPES = frozenset({
+    "text/html", "application/xhtml+xml", "application/xhtml",
+    "text/xml", "application/xml", "text/plain",
+})
+
+
+def content_looks_like_html(content: bytes | None, content_type: str = "") -> bool:
+    """A real document to parse. A PNG read as UTF-8 is not one."""
+    blob = content or b""
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    head = blob.lstrip()[:80]
+    if head.startswith(b"<") or head.lower().startswith(b"<!doctype"):
+        return True
+    if ctype.startswith("image/") or ctype in {
+        "application/pdf", "application/zip", "application/octet-stream",
+        "application/gzip", "audio/mpeg", "video/mp4",
+    }:
+        return False
+    if ctype in _HTMLISH_TYPES or ctype.startswith("text/"):
+        return True
+    return False
+
+
 def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
-    """Captcha SiteGround / interstitiel : 202 + HTML, header sg-captcha, ou marqueurs."""
+    """SiteGround captcha / interstitial: 202 + HTML, sg-captcha header, or markers."""
     headers = getattr(resp, "headers", None)
     if headers is not None and headers.get("sg-captcha"):
         return True
@@ -207,8 +361,8 @@ def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> 
 
 
 def looks_blocked(text: str, html: str = "", title: str = "") -> bool:
-    """True si la page est un challenge anti-bot / interstitiel de blocage.
-    Un vrai contenu réglementaire long qui *cite* ces mots reste accepté."""
+    """True if the page is an anti-bot challenge / blocking interstitial.
+    Long genuine regulatory content that *cites* these words stays accepted."""
     probe = " ".join(p for p in (title or "", (text or "")[:4000], (html or "")[:6000]) if p)
     if not probe or not BLOCKED_MARKERS_RE.search(probe):
         return False
@@ -223,7 +377,7 @@ def pdf_cache_key(content: bytes) -> str:
 
 
 def _pdf_cache_path(digest: str) -> Path:
-    # .act1 : annotation TURÍSTICA (colonnes SCT) — invalide les caches texte seul.
+    # .act1: TURÍSTICA annotation (SCT columns) — invalidates text-only caches.
     return Path(PDF_CACHE_DIR) / f"{digest}.act1.txt"
 
 
@@ -257,7 +411,7 @@ def _pdf_worker_env() -> dict:
 
 
 def _run_pdf_worker(inp: str, out: str, max_pages: int) -> None:
-    """Spawn ``app.core.pdf_worker`` — hookable depuis les tests."""
+    """Spawn ``app.core.pdf_worker`` — hookable from tests."""
     proc = subprocess.run(
         [sys.executable, "-m", "app.core.pdf_worker", inp, out, str(max_pages)],
         timeout=PDF_SUBPROCESS_TIMEOUT_S,
@@ -271,7 +425,7 @@ def _run_pdf_worker(inp: str, out: str, max_pages: int) -> None:
 
 
 def pdf_page_jpegs(content: bytes, max_pages: int = 2) -> list[bytes]:
-    """Premières pages du PDF en JPEG, hors process (vision Review)."""
+    """First PDF pages as JPEG, out of process (Review vision)."""
     if not content:
         return []
     fd, inp = tempfile.mkstemp(suffix=".pdf")
@@ -313,16 +467,16 @@ def pdf_page_jpegs(content: bytes, max_pages: int = 2) -> list[bytes]:
 
 
 def parse_pdf_text(content: bytes, max_pages: int = 180) -> str:
-    """Extrait le texte d'un PDF hors process, avec cache sha256 sur disque.
+    """Extract PDF text out of process, with sha256 disk cache.
 
-    Le process API n'importe pas ``fitz`` : un crash natif reste confiné au
-    sous-processus. Un hit cache évite tout spawn (gazettes rejouées).
+    The API process does not import ``fitz``: a native crash stays confined
+    to the subprocess. A cache hit avoids any spawn (replayed gazettes).
     """
     if not content:
         return ""
     digest = pdf_cache_key(content)
     cached = _read_pdf_cache(digest)
-    # Un cache vide (scan sans OCR, avant tesseract) ne doit pas figer l'échec.
+    # An empty cache (scan without OCR, before tesseract) must not freeze the failure.
     if cached is not None and cached.strip():
         return cached
     with _pdf_slots:
@@ -373,7 +527,7 @@ def parse_html_n2(html: str) -> dict:
 
 
 def _parse_similarity(a: str, b: str) -> float:
-    """Similarité entre les textes des deux parseurs (signal de qualité)."""
+    """Similarity between the two parsers' texts (quality signal)."""
     if not a or not b:
         return 0.0
     na = re.sub(r"\s+", " ", a)[:3000]
@@ -387,10 +541,10 @@ def _extract_agree_sim() -> float:
 
 
 async def dual_parse_html(html: str) -> dict:
-    """PARSING PARALLÈLE comparé : trafilatura ∥ Readability sur le même HTML.
-    Le texte le plus riche gagne ; la similarité entre les deux est conservée
-    comme signal (accord fort = extraction robuste, divergence = à inspecter).
-    Retourne {text, level, title, n1_chars, n2_chars, similarity, agree}."""
+    """Compared PARALLEL PARSING: trafilatura ∥ Readability on the same HTML.
+    The richer text wins; similarity between the two is kept
+    as a signal (strong agreement = robust extraction, divergence = inspect).
+    Return {text, level, title, n1_chars, n2_chars, similarity, agree}."""
     async def _n1():
         try:
             return (await asyncio.to_thread(parse_html_n1, html)).strip()
@@ -418,7 +572,7 @@ async def dual_parse_html(html: str) -> dict:
 
 
 def page_metadata(html: str, url: str) -> dict:
-    """Titre, meta description, image principale, liens externes (BS4)."""
+    """Title, meta description, main image, external links (BS4)."""
     soup = BeautifulSoup(html, "html.parser")
     title = (soup.title.get_text().strip() if soup.title else "") or ""
     meta = soup.find("meta", attrs={"name": "description"}) or \
@@ -455,7 +609,7 @@ def page_metadata(html: str, url: str) -> dict:
 
 
 def internal_followups(html: str, base_url: str, patterns=FOLLOWUP_PATTERNS, limit: int = 3) -> list[str]:
-    """Depth=2 sélectif : liens internes de type /annuaire, /contacts, /clearance…"""
+    """Selective depth=2: internal links like /annuaire, /contacts, /clearance…"""
     soup = BeautifulSoup(html, "html.parser")
     base_host = urlparse(base_url).netloc
     out, seen = [], set()
@@ -473,10 +627,10 @@ def internal_followups(html: str, base_url: str, patterns=FOLLOWUP_PATTERNS, lim
 
 
 # ---------------------------------------------------------------------------
-# Cascade principale
+# Main cascade
 # ---------------------------------------------------------------------------
 def _is_ssl_cert_error(exc: BaseException) -> bool:
-    """Chaîne intermédiaire manquante (leçon SIS Égypte / Sectigo)."""
+    """Missing intermediate certificate (SIS Egypt / Sectigo lesson)."""
     blob = ""
     cur: BaseException | None = exc
     for _ in range(6):
@@ -490,7 +644,7 @@ def _is_ssl_cert_error(exc: BaseException) -> bool:
 
 
 async def fetch_raw(url: str, timeout: int = 25) -> httpx.Response:
-    """GET direct. Retourne la Response httpx (octets, headers, URL finale)."""
+    """Direct GET. Return the httpx Response (bytes, headers, final URL)."""
     kwargs = dict(timeout=timeout, follow_redirects=True, headers=UA_BROWSER)
     try:
         async with httpx.AsyncClient(**kwargs) as client:
@@ -507,7 +661,7 @@ async def fetch_raw(url: str, timeout: int = 25) -> httpx.Response:
 
 
 def is_maps_render_url(url: str | None) -> bool:
-    """Fiche ou recherche Google Maps : DOM JS, pas un décret. Fetch seulement."""
+    """Google Maps card or search: JS DOM, not a decree. Fetch only."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return False
@@ -525,7 +679,7 @@ def is_maps_render_url(url: str | None) -> bool:
 
 def content_is_pdf(content: bytes | None, content_type: str = "",
                     url: str = "", content_disposition: str = "") -> bool:
-    """PDF réel. Un HTML d'erreur servi sous une URL .pdf n'en est pas un."""
+    """Real PDF. Error HTML served under a .pdf URL is not one."""
     blob = content or b""
     if blob[:5] == b"%PDF-":
         return True
@@ -548,7 +702,7 @@ def content_is_pdf(content: bytes | None, content_type: str = "",
 
 def text_usable(text: str | None, min_chars: int = 200, *,
                 html: str = "", title: str = "") -> bool:
-    """Texte assez long et ce n'est pas un challenge anti-bot."""
+    """Text long enough and not an anti-bot challenge."""
     t = (text or "").strip()
     if len(t) < int(min_chars or 0):
         return False
@@ -557,7 +711,7 @@ def text_usable(text: str | None, min_chars: int = 200, *,
 
 def fetch_record_usable(rec: dict | None, min_chars: int = 200, *,
                          keep_if_links: bool = False) -> bool:
-    """Fetch a rendu quelque chose qu'on peut garder — pas la peine d'allumer Chromium."""
+    """Fetch produced something we can keep — no need to start Chromium."""
     rec = rec or {}
     if rec.get("blocked") or rec.get("error") == "bot_blocked":
         return False
@@ -579,7 +733,7 @@ def _link_href(raw) -> str:
 
 
 def html_hrefs(html: str | None, url: str, limit: int = 50) -> list[str]:
-    """Tous les href http(s), internes compris — besoin AMP / depth-2."""
+    """All http(s) hrefs, internals included — needed for AMP / depth-2."""
     if not html:
         return []
     soup = BeautifulSoup(html, "html.parser")
@@ -626,7 +780,7 @@ def page_from_fetch_record(url: str, rec: dict | None) -> dict:
 
 
 def as_fetch_record(page: dict | None, url: str = "") -> dict:
-    """Forme TinyFish Fetch, pour harvest_bu_catalog / AMP sans changer le contrat."""
+    """TinyFish Fetch shape, for harvest_bu_catalog / AMP without changing the contract."""
     page = page or {}
     url = url or page.get("url") or ""
     links = list(page.get("links") or [])
@@ -658,14 +812,14 @@ def _is_mirror_url(url: str) -> bool:
     return host.endswith("jina.ai") or host.endswith("web.archive.org") or host.endswith("archive.org")
 
 
-# « 4.- Ensenada », « 1. Apia », ou premier item Jina « [1.-](url)Bahía Colonet »
+# "4.- Ensenada", "1. Apia", or first Jina item "[1.-](url)Bahía Colonet"
 _HEAD = r"(?:\[\d+\.-\]\([^)]+\)|\d+\.-\s+|\d+[.)]\s+)"
 _CATALOG_HEAD = re.compile(
     rf"(?:^|\n)[ \t]*(?:#{{1,6}}\s+)?{_HEAD}([^\n|#]{{2,80}})\n"
     rf"((?:.*\n){{0,16}}?)(?=[ \t]*(?:#{{1,6}}\s+)?{_HEAD}|\Z)",
     re.M,
 )
-# Jina : **Latitud:**31.89  — EN : Latitude: -13.8  — tables : | Latitud: | 31.89 |
+# Jina: **Latitud:**31.89  — EN: Latitude: -13.8  — tables: | Latitud: | 31.89 |
 _CATALOG_SEP = r"[\s|*]*"
 _CATALOG_LAT = re.compile(rf"(?:latitud(?:e)?|lat\.?):{_CATALOG_SEP}([+-]?\d+(?:\.\d+)?)", re.I)
 _CATALOG_LON = re.compile(rf"(?:longitud(?:e)?|long\.?|lng|lon):{_CATALOG_SEP}([+-]?\d+(?:\.\d+)?)", re.I)
@@ -674,7 +828,7 @@ _CATALOG_STATE = re.compile(
     rf"{_CATALOG_SEP}([^\n|*]+)",
     re.I,
 )
-# Tournures légales : port of Alofi, port de Papeete, puerto de Ensenada, porto de Santos…
+# Legal phrasing: port of Alofi, port de Papeete, puerto de Ensenada, porto de Santos…
 _PORT_OF_RE = re.compile(
     r"\b(?:ports?\s+of\s+|porto?s?\s+d(?:e\s+|['’])|puertos?\s+de\s+|"
     r"portos?\s+de\s+|havens?\s+van\s+|hafen\s+von\s+|porti?\s+di\s+)"
@@ -701,8 +855,8 @@ _CATALOG_MARKERS_RE = re.compile(
     r"porti\s+detar|porteve\s+detare|dega\s+doganore",
     re.I,
 )
-# Capitanía / Capitanias — pas « Capitán de Puerto » (titre, prose de loi).
-# Le nom doit commencer par une capitale (indépendant de IGNORECASE).
+# Capitanía / Capitanias — not "Capitán de Puerto" (title, statute prose).
+# The name must start with a capital (independent of IGNORECASE).
 _CAPITANIA_RE = re.compile(
     r"Capitan(?:[ií]as?|te)\s+[«\"']?\s*d[ae]\s+Puerto\s+"
     r"(?:d[ae]\s+|del?\s+|po\s+)?"
@@ -713,7 +867,7 @@ _CAPITANIA_RE = re.compile(
     r"){0,4}))",
     re.I,
 )
-# Ligne OCR du type « 7) Capitante «de Puerto de Puerto: Sucre ».
+# OCR line like "7) Capitante «de Puerto de Puerto: Sucre »."
 _CAPITANIA_NUM_LINE_RE = re.compile(
     r"(?m)^\s*\d{1,2}\s*[).:—\-]\s*.{0,24}Puerto\s+(?:d[ae]\s+|po\s+)?"
     r"(?-i:([A-ZÁÉÍÓÚÑÜ][^\n]{1,40}))",
@@ -740,8 +894,8 @@ _VE_CANON = (
     "Pampatar", "Güiria", "Caripito", "Ciudad Guayana", "Ciudad Bolívar",
     "Amazonas", "Apure",
 )
-# Uniquement en tête de ligne : la prose « ports de plaisance de français… »
-# de la landing douane ne doit pas devenir un toponyme.
+# Line-start only: "ports de plaisance de français…" prose
+# from the customs landing must not become a toponym.
 _PLAISANCE_PORT_RE = re.compile(
     r"(?m)^(?:[-•*]|\d+[.)])?\s*Ports?\s+de\s+plaisance\s+"
     r"(?:de\s+|d['’]|du\s+|des\s+)?"
@@ -760,7 +914,7 @@ _FR_REGION_RE = re.compile(
     r"corse|occitanie|pays\s+de\s+la\s+loire|provence)",
     re.I,
 )
-# Tableau SCT / SEMAR : « 1 Bahía Colonet\nBaja California\nPuerto\ndate\nlat\nlon »
+# SCT / SEMAR table: "1 Bahía Colonet\nBaja California\nPuerto\ndate\nlat\nlon"
 _MX_HABILITADO_ROW_RE = re.compile(
     r"(?m)^\s*(?P<n>\d{1,3})\s+(?P<name>[A-ZÁÉÍÓÚÑÜ][^\n]{1,80})\n"
     r"\s*(?P<state>[A-ZÁÉÍÓÚÑÜ][^\n]{2,50})\n"
@@ -770,7 +924,7 @@ _MX_HABILITADO_ROW_RE = re.compile(
     r"\s*(?P<lon>[+-]?\d{2,3}\.\d+)",
     re.I,
 )
-# MPI : chaque PoFA est un tableau markdown « | Nom |\n| --- |\n| Approved vessels | »
+# MPI: each PoFA is a markdown table "| Name |\n| --- |\n| Approved vessels |"
 _NZ_POFA_MD_RE = re.compile(
     r"(?m)^\s*\|\s*([A-Z][^|\n]{2,70}?)\s*\|\s*\n\s*\|\s*---\s*\|\s*\n"
     r"\s*\|\s*Approved vessels\s*\|",
@@ -810,8 +964,8 @@ _UK_PLEASURE_SECTION_RE = re.compile(
     r"pleasure craft ports?)\s*:?\s*(.*?)(?=\n#{1,3}\s|\Z)",
     re.I | re.S,
 )
-# Page douane SX : « Some examples include: Simpsonbay Marina, … Greatbay harbor »
-# Ne pas matcher « authorized ports in Sint Maarten. » (phrase trop courte).
+# SX customs page: "Some examples include: Simpsonbay Marina, … Greatbay harbor"
+# Do not match "authorized ports in Sint Maarten." (too short a phrase).
 _SX_EXAMPLES_RE = re.compile(
     r"(?:some\s+examples\s+include|examples\s+include)\s*[:\s]+"
     r"(.+?)(?:Customs Officers have access|\.\s+Furthermore|\Z)",
@@ -821,7 +975,7 @@ _SX_SKIP_PLACE_RE = re.compile(
     r"(?i)\b(airport|aeroport|a[eé]roport|post office|coastline|"
     r"entire coastline|juliana)\b",
 )
-# SIS Égypte : titres « Hurghada Marina: » dans « specialized marinas … including »
+# SIS Egypt: "Hurghada Marina:" titles inside "specialized marinas … including"
 _EG_SIS_LIST_RE = re.compile(
     r"specialized marinas.{0,160}?including\s*:?\s*(.+?)"
     r"(?:The State Sets|legislative framework|"
@@ -842,7 +996,7 @@ _EG_SKIP_MARINA_RE = re.compile(
     r"specialized marinas|egyptian marinas|international marinas|"
     r"tourist harbou?rs?)\b",
 )
-# Kartelë Dogana AL : « 2. Lezhë - Porti detar\nShëngjin » (le port, pas la ville).
+# Kartelë Dogana AL: "2. Lezhë - Porti detar\nShëngjin" (the port, not the town).
 _AL_PORTI_DETAR_RE = re.compile(
     r"(?i)porti\s+detar\s+([A-ZÀ-ÝË][A-Za-zÀ-ÿËëÇç]{2,24})",
 )
@@ -852,7 +1006,7 @@ _AL_PORTI_SKIP = frozenset({
 })
 _JORF_READERS = {
     "JORFTEXT000030235682": [
-        # Même arrêté (NOR INTV1430080A) : Légifrance est derrière Cloudflare.
+        # Same decree (NOR INTV1430080A): Légifrance is behind Cloudflare.
         "https://www.info-droits-etrangers.org/wp-content/uploads/2020/01/"
         "ARR%C3%8AT%C3%89_du_4_f%C3%A9vrier_2015_version_initiale.pdf",
     ],
@@ -876,8 +1030,8 @@ _PDF_HREF_RE = re.compile(
     re.I,
 )
 _PDF_MD_RE = re.compile(r"\[[^\]]*\]\(([^)]+\.pdf(?:\?[^)]*)?)\)", re.I)
-# Chemin seulement — « douane » / « customs » dans le hostname matchent
-# toutes les brochures d'une home douanes (leçon France : 31 PDF anglais).
+# Path only — "douane" / "customs" in the hostname match
+# every brochure on a customs homepage (France lesson: 31 English PDFs).
 _LIST_PDF_PATH_RE = re.compile(
     r"liste|listen|plaisance|eligibles|ppf|puerto|terminal|habilit|"
     r"port.?of.?entry|ports.?of.?entry|ports-entree|portos-de-entrada|"
@@ -896,14 +1050,14 @@ _YEAR_IN_PATH_RE = re.compile(r"/20(\d{2})/")
 
 
 def looks_hard_challenge(text: str = "", html: str = "", title: str = "") -> bool:
-    """Challenge Akamai / « Challenge Validation » : Chromium n'y peut rien."""
+    """Akamai / "Challenge Validation": Chromium cannot solve it."""
     probe = " ".join(p for p in (title or "", (text or "")[:2000], (html or "")[:4000]) if p)
     return bool(probe and HARD_CHALLENGE_RE.search(probe))
 
 
 def looks_like_port_catalog(text: str) -> bool:
-    """Vrai catalogue (coords ou décret numéroté), pas une loi quelconque
-    qui contient « 1. Article »."""
+    """A real catalog (coords or numbered decree), not any statute
+    that contains "1. Article"."""
     if not text:
         return False
     from app.core.run_rules import get_rule
@@ -952,16 +1106,16 @@ def looks_like_port_catalog(text: str) -> bool:
 
 
 def extract_structured_ports(text: str) -> list[dict]:
-    """Lit une liste officielle dans le texte source (pas une liste figée) :
-    titres « N.- Nom » + lat/lon, ou tournure légale « port of X ».
-    Les coordonnées du décret sont conservées pour éviter un géocodage de masse.
-    Chaque bloc [SOURCE: …] est lu isolément : concaténer un PDF de loi à un
-    catalogue ne doit pas avaler le dernier port."""
+    """Read an official list from the source text (not a hardcoded list):
+    "N.- Name" titles + lat/lon, or legal phrasing "port of X".
+    Decree coordinates are kept to avoid mass geocoding.
+    Each [SOURCE: …] block is read in isolation: concatenating a statute PDF
+    to a catalog must not swallow the last port."""
     if not text:
         return []
-    # _CATALOG_HEAD lit les blocs via (?:.*\n) : sans newline final, le dernier
-    # port (coords sur la dernière ligne) est avalé. TinyFish Fetch n'en met
-    # pas toujours une.
+    # _CATALOG_HEAD reads blocks via (?:.*\n): without a final newline, the last
+    # port (coords on the last line) is swallowed. TinyFish Fetch does not
+    # always add one.
     if not text.endswith("\n"):
         text = text + "\n"
     parts = re.split(r"\n(?=\[SOURCE: )", text) if "[SOURCE:" in text else [text]
@@ -994,7 +1148,7 @@ def _fold_ocr(s: str) -> str:
 
 
 def _normalize_capitania_name(name: str) -> str:
-    """Corrige une faute OCR évidente (Gúlria → Güiria), sans inventer de port."""
+    """Fix an obvious OCR error (Gúlria → Güiria), without inventing a port."""
     fold = _fold_ocr(name)
     if fold in _VE_OCR_ALIASES:
         return _VE_OCR_ALIASES[fold]
@@ -1042,7 +1196,7 @@ def _extract_capitanias(text: str) -> list[dict]:
 
 
 def _extract_fr_plaisance_table(text: str) -> list[dict]:
-    """Table douane : Région / Commune / Port de plaisance / PPF / autorité."""
+    """Customs table: Region / Commune / pleasure-craft port / PPF / authority."""
     lines = [re.sub(r"\s+", " ", ln).strip() for ln in (text or "").splitlines()]
     lines = [ln for ln in lines if ln]
     out, seen = [], set()
@@ -1085,7 +1239,7 @@ def _extract_fr_plaisance_table(text: str) -> list[dict]:
 
 
 def _turistica_allowlist(text: str) -> set[str] | None:
-    """Noms / numéros tagués TURÍSTICA, ou None si le PDF n'a pas été annoté."""
+    """Names / numbers tagged TURÍSTICA, or None if the PDF was not annotated."""
     m = _MX_TURISTICA_BLOCK_RE.search(text or "")
     if not m:
         return None
@@ -1104,7 +1258,7 @@ def _turistica_allowlist(text: str) -> set[str] | None:
 
 
 def _mx_activity_is_turistica(block: str) -> bool | None:
-    """True / False si « Tipo de actividad » est présent, sinon None."""
+    """True / False if "Tipo de actividad" is present, otherwise None."""
     m = _CATALOG_ACTIVITY.search(block or "")
     if not m:
         return None
@@ -1112,12 +1266,12 @@ def _mx_activity_is_turistica(block: str) -> bool | None:
 
 
 def _extract_mx_habilitados_table(text: str) -> list[dict]:
-    """PDF SCT : N° / nom / État / type / date / lat / lon — tag TURÍSTICA seulement."""
+    """SCT PDF: No. / name / State / type / date / lat / lon — TURÍSTICA tag only."""
     out, seen = [], set()
     allow = _turistica_allowlist(text)
     has_tag_col = bool(re.search(r"tur[ií]stica", text or "", re.I))
     if has_tag_col and allow is None:
-        # Colonne présente mais pas d'annotation : ne pas avaler les ports commerciaux.
+        # Column present but no annotation: do not swallow commercial ports.
         return []
     for m in _MX_HABILITADO_ROW_RE.finditer(text or ""):
         name = " ".join(m.group("name").split()).strip()
@@ -1147,7 +1301,7 @@ _NZ_TABLE_SKIP = frozenset({
 
 
 def _extract_nz_pofa_tables(text: str) -> list[dict]:
-    """Registre MPI « places of first arrival – seaports » (tableau par port)."""
+    """MPI register "places of first arrival – seaports" (table per port)."""
     out, seen = [], set()
     names = [m.group(1) for m in _NZ_POFA_MD_RE.finditer(text or "")]
     names += [m.group(1) for m in _NZ_POFA_PLAIN_RE.finditer(text or "")]
@@ -1183,7 +1337,7 @@ def _extract_nz_pofa_tables(text: str) -> list[dict]:
 
 
 def _extract_annexe_ppc_maritime(text: str) -> list[dict]:
-    """Annexe I Mayotte : points de passage contrôlés, frontières maritimes seulement."""
+    """Mayotte Annex I: controlled crossing points, maritime borders only."""
     out, seen = [], set()
     skip = _PORT_OF_SKIP | _GENERIC_PORT_NAMES | {
         "sites", "modalités", "modalites", "ouverture", "liste", "documents",
@@ -1206,7 +1360,7 @@ def _extract_annexe_ppc_maritime(text: str) -> list[dict]:
 
 
 def _sx_normalize_place(raw: str) -> str | None:
-    """Simpsonbay Marina, Greatbay harbor, Cruise Terminal — pas l'aéroport."""
+    """Simpsonbay Marina, Greatbay harbor, Cruise Terminal — not the airport."""
     n = " ".join((raw or "").split()).strip(" .;:")
     n = re.sub(r"^(?:including|and)\s+(?:the\s+)?", "", n, flags=re.I).strip()
     if not n or len(n) < 4 or _SX_SKIP_PLACE_RE.search(n):
@@ -1224,7 +1378,7 @@ def _sx_normalize_place(raw: str) -> str | None:
 
 
 def _eg_normalize_marina(raw: str) -> str | None:
-    """Titre SIS « Hurghada Marina: » — pas une ville citée en prose."""
+    """SIS title "Hurghada Marina:" — not a town cited in prose."""
     n = " ".join(html.unescape(raw or "").split()).strip(" .;:*")
     n = re.sub(r"^\*+", "", n).strip()
     if not n or len(n) < 8 or len(n) > 80:
@@ -1237,7 +1391,7 @@ def _eg_normalize_marina(raw: str) -> str | None:
 
 
 def _extract_eg_sis_yacht_marinas(text: str) -> list[dict]:
-    """Liste SIS « specialized marinas … including » (non exhaustive)."""
+    """SIS list "specialized marinas … including" (non-exhaustive)."""
     out, seen = [], set()
     text = html.unescape(text or "")
     block = text
@@ -1258,7 +1412,7 @@ def _extract_eg_sis_yacht_marinas(text: str) -> list[dict]:
 
 
 def _extract_al_porti_detar(text: str) -> list[dict]:
-    """Quatre ports de la kartelë Dogana (accise carburant, anijet e peshkimit)."""
+    """Four ports from the Dogana kartelë (fuel excise, anijet e peshkimit)."""
     out, seen = [], set()
     text = html.unescape(text or "")
     for m in _AL_PORTI_DETAR_RE.finditer(text):
@@ -1279,9 +1433,9 @@ def _extract_al_porti_detar(text: str) -> list[dict]:
 
 
 def _extract_sx_customs_examples(text: str) -> list[dict]:
-    """Lieux d'autorité listés par la douane de Sint Maarten (pas l'aéroport)."""
+    """Authority places listed by Sint Maarten customs (not the airport)."""
     out, seen = [], set()
-    # SharePoint encode le deux-points : « examples include&#58; ».
+    # SharePoint encodes the colon: "examples include&#58;".
     text = html.unescape(text or "")
     blobs = _SX_EXAMPLES_RE.findall(text)
     if not blobs and re.search(r"simpson\s*bay", text, re.I):
@@ -1303,7 +1457,7 @@ def _extract_sx_customs_examples(text: str) -> list[dict]:
 
 
 def _extract_uk_pleasure_ports(text: str) -> list[dict]:
-    """Si une liste de ports de plaisance UK est publiée, tous sont Ports of Entry."""
+    """If a UK pleasure-craft port list is published, all of them are Ports of Entry."""
     out, seen = [], set()
     skip = _PORT_OF_SKIP | _GENERIC_PORT_NAMES | {
         "united kingdom", "border force", "hmrc", "yachtline",
@@ -1329,7 +1483,7 @@ def _extract_uk_pleasure_ports(text: str) -> list[dict]:
 
 
 def _extract_douane_bureaux(text: str) -> list[dict]:
-    """« bureau de douane de Nouméa Port » — page formalités sans tableau."""
+    """"bureau de douane de Nouméa Port" — formalities page without a table."""
     out, seen = [], set()
     for m in _DOUANE_BUREAU_RE.finditer(text or ""):
         name = _clean_legal_port_name(m.group(1))
@@ -1413,7 +1567,7 @@ def _extract_structured_ports_one(text: str) -> list[dict]:
 
 
 def catalog_ports_with_coords(ports: list | None) -> list[dict]:
-    """Sous-ensemble catalogue qui a réellement lat/lon dans la source."""
+    """Catalog subset that actually has lat/lon in the source."""
     return [
         p for p in (ports or [])
         if p.get("lat") is not None and p.get("lon") is not None
@@ -1421,12 +1575,12 @@ def catalog_ports_with_coords(ports: list | None) -> list[dict]:
 
 
 def catalog_ports_to_keep(ports: list | None) -> list[dict]:
-    """Ports à retenir au skip LLM.
+    """Ports to keep when skipping the LLM.
 
-    Une table SCT a des coords : on les garde. Une liste officielle sans GPS
-    (PPF FR, MPI NZ, SIS EG, kartelë AL, Customs SX) a déjà des noms : on les
-    garde pour le géocodeur. Renvoyer [] ici alors que le parseur a lu des
-    noms, c'est le bug « catalogue suffisant (0 coordonnés) — LLM sauté ».
+    An SCT table has coords: keep them. An official list without GPS
+    (PPF FR, MPI NZ, SIS EG, kartelë AL, Customs SX) already has names: keep
+    them for the geocoder. Returning [] here after the parser read names
+    is the "catalog sufficient (0 coordinated) — LLM skipped" bug.
     """
     coords = catalog_ports_with_coords(ports)
     if coords:
@@ -1438,14 +1592,14 @@ def catalog_ports_to_keep(ports: list | None) -> list[dict]:
 
 
 def catalog_is_sufficient(ports: list | None, text: str = "") -> bool:
-    """Skip LLM si le parseur a déjà une liste officielle exploitable.
+    """Skip the LLM if the parser already has a usable official list.
 
-    - ≥ 3 ports avec lat/lon (catalogue type SCT) ;
-    - ou looks_like_port_catalog + ≥ 1 port coordonné ;
-    - ou looks_like_port_catalog + assez de noms (PPF / MPI / SIS / kartelë).
-    Les fragments « port de X » seuls ne suffisent pas (voir tests).
-    Au skip, `catalog_ports_to_keep` rend coords **ou** noms géocodables —
-    jamais une liste vide si le parseur a déjà des ports.
+    - ≥ 3 ports with lat/lon (SCT-style catalog);
+    - or looks_like_port_catalog + ≥ 1 coordinated port;
+    - or looks_like_port_catalog + enough names (PPF / MPI / SIS / kartelë).
+    Lone "port de X" fragments are not enough (see tests).
+    On skip, `catalog_ports_to_keep` returns coords **or** geocodeable names —
+    never an empty list if the parser already has ports.
     """
     if not ports:
         return False
@@ -1476,7 +1630,7 @@ _GEOCODE_STOP = frozenset({
     "un", "une", "et", "ou", "el", "los", "las", "y",
 })
 
-# Raison sociale / autorité portuaire — pas « port of / port de » (Port of Spain).
+# Legal entity / port authority — not "port of / port de" (Port of Spain).
 _CORPORATE_PORT_PREFIXES = (
     "ports autonomes de ", "ports autonomes d'",
     "port autonome de ", "port autonome d'",
@@ -1487,10 +1641,10 @@ _CORPORATE_PORT_PREFIXES = (
 
 
 def geocode_query_name(name: str) -> str:
-    """Toponyme à géocoder : Nouméa, pas « Port autonome de Nouméa ».
+    """Toponym to geocode: Nouméa, not "Port autonome de Nouméa".
 
-    Ne strippe pas « port of / port de / puerto de » — « Port of Spain »
-    resterait « Spain ».
+    Do not strip "port of / port de / puerto de" — "Port of Spain"
+    would become "Spain".
     """
     n = (name or "").strip()
     low = n.lower()
@@ -1502,11 +1656,11 @@ def geocode_query_name(name: str) -> str:
 
 
 def is_geocodeable_name(name: str, geocodeable=None) -> bool:
-    """False → ne pas appeler Nominatim/GeoNames (fragment, pas un toponyme).
+    """False → do not call Nominatim/GeoNames (fragment, not a toponym).
 
-    `geocodeable is False` (flag LLM) gagne toujours. Un filet local recale
-    les phrases type canari NL/CI même si le flag est absent ou True.
-    La raison sociale « Port autonome de … » est jugée sur l'alias listing.
+    `geocodeable is False` (LLM flag) always wins. A local net rejects
+    NL/CI canary-style sentences even if the flag is missing or True.
+    The legal entity "Port autonome de …" is judged on the listing alias.
     """
     if geocodeable is False:
         return False
@@ -1536,7 +1690,7 @@ def _pdf_stem(url: str) -> str:
 
 
 def _pdf_recency_bonus(path: str) -> int:
-    """Préfère le millésime courant à une carte PPF de 2022 encore en lien."""
+    """Prefer the current vintage over a 2022 PPF map still linked."""
     years = [2000 + int(y) for y in _YEAR_IN_PATH_RE.findall(path or "")]
     if years:
         return max(0, max(years) - 2020)
@@ -1546,7 +1700,7 @@ def _pdf_recency_bonus(path: str) -> int:
 
 
 def _pdf_list_score(url: str) -> int:
-    """Score le chemin du PDF, jamais le hostname (douane.gouv.fr ≠ liste)."""
+    """Score the PDF path, never the hostname (douane.gouv.fr ≠ a list)."""
     path = _pdf_path(url)
     if not path:
         return 0
@@ -1568,10 +1722,10 @@ def _pdf_list_score(url: str) -> int:
 
 
 def official_attachments(text: str, base_url: str, limit: int = 4) -> list[str]:
-    """PDF officiels liés depuis une page d'État (pièce jointe de liste, décret).
+    """Official PDFs linked from a state page (list attachment, decree).
 
-    On ne garde que les PDF dont le *chemin* ressemble à une liste. Un PDF
-    « 10-questions-before-exporting-en.pdf » sur douane.gouv.fr n'en est pas une.
+    Keep only PDFs whose *path* looks like a list. A PDF
+    "10-questions-before-exporting-en.pdf" on douane.gouv.fr is not one.
     """
     if not text or not base_url:
         return []
@@ -1608,15 +1762,15 @@ def official_attachments(text: str, base_url: str, limit: int = 4) -> list[str]:
 
 
 def should_follow_attachments(text: str, url: str) -> bool:
-    """Suivre un PDF même si la page est déjà longue (leçon SCT : la liste
-    est souvent le fichier lié, pas le HTML)."""
+    """Follow a PDF even if the page is already long (SCT lesson: the list
+    is often the linked file, not the HTML)."""
     blob = (text or "")[:4000]
     path = _pdf_path(url)
     if (looks_like_port_catalog(text or "")
             or bool(_CATALOG_MARKERS_RE.search(blob))
             or bool(_LIST_PDF_PATH_RE.search(path))):
         return True
-    # Page sans marqueur catalogue, mais un PDF « liste / PPF » est déjà lié.
+    # Page without a catalog marker, but a "list / PPF" PDF is already linked.
     return bool(url and official_attachments(text or "", url, limit=1))
 
 
@@ -1641,9 +1795,16 @@ async def _wayback_snapshot_url(url: str) -> str | None:
         return f"https://web.archive.org/web/{ts}id_/{orig}"
 
 
-def _mirror_http_err(exc: Exception) -> str:
+def _mirror_http_status(exc: Exception) -> int | None:
     if isinstance(exc, httpx.HTTPStatusError):
-        return f"HTTP {exc.response.status_code}"
+        return exc.response.status_code
+    return None
+
+
+def _mirror_http_err(exc: Exception) -> str:
+    code = _mirror_http_status(exc)
+    if code is not None:
+        return f"HTTP {code}"
     return type(exc).__name__
 
 
@@ -1663,7 +1824,7 @@ def _append_fetch_links(text: str, links: list | None) -> str:
 
 
 def _arbitrate_mirror_texts(jina_text: str | None, tf_text: str | None) -> tuple[str, str, dict] | None:
-    """Jina ∥ TinyFish Fetch : challenge écarté, catalogue gagne, sinon le plus long."""
+    """Jina ∥ TinyFish Fetch: challenge dropped, catalog wins, else the longest."""
     j_ok = _mirror_usable(jina_text)
     t_ok = _mirror_usable(tf_text)
     sim = _parse_similarity(jina_text or "", tf_text or "") if (j_ok and t_ok) else None
@@ -1710,6 +1871,8 @@ async def _jina_mirror_text(url: str, log) -> str | None:
                 log(f"miroir Jina: texte inutilisable ({len(text)} chars)")
         except Exception as e:
             log(f"miroir Jina: indisponible ({_mirror_http_err(e)})")
+            if _mirror_http_status(e) == 422:
+                return None
             if attempt == 0:
                 await asyncio.sleep(1.2)
     return None
@@ -1739,7 +1902,7 @@ async def _tinyfish_mirror_text(url: str, log) -> tuple[str | None, list]:
 
 
 async def _jorf_reader_text(url: str, log) -> str | None:
-    """Copies du même texte JORF quand Légifrance répond un challenge Cloudflare."""
+    """Copies of the same JORF text when Légifrance returns a Cloudflare challenge."""
     blob = (url or "").upper()
     for key, mirrors in _JORF_READERS.items():
         if key not in blob:
@@ -1762,6 +1925,9 @@ async def _jorf_reader_text(url: str, log) -> str | None:
 
 
 async def _wayback_mirror_text(url: str, log) -> str | None:
+    if wayback_circuit_open():
+        log("miroir Wayback: en pause (503 répétés)")
+        return None
     try:
         snap = await _wayback_snapshot_url(url)
         if snap:
@@ -1772,23 +1938,26 @@ async def _wayback_mirror_text(url: str, log) -> str | None:
                 parsed = await dual_parse_html(content.decode("utf-8", errors="replace"))
                 text = parsed.get("text") or ""
             if _mirror_usable(text):
+                _note_wayback_ok()
                 log(f"miroir Wayback: {len(text)} chars")
                 return text
     except Exception as e:
+        if _mirror_http_status(e) == 503:
+            _note_wayback_503()
         log(f"miroir Wayback: indisponible ({_mirror_http_err(e)})")
     return None
 
 
 async def fetch_mirror_text(url: str, log=None, skip_tinyfish: bool = False
                             ) -> tuple[str, str] | None:
-    """Miroir générique quand la page officielle est derrière un challenge.
-    Jina ∥ TinyFish Fetch (si clé), Wayback ensuite. L'URL d'origine reste
-    la source ; le miroir n'est qu'un lecteur.
+    """Generic mirror when the official page is behind a challenge.
+    Jina ∥ TinyFish Fetch (if key), then Wayback. The original URL stays
+    the source; the mirror is only a reader.
 
-    skip_tinyfish : Fetch a déjà été tenté en amont (prefer_fetch) — on ne
-    le paie pas une seconde fois.
+    skip_tinyfish: Fetch was already tried upstream (prefer_fetch) — do not
+    pay for it a second time.
 
-    Retourne (texte, level) — compare optionnelle en 3e élément si arbitrage."""
+    Return (text, level) — optional compare as 3rd element if arbitrated."""
     log = log or (lambda m: None)
     if _is_mirror_url(url):
         return None
@@ -1823,23 +1992,33 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
                           log=None, skip_fetch_mirror: bool = False,
                           keep_raw: bool = False) -> dict:
     """
-    Moteur local de lecture. La porte publique est ``read_url``.
+    Local reading engine. The public door is ``read_url``.
 
-    Retourne {url, text, md5, level, title, meta_desc, image, ext_links, links,
-              is_pdf, html, blocked, render_used, parse, final_url, error}.
+    Return {url, text, md5, level, title, meta_desc, image, ext_links, links,
+            is_pdf, html, blocked, render_used, parse, final_url, error}.
     level ∈ N1-pymupdf | N1-trafilatura | N2-readability | N3-render | blocked | failed
             | N3-mirror-* .
-    md5 = empreinte du texte extrait (stable) sinon du contenu brut.
-    blocked = page interstitielle anti-bot détectée (contenu invalidé, jamais ingéré).
-    parse = {n1_chars, n2_chars, similarity, agree} — double parsing comparé.
-    skip_fetch_mirror : Fetch déjà tenté — Jina / Wayback seulement.
+    md5 = fingerprint of extracted text (stable) else of raw content.
+    blocked = anti-bot interstitial detected (content invalidated, never ingested).
+    parse = {n1_chars, n2_chars, similarity, agree} — compared dual parsing.
+    skip_fetch_mirror: Fetch already tried — Jina / Wayback only.
     """
     log = log or (lambda m: None)
     out = empty_page(url)
 
+    if host_is_retired(url):
+        log(f"hôte retiré (DNS mort) — cascade sautée ({url_host(url)})")
+        out["error"] = "dead_host"
+        return out
+
     if is_maps_render_url(url):
         log("URL Google Maps — cascade locale sautée (DOM JS, Fetch seulement)")
         out["error"] = "maps_render_url"
+        return out
+
+    if url_looks_like_image(url):
+        log("URL image — cascade sautée (pas une fiche, pas de Chromium)")
+        out["error"] = "image_url"
         return out
 
     content = None
@@ -1852,12 +2031,24 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
         ctype = (resp.headers.get("content-type") or "").lower()
         disposition = resp.headers.get("content-disposition") or ""
         out["final_url"] = str(resp.url) or url
+        out["disposition"] = disposition
+        out["download"] = "attachment" in disposition.lower()
     except Exception as e:
         log(f"N1 fetch: échec ({type(e).__name__})")
+        out["fetch_failed"] = True
+        out["error"] = type(e).__name__
 
     if content is not None:
         out["md5"] = hashlib.md5(content).hexdigest()
+        if content_is_image(content, ctype, out["final_url"] or url):
+            log("contenu image — cascade sautée, pas de Chromium")
+            out["error"] = "image_content"
+            return out
         is_pdf = content_is_pdf(content, ctype, out["final_url"] or url, disposition)
+        if not is_pdf and not content_looks_like_html(content, ctype):
+            log("contenu binaire — cascade sautée, pas de Chromium")
+            out["error"] = "binary_content"
+            return out
         out["is_pdf"] = is_pdf
         if keep_raw and content:
             out["raw"] = content
@@ -1893,10 +2084,10 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
             elif parsed["text"]:
                 out["text"] = parsed["text"]
 
-    # N3 — rendu navigateur local (gratuit) : pages JS et challenges « soft ».
-    # Un challenge dur (Akamai, SiteGround, Cloudflare) n'est jamais résolu par
-    # Chromium : on passe au miroir (TinyFish Fetch passe SiteGround ; Jina non).
-    # Pas de Chromium sur un PDF — ni sur une URL .pdf qui a renvoyé du HTML.
+    # N3 — local browser render (free): JS pages and "soft" challenges.
+    # A hard challenge (Akamai, SiteGround, Cloudflare) is never solved by
+    # Chromium: fall through to the mirror (TinyFish Fetch passes SiteGround; Jina does not).
+    # No Chromium on a PDF — nor on a .pdf URL that returned HTML.
     if resp is not None and looks_bot_challenge_response(
             resp, content, out.get("final_url") or url):
         out["blocked"] = True
@@ -1904,9 +2095,12 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
     pdf_url = url_looks_like_pdf(url) or url_looks_like_pdf(out.get("final_url"))
     hard = looks_hard_challenge(
         out.get("text") or "", out.get("html") or "", out.get("title") or "")
-    skip_chromium = bool(out["is_pdf"] or pdf_url or hard or out["blocked"])
+    skip_chromium = bool(
+        out["is_pdf"] or pdf_url or hard or out["blocked"]
+        or out.get("fetch_failed") or out.get("download")
+        or url_looks_like_download(url, out.get("disposition") or ""))
     short = len(out["text"]) < min_chars
-    # 205 chars de page captcha ne doivent pas empêcher TinyFish Fetch (≥ 400).
+    # 205 chars of captcha page must not prevent TinyFish Fetch (≥ 400).
     want_mirror = bool(out["blocked"] or short or (pdf_url and not out["is_pdf"] and len(out["text"]) < 400))
     needs_render = (not skip_chromium) and allow_render and (out["blocked"] or short)
     if skip_chromium and want_mirror and (hard or out["blocked"] or pdf_url):
@@ -1939,8 +2133,8 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
             elif r_blocked:
                 out["blocked"] = True
 
-    # Miroir générique : page officielle bloquée, trop courte, ou .pdf captcha
-    # (205 chars Chromium ne doivent pas court-circuiter TinyFish Fetch).
+    # Generic mirror: official page blocked, too short, or captcha .pdf
+    # (205 Chromium chars must not short-circuit TinyFish Fetch).
     if want_mirror and not _is_mirror_url(url):
         mirrored = await fetch_mirror_text(url, log=log, skip_tinyfish=skip_fetch_mirror)
         if mirrored:
@@ -1974,10 +2168,10 @@ async def complete_with_cascade(
     log=None,
     concurrency: int = 4,
 ) -> dict[str, dict]:
-    """Complète les records Fetch vides / bloqués par la cascade locale.
+    """Fill empty / blocked Fetch records via the local cascade.
 
-    Les URL Google Maps restent telles quelles (Fetch-only). Un Fetch déjà
-    utilisable n'allume pas Chromium. Retourne des records forme Fetch.
+    Google Maps URLs stay as-is (Fetch-only). An already usable Fetch
+    does not start Chromium. Return Fetch-shaped records.
     """
     log = log or (lambda m: None)
     out = dict(fetched or {})
@@ -1993,7 +2187,7 @@ async def complete_with_cascade(
     if not need:
         return out
 
-    skip_tf = True  # Fetch déjà tenté (même s'il a échoué)
+    skip_tf = True  # Fetch already tried (even if it failed)
     sem = asyncio.Semaphore(max(1, int(concurrency or 1)))
 
     async def _one(u: str):
@@ -2015,7 +2209,7 @@ async def complete_with_cascade(
         elif u not in out:
             out[u] = as_fetch_record(page, u)
         elif page.get("text") and not page.get("blocked"):
-            # Fetch était trop court / vide : on prend le meilleur texte.
+            # Fetch was too short / empty: take the better text.
             prev = out.get(u) or {}
             if len(page.get("text") or "") > len(prev.get("text") or ""):
                 out[u] = as_fetch_record(page, u)
@@ -2034,14 +2228,14 @@ async def read_urls(
     log=None,
     concurrency: int = 4,
 ) -> dict[str, dict]:
-    """Porte unique : texte (et liens) d'une liste d'URL.
+    """Single door: text (and links) of a URL list.
 
-    prefer_fetch=True : TinyFish Fetch d'abord (lots de 10). Si le texte n'est
-    pas utilisable — PDF vide, page JS — on entre dans extract_cascade.
-    Chromium ne tourne que si HTML simple ET Fetch ont déjà échoué.
+    prefer_fetch=True: TinyFish Fetch first (batches of 10). If the text is
+    not usable — empty PDF, JS page — enter extract_cascade.
+    Chromium only runs if simple HTML AND Fetch have already failed.
 
-    URL Google Maps : Fetch seulement, jamais la cascade.
-    prefer_fetch=False : cascade locale (Projets, top-down).
+    Google Maps URL: Fetch only, never the cascade.
+    prefer_fetch=False: local cascade (Projects, top-down).
     """
     log = log or (lambda m: None)
     clean, seen = [], set()
@@ -2125,7 +2319,7 @@ async def read_url(
     keep_if_links: bool = False,
     log=None,
 ) -> dict:
-    """Porte unique pour une URL. Voir ``read_urls``."""
+    """Single door for one URL. See ``read_urls``."""
     pages = await read_urls(
         [url], min_chars=min_chars, prefer_fetch=prefer_fetch,
         allow_render=allow_render, fetch_purpose=fetch_purpose,

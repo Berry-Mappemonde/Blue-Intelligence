@@ -1,6 +1,4 @@
-"""
-generate-batch / generate ZEE retirés : 410, poe_ports intact (Sao Tome 8397).
-"""
+"""generate-batch / generate EEZ removed: 410, poe_ports intact (Sao Tome 8397)."""
 from pathlib import Path
 import os
 

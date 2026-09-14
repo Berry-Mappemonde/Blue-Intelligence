@@ -1,6 +1,6 @@
-"""P0 run mondial : PDF hors process, cache géocode, lock exceptions.
+"""P0 world run: PDF out of process, geocode cache, lock exceptions.
 
-Aucun seuil TinyFish / SERP n'est exercé ici. Mongo dédiée bi_test_p0_survive.
+No TinyFish / SERP threshold is exercised here. Dedicated Mongo bi_test_p0_survive.
 """
 import asyncio
 import inspect

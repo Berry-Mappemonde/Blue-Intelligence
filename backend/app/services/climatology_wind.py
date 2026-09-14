@@ -1,7 +1,7 @@
-"""Atlas de vent mensuel (roses 8 secteurs) — snapshot CMEMS MY, pas NRT.
+"""Monthly wind atlas (8-sector roses) — CMEMS MY snapshot, not NRT.
 
-Tant que ``wind-MM.npz`` manque, on renvoie ``None`` (pas un vent inventé).
-Le repli zones de ``climatology.py`` (NAVIGUIDE) n'est **pas** servi ici.
+While ``wind-MM.npz`` is missing, return ``None`` (no invented wind).
+The zone fallback from ``climatology.py`` (NAVIGUIDE) is **not** served here.
 """
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def _sample_cell(bundle: dict, lat: float, lon: float) -> dict | None:
     lon = wrap_lon(lon)
     i = _nearest_index(lats, lat)
     j = _nearest_index(lons, lon)
-    # Refus si la maille est trop loin (terre / trou / hors grille)
+    # Refuse if the cell is too far (land / hole / off-grid)
     if abs(float(lats[i]) - lat) > 0.75 or abs(wrap_lon(float(lons[j]) - lon)) > 0.75:
         return None
     n = _sample_count(bundle, i, j)
@@ -180,7 +180,7 @@ def _rose_from_cell(cell: dict) -> dict | None:
 
 
 def atlas_at(lat: float, lon: float, month: int) -> dict | None:
-    """Rose au point, ou ``None`` (terre, NaN, snapshot absent, échantillon pauvre)."""
+    """Rose at the point, or ``None`` (land, NaN, missing snapshot, poor sample)."""
     month = parse_month(month)
     if is_land(lat, lon):
         return None
@@ -194,10 +194,10 @@ def atlas_at(lat: float, lon: float, month: int) -> dict | None:
 
 
 def wind_at(lat: float, lon: float, month: int, mode: str = "most_likely") -> tuple[float, float] | None:
-    """(kn, dir_from) depuis l'atlas. ``None`` si la grille manque — pas le repli zones.
+    """(kn, dir_from) from the atlas. ``None`` if the grid is missing — not the zone fallback.
 
-    Un snapshot V0 ``stat=average`` n'a pas de MOST_LIKELY : on sert le vecteur
-    moyen, sans le relabeller rose.
+    A V0 ``stat=average`` snapshot has no MOST_LIKELY: serve the mean
+    vector, without relabeling it as a rose.
     """
     rose = atlas_at(lat, lon, month)
     if not rose:
@@ -212,7 +212,7 @@ def wind_at(lat: float, lon: float, month: int, mode: str = "most_likely") -> tu
 
 
 def wind_geojson(month: int, spacing_deg: float = 1.0) -> dict:
-    """Points MOST_LIKELY pour le pane vectoriel. Collection vide si snapshot absent."""
+    """MOST_LIKELY points for the vector pane. Empty collection if the snapshot is missing."""
     month = parse_month(month)
     spacing = max(0.5, min(4.0, float(spacing_deg)))
     features: list[dict] = []

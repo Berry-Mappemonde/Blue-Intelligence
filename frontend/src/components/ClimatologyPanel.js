@@ -25,8 +25,8 @@ const FILTERS = [
 ];
 
 /**
- * ClimatologyPanel — curseur janvier–décembre + filtres Vent / Houle /
- * Courant / Cyclones. Modèle : SciencePanel (Sextant / Argo).
+ * ClimatologyPanel — January–December slider + Wind / Wave /
+ * Current / Cyclone filters. Pattern: SciencePanel (Sextant / Argo).
  */
 export default function ClimatologyPanel({
   t, lang = "fr",
@@ -202,6 +202,7 @@ function PointCard({ t, point }) {
             {wave.hs_p90_m != null && <Row k="P90" v={`${wave.hs_p90_m} m`} />}
             {wave.hs_mean_m != null && <Row k="mean" v={`${wave.hs_mean_m} m`} />}
             {wave.period_s != null && <Row k="T" v={`${wave.period_s} s`} />}
+            {wave.dir_deg != null && <Row k="dir" v={`${wave.dir_deg}°`} />}
           </>
         )}
       </Block>

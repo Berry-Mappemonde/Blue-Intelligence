@@ -12,28 +12,23 @@ const SOURCE_FILTERS = [
   { id: "edmed", label: "EDMED" },
   { id: "argo", label: "Argo" },
   { id: "csr", label: "CSR" },
-];
-
-const WMS_LAYERS = [
-  { id: "bathymetry", labelKey: "scienceWmsBathymetry" },
-  { id: "substrate", labelKey: "scienceWmsSubstrate" },
-  { id: "cables", labelKey: "scienceWmsCables" },
+  { id: "sentinel-pilot", labelKey: "scienceFilterSentinel" },
 ];
 
 /**
- * SciencePanel — liste latérale du mode Science : jeux de données océano
- * (Sextant/ODATIS/EDMED) + flotteurs Argo + tracés CSR, filtres par source,
- * couches WMS EMODnet.
+ * SciencePanel — Science-mode side list: ocean datasets
+ * (Sextant/ODATIS/EDMED) + Argo floats + CSR tracks, filtered by source.
+ * EMODnet WMS layers live in MapLayersSidebar (right bar).
  */
 export default function SciencePanel({
-  t, science, onFlyTo, onRefresh, scienceWms, onToggleWms,
+  t, science, onFlyTo, onRefresh,
   sourceFilter = "argo", onSourceFilter,
 }) {
   const [query, setQuery] = useState("");
   const setSourceFilter = onSourceFilter || (() => {});
   const features = science?.features || [];
 
-  // Quand une moisson se termine, rafraîchir la carte + la liste.
+  // When a harvest finishes, refresh the map + the list.
   useEffect(() => {
     let live = true;
     let wasRunning = false;
@@ -116,23 +111,6 @@ export default function SciencePanel({
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1 mb-3" data-testid="science-wms">
-          {WMS_LAYERS.map((layer) => (
-            <button
-              key={layer.id}
-              type="button"
-              data-testid={`science-wms-${layer.id}`}
-              onClick={() => onToggleWms && onToggleWms(layer.id, !(scienceWms && scienceWms[layer.id]))}
-              className={`px-1.5 py-1 font-mono text-[9px] uppercase tracking-wide border rounded-sm transition-colors ${
-                scienceWms && scienceWms[layer.id]
-                  ? "border-accent/60 bg-accent/15 text-accent"
-                  : "border-line text-slate-500 hover:text-slate-300 hover:bg-raised"
-              }`}
-            >
-              {t(layer.labelKey)}
-            </button>
-          ))}
-        </div>
         <div className="mb-1" data-testid="science-legend">
           <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-1.5">{t("legend")}</p>
           <div className="space-y-1">
@@ -150,7 +128,6 @@ export default function SciencePanel({
             </div>
           </div>
         </div>
-        <p className="font-mono text-[9px] text-slate-500 leading-relaxed mb-1">{t("scienceWmsHint")}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto" data-testid="science-list">
