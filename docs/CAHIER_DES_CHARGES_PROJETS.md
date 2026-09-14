@@ -1,586 +1,586 @@
-# Cahier des charges — Projets de conservation marine
+# Specification — Marine conservation projects
 
-Document de cadrage du mode **Projets** de Blue Intelligence.
-Il relit le code, le PRD, l’architecture, le seed GeoJSON, le cahier Formalités (PoE),
-et la **revue du 7 septembre 2026** (32 commentaires Berry-Mappemonde sur la v1.0).
+Scoping document for the **Projects** mode of Blue Intelligence.
+It rereads the code, the PRD, the architecture, the GeoJSON seed, the Formalities (PoE) specification,
+and the **review of 7 September 2026** (32 Berry-Mappemonde comments on v1.0).
 
-Écrit en langage simple : c’est le contrat de ce que l’on cherche, et de ce que l’on refuse.
+Written in plain language: it is the contract of what we are looking for, and what we refuse.
 
-Version **2.0** — 7 septembre 2026. Document **complet** + **plan d’implémentation** (phases, fichiers, API, recette).
+Version **2.0** — 7 September 2026. **Complete** document + **implementation plan** (phases, files, API, acceptance tests).
 
-**Sommaire**
+**Contents**
 
-1. En une phrase
-2. Pourquoi ce travail existe
-3. Ce que l’on veut obtenir
-4. Ce que l’on ne veut pas
-5. Vocabulaire
-6. Les deux stratégies
-7. Règles
-8. Sources et outils
-9. Le code — où vit chaque brique
-10. Score S_ocean
-11. Contraintes dures
-12. Critères d’acceptation
-13. État actuel et écarts
-14. Plan d’implémentation
-15. Documents et conversations dont ce cahier hérite
-16. Qui fait quoi
-17. Cycle de vie d’un projet
-18. Le second livrable : les portails financeurs
-19. Algorithme (découverte, sites, Follow the Money)
-20. Modèle de données
-21. Ce que voit l’utilisateur
-22. Inventaire des MasterSeeds
-23. Gatekeeper et taxonomie
-24. Exemples concrets
-25. Recette
-26. Risques
-27. Hors périmètre
+1. In one sentence
+2. Why this work exists
+3. What we want to obtain
+4. What we do not want
+5. Vocabulary
+6. The two strategies
+7. Rules
+8. Sources and tools
+9. The code — where each piece lives
+10. S_ocean score
+11. Hard constraints
+12. Acceptance criteria
+13. Current state and gaps
+14. Implementation plan
+15. Documents and conversations this specification inherits from
+16. Who does what
+17. Lifecycle of a project
+18. The second deliverable: funder portals
+19. Algorithm (discovery, sites, Follow the Money)
+20. Data model
+21. What the user sees
+22. MasterSeeds inventory
+23. Gatekeeper and taxonomy
+24. Concrete examples
+25. Acceptance tests
+26. Risks
+27. Out of scope
 28. Annexes
-29. Trace des commentaires de revue (v1 → v2)
+29. Trace of the review comments (v1 → v2)
 
 ---
 
-## 1. En une phrase
+## 1. In one sentence
 
-Retrouver tous les projets de conservation, restauration ou protection marine **réellement menés** (une page, un ou plusieurs lieux, plusieurs financeurs possibles), **financés par des fondations**, **reliés à un endroit du monde assez précis et théoriquement accessible en bateau**, les poser sur la carte, et ne jamais y coller un programme terrestre, une page d’accueil, un siège d’ONG, ou un GPS inventé.
+Find every marine conservation, restoration or protection project **actually carried out** (one page, one or more places, several possible funders), **funded by foundations**, **tied to a place in the world precise enough and theoretically accessible by boat**, put them on the map, and never stick onto it a terrestrial programme, a home page, an NGO headquarters, or an invented GPS.
 
-Ceci **exclut** les projets trop généraux, ou qui ne sont pas clairement localisés à un ou plusieurs endroits accessibles en bateau. On fait clairement de **l’éco-tourisme** : un skipper doit pouvoir se dire « je peux aller voir ça ».
-
----
-
-## 2. Pourquoi ce travail existe
-
-Les fondations océaniques publient leurs actions sur des centaines de sites. La carte v1 (~4 463 points, ~861 financeurs) a déjà ramassé ce web. Beaucoup de points ne sont **pas visitables** : siège à Washington, centroïde de pays, rectangle océanique hashé, recale `snap_to_ocean` à des dizaines de kilomètres du vrai lieu.
-
-Blue Intelligence les cartographie pour l’expédition Berry-Mappemonde et pour l’éco-tourisme : **où** aller, **qui** finance, **quelle page** lire. Un GPS n’est pas le périmètre d’une AMP.
-
-Le stock v1 reste un **trésor** (restauration, revue, futur Gold). Le perdre, c’est perdre les deux.
+This **excludes** projects that are too general, or that are not clearly located at one or more places accessible by boat. We are clearly doing **eco-tourism**: a skipper must be able to say “I can go see that”.
 
 ---
 
-## 3. Ce que l’on veut obtenir
+## 2. Why this work exists
 
-Deux livrables, indissociables :
+Ocean foundations publish their actions on hundreds of sites. The v1 map (~4,463 points, ~861 funders) has already gathered that web. Many points are **not visitable**: headquarters in Washington, country centroid, hashed ocean rectangle, `snap_to_ocean` snap tens of kilometres from the real place.
 
-1. **La carte des sites visitables.**
-   Un projet peut avoir **plusieurs points** (plusieurs actions d’un même programme).
-   Chaque point : nom du site, GPS du **lieu d’action** (pas le HQ), accessibilité bateau, URL, financeur(s), description, S_ocean, `geo_source`.
+Blue Intelligence maps them for the Berry-Mappemonde expedition and for eco-tourism: **where** to go, **who** funds, **which page** to read. A GPS is not the perimeter of an MPA.
 
-2. **Les portails financeurs.**
-   MasterSeeds = les **~861 financeurs déjà découverts** (plus ceux que Follow the Money ajoutera), pas seulement les 21 portails curés d’origine. Pour chacun : nom, URL de listing si connue, dernier scan, pages vues.
-
-Un projet sans site assez précis **n’est pas publié**. Il reste en graine / file de revue (`unlocated`). On ne recale pas vers « une mer proche » pour faire semblant.
+The v1 stock remains a **treasure** (restoration, review, future Gold). Losing it is losing both.
 
 ---
 
-## 4. Ce que l’on ne veut pas
+## 3. What we want to obtain
 
-- Des projets **terrestres ou d’eau douce** (sauf estuaire côtier / mangrove / delta accessibles).
-- Des programmes **trop généraux** (« protéger les océans ») sans site nommé.
-- Des **pages génériques** : home, news, dons, jobs, boutique.
-- Un **GPS inventé** : `ocean_fallback_coords`, estimation au milieu d’un bassin, centroïde de pays.
-- Un **siège social** (Paris, Londres, Washington, Monaco-ville de l’ONG) présenté comme le projet.
-- **`snap_to_ocean`** comme rustine : le point recalé ne veut plus rien dire.
-- Une carte qui **écrase** `projects` (`clear_db`, `DELETE /api/projects`). Ces fonctions **disparaissent**.
-- TinyFish **Agent** en moteur quotidien (crédits). Search et Fetch sont les outils TinyFish normaux.
-- Inventer un titre, un site, ou un financeur absents des sources.
+Two deliverables, inseparable:
 
----
+1. **The map of visitable sites.**
+   A project may have **several points** (several actions of the same programme).
+   Each point: site name, GPS of the **action place** (not the HQ), boat accessibility, URL, funder(s), description, S_ocean, `geo_source`.
 
-## 5. Vocabulaire
+2. **The funder portals.**
+   MasterSeeds = the **~861 funders already discovered** (plus those Follow the Money will add), not only the original 21 curated portals. For each: name, listing URL if known, last scan, pages seen.
 
-| Mot | Sens ici |
-|-----|----------|
-| **Projet** | Une action marine décrite sur une URL, financée par une ou plusieurs fondations. |
-| **Site** | Un lieu d’action **assez précis** et **accessible en bateau** (baie, récif, AMP, marina, île, estuaire). Un projet peut avoir *n* sites. |
-| **Accessible en bateau** | Un skipper peut théoriquement s’y rendre (mer, côte, havre, AMP côtière). Pas un bureau, pas une ville intérieure. |
-| **Financeur** | Organisation dans `funders`. MasterSeed = l’union des ~861 déjà vus. |
-| **Swarm** | Découverte + extraction. N’écrit **plus** la carte v1 : seulement un **run**. |
-| **Carte v1** | Collection `projects` actuelle. Trésor. Revue, pas purge. |
-| **Run** | Génération isolée `project_run_*`, calquée sur `poe_run_*`. Promotion manuelle ensuite. |
-| **Snapped / fallback** | Défauts v1. Interdits en publication nouvelle. Candidats à la revue, exclus du futur Gold. |
-| **Gold Dataset** | N’existe pas encore (aucune cartographie de ce type n’existait). On peut en **créer** un : v1 **moins** snapped **moins** fallback océan, après revue. |
-| **Revue** | UI opérateur : accepter / rejeter / éditer un site, promouvoir un run. |
-| **Règles configurables** | Seuils gatekeeper, distances, plafonds : dans `settings` / JSON, **pas en dur** dans le code. |
+A project without a site precise enough is **not published**. It stays as a seed / review queue (`unlocated`). We do not snap toward “a nearby sea” to pretend.
 
 ---
 
-## 6. Les deux stratégies
+## 4. What we do not want
 
-On ne choisit pas. On les fait travailler ensemble.
+- **Terrestrial or freshwater** projects (except accessible coastal estuary / mangrove / delta).
+- Programmes that are **too general** (“protect the oceans”) without a named site.
+- **Generic pages**: home, news, donations, jobs, shop.
+- An **invented GPS**: `ocean_fallback_coords`, estimate in the middle of a basin, country centroid.
+- A **registered office** (Paris, London, Washington, Monaco-city of the NGO) presented as the project.
+- **`snap_to_ocean`** as a patch: the snapped point no longer means anything.
+- A map that **overwrites** `projects` (`clear_db`, `DELETE /api/projects`). These functions **disappear**.
+- TinyFish **Agent** as a daily engine (credits). Search and Fetch are the normal TinyFish tools.
+- Inventing a title, a site, or a funder absent from the sources.
 
-### 6.1 Top-Down — du portail vers les pages
+---
 
-On part d’un **financeur** (les ~861, pas seulement 21).
+## 5. Vocabulary
 
-1. URL de listing si on l’a ; sinon la déduire des `url` déjà en base pour ce financeur.
-2. Découvrir les pages projet : crawler HTTP → TinyFish **Search / Fetch** (gratuits, quotas) → Agent **seulement** si toujours 0.
-3. Cache `deeplink_pages` + file du **run**.
-4. Extraire, juger « est-ce un projet localisable ? », trouver les **sites**.
-5. Écrire dans `project_run_projects`, jamais dans `projects`.
+| Word | Meaning here |
+|------|--------------|
+| **Project** | A marine action described on a URL, funded by one or more foundations. |
+| **Site** | An action place **precise enough** and **accessible by boat** (bay, reef, MPA, marina, island, estuary). A project may have *n* sites. |
+| **Accessible by boat** | A skipper can theoretically get there (sea, coast, harbour, coastal MPA). Not an office, not an inland city. |
+| **Funder** | Organisation in `funders`. MasterSeed = the union of the ~861 already seen. |
+| **Swarm** | Discovery + extraction. **No longer** writes the v1 map: only a **run**. |
+| **v1 map** | Current `projects` collection. Treasure. Review, not purge. |
+| **Run** | Isolated generation `project_run_*`, modelled on `poe_run_*`. Manual promotion afterwards. |
+| **Snapped / fallback** | v1 defects. Forbidden in new publication. Review candidates, excluded from future Gold. |
+| **Gold Dataset** | Does not exist yet (no mapping of this kind existed). We can **create** one: v1 **minus** snapped **minus** ocean fallback, after review. |
+| **Review** | Operator UI: accept / reject / edit a site, promote a run. |
+| **Configurable rules** | Gatekeeper thresholds, distances, ceilings: in `settings` / JSON, **not hard-coded** in the code. |
 
-### 6.2 Bottom-Up — de l’URL / du point v1 vers le site
+---
 
-On part du stock :
+## 6. The two strategies
 
-- carte v1 (y compris snapped / fallback : à revoir, pas à republier tels quels) ;
-- DeepLinkCache ;
-- signalements skipper ;
-- file `failed` / `unlocated`.
+We do not choose. We make them work together.
 
-Pour chaque graine : la page décrit-elle **un ou plusieurs lieux accessibles en bateau** ? Si oui, extraire ces sites. Si non, `unlocated` — pas de rustine GPS.
+### 6.1 Top-Down — from the portal to the pages
 
-### 6.3 Recoupement
+We start from a **funder** (the ~861, not only 21).
+
+1. Listing URL if we have it; otherwise infer it from the `url` already in the database for this funder.
+2. Discover project pages: HTTP crawler → TinyFish **Search / Fetch** (free, quotas) → Agent **only** if still 0.
+3. `deeplink_pages` cache + **run** queue.
+4. Extract, judge “is this a locatable project?”, find the **sites**.
+5. Write into `project_run_projects`, never into `projects`.
+
+### 6.2 Bottom-Up — from the URL / the v1 point to the site
+
+We start from the stock:
+
+- v1 map (including snapped / fallback: to review, not to republish as-is);
+- DeepLinkCache;
+- skipper reports;
+- `failed` / `unlocated` queue.
+
+For each seed: does the page describe **one or more places accessible by boat**? If yes, extract those sites. If no, `unlocated` — no GPS patch.
+
+### 6.3 Cross-check
 
 | | Top-Down | Bottom-Up |
 |---|---|---|
-| Départ | un financeur / listing | une URL ou un point v1 |
-| Question | quelles pages projet ? | quels **sites visitables** sur cette page ? |
-| Produit | URLs + extraits dans un run | verdict + sites, ou `unlocated` |
-| Faiblesse | bruit, homes | ne découvre pas un portail neuf |
-| Force | trouve les listings | capitalise les 4 463 et les 861 |
+| Start | a funder / listing | a URL or a v1 point |
+| Question | which project pages? | which **visitable sites** on this page? |
+| Product | URLs + extracts in a run | verdict + sites, or `unlocated` |
+| Weakness | noise, homes | does not discover a new portal |
+| Strength | finds the listings | capitalises the 4,463 and the 861 |
 
 ---
 
-## 7. Règles
+## 7. Rules
 
-### 7.1 Règle d’or
+### 7.1 Golden rule
 
-On ne publie que des **actions marines financées par des fondations**, avec URL, et **au moins un site assez précis pour qu’un bateau puisse s’y rendre**.
+We publish only **marine actions funded by foundations**, with a URL, and **at least one site precise enough that a boat can get there**.
 
-Conséquences :
+Consequences:
 
-- Forêt, montagne, lac intérieur : non.
-- Estuaire, mangrove, delta, blue carbon côtier : oui, si le lieu est nommé.
-- Programme mondial : **chercher chaque lieu d’action**. Plusieurs points > un centroïde « global ». Pas de GPS représentatif inventé.
-- Siège de l’ONG : **jamais** un site. Le géocodeur doit les refuser.
-- Page about / donate / news : non.
-- `snap_to_ocean` : **interdit** pour publier. On cherche le vrai lieu, ou on laisse `unlocated`.
-- `ocean_fallback_coords` : **interdit** en carte et en run promu.
+- Forest, mountain, inland lake: no.
+- Estuary, mangrove, delta, coastal blue carbon: yes, if the place is named.
+- World programme: **seek each action place**. Several points > a “global” centroid. No invented representative GPS.
+- NGO headquarters: **never** a site. The geocoder must refuse them.
+- About / donate / news page: no.
+- `snap_to_ocean`: **forbidden** for publishing. We seek the real place, or we leave `unlocated`.
+- `ocean_fallback_coords`: **forbidden** on the map and in a promoted run.
 
 ### 7.2 Sources
 
-- Preuve = la page projet (`url`) + les pages de sites qu’elle cite.
-- Financeurs = ceux de la page / du seed, fusionnables, jamais inventés.
-- OSM, Nominatim, GeoNames, polygones AMP : **aident à situer**, ne prouvent pas le projet.
-- Claude Haiku **peut** servir (filtre, juge de lieu, second lecteur) si le budget est ouvert. Ce n’est plus réservé aux PoE.
-- TinyFish Search / Fetch : outils normaux. Agent : dernier recours, compteur, cap.
+- Evidence = the project page (`url`) + the site pages it cites.
+- Funders = those of the page / the seed, mergeable, never invented.
+- OSM, Nominatim, GeoNames, MPA polygons: **help locate**, do not prove the project.
+- Claude Haiku **may** serve (filter, place judge, second reader) if the budget is open. This is no longer reserved for PoE.
+- TinyFish Search / Fetch: normal tools. Agent: last resort, counter, cap.
 
-### 7.3 Géographie
+### 7.3 Geography
 
-Un site publié a un GPS **du lieu d’action** :
+A published site has a GPS **of the action place**:
 
-- déjà en mer, ou sur le littoral / havre (quelques kilomètres, seuil **configurable**, défaut serré ~15 km) ;
-- le point reste **là où le géocodeur l’a trouvé** — on ne le fait pas glisser vers l’eau ;
-- trop à l’intérieur, HQ, (0,0), bassin océanique aléatoire : `unlocated` ;
-- plusieurs sites = plusieurs géométries rattachées au même `project_id`.
+- already at sea, or on the shoreline / harbour (a few kilometres, **configurable** threshold, tight default ~15 km);
+- the point stays **where the geocoder found it** — we do not slide it toward the water;
+- too inland, HQ, (0,0), random ocean basin: `unlocated`;
+- several sites = several geometries attached to the same `project_id`.
 
-### 7.4 Carte et runs
+### 7.4 Map and runs
 
-- `projects` : **aucune purge**. Upsert non destructif à la **promotion** seulement.
-- Tout crawl / swarm écrit dans `project_run_*`.
-- `clear_db` et `DELETE /api/projects` : **supprimés** (API 410 / 400, plus de case Console).
-- Import GeoJSON : skip URL connue, fusion, pas d’écrasement GPS v1 sauf revue.
+- `projects`: **no purge**. Non-destructive upsert at **promotion** only.
+- Every crawl / swarm writes into `project_run_*`.
+- `clear_db` and `DELETE /api/projects`: **removed** (API 410 / 400, no more Console checkbox).
+- GeoJSON import: skip known URL, merge, no overwrite of v1 GPS except review.
 
-### 7.5 Règles hors du code compilé
+### 7.5 Rules outside compiled code
 
-Seuils ML (0,85 / 0,12), `min_marine_score`, `max_inland_km`, plafonds TinyFish Agent, `max_partner_orgs` : **`settings` + éventuellement `backend/data/project_rules.json`**. Changer une règle ne doit pas exiger un commit Python, seulement un réglage.
-
----
-
-## 8. Sources et outils
-
-### 8.1 Preuves (pages)
-
-| Outil | Rôle | Ce que ce n’est pas |
-|-------|------|---------------------|
-| Pages projet / sites | Preuve du projet et des lieux | — |
-| Crawler HTTP N1 | Listings simples, gratuit | Pagination JS |
-| TinyFish **Search** | Trouver listings et pages site | Pas Agent |
-| TinyFish **Fetch** | Miroir de page (gratuit, quota) | Pas Agent |
-| TinyFish **Agent** | JS / pagination si Search+Fetch+crawler = 0 | Moteur quotidien |
-| Cascade N1/N2/N3 | Texte (trafilatura ∥ Readability → Chromium → miroir) | N’invente pas |
-| OpenRouter | Extraction, gatekeeper zone grise | — |
-| **Claude** | Juge de lieu / second lecteur, budget partagé | Pas obligatoire |
-| RAG local | Pages longues | Pas un GPS |
-
-### 8.2 Signaux (graines et contrôle)
-
-| Outil | Rôle | Attention |
-|-------|------|-----------|
-| Carte v1 | 4 463 projets, ~861 financeurs | Ne jamais l’écraser ; snapped/fallback → revue |
-| MasterSeeds élargis | Union des financeurs v1 + 21 listings curés | URL de listing parfois inconnue : à découvrir |
-| DeepLinkCache | URLs déjà vues | Homes possibles |
-| Signalements | Skipper, `Community Report` | Même contrat de site |
-| Nominatim / GeoNames | Lieu nommé | HQ et villes : à filtrer |
-| Polygones AMP (ex-`/api/mpa`) | Indice de géocodage d’un nom d’AMP | Pas une preuve de projet ; couche carte toujours hors livrable |
-| `dedup_core` | URL, ou nom+distance | Fusionner tous les champs vides (`merge_docs`) |
-
-### 8.3 Exclus de la découverte
-
-`CRAWL_BLACKLIST` (configurable) : contact, about, donate, news, shop, jobs…
+ML thresholds (0.85 / 0.12), `min_marine_score`, `max_inland_km`, TinyFish Agent ceilings, `max_partner_orgs`: **`settings` + optionally `backend/data/project_rules.json`**. Changing a rule must not require a Python commit, only a setting.
 
 ---
 
-## 9. Le code — où vit chaque brique
+## 8. Sources and tools
 
-Aujourd’hui (à faire évoluer, § 14) :
+### 8.1 Evidence (pages)
 
-| Fichier | Rôle actuel | Cible v2 |
-|---------|-------------|----------|
-| `services/swarm_pipeline.py` | Découvre + **écrit `projects`** | Découvre + écrit **`project_run_*`** ; plus de snap / fallback |
-| `routers/swarm.py` | deploy (`clear_db`), Force Extract | `clear_db` refusé ; Force Extract = même pipeline, gatekeeper, run |
-| `routers/projects.py` | liste, import, enrich, `DELETE` | `DELETE` → 410 ; enrich ne snap pas ; sites[] |
-| `static_data/seeds.py` | 21 portails | Chargeur des ~861 (`data/master_seeds.json`) |
-| `core/llm.py` | `extract_project`, gatekeeper | Sites multiples ; seuils lus dans settings ; Claude optionnel |
-| `core/geo.py` | `snap_to_ocean`, `ocean_fallback_coords` | Conservés pour d’autres usages / debug ; **pipeline Projets ne les appelle plus** |
-| `core/tinyfish.py` | Agent + Search/Fetch | Search/Fetch d’abord ; Agent capé |
-| `services/poe_runs.py` | Modèle de run isolé | **Calquer** `project_runs.py` |
+| Tool | Role | What it is not |
+|------|------|----------------|
+| Project / site pages | Evidence of the project and the places | — |
+| HTTP crawler N1 | Simple listings, free | JS pagination |
+| TinyFish **Search** | Find listings and site pages | Not Agent |
+| TinyFish **Fetch** | Page mirror (free, quota) | Not Agent |
+| TinyFish **Agent** | JS / pagination if Search+Fetch+crawler = 0 | Daily engine |
+| N1/N2/N3 cascade | Text (trafilatura ∥ Readability → Chromium → mirror) | Does not invent |
+| OpenRouter | Extraction, grey-zone gatekeeper | — |
+| **Claude** | Place judge / second reader, shared budget | Not mandatory |
+| Local RAG | Long pages | Not a GPS |
 
-Frontend : `SwarmPanel`, `ProjectList`, `useProjectsLayer`, `ProjectsCard`, `ReportModal`, `AuditView`. Cible : case clear_db **disparue** ; écran revue ; un projet = plusieurs marqueurs.
+### 8.2 Signals (seeds and control)
 
----
+| Tool | Role | Caution |
+|------|------|---------|
+| v1 map | 4,463 projects, ~861 funders | Never overwrite it; snapped/fallback → review |
+| Widened MasterSeeds | Union of v1 funders + 21 curated listings | Listing URL sometimes unknown: to discover |
+| DeepLinkCache | URLs already seen | Homes possible |
+| Reports | Skipper, `Community Report` | Same site contract |
+| Nominatim / GeoNames | Named place | HQ and cities: to filter |
+| MPA polygons (ex-`/api/mpa`) | Geocoding hint for an MPA name | Not project evidence; map layer still out of deliverable |
+| `dedup_core` | URL, or name+distance | Merge all empty fields (`merge_docs`) |
 
-## 10. Score S_ocean
+### 8.3 Excluded from discovery
 
-Faisceau 0–1 (extracteur ou heuristique). Le seuil `min_marine_score` coupe à l’**entrée**. Il ne réécrit pas la v1.
-
-Nouveau signal, distinct : **`site_ok`** (bool + raison) — le lieu est-il assez précis et accessible en bateau ? Sans `site_ok`, pas de publication, même si S_ocean est haut.
-
----
-
-## 11. Contraintes dures
-
-1. **Trésor.** 4 463 projets + 1 171+ PoE : aucune purge.
-2. **Site visitable.** Pas de point sans lieu d’action accessible en bateau.
-3. **Pas de rustine GPS.** Ni snap, ni fallback océan, ni HQ.
-4. **Runs isolés.** Le swarm ne touche pas `projects`.
-5. **Purges supprimées.** Plus de `clear_db`, plus de `DELETE /api/projects`.
-6. **TinyFish Agent = scalpel.** Search/Fetch d’abord.
-7. **Claude autorisé** pour les Projets si le budget est ouvert.
-8. **Règles configurables.** Pas de magie 0,85 / 0,12 / 500 km dans le source.
-9. Carte **indicative**. Un point n’est pas le polygone de l’AMP.
+`CRAWL_BLACKLIST` (configurable): contact, about, donate, news, shop, jobs…
 
 ---
 
-## 12. Critères d’acceptation
+## 9. The code — where each piece lives
 
-Pour un **financeur** :
+Today (to evolve, § 14):
 
-1. Fiche portail (nom, listing ou « listing inconnu », dernier scan).
-2. Chaque **site** publié : nom, GPS du lieu d’action, URL, financeurs, pas HQ, pas snapped, pas fallback.
-3. Les pages génériques / programmes sans lieu : `unlocated` ou `rejected`, pas sur la carte.
-4. Un programme à 4 îles → jusqu’à 4 points, même `project_id`.
-5. Popup : URL + lieu + S_ocean. Le visiteur comprend où aller.
-6. La v1 n’a perdu aucun document, sauf rejet **écrit** en revue.
+| File | Current role | v2 target |
+|------|--------------|-----------|
+| `services/swarm_pipeline.py` | Discovers + **writes `projects`** | Discovers + writes **`project_run_*`**; no more snap / fallback |
+| `routers/swarm.py` | deploy (`clear_db`), Force Extract | `clear_db` refused; Force Extract = same pipeline, gatekeeper, run |
+| `routers/projects.py` | list, import, enrich, `DELETE` | `DELETE` → 410; enrich does not snap; sites[] |
+| `static_data/seeds.py` | 21 portals | Loader of the ~861 (`data/master_seeds.json`) |
+| `core/llm.py` | `extract_project`, gatekeeper | Multiple sites; thresholds read from settings; optional Claude |
+| `core/geo.py` | `snap_to_ocean`, `ocean_fallback_coords` | Kept for other uses / debug; **Projects pipeline no longer calls them** |
+| `core/tinyfish.py` | Agent + Search/Fetch | Search/Fetch first; capped Agent |
+| `services/poe_runs.py` | Isolated-run model | **Copy** `project_runs.py` |
 
-Pour un **run** : `wrote_projects: false` jusqu’à promotion ; compteurs `sites` / `unlocated` / `rejected` ; pas d’appel à `snap_to_ocean` ni `ocean_fallback_coords`.
+Frontend: `SwarmPanel`, `ProjectList`, `useProjectsLayer`, `ProjectsCard`, `ReportModal`, `AuditView`. Target: clear_db checkbox **gone**; review screen; one project = several markers.
 
 ---
 
-## 13. État actuel et écarts
+## 10. S_ocean score
 
-### Déjà là
+Bundle 0–1 (extractor or heuristic). The `min_marine_score` threshold cuts at **entry**. It does not rewrite v1.
 
-- Swarm Top-Down 21 seeds, crawler, TinyFish Agent de secours, DeepLinkCache, saturation.
-- Gatekeeper ML → LLM → heuristique, extraction JSON, catégories 9 familles.
-- Carte, filtres, signalement, enrich ↻ (re-texte, **pas** le GPS).
-- Import/export GeoJSON, seed 4 463.
+New, distinct signal: **`site_ok`** (bool + reason) — is the place precise enough and accessible by boat? Without `site_ok`, no publication, even if S_ocean is high.
+
+---
+
+## 11. Hard constraints
+
+1. **Treasure.** 4,463 projects + 1,171+ PoE: no purge.
+2. **Visitable site.** No point without an action place accessible by boat.
+3. **No GPS patch.** Neither snap, nor ocean fallback, nor HQ.
+4. **Isolated runs.** The swarm does not touch `projects`.
+5. **Purges removed.** No more `clear_db`, no more `DELETE /api/projects`.
+6. **TinyFish Agent = scalpel.** Search/Fetch first.
+7. **Claude allowed** for Projects if the budget is open.
+8. **Configurable rules.** No magic 0.85 / 0.12 / 500 km in the source.
+9. **Indicative** map. A point is not the MPA polygon.
+
+---
+
+## 12. Acceptance criteria
+
+For a **funder**:
+
+1. Portal sheet (name, listing or “listing unknown”, last scan).
+2. Each published **site**: name, action-place GPS, URL, funders, not HQ, not snapped, not fallback.
+3. Generic pages / programmes without a place: `unlocated` or `rejected`, not on the map.
+4. A programme on 4 islands → up to 4 points, same `project_id`.
+5. Popup: URL + place + S_ocean. The visitor understands where to go.
+6. v1 has lost no document, except a rejection **written** in review.
+
+For a **run**: `wrote_projects: false` until promotion; `sites` / `unlocated` / `rejected` counters; no call to `snap_to_ocean` or `ocean_fallback_coords`.
+
+---
+
+## 13. Current state and gaps
+
+### Already there
+
+- Top-Down swarm 21 seeds, crawler, fallback TinyFish Agent, DeepLinkCache, saturation.
+- Gatekeeper ML → LLM → heuristic, JSON extraction, 9-family categories.
+- Map, filters, report, enrich ↻ (re-text, **not** the GPS).
+- GeoJSON import/export, 4,463 seed.
 - Console test/full.
 
-Répartition seed (4 463) : Research 890, Conservation 765, Policy 490, Other 474, MPA 402, Pollution 391, Coastal 389, Fisheries 361, Education 301. ~861 financeurs. ~43 `snapped` dans le GeoJSON d’export (le champ `geo_source` n’y est pas : le fallback océan se voit en base, pas dans le seed).
+Seed breakdown (4,463): Research 890, Conservation 765, Policy 490, Other 474, MPA 402, Pollution 391, Coastal 389, Fisheries 361, Education 301. ~861 funders. ~43 `snapped` in the export GeoJSON (the `geo_source` field is not there: ocean fallback is visible in the database, not in the seed).
 
-### Écarts v2 (ce que le code doit rattraper)
+### v2 gaps (what the code must catch up)
 
-| Écart | Cible |
-|-------|--------|
-| Écriture live dans `projects` | `project_run_*` + promotion |
-| `clear_db` / `DELETE` | **Supprimés** |
-| `ocean_fallback` / `snap_to_ocean` dans le swarm | **Plus appelés** ; inland → `unlocated` |
-| 21 MasterSeeds | **~861 financeurs** |
-| Un point par projet | **n sites** |
-| Force Extract sans gatekeeper | Même `_process_url` / run |
-| Dédup = financeurs seulement | `merge_docs` |
-| Seuils en dur | `settings` / `project_rules.json` |
-| Claude Projets « interdit » | Autorisé si budget |
-| Agent TinyFish trop tôt | Search/Fetch d’abord |
-| Pas d’UI revue | File + promouvoir |
-| Catégories figées | Entraînables plus tard (**non prioritaire**) |
-| Télémétrie sans `dataset` | Champ `projects` (cosmétique) |
-| `/api/mpa` 410 | Réutiliser les polygones **en coulisse** pour géocoder un nom d’AMP |
+| Gap | Target |
+|-----|--------|
+| Live write into `projects` | `project_run_*` + promotion |
+| `clear_db` / `DELETE` | **Removed** |
+| `ocean_fallback` / `snap_to_ocean` in the swarm | **No longer called**; inland → `unlocated` |
+| 21 MasterSeeds | **~861 funders** |
+| One point per project | **n sites** |
+| Force Extract without gatekeeper | Same `_process_url` / run |
+| Dedup = funders only | `merge_docs` |
+| Hard-coded thresholds | `settings` / `project_rules.json` |
+| Projects Claude “forbidden” | Allowed if budget |
+| TinyFish Agent too early | Search/Fetch first |
+| No review UI | Queue + promote |
+| Frozen categories | Trainable later (**not a priority**) |
+| Telemetry without `dataset` | `projects` field (cosmetic) |
+| `/api/mpa` 410 | Reuse the polygons **behind the scenes** to geocode an MPA name |
 
 ---
 
-## 14. Plan d’implémentation
+## 14. Implementation plan
 
-Quatre phases. On ne relance **aucun** swarm mondial sur `projects` avant la phase B.
+Four phases. We relaunch **no** world swarm on `projects` before phase B.
 
-### Phase A — Ne plus casser le contrat (en premier)
+### Phase A — Stop breaking the contract (first)
 
-Objectif : le prochain clic Deploy ne peut plus vider la base ni poser un îlot fantôme.
+Goal: the next Deploy click can no longer empty the database nor place a ghost islet.
 
-| Tâche | Fichiers | Détail |
-|-------|----------|--------|
-| A1. Tuer les purges | `routers/projects.py`, `routers/swarm.py`, `swarm_pipeline.py`, `ProjectsCard.js` | `DELETE /api/projects` → **410**. `clear_db=true` → **400**, ignoré dans `deploy`. Case Console retirée. |
-| A2. Plus de rustine GPS | `swarm_pipeline.py`, `routers/swarm.py` | Ne plus appeler `snap_to_ocean` ni `ocean_fallback_coords`. Si pas de GPS de lieu, ou point trop inland : `failed` stage `unlocated`. Point côtier : on **garde** le GPS géocodé (terre de havre OK). |
-| A3. Règles hors code | `config.py`, `routers/misc.py`, `core/llm.py`, `core/ml.py` | `project_rules` dans settings : `gatekeeper_accept`, `gatekeeper_reject`, `min_marine_score`, `max_inland_km` (défaut 15), `allow_tinyfish_agent`, `max_partner_orgs`. `core` lit ces clés. |
-| A4. Tests | `tests/test_project_contract.py` | 410 sur DELETE ; 400 sur clear_db ; process_url / helper : inland → pas d’insert ; pas d’import de `ocean_fallback` dans le chemin publish. |
+| Task | Files | Detail |
+|------|-------|--------|
+| A1. Kill the purges | `routers/projects.py`, `routers/swarm.py`, `swarm_pipeline.py`, `ProjectsCard.js` | `DELETE /api/projects` → **410**. `clear_db=true` → **400**, ignored in `deploy`. Console checkbox removed. |
+| A2. No more GPS patch | `swarm_pipeline.py`, `routers/swarm.py` | No longer call `snap_to_ocean` or `ocean_fallback_coords`. If no place GPS, or point too inland: `failed` stage `unlocated`. Coastal point: we **keep** the geocoded GPS (harbour land OK). |
+| A3. Rules outside code | `config.py`, `routers/misc.py`, `core/llm.py`, `core/ml.py` | `project_rules` in settings: `gatekeeper_accept`, `gatekeeper_reject`, `min_marine_score`, `max_inland_km` (default 15), `allow_tinyfish_agent`, `max_partner_orgs`. `core` reads these keys. |
+| A4. Tests | `tests/test_project_contract.py` | 410 on DELETE; 400 on clear_db; process_url / helper: inland → no insert; no import of `ocean_fallback` on the publish path. |
 
-Critère de sortie A : pytest du contrat vert ; l’UI n’offre plus « vider la base ».
+Exit criterion A: contract pytest green; the UI no longer offers “empty the database”.
 
-### Phase B — Runs isolés (avant tout nouveau crawl)
+### Phase B — Isolated runs (before any new crawl)
 
-Calquer Formalités. Harmoniser les fonctions de run entre modes (même empreinte, mêmes événements, même Console).
+Copy Formalities. Harmonise run functions across modes (same fingerprint, same events, same Console).
 
-| Tâche | Fichiers | Détail |
-|-------|----------|--------|
-| B1. Collections | `project_runs.py` (nouveau), `main.py` indexes | `project_runs`, `project_run_projects` (1 ligne = 1 site ou 1 projet+sites[]), `project_run_events`. `wrote_projects: false`. |
-| B2. Brancher le swarm | `swarm_pipeline.py` | `deploy` prend `run_id` ; insert → `project_run_projects`. Plus d’`insert_one` dans `projects`. |
-| B3. API | `routers/project_runs.py` ou `/api/projects/runs` | POST run, GET status/diff/report, POST promote (plus tard, manuel). |
-| B4. Console | `ProjectsCard.js`, `FormalitiesCard` comme modèle | Lancer un run, pas « Deploy sur la carte ». |
-| B5. Force Extract / signalements | `swarm.py`, `projects.py` | Même pipeline, même run (ou run `enrich`). Gatekeeper obligatoire. |
-| B6. `dataset: "projects"` | `telemetry()` | Alignement stats. |
+| Task | Files | Detail |
+|------|-------|--------|
+| B1. Collections | `project_runs.py` (new), `main.py` indexes | `project_runs`, `project_run_projects` (1 line = 1 site or 1 project+sites[]), `project_run_events`. `wrote_projects: false`. |
+| B2. Wire the swarm | `swarm_pipeline.py` | `deploy` takes `run_id`; insert → `project_run_projects`. No more `insert_one` into `projects`. |
+| B3. API | `routers/project_runs.py` or `/api/projects/runs` | POST run, GET status/diff/report, POST promote (later, manual). |
+| B4. Console | `ProjectsCard.js`, `FormalitiesCard` as model | Launch a run, not “Deploy onto the map”. |
+| B5. Force Extract / reports | `swarm.py`, `projects.py` | Same pipeline, same run (or `enrich` run). Gatekeeper mandatory. |
+| B6. `dataset: "projects"` | `telemetry()` | Stats alignment. |
 
-Critère de sortie B : un run test (3 seeds) remplit `project_run_*`, `projects.count` inchangé.
+Exit criterion B: a test run (3 seeds) fills `project_run_*`, `projects.count` unchanged.
 
-### Phase C — Lieux d’action (cœur métier)
+### Phase C — Action places (business core)
 
-| Tâche | Fichiers | Détail |
-|-------|----------|--------|
-| C1. Schéma `sites[]` | `llm.py` `extract_project` | JSON : `sites: [{name, location, lat, lon, evidence}]` + financeurs[]. Un programme mondial → plusieurs sites ou `sites: []` + `unlocated`. |
-| C2. Juge de lieu | `project_geocode.py` (nouveau) | Refus HQ (ville du financeur, mots headquarters/siège). Nominatim + GeoNames. Claude ou OpenRouter : « ce toponyme est-il un lieu d’action marin visitable ? ». Polygone AMP si le nom matche (géocodage, pas couche carte). |
-| C3. Multi-points | `project_to_feature` / couche Leaflet | Un `project_id`, *n* Features, ou GeometryCollection. Popup : nom du **site**. |
-| C4. TinyFish | `_discover` | Crawler → Search → Fetch ; Agent si `allow_tinyfish_agent` et toujours 0. |
-| C5. MasterSeeds 861 | script `scripts/export_master_seeds.py`, `data/master_seeds.json` | Union distincte de `funders` + 21 URLs curées, **sans priorité**. Listing URL : domaine le plus fréquent des projets de ce financeur, ou à découvrir. Plafond `max_partner_orgs` = nouveautés Follow the Money seulement. |
-| C6. Dédup | `_dedup_merge` | Appeler `merge_docs`. |
+| Task | Files | Detail |
+|------|-------|--------|
+| C1. `sites[]` schema | `llm.py` `extract_project` | JSON: `sites: [{name, location, lat, lon, evidence}]` + financeurs[]. A world programme → several sites or `sites: []` + `unlocated`. |
+| C2. Place judge | `project_geocode.py` (new) | Refuse HQ (funder city, headquarters/siège words). Nominatim + GeoNames. Claude or OpenRouter: “is this toponym a visitable marine action place?”. MPA polygon if the name matches (geocoding, not map layer). |
+| C3. Multi-points | `project_to_feature` / Leaflet layer | One `project_id`, *n* Features, or GeometryCollection. Popup: **site** name. |
+| C4. TinyFish | `_discover` | Crawler → Search → Fetch; Agent if `allow_tinyfish_agent` and still 0. |
+| C5. MasterSeeds 861 | script `scripts/export_master_seeds.py`, `data/master_seeds.json` | Distinct union of `funders` + 21 curated URLs, **without priority**. Listing URL: most frequent domain of this funder’s projects, or to discover. Ceiling `max_partner_orgs` = Follow the Money novelties only. |
+| C6. Dedup | `_dedup_merge` | Call `merge_docs`. |
 
-Critère de sortie C : sur un échantillon (Hope Spots, un programme multi-îles, un siège Pew), les sites publiés dans le **run** sont visitables ; 0 HQ ; 0 fallback.
+Exit criterion C: on a sample (Hope Spots, a multi-island programme, a Pew headquarters), sites published in the **run** are visitable; 0 HQ; 0 fallback.
 
-### Phase D — Revue, Gold, ML
+### Phase D — Review, Gold, ML
 
-| Tâche | Fichiers | Détail |
-|-------|----------|--------|
-| D1. File de revue | collection `project_review`, onglet Review (`docs/CAHIER_DES_CHARGES_REVIEW.md`) | Files : `snapped` v1, `fallback`, `unlocated`, `hq_suspect`, discordances run↔v1. Actions : accepter site, éditer GPS, rejeter, **Gold** (fiche acceptée sur la carte). |
-| D2. Gold | export | v1 **moins** snapped **moins** fallback, **plus** les acceptés revue. Sert au gatekeeper. |
-| D3. Ré-entraîner le gatekeeper | `ml.py` | **Après** D2, pas avant le premier run isolé. Le modèle v1 est biaisé ; le relancer maintenant recopie les sièges. |
-| D4. Catégories | plus tard | Entraîner les indices `normalize_category`. **Non prioritaire** (les 9 familles restent un bonus d’affichage). |
+| Task | Files | Detail |
+|------|-------|--------|
+| D1. Review queue | collection `project_review`, Review tab (`docs/CAHIER_DES_CHARGES_REVIEW.md`) | Queues: v1 `snapped`, `fallback`, `unlocated`, `hq_suspect`, run↔v1 mismatches. Actions: accept site, edit GPS, reject, **Gold** (accepted sheet on the map). |
+| D2. Gold | export | v1 **minus** snapped **minus** fallback, **plus** review accepted. Serves the gatekeeper. |
+| D3. Retrain the gatekeeper | `ml.py` | **After** D2, not before the first isolated run. The v1 model is biased; relaunching it now recopies headquarters. |
+| D4. Categories | later | Train the `normalize_category` indices. **Not a priority** (the 9 families remain a display bonus). |
 
-Critère de sortie D : un opérateur peut nettoyer la v1 sans script Mongo ; un Gold exportable existe.
+Exit criterion D: an operator can clean v1 without a Mongo script; an exportable Gold exists.
 
-### Ordre et dépendances
+### Order and dependencies
 
 ```
-A (sûreté) → B (runs) → C (sites + 861 seeds) → D (revue / Gold / ML)
+A (safety) → B (runs) → C (sites + 861 seeds) → D (review / Gold / ML)
                 ↑
-         aucun crawl carte avant B
+         no map crawl before B
 ```
 
-On n’implémente **pas** un « snap borné à 50 km » : la revue a tranché, ce n’est plus une étape.
+We do **not** implement a “snap bounded at 50 km”: the review decided, it is no longer a step.
 
-### Charge d’implémentation (technique, pas calendaire)
+### Implementation load (technical, not calendar)
 
-- **A** : peu de fichiers, risque faible, tests unitaires suffisent.
-- **B** : copie raisonnable du module PoE runs (~même forme, autre collection).
-- **C** : le morceau invasif (prompt, géocode, GeoJSON multi-points, seeds).
-- **D** : surtout frontend + file Mongo.
+- **A**: few files, low risk, unit tests suffice.
+- **B**: reasonable copy of the PoE runs module (~same shape, other collection).
+- **C**: the invasive piece (prompt, geocode, multi-point GeoJSON, seeds).
+- **D**: mostly frontend + Mongo queue.
 
 ---
 
-## 15. Documents et conversations dont ce cahier hérite
+## 15. Documents and conversations this specification inherits from
 
 - `docs/PRD.md`, `docs/ARCHITECTURE.md`, `README.md`.
-- `docs/CAHIER_DES_CHARGES_POE.md` — même forme ; **modèle des runs** à calquer.
-- `seed/projects.geojson` — 4 463 features.
-- CDC Projets **v1.0** (7 sept. 2026) et **32 commentaires** Berry-Mappemonde (même jour) — § 29.
+- `docs/CAHIER_DES_CHARGES_POE.md` — same form; **run model** to copy.
+- `seed/projects.geojson` — 4,463 features.
+- Projects specification **v1.0** (7 Sep 2026) and **32** Berry-Mappemonde **comments** (same day) — § 29.
 
-Ce cahier **v2 prime** sur la v1 et sur le code dès qu’il y a conflit.
-
----
-
-## 16. Qui fait quoi
-
-| Acteur | Fait | Ne fait pas |
-|--------|------|-------------|
-| **Visiteur** | Carte, filtres, URL, signalement | Swarm, revue, purge |
-| **Opérateur** | Run isolé, revue, promotion, import | `clear_db`, Force All à l’aveugle |
-| **Gatekeeper** | Page marine vs non | Inventer un site |
-| **Juge de lieu** | Ce toponyme est-il visitable en bateau ? | Recaler vers n’importe quelle mer |
-| **Réviseur** | Tranche snapped / HQ / unlocated, goldise un échantillon | Goldiser tout le seed d’un coup |
-| **Pipeline** | Découvre, extrait, propose des sites dans un run | Toucher `projects` tout seul |
+This **v2 specification prevails** over v1 and over the code as soon as there is a conflict.
 
 ---
 
-## 17. Cycle de vie d’un projet
+## 16. Who does what
+
+| Actor | Does | Does not |
+|-------|------|----------|
+| **Visitor** | Map, filters, URL, report | Swarm, review, purge |
+| **Operator** | Isolated run, review, promotion, import | `clear_db`, Force All blindly |
+| **Gatekeeper** | Marine page vs not | Invent a site |
+| **Place judge** | Is this toponym visitable by boat? | Snap toward any sea |
+| **Reviewer** | Decides snapped / HQ / unlocated, goldises a sample | Goldise the whole seed at once |
+| **Pipeline** | Discovers, extracts, proposes sites in a run | Touch `projects` by itself |
+
+---
+
+## 17. Lifecycle of a project
 
 ```
-URL (listing 861 / cache / signalement)
-    → texte (cascade, pas un challenge)
-        → gatekeeper marin
-            → sites extraits (0..n)
-                → chaque site géocodé (lieu d’action, pas HQ)
-                    → site_ok → écrit dans le run
-                    → sinon unlocated
-                        → revue humaine
-                            → promu vers projects (n Features)
+URL (listing 861 / cache / report)
+    → text (cascade, not a challenge)
+        → marine gatekeeper
+            → extracted sites (0..n)
+                → each site geocoded (action place, not HQ)
+                    → site_ok → written in the run
+                    → else unlocated
+                        → human review
+                            → promoted to projects (n Features)
 ```
 
-| État | Sens | Où |
-|------|------|-----|
-| `cached` | URL vue | `deeplink_pages` |
-| `unlocated` | Marin mais pas de site visitable | run / `failed` |
-| `rejected` | Pas marin / page générique | `failed` gatekeeper |
-| `run_site` | Site proposé | `project_run_projects` |
-| `review` | Discordance ou v1 snapped/fallback | `project_review` |
-| **carte** | Promu | `projects` (+ `sites[]`) |
-| `reported` | Signalement | `reported_projects` |
+| State | Meaning | Where |
+|-------|---------|-------|
+| `cached` | URL seen | `deeplink_pages` |
+| `unlocated` | Marine but no visitable site | run / `failed` |
+| `rejected` | Not marine / generic page | `failed` gatekeeper |
+| `run_site` | Proposed site | `project_run_projects` |
+| `review` | Mismatch or v1 snapped/fallback | `project_review` |
+| **map** | Promoted | `projects` (+ `sites[]`) |
+| `reported` | Report | `reported_projects` |
 
-Dédup : même URL, ou même site (nom+<500 m). Fusion `merge_docs` + union des financeurs.
+Dedup: same URL, or same site (name+<500 m). `merge_docs` fusion + union of funders.
 
 ---
 
-## 18. Le second livrable : les portails financeurs
+## 18. The second deliverable: funder portals
 
-Une fiche par financeur (~861+) :
+One sheet per funder (~861+):
 
-| Champ | Sens |
-|-------|------|
-| `name` | Nom tel que vu en base / page |
-| `url` | Listing si connu, sinon domaine déduit |
-| `source` | `curated` · `v1` · `follow_the_money` — pas de rang entre eux |
-| `last_scan` / `urls_found` | Découverte |
+| Field | Meaning |
+|-------|---------|
+| `name` | Name as seen in the database / page |
+| `url` | Listing if known, otherwise inferred domain |
+| `source` | `curated` · `v1` · `follow_the_money` — no rank among them |
+| `last_scan` / `urls_found` | Discovery |
 | `listing_kind` | `projects_index` · `unknown` · … |
 
-Follow the Money **écrit dans cette table** (plus une liste parallèle plafonnée à 5 en dur). Le plafond settings évite la dérive, il n’empêche pas d’intégrer une fondation déjà vue en v1.
+Follow the Money **writes into this table** (no longer a parallel list hard-capped at 5). The settings ceiling avoids drift; it does not prevent integrating a foundation already seen in v1.
 
 ---
 
-## 19. Algorithme (découverte, sites, Follow the Money)
+## 19. Algorithm (discovery, sites, Follow the Money)
 
 ### Listing (L)
 
-Financeur → pages projet (crawler, Search, Fetch ; Agent si 0 et autorisé).
+Funder → project pages (crawler, Search, Fetch; Agent if 0 and allowed).
 
-### Marin + sites (M)
+### Marine + sites (M)
 
 Page → gatekeeper → extract `sites[]`.  
-Pour chaque site : juge de lieu → GPS ou `unlocated`.
+For each site: place judge → GPS or `unlocated`.
 
-### Décision
+### Decision
 
-| L | M (au moins 1 site_ok) | Décision |
+| L | M (at least 1 site_ok) | Decision |
 |---|------------------------|----------|
-| oui | oui | sites dans le run |
-| oui | non | `unlocated` / `rejected` |
-| non | oui | signalement / partenaire : idem |
-| non | non | ignoré |
+| yes | yes | sites in the run |
+| yes | no | `unlocated` / `rejected` |
+| no | yes | report / partner: same |
+| no | no | ignored |
 
-Programme mondial : M = la **liste des lieux d’action**, pas « global ».
+World programme: M = the **list of action places**, not “global”.
 
 ---
 
-## 20. Modèle de données
+## 20. Data model
 
-### Carte v1 (ne pas écraser)
+### v1 map (do not overwrite)
 
-`projects` : aujourd’hui 1 document ≈ 1 point. Cible : 1 document projet + `sites: [{name, lat, lon, geo_source, site_ok}]`.  
-Export GeoJSON : **une Feature par site** (même `project_id`).
+`projects`: today 1 document ≈ 1 point. Target: 1 project document + `sites: [{name, lat, lon, geo_source, site_ok}]`.  
+GeoJSON export: **one Feature per site** (same `project_id`).
 
-Champs à conserver : `title`, `url`, `funders`, `description`, `s_ocean`, `category_group`, `image`.  
-`snapped` / `geo_source=ocean-region-fallback` : flags de revue, plus des sources de publication.
+Fields to keep: `title`, `url`, `funders`, `description`, `s_ocean`, `category_group`, `image`.  
+`snapped` / `geo_source=ocean-region-fallback`: review flags, no longer publication sources.
 
-### Runs (à créer)
+### Runs (to create)
 
-| Collection | Une ligne = |
-|------------|-------------|
-| `project_runs` | un run (comme `poe_runs`) |
-| `project_run_projects` | un projet/site du run |
-| `project_run_events` | micro-étapes |
-| `project_review` | file de revue |
+| Collection | One line = |
+|------------|------------|
+| `project_runs` | one run (like `poe_runs`) |
+| `project_run_projects` | one project/site of the run |
+| `project_run_events` | micro-steps |
+| `project_review` | review queue |
 
-Réutiliser `run_fingerprint`, `events.RunRecorder`, `TaskState`.
+Reuse `run_fingerprint`, `events.RunRecorder`, `TaskState`.
 
-### Ailleurs
+### Elsewhere
 
 `deeplink_pages`, `discovery_state`, `telemetry` (+ `dataset`), `failed`, `reported_projects`, `settings`, `geocode_cache`.
 
-Fichiers : `data/master_seeds.json`, `data/project_rules.json` (défauts), `seed/projects.geojson`.
+Files: `data/master_seeds.json`, `data/project_rules.json` (defaults), `seed/projects.geojson`.
 
 ---
 
-## 21. Ce que voit l’utilisateur
+## 21. What the user sees
 
-**Visiteur.** Carte cyan, clusters, un marqueur **par site**, recherche, financeur, légende catégorie (bonus), liste, signalement, popup (lieu + URL + S_ocean). Plus de badge « snapped » comme qualité : un snapped v1 est à revoir, pas à vanter.
+**Visitor.** Cyan map, clusters, one marker **per site**, search, funder, category legend (bonus), list, report, popup (place + URL + S_ocean). No more “snapped” badge as quality: a v1 snapped is to review, not to boast.
 
-**Opérateur.** Lancer un **run**, logs, télémétrie. Plus de case « vider la base ». File de revue + promouvoir. Import/export. Réglages : seuils, `max_inland_km`, Agent on/off, budget Claude.
+**Operator.** Launch a **run**, logs, telemetry. No more “empty the database” checkbox. Review queue + promote. Import/export. Settings: thresholds, `max_inland_km`, Agent on/off, Claude budget.
 
-Manques actuels (= phase B/D) : runs, revue, multi-sites, fiche 861 portails.
+Current gaps (= phase B/D): runs, review, multi-sites, 861-portal sheet.
 
 ---
 
-## 22. Inventaire des MasterSeeds
+## 22. MasterSeeds inventory
 
-**Cible : ~861 financeurs** issus de la v1, pas 21 lignes.
+**Target: ~861 funders** from v1, not 21 rows.
 
-Les 21 listings curés et les ~840 financeurs v1 sont **à égalité** dans la file (plus de priorité 1 / 2). Les 21 fournissent surtout une URL de listing déjà connue :
+The 21 curated listings and the ~840 v1 funders are **equal** in the queue (no more priority 1 / 2). The 21 mainly provide an already-known listing URL:
 
 The Ocean Foundation, Oceana, Blue Marine Foundation, Fondation de la Mer, Pure Ocean, Fondation CMA CGM, IFREMER, Prince Albert II, Institut Paul Ricard, SHOM, CORDIS, Coral Reef Alliance, Mission Blue, Seacology, Ocean Conservancy, Pew, WWF Oceans, Packard, Rare Fish Forever, Fauna & Flora Oceans, WCS Marine.
 
-Les autres ~840 : nom tel qu’en base, URL de listing = domaine le plus fréquent de leurs projets v1 (sinon à découvrir via Search `"{name}" marine projects`).
+The other ~840: name as in the database, listing URL = most frequent domain of their v1 projects (otherwise to discover via Search `"{name}" marine projects`).
 
-SHOM / IFREMER : instituts — 0 URL projet reste un succès honnête s’il n’y a pas de listing d’actions.
-
----
-
-## 23. Gatekeeper et taxonomie
-
-Trois étages, **seuils dans settings** :
-
-1. ML local si assez entraîné : accept / reject selon `gatekeeper_accept` / `gatekeeper_reject` (défauts historiques 0,85 / 0,12).
-2. OpenRouter ou Claude (si budget).
-3. Heuristique mots-clés + `min_marine_score`.
-
-Ré-entraînement : **après** Gold (phase D), pas pour « débloquer » un run.
-
-Neuf familles : utiles à l’affichage, **chantier non prioritaire**. Plus tard : entraîner les indices.
+SHOM / IFREMER: institutes — 0 project URL remains an honest success if there is no action listing.
 
 ---
 
-## 24. Exemples concrets
+## 23. Gatekeeper and taxonomy
 
-**Hope Spot.** Chaque spot = un site visitable. Pas le bureau Mission Blue.
+Three stages, **thresholds in settings**:
 
-**Programme mondial à 4 récifs.** 4 sites, 1 projet, 4 points. Pas un point « Pacifique ».
+1. Local ML if trained enough: accept / reject according to `gatekeeper_accept` / `gatekeeper_reject` (historical defaults 0.85 / 0.12).
+2. OpenRouter or Claude (if budget).
+3. Keyword heuristic + `min_marine_score`.
 
-**Pew / siège Washington.** L = pages projet ; M refuse Washington ; cherche l’AMP / la côte nommée ; sinon `unlocated`.
+Retraining: **after** Gold (phase D), not to “unblock” a run.
 
-**Signalement « Coral Gardeners Moorea ».** Site Moorea si la page le dit. `Community Report` dans `funders`.
-
-**v1 snapped ou fallback.** Invisible comme « bon point » : file de revue, exclu du Gold tant que non accepté.
+Nine families: useful for display, **non-priority work**. Later: train the indices.
 
 ---
 
-## 25. Recette
+## 24. Concrete examples
 
-### Portail / financeur
+**Hope Spot.** Each spot = a visitable site. Not the Mission Blue office.
 
-1. Fiche dans MasterSeeds élargis.
-2. Chaque site carte : GPS d’action, URL, financeurs, `site_ok`.
+**World programme on 4 reefs.** 4 sites, 1 project, 4 points. Not a “Pacific” point.
+
+**Pew / Washington headquarters.** L = project pages; M refuses Washington; seeks the named MPA / coast; otherwise `unlocated`.
+
+**Report “Coral Gardeners Moorea”.** Moorea site if the page says so. `Community Report` in `funders`.
+
+**v1 snapped or fallback.** Invisible as a “good point”: review queue, excluded from Gold until accepted.
+
+---
+
+## 25. Acceptance tests
+
+### Portal / funder
+
+1. Sheet in the widened MasterSeeds.
+2. Each map site: action GPS, URL, funders, `site_ok`.
 3. 0 HQ, 0 fallback, 0 snap, 0 (0,0).
-4. Programme multi-lieux : autant de points que de sites extraits.
-5. Compte `projects` v1 non diminué sans revue écrite.
+4. Multi-place programme: as many points as extracted sites.
+5. v1 `projects` count not decreased without a written review.
 
 ### Run
 
 1. `wrote_projects: false`.
-2. Aucun appel `snap_to_ocean` / `ocean_fallback_coords` dans les traces.
+2. No `snap_to_ocean` / `ocean_fallback_coords` call in the traces.
 3. `clear_db` impossible (400).
-4. Tests : `test_project_contract.py` + suites existantes non-destructives (`>= 4463`).
+4. Tests: `test_project_contract.py` + existing non-destructive suites (`>= 4463`).
 
-### Interdit
+### Forbidden
 
-Relancer un `full` sur la carte. Réintroduire une case purge. « Juste un petit snap ».
+Relaunch a `full` on the map. Reintroduce a purge checkbox. “Just a little snap”.
 
 ```bash
 cd backend && python3 -m pytest tests/test_project_contract.py tests/test_blue_intelligence.py tests/test_import_and_regression.py tests/test_zoom_and_new_features.py tests/test_refactor_core.py -q
@@ -588,95 +588,95 @@ cd backend && python3 -m pytest tests/test_project_contract.py tests/test_blue_i
 
 ---
 
-## 26. Risques
+## 26. Risks
 
-| Risque | Parade |
-|--------|--------|
-| Purge | Fonctions **supprimées** (phase A) |
-| Rustine GPS | Plus d’appel ; revue des v1 sales |
-| HQ | Juge de lieu + liste de villes siège |
-| Programme mondial → 0 point | Extraire *n* sites ; `unlocated` honnête > centroïde |
-| 861 seeds = crawl énorme | Runs isolés, TTL, saturation |
-| TinyFish Agent | Search/Fetch ; flag off |
-| ML v1 biaisé | Ne pas ré-entraîner avant Gold |
-| AMP mal utilisées | Coulisse géocode seulement |
-| Multi-points / perf carte | `max_markers` inchangé ; cluster |
+| Risk | Counter-measure |
+|------|-----------------|
+| Purge | Functions **removed** (phase A) |
+| GPS patch | No more call; review of dirty v1 |
+| HQ | Place judge + headquarters-city list |
+| World programme → 0 point | Extract *n* sites; honest `unlocated` > centroid |
+| 861 seeds = huge crawl | Isolated runs, TTL, saturation |
+| TinyFish Agent | Search/Fetch; flag off |
+| Biased v1 ML | Do not retrain before Gold |
+| MPAs misused | Geocode backstage only |
+| Multi-points / map perf | `max_markers` unchanged; cluster |
 
 ---
 
-## 27. Hors périmètre
+## 27. Out of scope
 
-- Formalités — `docs/CAHIER_DES_CHARGES_POE.md` (on **harmonise** seulement les runs).
-- Marinas / mouillages de la route.
-- Couche polygones AMP **sur la carte** (l’usage géocode est **dans** le périmètre C2).
-- Crowdsourcing PoE.
-- Promotion automatique run → carte.
-- Croisement projet ↔ PoE (P2 PRD).
-- Entraînement des catégories (plus tard).
-- Annuaire de toutes les ONG marines hors financeurs v1 + signalements + Follow the Money.
+- Formalities — `docs/CAHIER_DES_CHARGES_POE.md` (we **harmonise** only the runs).
+- Route marinas / anchorages.
+- MPA polygon layer **on the map** (geocode use is **inside** C2 scope).
+- PoE crowdsourcing.
+- Automatic run → map promotion.
+- Project ↔ PoE crossing (P2 PRD).
+- Category training (later).
+- Directory of all marine NGOs outside v1 funders + reports + Follow the Money.
 
 ---
 
 ## 28. Annexes
 
-### A. Télémétrie
+### A. Telemetry
 
-`SUCCESS` (sites dans le run), `MERGED`, `REJECTED`, `UNLOCATED`, `FAILED`, `CANCELLED`. Champ `dataset: "projects"`.
+`SUCCESS` (sites in the run), `MERGED`, `REJECTED`, `UNLOCATED`, `FAILED`, `CANCELLED`. Field `dataset: "projects"`.
 
-### B. API cible
+### B. Target API
 
-| Méthode | Effet |
-|---------|--------|
-| `GET /api/projects` | Carte (1 Feature / site) |
-| `POST /api/projects/runs` | Run isolé |
-| `POST /api/projects/runs/{id}/promote` | Manuel, plus tard |
-| `POST /api/swarm/deploy` | Devient un run ; `clear_db` → 400 |
+| Method | Effect |
+|--------|--------|
+| `GET /api/projects` | Map (1 Feature / site) |
+| `POST /api/projects/runs` | Isolated run |
+| `POST /api/projects/runs/{id}/promote` | Manual, later |
+| `POST /api/swarm/deploy` | Becomes a run; `clear_db` → 400 |
 | `DELETE /api/projects` | **410** |
-| `POST /api/report-project` | File + prochain run |
+| `POST /api/report-project` | Queue + next run |
 
-### C. Restauration v1
+### C. v1 restoration
 
 ```bash
 curl -X POST http://localhost:8001/api/import/geojson \
   -H "Content-Type: application/json" --data-binary @seed/projects.geojson
 ```
 
-Skip des URLs connues. Pas une purge.
+Skip of known URLs. Not a purge.
 
 ### D. Tests
 
-Actuels : `test_blue_intelligence.py`, `test_import_and_regression.py`, `test_zoom_and_new_features.py`, `test_refactor_core.py`, `test_ml_jobs.py`.  
-À ajouter : `test_project_contract.py` (A), puis tests de runs (B) sur le modèle `test_poe_*`.
+Current: `test_blue_intelligence.py`, `test_import_and_regression.py`, `test_zoom_and_new_features.py`, `test_refactor_core.py`, `test_ml_jobs.py`.  
+To add: `test_project_contract.py` (A), then run tests (B) on the `test_poe_*` model.
 
 ### E. Attribution
 
-Pages des fondations ; OSM / Nominatim / GeoNames ; AMP en indice si réutilisées. Synthèses, pas textes officiels.
+Foundation pages; OSM / Nominatim / GeoNames; MPAs as a hint if reused. Syntheses, not official texts.
 
 ---
 
-## 29. Trace des commentaires de revue (v1 → v2)
+## 29. Trace of the review comments (v1 → v2)
 
-| # | Décision reprise |
-|---|------------------|
-| 0, 6, 7 | Phrase d’ouverture, éco-tourisme, bateau, plusieurs financeurs |
-| 1, 2, 5, 9, 14 | Abandon de `snap_to_ocean` comme publication |
-| 3, 21 | Agent cher ; Search/Fetch d’abord |
-| 4, 15, 20 | Meilleur géocode + Claude autorisé |
-| 8 | *n* sites pour un programme mondial |
-| 10, 16, 22 | Créer `project_run_*`, harmoniser les modes, avant un nouveau run |
-| 11, 27, 24 | Gold à **créer** (v1 − snapped − fallback) ; ré-entraîner **après** |
-| 12, 13, 29 | MasterSeeds = ~861 financeurs |
-| 17 | Supprimer purges (pas seulement les cacher) |
-| 18, 19 | Plus de fallback ; plus de HQ en sortie de géocode |
-| 23 | Télémétrie `dataset` : cosmétique, champ à ajouter (B6) |
-| 25 | AMP = indice de géocodage (C2) |
-| 26 | UI de revue plutôt qu’un snap borné (D1) |
-| 28 | Enrich ↻ = re-texte aujourd’hui ; le GPS se revoit en C/D, pas par snap |
-| 30 | Seuils configurables (A3) |
-| 31 | Catégories : garder, entraîner plus tard, pas prioritaire |
+| # | Decision taken up |
+|---|-------------------|
+| 0, 6, 7 | Opening sentence, eco-tourism, boat, several funders |
+| 1, 2, 5, 9, 14 | Abandonment of `snap_to_ocean` as publication |
+| 3, 21 | Agent expensive; Search/Fetch first |
+| 4, 15, 20 | Better geocode + Claude allowed |
+| 8 | *n* sites for a world programme |
+| 10, 16, 22 | Create `project_run_*`, harmonise the modes, before a new run |
+| 11, 27, 24 | Gold to **create** (v1 − snapped − fallback); retrain **after** |
+| 12, 13, 29 | MasterSeeds = ~861 funders |
+| 17 | Remove purges (not merely hide them) |
+| 18, 19 | No more fallback; no more HQ in geocode output |
+| 23 | Telemetry `dataset`: cosmetic, field to add (B6) |
+| 25 | MPA = geocoding hint (C2) |
+| 26 | Review UI rather than a bounded snap (D1) |
+| 28 | Enrich ↻ = re-text today; GPS is revisited in C/D, not by snap |
+| 30 | Configurable thresholds (A3) |
+| 31 | Categories: keep, train later, not a priority |
 
 ---
 
-Les **chiffres** (15 km, 0,85 / 0,12, 500 m, plafonds…) ne vivent plus seulement ici : catalogue `backend/data/run_rules.json`, principe et intervalle dans `docs/REGLES_PARAMETRES.md`. Un run consigne le snapshot dans `params.rules`.
+The **numbers** (15 km, 0.85 / 0.12, 500 m, ceilings…) no longer live only here: catalogue `backend/data/run_rules.json`, principle and interval in `docs/REGLES_PARAMETRES.md`. A run records the snapshot in `params.rules`.
 
-*Fin du cahier des charges v2. Toute évolution de règle se fait d’abord ici, puis dans le catalogue / le code. L’implémentation suit le § 14, phase A en premier.*
+*End of the v2 specification. Any rule evolution is done first here, then in the catalogue / the code. Implementation follows § 14, phase A first.*
