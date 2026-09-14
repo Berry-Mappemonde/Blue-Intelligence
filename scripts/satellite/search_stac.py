@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Liste 1–2 scènes Sentinel-2 L2A sur le corridor (STAC CDSE).
+"""Liste 1–2 scènes Sentinel-2 L1C sur le corridor (STAC CDSE).
 
+ACOLITE refuse le L2A (correction ESA). Il faut le L1C (image brute).
 N'écrit aucune image. À lancer sur le Mac de l'opérateur.
 """
 from __future__ import annotations
@@ -22,6 +23,7 @@ TOKEN_URL = (
     "/protocol/openid-connect/token"
 )
 STAC_SEARCH = "https://stac.dataspace.copernicus.eu/v1/search"
+DEFAULT_COLLECTION = "sentinel-2-l1c"
 
 
 def access_token() -> str:
@@ -46,10 +48,16 @@ def access_token() -> str:
     return token
 
 
-def search_scenes(token: str, bbox: list[float], limit: int, max_cloud: float) -> list[dict]:
+def search_scenes(
+    token: str,
+    bbox: list[float],
+    limit: int,
+    max_cloud: float,
+    collection: str = DEFAULT_COLLECTION,
+) -> list[dict]:
     end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     body = {
-        "collections": ["sentinel-2-l2a"],
+        "collections": [collection],
         "bbox": bbox,
         "datetime": f"2025-01-01T00:00:00Z/{end}",
         "limit": limit,
@@ -90,14 +98,20 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Recherche STAC Sentinel-2 (pas de téléchargement)")
     p.add_argument("--limit", type=int, default=2)
     p.add_argument("--max-cloud", type=float, default=20)
+    p.add_argument(
+        "--collection",
+        default=DEFAULT_COLLECTION,
+        help="Collection STAC (défaut : sentinel-2-l1c, requis par ACOLITE)",
+    )
     p.add_argument("--out", type=Path, help="Écrire le manifeste JSON ici")
     args = p.parse_args()
     bbox = default_bbox()
     token = access_token()
-    scenes = search_scenes(token, bbox, args.limit, args.max_cloud)
+    scenes = search_scenes(token, bbox, args.limit, args.max_cloud, args.collection)
     manifest = {
         "bbox": bbox,
-        "collection": "sentinel-2-l2a",
+        "collection": args.collection,
+        "note": "L1C pour ACOLITE. Ne pas utiliser une scène MSIL2A.",
         "scenes": scenes,
     }
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
