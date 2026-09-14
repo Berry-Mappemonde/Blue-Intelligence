@@ -15,7 +15,8 @@ import ReviewView from "./components/ReviewView";
 import SettingsPanel from "./components/SettingsPanel";
 import ReportModal from "./components/ReportModal";
 import NotForNavModal from "./components/map/NotForNavModal";
-import EmodnetWmsBox, { DEFAULT_SCIENCE_WMS } from "./components/EmodnetWmsBox";
+import MapLayersSidebar, { DEFAULT_SCIENCE_WMS } from "./components/MapLayersSidebar";
+import { DEFAULT_SAFETY_M } from "./components/map/safetyIsobathSpec";
 import {
   readNotForNavAccepted,
   siteEntryNeedsAccept,
@@ -135,6 +136,8 @@ export default function App() {
   const toggleScienceWms = useCallback((id, on) => {
     setScienceWms((prev) => ({ ...prev, [id]: !!on }));
   }, []);
+  const [safetyM, setSafetyM] = useState(DEFAULT_SAFETY_M);
+  const [noaaAidsOn, setNoaaAidsOn] = useState(false);
   const [climoMonth, setClimoMonth] = useState(() => new Date().getMonth() + 1);
   const [climoFilters, setClimoFilters] = useState(() => {
     try {
@@ -706,91 +709,77 @@ export default function App() {
         }}
       />
       <div className="flex flex-1 min-h-0">
-        {view !== "review" && (
-          <div
-            className="w-[360px] shrink-0 flex flex-col min-h-0 border-r border-line bg-surface"
-            data-testid="map-sidebar"
-          >
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col [&>aside]:h-full [&>aside]:w-full [&>aside]:border-r-0 [&>aside]:min-h-0">
-              {mode === "projects" && (
-                <SwarmPanel
-                  t={t} projects={projects} funders={funders}
-                  funderFilter={funderFilter} setFunderFilter={setFunderFilter}
-                  searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                  categories={categories} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
-                  onFlyTo={(id, lat, lon) => setFlyToProject({ id, lat, lon, ts: Date.now() })}
-                  onReport={() => setShowReport(true)}
-                />
-              )}
-              {mode === "marinas" && (
-                <MarinasPanel
-                  t={t}
-                  marinas={marinas}
-                  onFlyTo={handleFlyToMarina}
-                  onRefresh={fetchMarinas}
-                  onRefreshAnchorages={fetchAnchorages}
-                />
-              )}
-              {mode === "capitaineries" && (
-                <CapitaineriesPanel
-                  t={t}
-                  capitaineries={capitaineries}
-                  onFlyTo={handleFlyToCapitainerie}
-                  onRefresh={fetchCapitaineries}
-                />
-              )}
-              {mode === "formalities" && (
-                <FormalitiesPanel
-                  t={t}
-                  zones={poeZones}
-                  zonesLoading={poeZonesLoading}
-                  selectedZone={selectedZone}
-                  onSelectZone={handleSelectZone}
-                  fiche={zoneFiche}
-                  ficheLoading={ficheLoading}
-                  onFlyToPort={handleFlyToPoe}
-                />
-              )}
-              {mode === "amp" && (
-                <AmpPanel
-                  t={t}
-                  sites={ampSites}
-                  lfpFilter={ampLfpFilter}
-                  onLfpFilter={setAmpLfpFilter}
-                  onFlyTo={handleFlyToAmp}
-                />
-              )}
-              {mode === "science" && (
-                <SciencePanel
-                  t={t}
-                  science={science}
-                  onFlyTo={handleFlyToScience}
-                  onRefresh={fetchScience}
-                  sourceFilter={scienceSourceFilter}
-                  onSourceFilter={setScienceSourceFilter}
-                />
-              )}
-              {mode === "climatology" && (
-                <ClimatologyPanel
-                  t={t}
-                  lang={lang}
-                  month={climoMonth}
-                  onMonth={(m) => { setClimoMonth(m); setClimoPoint(null); }}
-                  filters={climoFilters}
-                  onToggleFilter={toggleClimoFilter}
-                  waveStat={climoWaveStat}
-                  onWaveStat={setClimoWaveStat}
-                  meta={climoMeta}
-                  point={climoPoint}
-                />
-              )}
-            </div>
-            <EmodnetWmsBox
-              t={t}
-              scienceWms={scienceWms}
-              onToggleWms={toggleScienceWms}
-            />
-          </div>
+        {view !== "review" && mode === "projects" && (
+          <SwarmPanel
+            t={t} projects={projects} funders={funders}
+            funderFilter={funderFilter} setFunderFilter={setFunderFilter}
+            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+            categories={categories} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
+            onFlyTo={(id, lat, lon) => setFlyToProject({ id, lat, lon, ts: Date.now() })}
+            onReport={() => setShowReport(true)}
+          />
+        )}
+        {view !== "review" && mode === "marinas" && (
+          <MarinasPanel
+            t={t}
+            marinas={marinas}
+            onFlyTo={handleFlyToMarina}
+            onRefresh={fetchMarinas}
+            onRefreshAnchorages={fetchAnchorages}
+          />
+        )}
+        {view !== "review" && mode === "capitaineries" && (
+          <CapitaineriesPanel
+            t={t}
+            capitaineries={capitaineries}
+            onFlyTo={handleFlyToCapitainerie}
+            onRefresh={fetchCapitaineries}
+          />
+        )}
+        {view !== "review" && mode === "formalities" && (
+          <FormalitiesPanel
+            t={t}
+            zones={poeZones}
+            zonesLoading={poeZonesLoading}
+            selectedZone={selectedZone}
+            onSelectZone={handleSelectZone}
+            fiche={zoneFiche}
+            ficheLoading={ficheLoading}
+            onFlyToPort={handleFlyToPoe}
+          />
+        )}
+        {view !== "review" && mode === "amp" && (
+          <AmpPanel
+            t={t}
+            sites={ampSites}
+            lfpFilter={ampLfpFilter}
+            onLfpFilter={setAmpLfpFilter}
+            onFlyTo={handleFlyToAmp}
+          />
+        )}
+        {view !== "review" && mode === "science" && (
+          <SciencePanel
+            t={t}
+            science={science}
+            onFlyTo={handleFlyToScience}
+            onRefresh={fetchScience}
+            sourceFilter={scienceSourceFilter}
+            onSourceFilter={setScienceSourceFilter}
+          />
+        )}
+        {view !== "review" && mode === "climatology" && (
+          <ClimatologyPanel
+            t={t}
+            lang={lang}
+            month={climoMonth}
+            onMonth={(m) => { setClimoMonth(m); setClimoPoint(null); }}
+            filters={climoFilters}
+            onToggleFilter={toggleClimoFilter}
+            waveStat={climoWaveStat}
+            onWaveStat={setClimoWaveStat}
+            meta={climoMeta}
+            point={climoPoint}
+          />
         )}
         <main className="flex-1 relative min-w-0">
           <div
@@ -807,8 +796,9 @@ export default function App() {
               flyToScience={flyToScience}
               scienceWms={scienceWms}
               overlayOn={overlayOn}
-              onToggleOverlay={setOverlayOn}
               nauticalAllowed={nauticalAllowed}
+              safetyM={safetyM}
+              noaaAidsOn={noaaAidsOn}
               showReview={showReview}
               scienceSourceFilter={scienceSourceFilter}
               climoMonth={climoMonth}
@@ -854,6 +844,20 @@ export default function App() {
             )
           ) : null}
         </main>
+        {view === "map" && (
+          <MapLayersSidebar
+            t={t}
+            overlayOn={overlayOn}
+            onToggleOverlay={setOverlayOn}
+            scienceWms={scienceWms}
+            onToggleWms={toggleScienceWms}
+            safetyM={safetyM}
+            onSafetyM={setSafetyM}
+            noaaAidsOn={noaaAidsOn}
+            onToggleNoaaAids={setNoaaAidsOn}
+            showNoaa={mode === "capitaineries"}
+          />
+        )}
           {showSettings && (
           <SettingsPanel t={t} lang={lang} mode={mode} settings={settings}
             isAdmin={isAdmin}
