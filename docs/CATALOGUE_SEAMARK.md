@@ -55,10 +55,22 @@ pas un encodeur S-101. Voir `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 
 | Tag | Statut | Usage |
 |---|---|---|
-| `seamark:type=anchorage` + `seamark:anchorage:category` | candidat | zones de mouillage officielles |
-| `seamark:type=anchor_berth` | candidat | postes numérotés |
-| `seamark:type=mooring` + `seamark:mooring:category` | candidat | bouées / coffres |
+| `seamark:type=anchorage` + `seamark:anchorage:category` | exploité | zones de mouillage — `anchorage_build.py` |
+| `seamark:type=anchor_berth` | exploité | postes numérotés |
+| `seamark:type=mooring` + `seamark:mooring:category` | exploité | bouées / coffres |
+| `natural=bay` (nommée) | exploité | baie naturelle le long du corridor |
 | `seamark:type=restricted_area` + `seamark:restricted_area:restriction=no_anchoring` | candidat | mouillage interdit — croisement AMP |
+
+## Mapping inverse (champ slim BI → tags OSM d’export)
+
+Table machine : `export_mapping` dans `seamark_catalog.json`. Exemple : badge **Avitaillement** / champ `fuel` → `fuel=yes` + `seamark:small_craft_facility:category=fuel`. Sens autorisé : OSM → champs BI → GeoJSON OSM. Pas d’attributs S-101.
+
+## Pilotes satellite (mode Science, avant le premier dump)
+
+| Tag | Statut | Usage |
+|---|---|---|
+| `natural=coastline` | candidat | trait de côte MNDWI / CoastSat (corridor Berry) |
+| `seamark:type=depth_area` | candidat | classes SDB Stumpf — pas un DTM, pas une ENC |
 
 ## Route NAVIGUIDE (atterrissages, dangers)
 
