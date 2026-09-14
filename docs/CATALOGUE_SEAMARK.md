@@ -10,6 +10,9 @@ Règle d'or héritée de Blue Intelligence : **on n'invente rien**. Un tag absen
 reste absent ; un badge, un téléphone ou un canal VHF n'apparaît que si un tag
 l'atteste.
 
+Ce catalogue est une **cible d'export OpenSeaMap** (champs BI ← tags OSM),
+pas un encodeur S-101. Voir `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+
 ## Comment lire ce catalogue
 
 - **exploité** — lu aujourd'hui par un pipeline (dump marinas, capitaineries,
