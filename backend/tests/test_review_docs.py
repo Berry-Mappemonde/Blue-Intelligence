@@ -93,6 +93,26 @@ def test_render_screenshot_none_when_playwright_missing(monkeypatch):
     assert out is None
 
 
+def test_render_html_uses_isolated_worker_not_inprocess_browser(monkeypatch):
+    import app.core.render as render
+
+    called = {}
+
+    def fake_worker(url, timeout_s, settle_ms):
+        called["url"] = url
+        return "<html>ok</html>"
+
+    async def boom_browser(log):
+        raise AssertionError("Chromium must not live in the API process")
+
+    monkeypatch.setattr(render, "_run_render_worker", fake_worker)
+    monkeypatch.setattr(render, "_get_browser", boom_browser)
+    render._unavailable = False
+    html = asyncio.run(render.render_html("https://example.org/fiche"))
+    assert html == "<html>ok</html>"
+    assert called["url"] == "https://example.org/fiche"
+
+
 def test_cascade_retries_nim_text_when_vision_fails(monkeypatch):
     from app.core import judge
 
