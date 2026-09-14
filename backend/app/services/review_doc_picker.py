@@ -14,17 +14,26 @@ from app.core.extract import (
     extract_structured_ports,
     looks_like_port_catalog,
     pdf_page_jpegs,
+    should_skip_screenshot,
 )
 from app.core.judge import complete_json_cascade
 from app.services.poe_pipeline import list_url_bonus
 from app.services.poe_zone_label import search_polygon_name
+from app.services.territory_ref import td_url_fits_polygon
 from app.services.review_choices import (
     empty_choices,
     gold_ready,
     save_choices_doc,
 )
-from app.services.review_queue import get_fiche, save_comment
+from app.services.review_queue import get_fiche, list_queue, save_comment
 from app.services.poe_zone_fiche import PUBLISHED_RUN
+from app.services.review_lessons import (
+    format_lessons_for_prompt,
+    pick_fewshot,
+    save_proposal,
+    token_scores_from_lessons,
+    url_lesson_delta,
+)
 
 DOC_CAP = 12
 IMAGE_CAP = 6
@@ -46,6 +55,9 @@ Une liste nationale mixte (cargo + plaisance, ex. puertos habilitados Mexique)
 peut être gardée. Une page tourisme / home / actu / projet / un seul port
 s'écarte. Tu peux garder PLUSIEURS documents (page + PDF).
 N'invente aucune URL hors liste.
+
+Leçons Gold (décisions humaines antérieures — suis ce jugement) :
+{lessons}
 
 Documents :
 {docs}
@@ -69,7 +81,7 @@ def rank_td_urls(fiche: dict | None) -> list[str]:
     rows = []
     for rec in (fiche or {}).get("sources_td") or []:
         url = rec.get("url")
-        if url:
+        if url and td_url_fits_polygon(url, fiche):
             rows.append((list_url_bonus(url) + (0.4 if rec.get("official") else 0), url))
     rows.sort(key=lambda x: x[0], reverse=True)
     seen, out = set(), []
@@ -95,13 +107,17 @@ async def _evidence_for(url: str, log) -> dict:
         except Exception:
             images = []
     elif not page.get("is_pdf"):
-        try:
-            from app.core.render import render_screenshot
-            shot = await render_screenshot(url, log=log)
-            if shot:
-                images = [shot]
-        except Exception:
-            images = []
+        skip = should_skip_screenshot(url, page)
+        if skip:
+            log(f"screenshot {url[:70]}: sauté ({skip})")
+        else:
+            try:
+                from app.core.render import render_screenshot
+                shot = await render_screenshot(url, log=log)
+                if shot:
+                    images = [shot]
+            except Exception:
+                images = []
     catalog = extract_structured_ports(text) if text else []
     return {
         "url": url,
@@ -116,20 +132,23 @@ async def _evidence_for(url: str, log) -> dict:
     }
 
 
-def local_pick(evidences: list[dict]) -> dict:
+def local_pick(evidences: list[dict],
+               token_scores: dict[str, float] | None = None) -> dict:
     """Heuristique locale : catalogue / bonus d'URL. Tourne en parallèle du LLM."""
     keep, drop = [], []
     reasons = []
     for ev in evidences:
         url = ev["url"]
+        adj = url_lesson_delta(url, token_scores)
+        bonus = float(ev.get("bonus") or 0) + adj
         strong = ev["sufficient"] or (
             ev["looks_catalog"] and ev["catalog_n"] >= 3
-        ) or (ev["bonus"] >= 0.45 and ev["catalog_n"] >= 1)
+        ) or (bonus >= 0.45 and ev["catalog_n"] >= 1) or adj >= 0.3
         if strong:
             keep.append(url)
             reasons.append({
                 "url": url, "verdict": "keep",
-                "why": f"catalogue local n={ev['catalog_n']} bonus={ev['bonus']:.2f}",
+                "why": f"catalogue local n={ev['catalog_n']} bonus={bonus:.2f}",
             })
         else:
             drop.append(url)
@@ -213,13 +232,16 @@ def merge_picks(local: dict, llm: dict | None, allowed: set[str]) -> dict:
     }
 
 
-async def _llm_pick(fiche: dict, evidences: list[dict], settings, log) -> dict | None:
+async def _llm_pick(fiche: dict, evidences: list[dict], settings, log,
+                    lessons: list[dict] | None = None) -> dict | None:
     allowed = {ev["url"] for ev in evidences}
+    few = pick_fewshot(lessons or [], fiche, exclude_id=_sid(fiche.get("mrgid")))
     prompt = PICKER_PROMPT.format(
         label=search_polygon_name(fiche) or fiche.get("name") or fiche.get("label") or "",
         mrgid=fiche.get("mrgid"),
         iso2=fiche.get("iso2") or "",
         sovereign=fiche.get("sovereign") or "",
+        lessons=format_lessons_for_prompt(few),
         docs=_docs_blob(evidences),
     )
     images = _collect_images(evidences)
@@ -251,7 +273,8 @@ async def _llm_pick(fiche: dict, evidences: list[dict], settings, log) -> dict |
 
 async def suggest_eez_documents(db, entity_id: str, *,
                                 settings: dict | None = None,
-                                log=None) -> dict:
+                                log=None,
+                                lessons: list[dict] | None = None) -> dict:
     """Pré-remplit keep/drop + commentaire. Pas de Gold."""
     log = log or (lambda m: None)
     eid = _sid(entity_id)
@@ -278,10 +301,20 @@ async def suggest_eez_documents(db, entity_id: str, *,
         except Exception:
             settings = {}
 
-    evidences = await asyncio.gather(*[_evidence_for(u, log) for u in urls])
-    local_task = asyncio.to_thread(local_pick, list(evidences))
-    llm_task = _llm_pick(fiche, list(evidences), settings, log)
-    local, llm = await asyncio.gather(local_task, llm_task)
+    if lessons is None:
+        from app.services.review_lessons import load_lessons
+        lessons = await load_lessons(db)
+    scores = token_scores_from_lessons(lessons)
+    evidences: list[dict] = []
+    try:
+        for url in urls:
+            evidences.append(await _evidence_for(url, log))
+        local_task = asyncio.to_thread(local_pick, list(evidences), scores)
+        llm_task = _llm_pick(fiche, list(evidences), settings, log, lessons=lessons)
+        local, llm = await asyncio.gather(local_task, llm_task)
+    finally:
+        from app.core.render import shutdown_render
+        await shutdown_render()
     picked = merge_picks(local, llm, {ev["url"] for ev in evidences})
 
     public = empty_choices()
@@ -291,6 +324,7 @@ async def suggest_eez_documents(db, entity_id: str, *,
         public["td"][url] = "drop"
     choices = await save_choices_doc(db, "eez", eid, public)
     saved = await save_comment(db, "eez", PUBLISHED_RUN, eid, picked["comment"])
+    await save_proposal(db, eid, picked, fiche)
     ready = gold_ready(fiche, choices, kind="eez", comment=picked["comment"])
     log(f"doc picker {eid}: keep={len(picked['keep'])} engine={picked.get('engine')}")
     return {
@@ -307,3 +341,63 @@ async def suggest_eez_documents(db, entity_id: str, *,
         "wrote_poe_ports": False,
         "wrote_projects": False,
     }
+
+
+async def all_eez_ids(db) -> list[str]:
+    """Toutes les fiches Formalités (union publiée), pas le filtre Stable / pré-Gold."""
+    packed = await list_queue(
+        db, "eez", PUBLISHED_RUN, offset=0, limit=2000,
+        q="", pre_gold=False, stable=False)
+    out, seen = [], set()
+    for it in packed.get("items") or []:
+        eid = _sid(it.get("id"))
+        if eid and eid not in seen:
+            seen.add(eid)
+            out.append(eid)
+    return out
+
+
+async def run_suggest_batch(db, state, *, settings: dict | None = None) -> dict:
+    """Lot Proposer : une proposition par polygone. Écrase cases + commentaires."""
+    log = state.log if hasattr(state, "log") else (lambda m: None)
+    ids = await all_eez_ids(db)
+    state.total = len(ids)
+    state.progress = 0
+    if settings is None:
+        try:
+            from app.db import get_settings
+            settings = await get_settings()
+        except Exception:
+            settings = {}
+    from app.services.review_lessons import load_lessons
+    lessons = await load_lessons(db)
+    ok = fail = 0
+    last_id = None
+    for eid in ids:
+        if getattr(state, "cancel", False):
+            log("lot Proposer : annulé")
+            break
+        try:
+            out = await suggest_eez_documents(
+                db, eid, settings=settings, log=log, lessons=lessons)
+            ok += 1
+            last_id = eid
+            state.results.append({
+                "id": eid, "ok": True,
+                "engine": out.get("engine"),
+                "keep": len((out.get("choices") or {}).get("td") or {}),
+            })
+            log(f"lot {eid}: engine={out.get('engine')}")
+        except Exception as e:
+            fail += 1
+            state.results.append({
+                "id": eid, "ok": False, "error": f"{type(e).__name__}",
+            })
+            log(f"lot {eid}: {type(e).__name__}: {str(e)[:120]}")
+        state.progress = ok + fail
+    summary = {
+        "ok": ok, "fail": fail, "total": len(ids),
+        "last_id": last_id, "cancelled": bool(getattr(state, "cancel", False)),
+    }
+    state.summary = summary
+    return summary

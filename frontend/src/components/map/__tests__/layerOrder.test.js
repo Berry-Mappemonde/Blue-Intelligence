@@ -6,6 +6,7 @@
  * passer inaperçu en revue.
  */
 import { LEAFLET_BUILTIN_PANES, PANES, createPanes } from "../layerOrder";
+import { SCIENCE_WMS_PANES } from "../useScienceWms";
 import { BASEMAPS, BASEMAP_CYCLE, nextBasemap, stripUnavailableSources } from "../basemaps";
 import { maplibreWorkerUrl } from "../maplibreWorker";
 
@@ -15,6 +16,7 @@ describe("ordre des panes (verrouillé)", () => {
       "basemap-gl@190",
       "climatology-raster@250",
       "climatology-vector@260",
+      "bi-overlay@270",
       "route@380",
       "amp@420",
       "formalities-escales@500",
@@ -57,6 +59,14 @@ describe("ordre des panes (verrouillé)", () => {
     });
     expect(PANES.find((p) => p.name === "climatology-raster").pointerEvents).toBe("none");
     expect(PANES.find((p) => p.name === "climatology-vector").pointerEvents).toBe("none");
+    expect(PANES.find((p) => p.name === "bi-overlay").pointerEvents).toBe("none");
+  });
+
+  test("bathy EMODnet reste sous l'atlas climatologie", () => {
+    expect(SCIENCE_WMS_PANES["science-wms-bathy"]).toBe(240);
+    expect(SCIENCE_WMS_PANES["science-wms-bathy"]).toBeLessThan(
+      PANES.find((p) => p.name === "climatology-raster").zIndex,
+    );
   });
 });
 
