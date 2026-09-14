@@ -57,8 +57,8 @@ SHOM_WFS = "https://services.data.shom.fr/INSPIRE/wfs"
 # Data is stored in EPSG:3857 (Web Mercator meters); bbox must be given as
 # `west,south,east,north,EPSG:4326` (LON-FIRST despite the WFS 2.0 axis-order convention).
 # The `INFORMATIONS_PORTUAIRES_BDD_WFS:smcfac_point` layer is the S-57 "Small Craft Facilities"
-# — marinas, yacht clubs, pontoons, workshops. Available for métropole + Antilles + Polynésie
-# + Réunion/Mayotte. Guyane not covered.
+# — marinas, yacht clubs, pontoons, workshops. Available for mainland France + Antilles + Polynesia
+# + Reunion/Mayotte. French Guiana not covered.
 SHOM_TYPENAMES = [
     "INFORMATIONS_PORTUAIRES_BDD_WFS:smcfac_point",
     "INFORMATIONS_PORTUAIRES_BDD_WFS:hrbfac_point",
@@ -933,7 +933,7 @@ def priority_for(lat: float, lon: float, wps: list[Waypoint]) -> tuple[int, Wayp
 # ------------------------------------------------------------------------
 
 
-# État de build unifié (voir app/core/tasks.py)
+# Unified build state (see app/core/tasks.py)
 from app.core.tasks import BuildState  # noqa: E402
 
 
@@ -1078,9 +1078,9 @@ async def build_marinas(
                         n_corr += 1
                 state.log(f"Corridor band total: {n_corr} marina candidates")
 
-            # ---- SHOM pass (French territory: métropole + DROM-COM) ----
+            # ---- SHOM pass (French territory: mainland + DROM-COM) ----
             # SHOM's INFORMATIONS_PORTUAIRES layer covers metropolitan France + Corsica +
-            # Antilles + Polynésie + Réunion / Mayotte. We query per-region so each bbox
+            # Antilles + Polynesia + Reunion / Mayotte. We query per-region so each bbox
             # stays small enough for the server (single global bbox would return >10k features).
             shom_errors = 0
             shom_regions = [

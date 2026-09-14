@@ -1,12 +1,12 @@
-"""Home → catalogue (CDC Projets C5 « listing à découvrir »).
+"""Home → catalogue (Projects CDC C5 “listing to discover”).
 
-Les 21 curés donnent les motifs d'une page qui *liste* les projets.
-Les MasterSeeds v1 n'ont souvent que la home (`https://domaine/`).
-Cette étape trouve l'URL catalogue avant la découverte des fiches.
+The 21 curated seeds give the patterns of a page that *lists* projects.
+v1 MasterSeeds often have only the home (`https://domain/`).
+This step finds the catalogue URL before card discovery.
 
-Hop 1 : hygiène SERP (même hôte, pas home / news / donate / wp-content) →
-raccourci feuille curée (`/projects/`) → sinon juge LLM de 3–5 URLs →
-Agent listing. Le filtre feuille n'est plus un veto sur la SERP.
+Hop 1: SERP hygiene (same host, not home / news / donate / wp-content) →
+curated-leaf shortcut (`/projects/`) → else LLM judge of 3–5 URLs →
+listing Agent. The leaf filter is no longer a SERP veto.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ LISTING_JUDGE_CAP = 5
 
 
 class ListingJudgeQuotaError(Exception):
-    """NVIDIA / OpenRouter / Claude 429 : pas d'Agent TinyFish derrière."""
+    """NVIDIA / OpenRouter / Claude 429: no TinyFish Agent behind."""
 _FILE_EXTS = frozenset({
     "pdf", "jpg", "jpeg", "png", "gif", "zip", "svg", "mp4", "webp", "css", "js",
 })
@@ -32,10 +32,10 @@ LANG_PREFIXES = {
     "en", "fr", "de", "es", "it", "pt", "nl", "int", "uk", "us", "eu",
 }
 
-# Segments « index » appris des 21 listings curés + URL_PATTERNS.
+# “Index” segments learned from the 21 curated listings + URL_PATTERNS.
 _LISTING_LEAVES: frozenset[str] | None = None
 
-# Préfixes de chemins à ne jamais prendre pour un catalogue (PDF, CMS, actu).
+# Path prefixes never to take as a catalogue (PDF, CMS, news).
 _NOT_LISTING_PREFIXES = (
     "/wp-content", "/wp-admin", "/uploads", "/feed", "/tag/", "/tags/",
     "/category/", "/author/", "/cdn-cgi",
@@ -50,7 +50,7 @@ _BLOCKED_SEGS = frozenset(_norm_seg(s) for s in CRAWL_BLACKLIST)
 
 
 def listing_leaves() -> frozenset[str]:
-    """Derniers segments des 21 curés + motifs URL_PATTERNS (sans slash)."""
+    """Last segments of the 21 curated + URL_PATTERNS motifs (no slash)."""
     global _LISTING_LEAVES
     if _LISTING_LEAVES is not None:
         return _LISTING_LEAVES
@@ -69,7 +69,7 @@ def listing_leaves() -> frozenset[str]:
             n = _norm_seg(p)
             if n and n not in LANG_PREFIXES:
                 leaves.add(n)
-    # Variantes fréquentes non couvertes par un curé isolé.
+    # Frequent variants not covered by a single curated seed.
     leaves.update({
         "projects", "project", "projets", "projet",
         "campaigns", "campaign", "initiatives", "initiative",
@@ -96,7 +96,7 @@ def path_parts(path: str) -> list[str]:
 
 
 def is_homepage_url(url: str | None) -> bool:
-    """Racine du site (éventuellement /fr, /en). Pas un catalogue."""
+    """Site root (optionally /fr, /en). Not a catalogue."""
     if not (url or "").strip():
         return True
     parts = path_parts(urlparse(url).path)
@@ -108,11 +108,11 @@ def is_homepage_url(url: str | None) -> bool:
 
 
 def is_listing_path(path: str, *, apply_blacklist: bool = True) -> bool:
-    """Page qui liste des projets : 1–3 segments, feuille dans les motifs curés.
+    """Page that lists projects: 1–3 segments, leaf in the curated motifs.
 
-    `/projects/` et `/hope-spots/` passent (1 segment).
-    `/en/where-we-work/` passe (feuille = motif).
-    `/projects/coral-restore` est une fiche, pas un catalogue.
+    `/projects/` and `/hope-spots/` pass (1 segment).
+    `/en/where-we-work/` passes (leaf = motif).
+    `/projects/coral-restore` is a card, not a catalogue.
     """
     raw = path or ""
     low = raw.lower()
@@ -130,7 +130,7 @@ def is_listing_path(path: str, *, apply_blacklist: bool = True) -> bool:
     last = meaningful[-1]
     if last not in leaves:
         return False
-    # Une fiche a souvent un slug après le motif (4e segment déjà exclu).
+    # A card often has a slug after the motif (4th segment already excluded).
     # 2+ meaningful dont le dernier n'est PAS seulement le motif? last IS a leaf
     # `/projects/coral-restore` → meaningful=[projects, coral-restore], last not leaf → False. OK.
     return True
@@ -145,7 +145,7 @@ def is_listing_url(url: str | None, *, home_ok: bool = False) -> bool:
 
 
 def is_curated_listing_url(url: str | None) -> bool:
-    """Les 21 curés sont déjà le catalogue, même si le chemin sort du filtre feuille."""
+    """The 21 curated ones are already the catalogue, even if the path exits the leaf filter."""
     key = (url or "").rstrip("/")
     if not key:
         return False
@@ -153,7 +153,7 @@ def is_curated_listing_url(url: str | None) -> bool:
 
 
 def needs_listing_hop(seed: dict | None) -> bool:
-    """True si on n'a pas encore une URL catalogue qualifiée."""
+    """True if we do not yet have a qualified catalogue URL."""
     seed = seed or {}
     kind = (seed.get("listing_kind") or "").strip().lower()
     url = (seed.get("listing_url") or seed.get("url") or "").strip()
@@ -171,7 +171,7 @@ def needs_listing_hop(seed: dict | None) -> bool:
 
 
 def pick_listing_url(urls: list[str] | None) -> str | None:
-    """Un seul catalogue : chemin le plus court parmi les candidats valides."""
+    """One catalogue: shortest path among valid candidates."""
     ok = [u for u in (urls or []) if is_listing_url(u)]
     if not ok:
         return None
@@ -180,7 +180,7 @@ def pick_listing_url(urls: list[str] | None) -> str | None:
 
 
 def apply_learned_listings(seeds: list[dict], extras: list[dict] | None) -> list[dict]:
-    """Recolle les catalogues mémorisés (Mongo) sur les MasterSeeds v1."""
+    """Reattach memorized catalogues (Mongo) onto v1 MasterSeeds."""
     by_domain: dict[str, str] = {}
     by_name: dict[str, str] = {}
     for extra in extras or []:
@@ -208,7 +208,7 @@ def apply_learned_listings(seeds: list[dict], extras: list[dict] | None) -> list
         n = (item.get("name") or "").strip().lower()
         learned = by_name.get(n) if n else None
         if not learned and d:
-            # Un catalogue mémorisé sur oceandecade.org n'est pas celui de BMKG.
+            # A catalogue memorized on oceandecade.org is not BMKG's.
             if is_shared_hub(d) and not name_owns_hub(item.get("name") or "", d):
                 learned = None
             else:
@@ -238,7 +238,7 @@ def apply_learned_listings(seeds: list[dict], extras: list[dict] | None) -> list
 
 
 def listing_search_query(seed: dict) -> str:
-    """Un shot : site:{domaine} … listing. Pas de 2e langue."""
+    """One shot: site:{domain} … listing. No 2nd language."""
     name = (seed.get("name") or "").strip() if isinstance(seed, dict) else ""
     url = (seed.get("url") or "").strip() if isinstance(seed, dict) else ""
     host = domain_of(url)
@@ -250,7 +250,7 @@ def listing_search_query(seed: dict) -> str:
 
 
 def listing_search_retry_query(seed: dict) -> str:
-    """2e shot si le filtre a tout jeté : chemins d'index, hors news."""
+    """2nd shot if the filter dropped everything: index paths, no news."""
     url = (seed.get("url") or "").strip() if isinstance(seed, dict) else ""
     host = domain_of(url)
     if host:
@@ -265,7 +265,7 @@ def listing_search_retry_query(seed: dict) -> str:
 
 
 def fiche_search_retry_query(seed: dict) -> str:
-    """2e shot fiches : pages profondes, hors URLs déjà éliminées."""
+    """2nd shot cards: deep pages, excluding already-eliminated URLs."""
     name = (seed.get("name") or "").strip() if isinstance(seed, dict) else ""
     url = (seed.get("url") or "").strip() if isinstance(seed, dict) else ""
     host = domain_of(url)
@@ -282,10 +282,10 @@ def fiche_search_retry_query(seed: dict) -> str:
 def infer_listing_from_project_urls(
     urls: list[str], funder_name: str = "", *, allow_shared_hub: bool = False,
 ) -> str | None:
-    """Indice : préfixe commun des fiches v1 s'il ressemble à un catalogue.
+    """Hint: common prefix of v1 cards if it looks like a catalogue.
 
     Save Our Seas `/project/…` → `https://saveourseas.com/project/`.
-    `/wp-content/uploads` → ignoré.
+    `/wp-content/uploads` → ignored.
     """
     by_host: dict[str, list[list[str]]] = {}
     for u in urls or []:
@@ -353,7 +353,7 @@ def _hit_url(hit) -> str:
 
 
 def _looks_like_fiche_parts(parts: list[str]) -> bool:
-    """`/projects/coral-restore` : feuille + slug. Pas un catalogue."""
+    """`/projects/coral-restore`: leaf + slug. Not a catalogue."""
     meaningful = [_norm_seg(p) for p in parts if _norm_seg(p) not in LANG_PREFIXES]
     if len(meaningful) < 2:
         return False
@@ -362,7 +362,7 @@ def _looks_like_fiche_parts(parts: list[str]) -> bool:
 
 
 def listing_hygiene_ok(url: str | None) -> bool:
-    """Même contrainte légère pour SERP, Agent et mémoire. Pas un veto feuille."""
+    """Same light constraint for SERP, Agent and memory. Not a leaf veto."""
     if not (url or "").startswith("http"):
         return False
     if is_homepage_url(url):
@@ -415,10 +415,10 @@ def _collect_same_host_hits(hits, seed, *, exclude_urls=None) -> list[str]:
 
 
 def hygiene_listing_urls(hits, seed, max_urls=LISTING_JUDGE_CAP, *, exclude_urls=None) -> list[str]:
-    """3–5 candidats juge : même hôte, pas home / news / donate / fiche / wp-content.
+    """3–5 judge candidates: same host, not home / news / donate / card / wp-content.
 
-    Les feuilles curées (`/projects/`) passent en tête pour le raccourci, sans
-    plafonner avant : un `/projects/` en 6e hit SERP n'est pas perdu.
+    Curated leaves (`/projects/`) go first for the shortcut, without
+    capping early: a `/projects/` at SERP hit 6 is not lost.
     """
     try:
         cap = max(0, int(max_urls or 0))
@@ -433,7 +433,7 @@ def hygiene_listing_urls(hits, seed, max_urls=LISTING_JUDGE_CAP, *, exclude_urls
 
 
 def merge_listing_candidates(*groups, cap=LISTING_JUDGE_CAP) -> list[str]:
-    """Union crawl + Fetch + Search, feuilles d'abord, plafond juge."""
+    """Union crawl + Fetch + Search, leaves first, judge cap."""
     seen: set[str] = set()
     leaves, rest = [], []
     for group in groups:
@@ -457,7 +457,7 @@ def merge_listing_candidates(*groups, cap=LISTING_JUDGE_CAP) -> list[str]:
 
 
 def accept_listing_url(url: str | None, seed: dict | None = None) -> str | None:
-    """Sortie Agent listing : hygiène, pas le veto feuille `/projects/`."""
+    """Listing Agent output: hygiene, not the `/projects/` leaf veto."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return None
@@ -475,7 +475,7 @@ def accept_listing_url(url: str | None, seed: dict | None = None) -> str | None:
 
 
 def filter_listing_urls(hits, seed, max_urls=3, *, exclude_urls=None) -> list[str]:
-    """Raccourci feuille curée uniquement (`/projects/`, `/hope-spots/`)."""
+    """Curated-leaf shortcut only (`/projects/`, `/hope-spots/`)."""
     try:
         cap = max(0, int(max_urls or 0))
     except (TypeError, ValueError):
@@ -495,7 +495,7 @@ def filter_listing_urls(hits, seed, max_urls=3, *, exclude_urls=None) -> list[st
 
 
 def parent_listing_url(url: str | None) -> str | None:
-    """`/projects/coral-restore` → `https://host/projects/` si le parent est un index."""
+    """`/projects/coral-restore` → `https://host/projects/` if the parent is an index."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return None
@@ -513,9 +513,9 @@ def parent_listing_url(url: str | None) -> str | None:
 
 
 def listing_from_hits(hits, seed: dict | None = None) -> str:
-    """Page-liste sur le domaine de la home. Pas d'Agent, pas de juge LLM.
+    """List page on the home domain. No Agent, no LLM judge.
 
-    Accepte un hit `/projects/` ou remonte d'une fiche `/projects/slug`.
+    Accept a `/projects/` hit or walk up from a `/projects/slug` card.
     """
     seed = seed or {}
     host_seed = {
@@ -586,7 +586,7 @@ async def llm_judge_listing(
     settings: dict | None = None,
     log=None,
 ) -> str | None:
-    """NVIDIA (chaîne json) → OpenRouter → Claude. Une URL parmi 3–5, jamais hors liste."""
+    """NVIDIA (json chain) → OpenRouter → Claude. One URL among 3–5, never off-list."""
     packed = []
     for cand in candidates or []:
         if isinstance(cand, dict):

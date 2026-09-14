@@ -1,14 +1,13 @@
-"""
-project_runs — Runs isolés du swarm Projets (CDC v2, phase B).
+"""project_runs — Isolated Project swarm runs (CDC v2, phase B).
 
-Un run écrit uniquement dans :
-  - project_runs            : méta (params, progression, résumé)
-  - project_run_projects    : sites / projets extraits {run_id, …}
-  - project_run_events      : micro-étapes (RunRecorder)
-  - project_run_journal     : récit complet (logs swarm + agents), sans plafond
+A run writes only into:
+  - project_runs            : meta (params, progress, summary)
+  - project_run_projects    : extracted sites / projects {run_id, …}
+  - project_run_events      : micro-steps (RunRecorder)
+  - project_run_journal     : full narrative (swarm + agent logs), uncapped
 
-La collection v1 `projects` n'est JAMAIS écrite (wrote_projects: false).
-Promotion carte = phase D, manuelle, hors de ce module.
+The v1 `projects` collection is NEVER written (wrote_projects: false).
+Map promotion = phase D, manual, outside this module.
 """
 import time
 import uuid
@@ -68,7 +67,7 @@ async def open_run(db, *, mode: str, label: str = "", settings: dict | None = No
                    force_rescan: bool = False, run_id: str | None = None,
                    to_file: bool = True, rules_overrides: dict | None = None,
                    profile: str | None = None) -> dict:
-    """Crée le document de run. N'écrit pas dans `projects`."""
+    """Create the run document. Do not write `projects`."""
     await ensure_run_indexes(db)
     rid = run_id or new_run_id()
     settings = settings or {}
@@ -115,7 +114,7 @@ async def bump_counter(db, run_id: str, key: str, n: int = 1):
 
 
 async def write_run_project(db, run_id: str, doc: dict) -> str:
-    """Upsert une ligne de run. N'écrit jamais dans `projects`."""
+    """Upsert a run row. Never write `projects`."""
     if not run_id:
         raise ValueError("run_id required — isolated run only")
     url = doc.get("url")
@@ -175,7 +174,7 @@ async def finalize_run(db, run_id: str, *, cancelled: bool = False, error: str |
 
 
 async def diff_run_vs_v1(db, run_id: str) -> dict:
-    """Compare les URLs du run à la carte v1. Aucune écriture."""
+    """Compare run URLs to the v1 map. No write."""
     run_docs = await db.project_run_projects.find({"run_id": run_id}).to_list(20000)
     v1 = await db.projects.find({}, {"url": 1, "title": 1}).to_list(30000)
     v1_urls = {p.get("url") for p in v1 if p.get("url")}
@@ -206,7 +205,7 @@ async def diff_run_vs_v1(db, run_id: str) -> dict:
 
 
 async def build_run_report(db, run_id: str) -> dict:
-    """Rapport JSON d'un run Projets (calqué sur le rapport PoE, plus simple)."""
+    """JSON report of a Projects run (modeled on the PoE report, simpler)."""
     run = await db.project_runs.find_one({"_id": run_id}) or {}
     docs = await db.project_run_projects.find({"run_id": run_id}).to_list(20000)
     events = await db.project_run_events.find(
@@ -264,7 +263,7 @@ def report_to_markdown(rep: dict) -> str:
 
 
 def run_projects_to_geojson(run_id: str, docs: list[dict]) -> dict:
-    """FeatureCollection d'un run (mêmes propriétés que la carte live)."""
+    """FeatureCollection of a run (same properties as the live map)."""
     feats = []
     for d in docs:
         lat, lon = d.get("lat"), d.get("lon")

@@ -1,6 +1,6 @@
-"""Applique la revue manuelle des 33 name_only dans poe_seed_ports.
+"""Apply the manual review of the 33 name_only in poe_seed_ports.
 
-Ne touche jamais poe_ports. Ne lance pas seeds/build.
+Never touch poe_ports. Do not run seeds/build.
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ def _new_split_seed(parent: dict, name: str, lat: float, lon: float,
 
 
 def apply_one(coll, item: dict, reviewed_at: str) -> dict:
-    """Applique une fiche de revue. Retourne {n, action, ok, detail}."""
+    """Apply one review card. Return {n, action, ok, detail}."""
     action = item.get("action")
     key = item.get("dedup_key")
     name = item.get("name") or ""
@@ -263,7 +263,7 @@ def apply_one(coll, item: dict, reviewed_at: str) -> dict:
 
 
 def apply_review(coll, poe_ports, review: dict | None = None) -> dict:
-    """Applique les 33. `poe_ports` est lu pour vérifier qu'on n'écrit pas."""
+    """Apply the 33. `poe_ports` is read to verify we do not write."""
     review = review or load_review()
     before = poe_ports.count_documents({})
     reviewed_at = now_iso()

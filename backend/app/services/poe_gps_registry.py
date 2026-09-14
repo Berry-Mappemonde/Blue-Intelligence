@@ -1,15 +1,15 @@
-"""Registre git des GPS PoE tranchés — pas un dict Python.
+"""Git registry of arbitrated PoE GPS — not a Python dict.
 
-Fichier : docs/data/poe-gps-arbitrated.json (revue PR).
-Claude ne choisit jamais un point. WPI / UN/LOCODE / web = candidats,
-pas une vérité posée sans score.
+File: docs/data/poe-gps-arbitrated.json (PR review).
+Claude never picks a point. WPI / UN/LOCODE / web = candidates,
+not a truth set without a score.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-# backend/app/services/this.py → racine du dépôt (pas app.config : Mongo).
+# backend/app/services/this.py → repo root (not app.config: Mongo).
 GPS_REGISTRY_PATH = (
     Path(__file__).resolve().parents[3] / "docs" / "data" / "poe-gps-arbitrated.json"
 )
@@ -23,7 +23,7 @@ _BY_KEY: dict[str, dict] | None = None
 
 
 def load_gps_registry(*, force: bool = False) -> dict:
-    """Charge le JSON. `force` pour les tests qui réécrivent le fichier."""
+    """Load the JSON. `force` for tests that rewrite the file."""
     global _CACHE, _BY_KEY
     if _CACHE is not None and not force:
         return _CACHE
@@ -59,13 +59,13 @@ def registry_path() -> Path:
 
 
 def registry_hit(dedup_key: str) -> dict | None:
-    """Entrée brute (tout statut), ou None."""
+    """Raw entry (any status), or None."""
     load_gps_registry()
     return (_BY_KEY or {}).get(str(dedup_key or ""))
 
 
 def accepted_by_key(dedup_key: str) -> dict | None:
-    """Entrée `status=accepted` pour une clé, ou None."""
+    """`status=accepted` entry for a key, or None."""
     hit = registry_hit(dedup_key)
     if hit and hit.get("status") == "accepted":
         return hit
@@ -82,7 +82,7 @@ def keep_keys() -> frozenset[str]:
 
 
 def entries_with_candidates() -> list[dict]:
-    """Accepted + wrong/right — batterie de régression sans réseau."""
+    """Accepted + wrong/right — offline regression battery."""
     data = load_gps_registry()
     out = []
     for e in data.get("entries") or []:
@@ -94,7 +94,7 @@ def entries_with_candidates() -> list[dict]:
 
 
 def public_view() -> dict:
-    """Payload atelier : le JSON, sans Mongo, sans persist."""
+    """Workshop payload: the JSON, no Mongo, no persist."""
     data = load_gps_registry()
     entries = list(data.get("entries") or [])
     return {

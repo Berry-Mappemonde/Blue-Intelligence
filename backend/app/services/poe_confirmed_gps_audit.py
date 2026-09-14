@@ -1,11 +1,11 @@
-"""Audit GPS des graines `confirmed` — homonymes Nominatim, inland_river.
+"""GPS audit of `confirmed` seeds — Nominatim homonyms, inland_river.
 
-Ne change pas `verify_verdict` / `confirmation_status`. Ne lance pas
-`seeds/build`. N'écrit `poe_ports` que si la même clé y porte le même GPS
-aberrant.
+Does not change `verify_verdict` / `confirmation_status`. Does not run
+`seeds/build`. Writes `poe_ports` only if the same key there carries the same
+aberrant GPS.
 
-Tanjung Pinang et Bandar Bintan Telani restent deux marinas distinctes :
-on ne copie jamais le GPS de l'une sur l'autre.
+Tanjung Pinang and Bandar Bintan Telani stay two distinct marinas:
+never copy one GPS onto the other.
 """
 from __future__ import annotations
 
@@ -43,12 +43,12 @@ COASTAL_OK = {"in_eez", "coastal_land"}
 INLAND_KINDS = {"inland_river", "inland", "other_water"}
 
 TANJUNG_PINANG_KEY = "8492:tanjungpinangbintanislandriauislands"
-# Centroïde île Bintan (pas Bandar Bintan Telani 1.1605 / 104.3202).
-# Les lat/lon tranchés vivent dans docs/data/poe-gps-arbitrated.json.
+# Bintan island centroid (not Bandar Bintan Telani 1.1605 / 104.3202).
+# Arbitrated lat/lon live in docs/data/poe-gps-arbitrated.json.
 BINTAN_CLUSTER = (1.08, 104.42)
 BANDAR_BINTAN_TELANI_KEY = "8492:bandarbintantelani"
 
-# Tokens parenthèse → centroïde d'île, jamais le GPS d'une autre marina.
+# Parenthesis tokens → island centroid, never another marina's GPS.
 ISLAND_CLUSTER_GPS: dict[str, tuple[float, float]] = {
     "bintan": BINTAN_CLUSTER,
     "bintanisland": BINTAN_CLUSTER,
@@ -84,7 +84,7 @@ def load_eez_geoms(path: str | None = None) -> dict[int, object]:
 
 
 def core_name_norm(name: str) -> str:
-    """Nom comparable : sans parenthèses, sans « Port of », sans numéros."""
+    """Comparable name: no parentheses, no “Port of”, no numbers."""
     n = _STRIP_PAREN.sub(" ", name or "")
     n = _PORT_PREFIX.sub(" ", n)
     n = re.sub(r"\b\d+\b", " ", n)
@@ -179,8 +179,8 @@ def _spatial_reasons(spatial: dict) -> list[str]:
             reasons.append(REASON_INLAND_FAR)
         elif kind in ("inland", "other_water") and dist_f > OTHER_WATER_FAR_KM:
             reasons.append(REASON_INLAND_FAR)
-    # inland_river ≤ 30 km = exception rivière acceptée (Shanghai, Bristol) :
-    # pas « hors ZEE loin ». Au-delà, même seuil que inland_far.
+    # inland_river ≤ 30 km = accepted river exception (Shanghai, Bristol):
+    # not “far outside EEZ”. Beyond that, same threshold as inland_far.
     if kind not in COASTAL_OK and dist_f is not None:
         far = INLAND_FAR_KM if kind == "inland_river" else OUTSIDE_EEZ_FAR_KM
         if dist_f > far:
@@ -191,7 +191,7 @@ def _spatial_reasons(spatial: dict) -> list[str]:
 def _best_same_name_in_eez_obs(
     seed: dict, geoms: dict[int, object] | None, spatial: dict | None = None,
 ) -> dict:
-    """Observation in_eez / côtière du même nom_norm, loin du GPS retenu."""
+    """in_eez / coastal observation of the same nom_norm, far from the kept GPS."""
     kind = (spatial or {}).get("kind")
     if kind in COASTAL_OK:
         return {}
@@ -227,7 +227,7 @@ def _best_same_name_in_eez_obs(
         kind = cls.get("kind")
         dist = cls.get("dist_km")
         dist_f = float(dist) if dist is not None else 999.0
-        # sliver in_eez (0,0 vs 0,1 km) ne doit pas battre un meilleur nom
+        # in_eez sliver (0.0 vs 0.1 km) must not beat a better name
         coast_rank = 0 if kind == "in_eez" or dist_f <= 2.2 else (
             1 if kind == "coastal_land" else 2)
         return (
@@ -258,7 +258,7 @@ def _island_cluster_for(tokens: list[str]) -> tuple[float, float] | None:
 
 def _paren_mismatch(seed: dict, by_zone: dict[int, list[dict]],
                     spatial: dict | None = None) -> tuple[list[str], dict]:
-    """Le nom cite une île/région ; le GPS n'est pas près des pairs de cette île."""
+    """The name cites an island/region; the GPS is not near that island's peers."""
     kind = (spatial or {}).get("kind")
     xy = _coords(seed)
     mid = _mid(seed)
@@ -268,7 +268,7 @@ def _paren_mismatch(seed: dict, by_zone: dict[int, list[dict]],
     tokens = [t for t in tokens if len(t) >= 4]
     if not tokens:
         return [], {}
-    # Un confirmed côtier in_eez n'est pas un homonyme Nominatim (Sidney BC).
+    # A coastal in_eez confirmed is not a Nominatim homonym (Sidney BC).
     if kind in COASTAL_OK:
         return [], {}
     peers = []
@@ -298,7 +298,7 @@ def _paren_mismatch(seed: dict, by_zone: dict[int, list[dict]],
         return [], {}
     if not peers:
         return [], {}
-    # Centroïde du cluster, pas le GPS d'une marina unique.
+    # Cluster centroid, not a single marina's GPS.
     if len(peers) < 2:
         return [REASON_HOMONYM_PAREN] if haversine_km(
             xy[0], xy[1], peers[0][1][0], peers[0][1][1]
@@ -365,10 +365,10 @@ def _seed_group(seed: dict, groups: dict[str, str]) -> str | None:
 def _group_outlier(seed: dict, members: list[dict],
                    spatial: dict | None = None,
                    spatial_by_key: dict[str, dict] | None = None) -> tuple[list[str], dict]:
-    """Isolé vs le cluster *sain* du groupe (in_eez / côte), pas vs un GPS pourri.
+    """Isolated vs the group's *healthy* cluster (in_eez / coast), not vs a rotten GPS.
 
-    BBT ↔ Tarempa (~310 km) restent ensemble. Tanjung Pinang Sumatra (>300 km
-    et hors ZEE) est l'outlier. Astoria NY vs côte ouest : in_eez mais >1500 km.
+    BBT ↔ Tarempa (~310 km) stay together. Tanjung Pinang Sumatra (>300 km
+    and outside the EEZ) is the outlier. Astoria NY vs west coast: in_eez but >1500 km.
     """
     xy = _coords(seed)
     if xy is None:
@@ -434,7 +434,7 @@ def _already_at(seed: dict, lat: float, lon: float, tol: float = 5e-3) -> bool:
 
 def _plan_correction(seed: dict, spatial: dict, extra: dict,
                      reasons: list[str]) -> dict | None:
-    """Cas évidents + GPS du registre git (accepted)."""
+    """Obvious cases + GPS from the git registry (accepted)."""
     key = _seed_key(seed)
     hit = accepted_by_key(key)
     if hit:
@@ -474,7 +474,7 @@ def flag_confirmed_seeds(
     geoms: dict[int, object] | None = None,
     listing_ports: list[dict] | None = None,
 ) -> list[dict]:
-    """Entrée : docs seed. Sortie : flags typés (ne mute pas les docs)."""
+    """Input: seed docs. Output: typed flags (does not mutate the docs)."""
     geoms = geoms if geoms is not None else load_eez_geoms()
     if listing_ports is None:
         listing_ports = project_listing().get("ports") or []
@@ -574,7 +574,7 @@ def audit_confirmed_seeds(
     geoms: dict[int, object] | None = None,
     listing_ports: list[dict] | None = None,
 ) -> dict:
-    """Rapport comparable (atelier). Pas d'écriture."""
+    """Comparable report (workshop). No write."""
     flags = flag_confirmed_seeds(
         seeds, geoms=geoms, listing_ports=listing_ports)
     confirmed_n = sum(
@@ -625,9 +625,9 @@ def _correction_set(seed: dict, plan: dict, spatial_after: dict, stamp: str,
 def persist_gps_audit(db, report: dict, *,
                       geoms: dict[int, object] | None = None,
                       seeds: list[dict] | None = None) -> dict:
-    """Écrit gps_audit_* ; corrige les cas évidents ; log `gps_audit_correct`.
+    """Write gps_audit_*; correct obvious cases; log `gps_audit_correct`.
 
-    `db` expose poe_seed_ports, poe_ports, poe_audit_log (sync).
+    `db` exposes poe_seed_ports, poe_ports, poe_audit_log (sync).
     """
     geoms = geoms if geoms is not None else load_eez_geoms()
     stamp = report.get("audited_at") or now_iso()
@@ -668,7 +668,7 @@ def persist_gps_audit(db, report: dict, *,
             upd = _correction_set(
                 hit, plan, spatial_after, stamp,
                 finding.get("reasons") or [], prev)
-            # Ne jamais toucher au verdict.
+            # Never touch the verdict.
             seed_coll.update_one({"_id": hit["_id"]}, {"$set": upd})
             log_coll.insert_one({
                 "action": "gps_audit_correct",
@@ -722,7 +722,7 @@ def persist_gps_audit(db, report: dict, *,
             flagged += 1
             continue
         if hit.get("gps_audit_status") == "corrected":
-            # Relance : le GPS n'est plus aberrant, on garde le marqueur.
+            # Rerun: the GPS is no longer aberrant, keep the marker.
             ok += 1
             continue
         seed_coll.update_one({"_id": hit["_id"]}, {"$set": {
