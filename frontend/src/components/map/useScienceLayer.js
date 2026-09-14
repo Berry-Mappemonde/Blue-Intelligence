@@ -16,6 +16,7 @@ const SOURCE_LABELS = {
   edmed: "EDMED · SeaDataNet",
   argo: "Argo · Coriolis",
   csr: "CSR · SeaDataNet",
+  "sentinel-pilot": "Sentinel · pilote corridor",
 };
 
 const OCEAN_LABELS = { A: "Atlantique", P: "Pacifique", I: "Indien" };
