@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """GLORYS12 climatology_P1M-m → current-MM.npz (surface uo/vo).
 
-À lancer sur le Mac (`copernicusmarine login`). Un subset surface, 12 pas.
-Jamais le cube 3D en RAM.
+Run on the Mac (`copernicusmarine login`). One surface subset, 12 steps.
+Never the 3D cube in RAM.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ DOI = "10.48670/moi-00021"
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=OUT)
-    ap.add_argument("--spacing", type=float, default=0.25, help="maille stockée (°)")
+    ap.add_argument("--spacing", type=float, default=0.25, help="stored cell size (°)")
     args = ap.parse_args()
     try:
         import numpy as np
@@ -44,7 +44,7 @@ def main() -> int:
         minimum_depth=0.0,
         maximum_depth=1.0,
     )
-    # Premier niveau ~0,494 m
+    # First level ~0.494 m
     if "depth" in ds.dims:
         ds = ds.isel(depth=0)
     if args.spacing > 0.083:

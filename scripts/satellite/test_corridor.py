@@ -4,7 +4,7 @@ from corridor import bbox_around, first_sea_lonlat
 
 
 class CorridorTest(unittest.TestCase):
-    def test_la_rochelle_et_bbox(self):
+    def test_la_rochelle_and_bbox(self):
         route = {
             "features": [
                 {
