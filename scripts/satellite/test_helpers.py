@@ -1,6 +1,7 @@
 import unittest
 
-from download_scenes import product_name
+from download_scenes import is_l2a_scene, product_name, require_l1c
+from search_stac import DEFAULT_COLLECTION
 from stamp import stamp_features
 
 
@@ -11,6 +12,20 @@ class HelpersTest(unittest.TestCase):
             "S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321.SAFE",
         )
         self.assertEqual(product_name("X.SAFE"), "X.SAFE")
+
+    def test_recherche_par_defaut_l1c(self):
+        self.assertEqual(DEFAULT_COLLECTION, "sentinel-2-l1c")
+
+    def test_refuse_l2a_pour_acolite(self):
+        self.assertTrue(is_l2a_scene(
+            "S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321"
+        ))
+        self.assertFalse(is_l2a_scene(
+            "S2C_MSIL1C_20260912T110631_N0512_R137_T30TWR_20260912T123456"
+        ))
+        with self.assertRaises(SystemExit) as ctx:
+            require_l1c("S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321")
+        self.assertIn("L2A", str(ctx.exception))
 
     def test_stamp_coastline(self):
         raw = {
