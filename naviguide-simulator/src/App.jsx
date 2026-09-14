@@ -845,6 +845,7 @@ export default function App() {
         onCancel={() => { pendingLayerRef.current = null; setNotForNavOpen(false); }}
         onAccept={() => {
           writeNotForNavAccepted();
+          gateRef.current.allowed = true;
           setNotForNavOk(true);
           setNotForNavOpen(false);
           enablePendingRestricted(pendingLayerRef.current);

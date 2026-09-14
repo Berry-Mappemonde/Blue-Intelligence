@@ -70,5 +70,5 @@ TrackPlayBack, deck.gl ni signalk-polar-performance : ce sont des *idées*
 | Tuiles Esri Canvas | « Tiles © Esri » |
 | OpenSeaMap (balisage) | ODbL — « © OpenSeaMap contributors » |
 | EMODnet (bathy / fonds / câbles) | CC-BY — attribution WMS |
-| GEBCO (sondage au large dans le sac) | GEBCO Compilation Group |
+| GEBCO (sondage au large dans le sac) | GEBCO Compilation Group — lookup point OpenTopoData (GEBCO 2020), `null` à moins de 20 M d’un port |
 | Polaire Leopard 46 | fichier ORC chargé par l’utilisateur / défaut local |
