@@ -1,9 +1,10 @@
 import { useState } from "react";
 
 /**
- * Fenêtre bloquante d'acceptation — le bandeau nautique reste ensuite.
+ * Fenêtre bloquante d'entrée sur le site.
+ * Le bandeau nautique reste ensuite en bas de la carte.
  */
-export default function NotForNavModal({ t, open, onAccept, onStayOnOsm }) {
+export default function NotForNavModal({ t, open, onAccept }) {
   const [acked, setAcked] = useState(false);
   if (!open) return null;
   return (
@@ -19,10 +20,10 @@ export default function NotForNavModal({ t, open, onAccept, onStayOnOsm }) {
           id="not-for-nav-title"
           className="font-heading font-bold text-sm uppercase tracking-wide text-amber-200"
         >
-          {t("seaMapDisclaimerTitle")}
+          {t("notForNavTitle")}
         </h2>
         <p className="mt-3 text-[13px] leading-relaxed text-slate-300">
-          {t("seaMapDisclaimerBody")}
+          {t("notForNavBody")}
         </p>
         <p className="mt-2 font-mono text-[10px] text-slate-500 leading-relaxed">
           {t("notForNavModalHint")}
@@ -37,15 +38,7 @@ export default function NotForNavModal({ t, open, onAccept, onStayOnOsm }) {
           />
           <span>{t("notForNavAck")}</span>
         </label>
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            data-testid="not-for-nav-stay-osm"
-            className="w-full px-3 py-2 font-mono text-[11px] uppercase tracking-wide border border-line text-slate-300 hover:bg-raised rounded-sm"
-            onClick={onStayOnOsm}
-          >
-            {t("notForNavStayOsm")}
-          </button>
+        <div className="mt-4">
           <button
             type="button"
             data-testid="not-for-nav-accept"
