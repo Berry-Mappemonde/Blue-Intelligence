@@ -1,11 +1,11 @@
-"""Sous-processus Chromium (Playwright isolé).
+"""Chromium subprocess (isolated Playwright).
 
-HTML : ``python -m app.core.render_worker URL OUT.html [timeout_s] [settle_ms]``
-JPEG : ``python -m app.core.render_worker --screenshot URL OUT.jpg
+HTML: ``python -m app.core.render_worker URL OUT.html [timeout_s] [settle_ms]``
+JPEG: ``python -m app.core.render_worker --screenshot URL OUT.jpg
         [timeout_s] [settle_ms] [max_height]``
 
-Un crash natif (munmap_chunk, SIGABRT) tue uniquement ce process — l'API
-continue. La RAM Chromium est rendue à la sortie, comme ``pdf_worker``.
+A native crash (munmap_chunk, SIGABRT) kills only this process — the API
+continues. Chromium RAM is released on exit, like ``pdf_worker``.
 """
 from __future__ import annotations
 

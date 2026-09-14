@@ -1,185 +1,184 @@
-# Contrats des modes
+# Mode contracts
 
-**Ce que je cherche à faire.** Transformer le web maritime vivant en une base géospatiale fiable, posée sur une carte mondiale : sites d’action accessibles en bateau, ports d’entrée officiels, marinas, capitaineries, aires protégées — sans confondre un siège, une page institutionnelle ou un port commercial avec ce dont un plaisancier a besoin.
+**What I am trying to do.** Turn the living maritime web into a reliable geospatial base, laid on a worldwide map: action sites reachable by boat, official ports of entry, marinas, harbour offices, protected areas — without confusing a headquarters, an institutional page or a commercial harbour with what a pleasure-craft sailor needs.
 
-Les cinq modes ont été câblés séparément. Des jobs qui posent **la même question** n’utilisent pas les mêmes outils. Ce document recadre les pipelines sur **7 familles** (pas 5 : « qualification » ne doit pas devenir un fourre-tout), puis nomme les jumeaux à faire converger.
+The five modes were wired separately. Jobs that ask **the same question** do not use the same tools. This document reframes the pipelines around **7 families** (not 5: “qualification” must not become a catch-all), then names the twins to converge.
 
-## Ce que chaque mode cherche
+## What each mode seeks
 
-| Mode | Contrat |
+| Mode | Contract |
 | --- | --- |
-| **Projets** | Trouver les projets de conservation marine financés par des fondations, extraire le **lieu d’action** (un GPS par page, pas le siège), n’en garder que ce qui est accessible en bateau, scorer (S_ocean), écrire un run isolé — sans vider la carte live. |
-| **Ports d’entrée** | Pour **chaque polygone VLIZ** (`mrgid`, jamais un pays), retrouver la page ou le PDF d’État qui liste les ports d’entrée plaisance, et n’écrire un GPS que s’il tombe dans *ce* polygone. Top-down : polygone → liste. Bottom-up : lieu déjà connu → preuve, et catalogue entier si la page en est un. Noonsite, OSM et le WPI sont des signaux / contre-liste, pas une preuve. Publication carte = revue / Gold. |
-| **Marinas** | Annuaire mondial `leisure=marina` (identité OSM stable), signal Google `/maps/place/` s’il existe vraiment, contacts et services **sans inventer**. Mouillages OSM à part, le long de la route. Runs isolés. |
-| **Capitaineries** | Recenser les **bureaux** (le bâtiment, pas le plan d’eau ni la marina), en tirer téléphone et VHF, sans jamais les rattacher aux marinas. |
-| **AMP** | Polygones ProtectedSeas sur une **façade** (pas le monde), et **deux URL distinctes** : gestionnaire (`manager_url`) vs visite / entrée / permis / mouillage (`visit_url`). La visite n’est jamais la homepage gestionnaire. |
-| **Science** | Localiser les jeux de données océanographiques des catalogues officiels (Sextant/SISMER, ODATIS, EDMED SeaDataNet), les flotteurs Argo actifs et les tracés de campagnes CSR, chacun avec le **lien direct vers sa fiche portail**. Couches WMS EMODnet en fond (bathymétrie, substrat, câbles). Moisson par API structurées (JSON GeoNetwork, SPARQL, ERDDAP) — jamais de LLM ni de scraping. |
-| **Climatologie** | Servir un **atlas mensuel versionné** (roses 8 secteurs, Hs P50/P90, courant de surface, pistes IBTrACS) avec `kind: "climatology"`, période et DOI nommés. Snapshot + API, **pas un swarm**, pas un LLM, pas une prévision. `null` sur terre / pixel NaN / échantillon trop pauvre. Blue Intelligence **montre** l’atlas (7ᵉ mode) ; NAVIGUIDE **s’en sert** sans le peindre. |
+| **Projects** | Find marine-conservation projects funded by foundations, extract the **action place** (one GPS per page, not the headquarters), keep only what is reachable by boat, score (S_ocean), write an isolated run — without emptying the live map. |
+| **Ports of entry** | For **each VLIZ polygon** (`mrgid`, never a country), find the State page or PDF that lists pleasure-craft ports of entry, and write a GPS only if it falls inside *this* polygon. Top-down: polygon → list. Bottom-up: already-known place → evidence, and the whole catalogue if the page is one. Noonsite, OSM and the WPI are signals / counter-list, not evidence. Map publication = review / Gold. |
+| **Marinas** | Worldwide `leisure=marina` directory (stable OSM identity), Google `/maps/place/` signal if it really exists, contacts and services **without inventing**. OSM anchorages apart, along the route. Isolated runs. |
+| **Harbour offices** | Inventory the **offices** (the building, not the water body nor the marina), pull phone and VHF from them, without ever attaching them to marinas. |
+| **MPA** | ProtectedSeas polygons on a **coastal stretch** (not the world), and **two distinct URLs**: manager (`manager_url`) vs visit / entry / permit / anchoring (`visit_url`). The visit is never the manager homepage. |
+| **Science** | Locate oceanographic datasets from official catalogues (Sextant/SISMER, ODATIS, EDMED SeaDataNet), active Argo floats and CSR campaign tracks, each with the **direct link to its portal fiche**. EMODnet WMS layers as background (bathymetry, substrate, cables). Harvest by structured APIs (GeoNetwork JSON, SPARQL, ERDDAP) — never an LLM nor scraping. |
+| **Climatology** | Serve a **versioned monthly atlas** (8-sector roses, Hs P50/P90, surface current, IBTrACS tracks) with `kind: "climatology"`, named period and DOI. Snapshot + API, **not a swarm**, not an LLM, not a forecast. `null` on land / NaN pixel / sample too thin. Blue Intelligence **shows** the atlas (7th mode); NAVIGUIDE **uses it** without painting it. |
 
-Légende des jobs web : **P** Projets swarm · **TD** PoE top-down · **BU** PoE bottom-up · **MM** Marinas Maps · **ME** Marinas enrich · **CE** Capitaineries enrich · **AV** AMP visit.
+Web-job legend: **P** Projects swarm · **TD** PoE top-down · **BU** PoE bottom-up · **MM** Marinas Maps · **ME** Marinas enrich · **CE** Harbour-office enrich · **AV** MPA visit.
 
-Les dumps OSM (marinas, capitaineries, mouillages), les polygones AMP, la moisson Science et les snapshots Climatologie n’enchaînent pas les 7 familles. Ce n’est pas un trou : ce n’est pas le même objet.
-
----
-
-## 1. Recherche — où est la page ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P | Découvrir les URL de projets sur chaque listing | Crawler httpx + BeautifulSoup sur un **MasterSeed déjà connu** ; TinyFish **Agent** si 0 URL |
-| TD | Chercher l’URL d’État qui porte la liste | SearXNG + Serper ; TinyFish Search selon variante ; OpenRouter `:online` en dernier |
-| BU | Chercher la page d’État de ce nom | **`search_named`** : TinyFish Search paginé ; `serp_filter` ; DuckDuckGo si pas de clé |
-| MM | Ouvrir le lien Maps et ramasser `/place/` | TinyFish **Fetch** d’une URL Maps **déjà construite** ; Search sauté |
-| ME | Trouver un site s’il n’y a pas de tag OSM | **`search_named`** : TinyFish Search ; `serp_filter` ; DuckDuckGo si pas de clé |
-| CE | Trouver des pages de contact | **`search_named`** (même outillage) ; ranking métier ensuite |
-| AV | Chercher visite `site:` puis web ouvert | **`search_named`** ; DuckDuckGo si pas de clé ; pas SearXNG |
-
-## 2. Filtre de source — cette URL a-t-elle le droit d’être lue ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P | Écarter contact / dons / news du listing | Liste noire de chemins **dans le crawler**, pas `serp_filter` |
-| TD | Domaines d’État + jeter forums / OTA | Whitelist ISO2 + `serp_filter` + classifieur ML SERP |
-| BU | Whitelist d’abord, puis sans si 0 hit | `include_domains` dans Search ; `url_allowed` ; **`serp_filter`** |
-| MM | Une fiche marina proche, pas un resto | Nom / slug + 8 km |
-| CE | Ignorer réseaux / OTA | **`serp_filter`** ; ranking `_url_rank` |
-| AV | Homepage interdite ; hits Search jugés | `serp_filter` **puis** score local **puis** `ask_yes_no` |
-
-## 3. Lecture — quel texte a-t-on ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P + TD | Extraire pages et PDF | **`read_url`** → `extract_cascade` : httpx, trafilatura ∥ Readability, PyMuPDF / Tesseract, Playwright, Jina ∥ TinyFish Fetch, Wayback |
-| BU | Télécharger les hits whitelistés | **`read_url(prefer_fetch=True)`** : Fetch, cascade si texte inutilisable ; Agent si `bot_blocked` |
-| ME | Lire le site officiel | **`read_url`** (cascade : PDF, HTML, Playwright) |
-| CE | Télécharger les pages contact | **`read_url(prefer_fetch=True)`** : Fetch, cascade si vide |
-| MM | Lire la page Maps rendue | TinyFish Fetch seulement (DOM JS Maps — hors cascade) |
-| AV | Lire le `manager_url` | **`read_url(prefer_fetch=True, keep_if_links=True)`** ; scoring **sans** LLM |
-
-P, TD, BU, ME, CE et AV passent par `read_url`. MM reste Fetch-only (fiche `/place/`).
-
-## 4. Filtre de contenu / objet — est-ce le bon objet ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P | Projet marin, puis accessible en bateau | Gatekeeper ML → `ask_yes_no` (rôle `json`, prompt marin) ; puis `site_publishable` |
-| TD | L’objet « port » sort à l’extraction (le filtre fort est la source d’État) | Parseur catalogue / NER plus tard |
-| BU | Juger seulement le résidu | `ask_yes_no` (rôle `judge`, prompt plaisance / cargo) |
-| Dump marinas | Marina de plaisance | Overpass `leisure=marina` |
-| Dump capitaineries | Bureau, pas plan d’eau | Overpass `office=harbour_master` (+ seamark / harbour) |
-| Mouillages | Objet mouillage | Tags Overpass anchorage / baie nommée |
-| AV (Fetch) | Lien visite dans le HTML | Score heuristique, pas de juge |
-| AV (Search) | Bonne page visite | `ask_yes_no` (rôle `json`, prompt visite) ; URL parmi les candidates |
-
-P, BU et AV (Search) passent par `ask_yes_no`. Le dump OSM et le juge LLM ne sont pas la même implémentation ; la **question** est la même.
-
-## 5. Extraction structurée — quels champs ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P | Nom, lieu, S_ocean, partenaires | NIM `extract` → OpenRouter → Claude ; heuristique |
-| TD | Noms de ports (+ lat/lon dans le texte) | Parseur catalogue d’abord ; NIM `extract` / `legal` ∥ spaCy ; Claude en dernier |
-| ME | VHF, places, tirant, services, tél | **`run_page_enrich`** : tags ; regex tél/VHF ; NIM `page` → OpenRouter ; Agent si site officiel |
-| CE | Téléphone, canal VHF | **`run_page_enrich`** (même ordre) ; schéma contact seulement |
-| AV | Pas des champs métier : une URL | Liens extraits du Fetch ; pas de schéma JSON page |
-
-ME et CE sont le jumeau « JSON sur du texte de page » (`page`). P et TD sont le jumeau « JSON métier sur un corpus long » (`extract`).
-
-## 6. Géocodage — ce point est-il dans le bon espace ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P | GPS du lieu d’action | **`geocode_name`** Nominatim **∥** GeoNames ; départage LLM si désaccord ; havre ≤ 15 km (`site_publishable`) |
-| TD | Coller le port dans **ce** polygone | **`geocode_port_dual`** (même appel parallèle) ; départage LLM ; si les deux annuaires sont muets : **`llm_geocode_port`** puis in-EEZ / 15 km / rivière 400 km |
-| BU | Géocoder les noms sans point | **Le même** `geocode_port_dual` + `llm_geocode_port` si muets + filtre polygone |
-| MM / dumps / AMP | — | GPS déjà dans OSM / SHOM / NOAA / ProtectedSeas |
-
-P et PoE partagent `geocode_dual` (Nominatim ∥ GeoNames). Les tests d’espace restent distincts : havre (`site_publishable`) vs polygone VLIZ (`classify_poe_point`).
-
-## 7. Identité / doublon — est-ce déjà là ?
-
-| Job | Phrase | Outils aujourd’hui |
-| --- | --- | --- |
-| P + TD | Fusionner deux fiches du même lieu | `same_site` (`app.core.dedup`) : 500 m + similarité 60 % / 90 % |
-| BU catalogue | Noms déjà sur la liste : juge sauté | Identité **de nom dans un catalogue**, pas un merge GPS |
-| Dump marinas | Upsert | `osm_id` |
-| Dump capitaineries | Coller SHOM / NOAA sur OSM | `find_building` : 0,25 km, distance seule, pas de nom |
-| Mouillages | Doublons de corridor | nom + geohash6 |
-| AMP carte | Ne pas retélécharger | Cache tuile 30 j. (pas un merge d’entités) |
+OSM dumps (marinas, harbour offices, anchorages), MPA polygons, the Science harvest and Climatology snapshots do not chain the 7 families. That is not a hole: it is not the same object.
 
 ---
 
-## Jumeaux réels (à faire converger)
+## 1. Search — where is the page?
 
-Un jumeau, dans ce document, n’est pas « deux modes qu’il faudrait fusionner ». C’est deux morceaux de code qui se posent **la même question** — où est la page, quel texte a-t-on, est-ce le bon objet — et qui, parce qu’ils ont été écrits à des semaines d’écart, ont chacun réinventé leurs outils. Les faire converger, c’est partager la brique technique. Ce n’est pas mélanger les contrats produit : une marina n’est toujours pas un port d’entrée, une aire marine protégée n’est toujours pas un projet de conservation.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P | Discover project URLs on each listing | httpx + BeautifulSoup crawler on an **already-known MasterSeed**; TinyFish **Agent** if 0 URL |
+| TD | Find the State URL that carries the list | SearXNG + Serper; TinyFish Search depending on variant; OpenRouter `:online` last |
+| BU | Find the State page for this name | **`search_named`**: paginated TinyFish Search; `serp_filter`; DuckDuckGo if no key |
+| MM | Open the Maps link and collect `/place/` | TinyFish **Fetch** of an **already-built** Maps URL; Search skipped |
+| ME | Find a site if there is no OSM tag | **`search_named`**: TinyFish Search; `serp_filter`; DuckDuckGo if no key |
+| CE | Find contact pages | **`search_named`** (same tooling); domain ranking afterwards |
+| AV | Search visit `site:` then open web | **`search_named`**; DuckDuckGo if no key; no SearXNG |
 
-Chacun des six points ci-dessous est un projet de modification. Il raconte d’abord ce que le code fait aujourd’hui, ensuite pourquoi c’est un vrai problème (et pas seulement du code moche), ensuite ce qu’on changerait, et pourquoi ce changement est justifié — y compris ce qu’on refuse de coller ensemble.
+## 2. Source filter — is this URL allowed to be read?
 
-### 1. Lire une URL : une seule porte d’entrée, pas cinq lecteurs
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P | Drop contact / donate / news from the listing | Path blacklist **in the crawler**, not `serp_filter` |
+| TD | State domains + drop forums / OTA | ISO2 whitelist + `serp_filter` + SERP ML classifier |
+| BU | Whitelist first, then without if 0 hit | `include_domains` in Search; `url_allowed`; **`serp_filter`** |
+| MM | A nearby marina fiche, not a restaurant | Name / slug + 8 km |
+| CE | Ignore networks / OTA | **`serp_filter`**; `_url_rank` ranking |
+| AV | Homepage forbidden; Search hits judged | `serp_filter` **then** local score **then** `ask_yes_no` |
 
-Dès qu’on a une adresse web, on a besoin du **texte** de la page (ou du PDF). C’est la même question partout. Pourtant le chemin n’est pas le même selon le mode.
+## 3. Read — what text do we have?
 
-Le swarm Projets et le bras top-down des ports d’entrée passent par une cascade d’extraction (`extract_cascade`). On télécharge d’abord simplement. Si c’est du HTML, on en tire le texte. Si c’est un PDF, y compris un scan, on l’ouvre (et on le lit à l’OCR si besoin). Si la page n’est que du JavaScript, on ouvre un vrai navigateur. Si le site bloque, on essaie un miroir. Le bras bottom-up des ports d’entrée, l’enrichissement des capitaineries, la recherche de page de visite des AMP, et le job Google Maps des marinas, eux, appellent surtout TinyFish Fetch : un seul coup, le texte rendu, et c’est tout. L’enrichissement marina est encore plus mince : un téléchargement HTTP plus un extracteur de lisibilité, sans PDF ni navigateur.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P + TD | Extract pages and PDFs | **`read_url`** → `extract_cascade`: httpx, trafilatura ∥ Readability, PyMuPDF / Tesseract, Playwright, Jina ∥ TinyFish Fetch, Wayback |
+| BU | Download the whitelisted hits | **`read_url(prefer_fetch=True)`**: Fetch, cascade if text unusable; Agent if `bot_blocked` |
+| ME | Read the official site | **`read_url`** (cascade: PDF, HTML, Playwright) |
+| CE | Download the contact pages | **`read_url(prefer_fetch=True)`**: Fetch, cascade if empty |
+| MM | Read the rendered Maps page | TinyFish Fetch only (Maps JS DOM — outside the cascade) |
+| AV | Read the `manager_url` | **`read_url(prefer_fetch=True, keep_if_links=True)`**; scoring **without** LLM |
 
-Le problème se voit concrètement. Un décret d’État en PDF, ouvert par le top-down, est lu. Le même décret, ouvert par le bottom-up, peut revenir vide, parce que Fetch n’est pas une cascade PDF. Un site de marina tout en JavaScript passe au swarm (le navigateur local s’en occupe) et échoue à l’enrichissement marina. On paie donc plus cher d’un côté, ou on rate l’information de l’autre, pour une question identique : « donne-moi le texte de cette URL ».
+P, TD, BU, ME, CE and AV go through `read_url`. MM stays Fetch-only (`/place/` fiche).
 
-Le changement proposé est donc une seule porte d’entrée pour lire une URL. Dès que TinyFish Fetch ne rend pas un texte utilisable — surtout un PDF ou un site JavaScript — le bottom-up, les marinas et les capitaineries rentreraient dans la même cascade que les Projets et le top-down. On ne supprime pas Fetch : il reste le bon outil quand on a besoin du DOM après JavaScript, typiquement la fiche Google Maps `/place/`, que la cascade n’a pas vocation à parser comme un décret. On n’allume pas non plus le navigateur local à chaque Fetch réussi : il ne sert que si le HTML simple et Fetch ont déjà échoué. Sinon le coût explose, et on n’a rien gagné.
+## 4. Content / object filter — is this the right object?
 
-**Fait.** Porte `app.core.extract.read_url` / `read_urls`. Fetch d’abord pour BU, CE, AV. Cascade dès que Fetch est vide. Chromium seulement après HTML simple et Fetch. Maps : Fetch seulement. `extract_cascade` : magie `%PDF-`, Content-Type / Content-Disposition ; un HTML d’erreur sous une URL `.pdf` n’est plus un PDF.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P | Marine project, then reachable by boat | ML gatekeeper → `ask_yes_no` (`json` role, marine prompt); then `site_publishable` |
+| TD | The “port” object comes out at extraction (the strong filter is the State source) | Catalogue parser / NER later |
+| BU | Judge only the residue | `ask_yes_no` (`judge` role, pleasure-craft / cargo prompt) |
+| Marinas dump | Pleasure-craft marina | Overpass `leisure=marina` |
+| Harbour-office dump | Office, not water body | Overpass `office=harbour_master` (+ seamark / harbour) |
+| Anchorages | Anchorage object | Overpass anchorage / named-bay tags |
+| AV (Fetch) | Visit link in the HTML | Heuristic score, no judge |
+| AV (Search) | Right visit page | `ask_yes_no` (`json` role, visit prompt); URL among the candidates |
 
-### 2. Chercher « la page officielle de ce nom » : même outillage, questions métier distinctes
+P, BU and AV (Search) go through `ask_yes_no`. The OSM dump and the LLM judge are not the same implementation; the **question** is the same.
 
-Quatre jobs cherchent la page officielle d’un **lieu déjà nommé** : un port, une capitainerie, une aire protégée, une marina sans site dans OpenStreetMap. C’est la même question humaine. Chacun a pourtant sa recette.
+## 5. Structured extraction — which fields?
 
-Le bottom-up n’a que TinyFish Search, filtré par une liste de domaines d’État. S’il n’y a pas de clé TinyFish, il n’y a pas de recherche du tout. Les capitaineries font TinyFish Search, puis DuckDuckGo si ça revient vide, et jettent Facebook ou Tripadvisor avec une petite liste maison, au lieu du filtre de résultats de recherche déjà partagé ailleurs. Les AMP font TinyFish Search, passent les résultats dans ce filtre commun (`serp_filter`), puis un score, mais n’ont pas de filet DuckDuckGo. L’enrichissement marina, s’il n’a pas de tag site, tape DuckDuckGo et ignore TinyFish Search.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P | Name, place, S_ocean, partners | NIM `extract` → OpenRouter → Claude; heuristic |
+| TD | Port names (+ lat/lon in the text) | Catalogue parser first; NIM `extract` / `legal` ∥ spaCy; Claude last |
+| ME | VHF, berths, draft, services, phone | **`run_page_enrich`**: tags; phone/VHF regex; NIM `page` → OpenRouter; Agent if official site |
+| CE | Phone, VHF channel | **`run_page_enrich`** (same order); contact schema only |
+| AV | Not domain fields: a URL | Links extracted from Fetch; no page JSON schema |
 
-Ce n’est pas la question du bras top-down des ports d’entrée. Celui-là ne cherche pas « la page de *ce* port ». Il cherche une **liste réglementaire pour tout un polygone de zone économique exclusive**. Il a donc besoin de SearXNG, de Serper, parfois d’un modèle avec accès web. Coller SearXNG sur une marina ou une AMP serait le mauvais outil : on n’y cherche pas un décret de ports d’entrée.
+ME and CE are the “JSON on page text” twin (`page`). P and TD are the “domain JSON on a long corpus” twin (`extract`).
 
-Le changement proposé n’aligne que les recherches **nommées**. On commencerait par TinyFish Search, on passerait les résultats dans le même filtre déjà utilisé par le top-down et les AMP pour écarter forums et sites d’annonces, et on garderait DuckDuckGo uniquement comme filet quand la clé TinyFish manque — exactement ce que les capitaineries font déjà, et que le bottom-up et les AMP n’ont pas. Les requêtes et les listes de domaines resteraient propres à chaque mode : un port d’entrée n’est pas une page de permis d’aire protégée. On changerait l’outillage, pas la question métier. On n’installerait pas SearXNG sur l’enrichissement marina, capitainerie ou AMP.
+## 6. Geocoding — is this point in the right space?
 
-**Fait.** Porte `app.core.search.search_named`. TinyFish Search d’abord (paginé si le caller le demande), puis `serp_filter`. DuckDuckGo HTML seulement si la clé TinyFish manque — pas un second avis après un TinyFish vide. Requêtes, `include_domains` / `exclude_domains` et ranking restent propres à BU / CE / AV / ME. Pas de SearXNG sur ces jobs. Filet DDG : opérateur `site:` + filtre d’hôte pour que la whitelist survive sans API TinyFish.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P | GPS of the action place | **`geocode_name`** Nominatim **∥** GeoNames; LLM tie-break if disagreement; haven ≤ 15 km (`site_publishable`) |
+| TD | Glue the port into **this** polygon | **`geocode_port_dual`** (same parallel call); LLM tie-break; if both directories are mute: **`llm_geocode_port`** then in-EEZ / 15 km / 400 km river |
+| BU | Geocode names without a point | **The same** `geocode_port_dual` + `llm_geocode_port` if mute + polygon filter |
+| MM / dumps / MPA | — | GPS already in OSM / SHOM / NOAA / ProtectedSeas |
 
-### 3. Enrichir une marina ou une capitainerie : le même ordre des étapes, pas le même formulaire
+P and PoE share `geocode_dual` (Nominatim ∥ GeoNames). Space tests stay distinct: haven (`site_publishable`) vs VLIZ polygon (`classify_poe_point`).
 
-Les deux jobs d’enrichissement font le travail le plus proche du dépôt : extraire un téléphone, un canal VHF, parfois des services, **sans jamais inventer** un champ. Ils partagent déjà le même modèle NVIDIA pour lire une page, OpenRouter avec un contrôle de crédit, DuckDuckGo, et la petite fonction de lecture HTML. L’Agent TinyFish est le dernier recours des deux.
+## 7. Identity / duplicate — is it already there?
 
-Ils ne font pourtant pas les étapes dans le même ordre, et ce n’est pas justifié par le métier. Les capitaineries cherchent le web tout de suite, parce qu’elles n’ont souvent pas d’adresse dans OpenStreetMap. Les marinas lisent d’abord le tag site, ce qui est plus économique quand le tag existe. Les capitaineries sortent un numéro de téléphone par une règle simple *avant* d’appeler un modèle de langage. Les marinas appellent le modèle d’abord et ne regardent les tags OpenStreetMap qu’à la fin. L’Agent marina peut partir d’une URL trouvée sur DuckDuckGo, donc parfois un Tripadvisor. L’Agent capitainerie n’accepte qu’un site officiel — et c’est cette seconde règle qui est la bonne : un Agent lancé sur une page d’avis invente ou copie n’importe quoi.
+| Job | Sentence | Tools today |
+| --- | --- | --- |
+| P + TD | Merge two fiches of the same place | `same_site` (`app.core.dedup`): 500 m + 60% / 90% similarity |
+| BU catalogue | Names already on the list: judge skipped | Identity **of a name in a catalogue**, not a GPS merge |
+| Marinas dump | Upsert | `osm_id` |
+| Harbour-office dump | Glue SHOM / NOAA onto OSM | `find_building`: 0.25 km, distance alone, no name |
+| Anchorages | Corridor duplicates | name + geohash6 |
+| MPA map | Do not re-download | 30-day tile cache (not an entity merge) |
 
-On ne fusionnerait pas les deux schémas de données : une marina a des places visiteurs et un tirant d’eau, une capitainerie n’a besoin que du téléphone et du VHF. Ce qu’on partagerait, c’est **l’ordre** des étapes. On partirait des tags déjà là. On ne chercherait le web que s’il manque une URL. On lirait la page. On extrairait par une règle simple ce qui est trivial (un numéro, un canal). On n’appellerait NVIDIA puis OpenRouter que s’il reste un trou. On n’appellerait l’Agent que si l’URL est vraiment officielle. On éviterait ainsi de payer un modèle pour relire un téléphone déjà dans OpenStreetMap, et d’envoyer l’Agent sur un résultat de moteur.
+---
 
-**Fait.** Porte `app.core.enrich.run_page_enrich`. Ordre commun : tags → URL déjà là (`search_named` seulement s’il en manque) → lecture → regex téléphone/VHF → NVIDIA `page` puis OpenRouter s’il reste un trou → Agent TinyFish seulement si l’URL est officielle (`serp_filter`, jamais un hit moteur). Schémas distincts : marina = places visiteurs, tirant, services ; capitainerie = téléphone + VHF. Un champ déjà rempli n’est pas écrasé.
+## Real twins (to converge)
 
-### 4. Dire oui ou non : un même branchement, trois prompts différents
+A twin, in this document, is not “two modes that should be merged”. It is two pieces of code that ask **the same question** — where is the page, what text do we have, is this the right object — and that, because they were written weeks apart, each reinvented their tools. Converging them is sharing the technical brick. It is not mixing the product contracts: a marina is still not a port of entry, a marine protected area is still not a conservation project.
 
-Trois jobs disent « j’accepte » ou « je refuse » après avoir vu du texte ou des résultats de recherche. Chacun a son propre prompt et son propre rôle NVIDIA. Le gatekeeper des Projets demande si la page est un projet marin. Le juge bottom-up demande si *ce lieu* est un port d’entrée plaisance, ou du cargo. Le juge AMP demande, parmi une **liste d’URL déjà trouvées**, laquelle est une page de visite — et il n’a pas le droit d’en inventer une. Cette dernière contrainte est précieuse : c’est elle qui empêche d’halluciner une adresse de visite.
+Each of the six points below is a modification project. It first tells what the code does today, then why it is a real problem (and not only ugly code), then what we would change, and why that change is justified — including what we refuse to glue together.
 
-Le problème n’est pas que les questions métier soient différentes. Elles doivent le rester. Le problème, c’est que chaque mode a recâblé l’appel au modèle, les replis OpenRouter et Claude, et le format de la réponse. Quand on corrige un bug d’appel — un délai trop court, un JSON cassé, le filet Claude — on le corrige trois fois, ou une seule.
+### 1. Read a URL: one door, not five readers
 
-Le changement proposé est un adaptateur commun, pas un juge unique. On enverrait un prompt, et on recevrait un objet du type « j’accepte ou je refuse, éventuellement cette URL parmi les candidates, voici pourquoi ». Les trois textes de prompt resteraient trois textes. On n’écrirait pas un juge « projet ou port ou aire protégée » : ce serait plus faible que chaque spécialiste, et ça mélangerait des objets que le produit refuse de confondre.
+As soon as we have a web address, we need the **text** of the page (or of the PDF). It is the same question everywhere. Yet the path is not the same depending on the mode.
 
-**Fait.** Porte `app.core.judge.ask_yes_no`. NVIDIA → OpenRouter → Claude. Réponse `YesNo` (accepté / refusé / URL parmi les candidates / raison). Trois prompts inchangés. Rôles NVIDIA distincts : `json` (gatekeeper, AMP, sans Flash) et `judge` (bottom-up, Flash en dernier). Une URL hors liste ou égale au `manager_url` est un refus — c’est le filet anti-hallucination des AMP, désormais dans l’adaptateur. `bool("false")` n’est plus un oui. Pas un juge unique « projet ou port ou AMP ».
+The Projects swarm and the ports-of-entry top-down arm go through an extraction cascade (`extract_cascade`). We first download simply. If it is HTML, we extract the text. If it is a PDF, including a scan, we open it (and OCR it if needed). If the page is only JavaScript, we open a real browser. If the site blocks, we try a mirror. The ports-of-entry bottom-up arm, harbour-office enrichment, MPA visit-page search, and the marinas Google Maps job mainly call TinyFish Fetch: one shot, the rendered text, and that is all. Marina enrichment is even thinner: an HTTP download plus a readability extractor, without PDF or browser.
 
-### 5. Deux points proches : ce n’est pas toujours « le même objet »
+The problem is concrete. A State decree as PDF, opened by top-down, is read. The same decree, opened by bottom-up, can come back empty, because Fetch is not a PDF cascade. A marina site all in JavaScript passes the swarm (the local browser handles it) and fails marina enrichment. We therefore pay more on one side, or miss the information on the other, for an identical question: “give me the text of this URL”.
 
-Les dumps marinas, capitaineries et mouillages partagent déjà Overpass et la grille mondiale. Il n’y a pas de projet d’unification Overpass : c’est déjà le cas. Le piège serait d’y coller la déduplication des projets et des ports d’entrée (cinq cents mètres et un nom proche).
+The proposed change is therefore a single door to read a URL. As soon as TinyFish Fetch does not return usable text — especially a PDF or a JavaScript site — bottom-up, marinas and harbour offices would enter the same cascade as Projects and top-down. We do not remove Fetch: it remains the right tool when we need the DOM after JavaScript, typically the Google Maps `/place/` fiche, which the cascade is not meant to parse like a decree. We also do not light the local browser on every successful Fetch: it only serves if simple HTML and Fetch have already failed. Otherwise the cost explodes, and we have gained nothing.
 
-Quand on fusionne deux projets à moins de cinq cents mètres, on dit : c’est **le même site d’action**, on enrichit une seule fiche. Quand on colle un point du SHOM ou de la NOAA sur un objet OpenStreetMap à deux cent cinquante mètres, on dit : deux cartes officielles parlent du **même bâtiment**, on superpose un calque. Ce n’est pas la même décision. Réutiliser la déduplication des projets pour les capitaineries collerait des bureaux trop loin, ou refuserait un calque légitime.
+**Done.** Door `app.core.extract.read_url` / `read_urls`. Fetch first for BU, CE, AV. Cascade as soon as Fetch is empty. Chromium only after simple HTML and Fetch. Maps: Fetch only. `extract_cascade`: `%PDF-` magic, Content-Type / Content-Disposition; an error HTML under a `.pdf` URL is no longer a PDF.
 
-Ce point n’est donc pas un chantier d’unification. C’est un **garde-fou**. Même famille « identité » dans la taxonomie, deux règles, deux codes. On ne les mélange pas.
+### 2. Search “the official page of this name”: same tooling, distinct domain questions
 
-**Fait.** Portes `app.core.identity.same_site` et `app.core.identity.find_building`. `same_site` reste `app.core.dedup` (500 m + similarité 60 % / 90 %) — fusion de fiches Projets / PoE. `find_building` est le calque 250 m, distance seule, premier plus proche (plus de last-wins), préfiltre degré, rayon lu dans `capitaineries.merge_km`. Un nom différent n’empêche pas le calque. Un nom proche à 400 m ne colle pas deux bureaux. Pas de `is_duplicate` sur les capitaineries.
+Four jobs search the official page of an **already-named place**: a port, a harbour office, a protected area, a marina without a site in OpenStreetMap. It is the same human question. Each still has its own recipe.
 
-### 6. Géocoder un nom : un même appel aux deux annuaires, deux tests d’espace ensuite
+Bottom-up has only TinyFish Search, filtered by a list of State domains. If there is no TinyFish key, there is no search at all. Harbour offices do TinyFish Search, then DuckDuckGo if it comes back empty, and drop Facebook or Tripadvisor with a small homemade list, instead of the search-result filter already shared elsewhere. MPAs do TinyFish Search, pass the results through that common filter (`serp_filter`), then a score, but have no DuckDuckGo net. Marina enrichment, if it has no site tag, hits DuckDuckGo and ignores TinyFish Search.
 
-Les Projets et les ports d’entrée demandent tous les deux à Nominatim et à GeoNames où se trouve un nom. Les Projets les appellent l’un après l’autre, puis un modèle de langage si besoin, puis vérifient qu’on est en mer ou dans un havre à moins de quinze kilomètres. Les ports d’entrée les appellent en parallèle, départagent au modèle s’ils ne sont pas d’accord, puis exigent que le point tombe dans **ce** polygone de zone économique exclusive — pas « en France », *ce* polygone VLIZ.
+This is not the question of the ports-of-entry top-down arm. That one does not search “the page of *this* port”. It searches a **regulatory list for a whole exclusive-economic-zone polygon**. It therefore needs SearXNG, Serper, sometimes a model with web access. Gluing SearXNG onto a marina or an MPA would be the wrong tool: we are not looking for a ports-of-entry decree there.
 
-Les fournisseurs sont les mêmes, et le désaccord Nominatim / GeoNames est le même : c’est pour cela qu’un seul appel « demande aux deux, départage s’il le faut » est justifié. Ce qui ne doit pas fusionner, c’est le **test d’espace** ensuite. Un projet n’a pas à entrer dans un polygone VLIZ. Un port d’entrée n’a pas le droit d’être collé sur Mayotte alors qu’on fiche l’hexagone. On unifierait l’outil de géocodage, pas la géographie du produit.
+The proposed change aligns only the **named** searches. We would start with TinyFish Search, pass the results through the same filter already used by top-down and MPAs to drop forums and classifieds sites, and keep DuckDuckGo only as a net when the TinyFish key is missing — exactly what harbour offices already do, and what bottom-up and MPAs do not have. Queries and domain lists would stay proper to each mode: a port of entry is not a protected-area permit page. We would change the tooling, not the domain question. We would not install SearXNG on marina, harbour-office or MPA enrichment.
 
-**Fait.** Porte `app.core.geo.geocode_name` / `geocode_dual`. Nominatim ∥ GeoNames, départage `arbitrate_geocode` si désaccord, aucune troisième coordonnée. `geocode_port_dual` réutilise `pack_geocode_dual`. Projets : `site_publishable` (havre ≤ 15 km) dans `apply_havre` ; `llm_geocode` (site de conservation) seulement si les deux annuaires sont muets. PoE : polygone VLIZ inchangé ; si les deux annuaires sont muets, `llm_geocode_port` (prompt port d’entrée, pas récif/AMP) puis le même test VLIZ. Un GPS inventé hors de *ce* polygone n’est pas écrit. Pas de `classify_poe_point` sur un projet. Pas de `llm_geocode` Projet sur un port.
+**Done.** Door `app.core.search.search_named`. TinyFish Search first (paginated if the caller asks), then `serp_filter`. DuckDuckGo HTML only if the TinyFish key is missing — not a second opinion after an empty TinyFish. Queries, `include_domains` / `exclude_domains` and ranking stay proper to BU / CE / AV / ME. No SearXNG on these jobs. DDG net: `site:` operator + host filter so the whitelist survives without a TinyFish API.
 
-### Dans quel ordre, et pourquoi
+### 3. Enrich a marina or a harbour office: the same step order, not the same form
 
-On commence par la **lecture** (jumeau n°1 : **fait**), parce que c’est là que bottom-up, marinas et capitaineries perdent aujourd’hui des PDF et des pages JavaScript, et parce que tout le reste — enrichissement, juge — s’appuie sur un texte déjà là. Ensuite la **recherche nommée** (jumeau n°2 : **fait**), pour que capitaineries, AMP, marinas sans site et bottom-up cessent de réinventer le filet (TinyFish, le filtre de résultats, DuckDuckGo si la clé manque). Ensuite l’**ordre d’enrichissement** marina / capitainerie (jumeau n°3 : **fait**), qui devient simple une fois lecture et recherche stables. Le **juge** commun (jumeau n°4 : **fait**) : un branchement `ask_yes_no`, trois prompts. Le **garde-fou identité** (jumeau n°5 : **fait**) : `same_site` n’est pas `find_building`. Le **géocode** (jumeau n°6 : **fait**) : les Projets réutilisent l’appel parallèle des ports d’entrée, sans toucher à la règle du havre.
+The two enrichment jobs do the work closest to the repo: extract a phone, a VHF channel, sometimes services, **without ever inventing** a field. They already share the same NVIDIA model to read a page, OpenRouter with a credit check, DuckDuckGo, and the small HTML-read function. The TinyFish Agent is the last resort of both.
 
-On ne met pas SearXNG dans l’enrichissement marina ou capitainerie : ce n’est pas une liste d’État par zone économique. On ne remplace pas Overpass par une recherche web pour les dumps. On ne traite pas le cache de tuiles AMP comme une fusion de fiches. On ne lance pas le navigateur local sur chaque TinyFish Fetch qui a déjà renvoyé du HTML.
+They still do not do the steps in the same order, and that is not justified by the domain. Harbour offices search the web immediately, because they often have no address in OpenStreetMap. Marinas first read the site tag, which is more economical when the tag exists. Harbour offices extract a phone number by a simple rule *before* calling a language model. Marinas call the model first and only look at OpenStreetMap tags at the end. The marina Agent can start from a URL found on DuckDuckGo, therefore sometimes a Tripadvisor. The harbour-office Agent only accepts an official site — and that second rule is the right one: an Agent launched on a review page invents or copies anything.
 
+We would not merge the two data schemas: a marina has visitor berths and a draft, a harbour office only needs phone and VHF. What we would share is the **order** of the steps. We would start from the tags already there. We would search the web only if a URL is missing. We would read the page. We would extract by a simple rule what is trivial (a number, a channel). We would call NVIDIA then OpenRouter only if a hole remains. We would call the Agent only if the URL is really official. We would thus avoid paying a model to re-read a phone already in OpenStreetMap, and sending the Agent onto an engine result.
+
+**Done.** Door `app.core.enrich.run_page_enrich`. Common order: tags → URL already there (`search_named` only if one is missing) → read → phone/VHF regex → NVIDIA `page` then OpenRouter if a hole remains → TinyFish Agent only if the URL is official (`serp_filter`, never an engine hit). Distinct schemas: marina = visitor berths, draft, services; harbour office = phone + VHF. A field already filled is not overwritten.
+
+### 4. Say yes or no: one wiring, three different prompts
+
+Three jobs say “I accept” or “I refuse” after seeing text or search results. Each has its own prompt and its own NVIDIA role. The Projects gatekeeper asks whether the page is a marine project. The bottom-up judge asks whether *this place* is a pleasure-craft port of entry, or cargo. The MPA judge asks, among a **list of URLs already found**, which one is a visit page — and it is not allowed to invent one. That last constraint is precious: it is what prevents hallucinating a visit address.
+
+The problem is not that the domain questions are different. They must stay so. The problem is that each mode rewired the model call, the OpenRouter and Claude fallbacks, and the response format. When we fix a call bug — a timeout too short, a broken JSON, the Claude net — we fix it three times, or once.
+
+The proposed change is a common adapter, not a single judge. We would send a prompt, and receive an object of the type “I accept or I refuse, optionally this URL among the candidates, here is why”. The three prompt texts would stay three texts. We would not write a “project or port or protected area” judge: that would be weaker than each specialist, and it would mix objects the product refuses to confuse.
+
+**Done.** Door `app.core.judge.ask_yes_no`. NVIDIA → OpenRouter → Claude. `YesNo` response (accepted / refused / URL among the candidates / reason). Three prompts unchanged. Distinct NVIDIA roles: `json` (gatekeeper, MPA, without Flash) and `judge` (bottom-up, Flash last). A URL off the list or equal to `manager_url` is a refusal — that is the MPA anti-hallucination net, now in the adapter. `bool("false")` is no longer a yes. Not a single “project or port or MPA” judge.
+
+### 5. Two nearby points: it is not always “the same object”
+
+The marinas, harbour-office and anchorage dumps already share Overpass and the worldwide grid. There is no Overpass-unification project: that is already the case. The trap would be to glue onto it the Projects and ports-of-entry deduplication (five hundred metres and a close name).
+
+When we merge two projects less than five hundred metres apart, we say: it is **the same action site**, we enrich a single fiche. When we glue a SHOM or NOAA point onto an OpenStreetMap object at two hundred and fifty metres, we say: two official maps speak of **the same building**, we superimpose a layer. It is not the same decision. Reusing the Projects deduplication for harbour offices would glue offices too far, or refuse a legitimate layer.
+
+This point is therefore not a unification workshop. It is a **guardrail**. Same “identity” family in the taxonomy, two rules, two codes. We do not mix them.
+
+**Done.** Doors `app.core.identity.same_site` and `app.core.identity.find_building`. `same_site` stays `app.core.dedup` (500 m + 60% / 90% similarity) — merge of Projects / PoE fiches. `find_building` is the 250 m overlay, distance alone, first nearest (no more last-wins), degree prefilter, radius read in `capitaineries.merge_km`. A different name does not prevent the overlay. A close name at 400 m does not glue two offices. No `is_duplicate` on harbour offices.
+
+### 6. Geocode a name: one call to both directories, two space tests afterwards
+
+Projects and ports of entry both ask Nominatim and GeoNames where a name is. Projects call them one after the other, then a language model if needed, then check we are at sea or in a haven less than fifteen kilometres away. Ports of entry call them in parallel, break ties with the model if they disagree, then require that the point fall inside **this** exclusive-economic-zone polygon — not “in France”, *this* VLIZ polygon.
+
+The providers are the same, and the Nominatim / GeoNames disagreement is the same: that is why a single call “ask both, break ties if needed” is justified. What must not merge is the **space test** afterwards. A project does not have to enter a VLIZ polygon. A port of entry is not allowed to be glued onto Mayotte while we are filing metropolitan France. We would unify the geocoding tool, not the product geography.
+
+**Done.** Door `app.core.geo.geocode_name` / `geocode_dual`. Nominatim ∥ GeoNames, `arbitrate_geocode` tie-break if disagreement, no third coordinate. `geocode_port_dual` reuses `pack_geocode_dual`. Projects: `site_publishable` (haven ≤ 15 km) in `apply_havre`; `llm_geocode` (conservation site) only if both directories are mute. PoE: VLIZ polygon unchanged; if both directories are mute, `llm_geocode_port` (port-of-entry prompt, not reef/MPA) then the same VLIZ test. An invented GPS outside *this* polygon is not written. No `classify_poe_point` on a project. No Project `llm_geocode` on a port.
+
+### In which order, and why
+
+We start with **read** (twin no. 1: **done**), because that is where bottom-up, marinas and harbour offices today lose PDFs and JavaScript pages, and because everything else — enrichment, judge — relies on a text already there. Then **named search** (twin no. 2: **done**), so harbour offices, MPAs, marinas without a site and bottom-up stop reinventing the net (TinyFish, the result filter, DuckDuckGo if the key is missing). Then the marina / harbour-office **enrichment order** (twin no. 3: **done**), which becomes simple once read and search are stable. The common **judge** (twin no. 4: **done**): one `ask_yes_no` wiring, three prompts. The **identity guardrail** (twin no. 5: **done**): `same_site` is not `find_building`. The **geocode** (twin no. 6: **done**): Projects reuse the ports-of-entry parallel call, without touching the haven rule.
+
+We do not put SearXNG in marina or harbour-office enrichment: it is not a State list by economic zone. We do not replace Overpass with a web search for the dumps. We do not treat the MPA tile cache as a fiche merge. We do not launch the local browser on every TinyFish Fetch that already returned HTML.

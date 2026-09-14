@@ -1,6 +1,6 @@
-"""Contrôle listing des runs PoE — projection slug→mrgid, rapport, file de revue.
+"""Listing control of PoE runs — slug→mrgid projection, report, review queue.
 
-Aucun réseau. Mongo dédiée uniquement pour la persistance de revue.
+No network. Dedicated Mongo only for review persistence.
 """
 import asyncio
 import os
@@ -147,7 +147,7 @@ class TestProjectAndCompare:
         assert s["confident"] == 1
         assert s["contradiction"] == 1
         assert s["run_only"] == 1
-        # Alofi (Niue) hors des ZEE du run → pas listing_only
+        # Alofi (Niue) outside the run EEZs → not listing_only
         assert s["listing_only"] == 0
         assert cmp["review"]["listing_only"] == []
         assert cmp["confident"][0]["listing"]["name"] == "Fort Bay (Fort Baai)"
@@ -166,7 +166,7 @@ class TestProjectAndCompare:
         proj = project_listing(_listing_mini(), zones=ZONES, overrides={})
         run = [_run_port(26518, "Fort")]  # court, score moyen vs Fort Bay
         cmp = compare_to_listing(run, proj["ports"], run_mrgids={26518})
-        # soit ambiguous soit confident selon le fuzzy — jamais les deux
+        # either ambiguous or confident per fuzzy — never both
         assert cmp["summary"]["run_only"] + cmp["summary"]["ambiguous"] + cmp["summary"]["confident"] == 1
         if cmp["summary"]["ambiguous"]:
             assert cmp["review"]["ambiguous"][0]["listing"]["name"]

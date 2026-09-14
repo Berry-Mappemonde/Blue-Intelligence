@@ -1,97 +1,97 @@
-# Catalogue de référence des tags `seamark:*` et tags portuaires exploitables
+# Reference catalogue of `seamark:*` tags and usable harbour tags
 
-Inspiré du dépôt [Open Waters: Seamap](https://github.com/openwatersio/seamap)
-(`src/main/java/Seamark.java`, `bin/audit-tags.ts`) : documenter noir sur blanc
-**ce que nos pipelines lisent** dans OpenStreetMap, et ce qui reste exploitable
-demain. La version machine est `backend/data/seamark_catalog.json`, consommée
-par `scripts/audit_tags.py`.
+Inspired by the [Open Waters: Seamap](https://github.com/openwatersio/seamap)
+repository (`src/main/java/Seamark.java`, `bin/audit-tags.ts`): document in
+black and white **what our pipelines read** in OpenStreetMap, and what remains
+usable tomorrow. The machine version is `backend/data/seamark_catalog.json`,
+consumed by `scripts/audit_tags.py`.
 
-Règle d'or héritée de Blue Intelligence : **on n'invente rien**. Un tag absent
-reste absent ; un badge, un téléphone ou un canal VHF n'apparaît que si un tag
-l'atteste.
+Golden rule inherited from Blue Intelligence: **we invent nothing**. A missing
+tag stays missing; a badge, a phone number or a VHF channel appears only if a
+tag attests it.
 
-Ce catalogue est une **cible d'export OpenSeaMap** (champs BI ← tags OSM),
-pas un encodeur S-101. Voir `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+This catalogue is an **OpenSeaMap export target** (BI fields ← OSM tags),
+not an S-101 encoder. See `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 
-## Comment lire ce catalogue
+## How to read this catalogue
 
-- **exploité** — lu aujourd'hui par un pipeline (dump marinas, capitaineries,
-  badges services, enrichissement).
-- **candidat** — documenté ici, exploitable dans une itération future ; le
-  rapport d'audit mesure sa présence réelle dans nos données.
-- L'audit (`python scripts/audit_tags.py`) compare ce catalogue aux données
-  Mongo réelles et liste les clés **hors catalogue** : c'est un rapport, pas un
-  contrôle CI — les données OSM réelles contiennent des typos, un œil humain
-  tranche (voir `docs/audits/`).
+- **used** — read today by a pipeline (marina dump, harbour masters,
+  service badges, enrichment).
+- **candidate** — documented here, usable in a future iteration; the
+  audit report measures its real presence in our data.
+- The audit (`python scripts/audit_tags.py`) compares this catalogue to
+  real Mongo data and lists keys **outside the catalogue**: it is a report,
+  not a CI check — real OSM data contains typos, a human eye decides
+  (see `docs/audits/`).
 
-## Mode Marinas
+## Marinas mode
 
-| Tag | Statut | Usage |
+| Tag | Status | Usage |
 |---|---|---|
-| `leisure=marina` | exploité | identité du dump mondial |
-| `seamark:type=harbour` + `seamark:harbour:category` | exploité | catégorie (marina, yacht_harbour…) — 68 % des fiches |
-| `seamark:harbour:capacity`, `capacity` | exploité | badge **Amarrage** |
-| `seamark:harbour:draught`, `max_depth`, `depth` | exploité | badge **Amarrage** (tirant d'eau) |
-| `mooring` | exploité | badge **Amarrage** |
-| `fuel`, `drinking_water`, `electricity`, `shop` | exploité | badge **Avitaillement** |
-| `seamark:small_craft_facility:category` | exploité | badge selon valeur (fuel → Avitaillement, slipway/crane/boat_hoist/pump_out → Technique, toilets/showers/laundrette → À terre, visitor_berth → Amarrage) |
-| `pumpout`, `sanitary_dump_station`, `waste_disposal` | exploité | badge **Technique** |
-| `shower`, `toilets`, `restaurant`, `wifi`, `internet_access`, `wheelchair` | exploité | badge **À terre** |
-| `website`, `contact:website`, `url` | exploité | site officiel (vérifié palier 2) |
-| `phone`, `contact:phone`, `email`, `contact:email`, `opening_hours`, `operator`, `fee`, `charge`, `description` | exploité | fiche |
-| `seamark:type=berth` + `seamark:berth:category` | candidat | postes visiteurs à quai |
-| `seamark:type=harbour_basin`, `dock`, `marina` (typo fréquente) | candidat | variantes observées par l'audit |
+| `leisure=marina` | used | identity of the world dump |
+| `seamark:type=harbour` + `seamark:harbour:category` | used | category (marina, yacht_harbour…) — 68% of records |
+| `seamark:harbour:capacity`, `capacity` | used | **Berthing** badge |
+| `seamark:harbour:draught`, `max_depth`, `depth` | used | **Berthing** badge (draught) |
+| `mooring` | used | **Berthing** badge |
+| `fuel`, `drinking_water`, `electricity`, `shop` | used | **Provisioning** badge |
+| `seamark:small_craft_facility:category` | used | badge by value (fuel → Provisioning, slipway/crane/boat_hoist/pump_out → Technical, toilets/showers/laundrette → Ashore, visitor_berth → Berthing) |
+| `pumpout`, `sanitary_dump_station`, `waste_disposal` | used | **Technical** badge |
+| `shower`, `toilets`, `restaurant`, `wifi`, `internet_access`, `wheelchair` | used | **Ashore** badge |
+| `website`, `contact:website`, `url` | used | official site (tier-2 verified) |
+| `phone`, `contact:phone`, `email`, `contact:email`, `opening_hours`, `operator`, `fee`, `charge`, `description` | used | record |
+| `seamark:type=berth` + `seamark:berth:category` | candidate | visitor berths at the quay |
+| `seamark:type=harbour_basin`, `dock`, `marina` (frequent typo) | candidate | variants observed by the audit |
 
-## Mode Capitaineries
+## Harbour masters mode
 
-| Tag | Statut | Usage |
+| Tag | Status | Usage |
 |---|---|---|
-| `office=harbour_master`, `seamark:building:function=harbour_master`, `harbour=harbour_master` | exploité | identité |
-| `phone`, `contact:phone`, `telephone`, `mobile`, `contact:mobile` | exploité | téléphone (jamais inventé) |
-| `vhf`, `vhf_channel`, `channel`, `harbour:vhf`, `communication:vhf`, `seamark:communication:channel`, `seamark:harbour:vhf`, `comcha`, `shom:comcha` | exploité | canal VHF |
-| `seamark:information`, `inform`, `ninfom`, `note`, `shom:*`, `noaa:*` | exploité | notes / overlay SHOM & NOAA |
+| `office=harbour_master`, `seamark:building:function=harbour_master`, `harbour=harbour_master` | used | identity |
+| `phone`, `contact:phone`, `telephone`, `mobile`, `contact:mobile` | used | phone (never invented) |
+| `vhf`, `vhf_channel`, `channel`, `harbour:vhf`, `communication:vhf`, `seamark:communication:channel`, `seamark:harbour:vhf`, `comcha`, `shom:comcha` | used | VHF channel |
+| `seamark:information`, `inform`, `ninfom`, `note`, `shom:*`, `noaa:*` | used | notes / SHOM & NOAA overlay |
 
-## Mode Mouillages (corridor de route)
+## Anchorages mode (route corridor)
 
-| Tag | Statut | Usage |
+| Tag | Status | Usage |
 |---|---|---|
-| `seamark:type=anchorage` + `seamark:anchorage:category` | exploité | zones de mouillage — `anchorage_build.py` |
-| `seamark:type=anchor_berth` | exploité | postes numérotés |
-| `seamark:type=mooring` + `seamark:mooring:category` | exploité | bouées / coffres |
-| `natural=bay` (nommée) | exploité | baie naturelle le long du corridor |
-| `seamark:type=restricted_area` + `seamark:restricted_area:restriction=no_anchoring` | candidat | mouillage interdit — croisement AMP |
+| `seamark:type=anchorage` + `seamark:anchorage:category` | used | anchorage zones — `anchorage_build.py` |
+| `seamark:type=anchor_berth` | used | numbered berths |
+| `seamark:type=mooring` + `seamark:mooring:category` | used | buoys / mooring buoys |
+| `natural=bay` (named) | used | natural bay along the corridor |
+| `seamark:type=restricted_area` + `seamark:restricted_area:restriction=no_anchoring` | candidate | anchoring forbidden — MPA overlay |
 
-## Mapping inverse (champ slim BI → tags OSM d’export)
+## Reverse mapping (slim BI field → OSM export tags)
 
-Table machine : `export_mapping` dans `seamark_catalog.json`. Exemple : badge **Avitaillement** / champ `fuel` → `fuel=yes` + `seamark:small_craft_facility:category=fuel`. Sens autorisé : OSM → champs BI → GeoJSON OSM. Pas d’attributs S-101.
+Machine table: `export_mapping` in `seamark_catalog.json`. Example: **Provisioning** badge / `fuel` field → `fuel=yes` + `seamark:small_craft_facility:category=fuel`. Allowed direction: OSM → BI fields → OSM GeoJSON. No S-101 attributes.
 
-## Pilotes satellite (mode Science, avant le premier dump)
+## Satellite pilots (Science mode, before the first dump)
 
-| Tag | Statut | Usage |
+| Tag | Status | Usage |
 |---|---|---|
-| `natural=coastline` | candidat | trait de côte MNDWI / CoastSat (corridor Berry) |
-| `seamark:type=depth_area` | candidat | classes SDB Stumpf — pas un DTM, pas une ENC |
+| `natural=coastline` | candidate | MNDWI / CoastSat coastline (Berry corridor) |
+| `seamark:type=depth_area` | candidate | Stumpf SDB classes — not a DTM, not an ENC |
 
-## Route NAVIGUIDE (atterrissages, dangers)
+## NAVIGUIDE route (landfalls, hazards)
 
-| Tag | Statut | Usage |
+| Tag | Status | Usage |
 |---|---|---|
-| `seamark:type=light` + `character/colour/period/range` | candidat | feux d'atterrissage aux escales (`Fl(3)WRG.10s`) |
-| `seamark:type=rock` / `wreck` / `obstruction` | candidat | dangers le long du corridor |
+| `seamark:type=light` + `character/colour/period/range` | candidate | landfall lights at stops (`Fl(3)WRG.10s`) |
+| `seamark:type=rock` / `wreck` / `obstruction` | candidate | hazards along the corridor |
 
-## Ajouter un tag au catalogue
+## Adding a tag to the catalogue
 
-1. Lancer l'audit : `python scripts/audit_tags.py --out docs/audits/$(date +%F)-tags.md`.
-2. Regarder les sections « hors catalogue » / « sous-clés non documentées » ;
-   attention aux typos OSM (`seamark:type=no`, `marina`…), c'est justement le
-   rôle de l'œil humain.
-3. Ajouter l'entrée dans `backend/data/seamark_catalog.json` (statut
-   `candidat`, puis `exploite` quand un pipeline le lit vraiment).
-4. Mettre à jour ce document et, si le tag alimente un badge, la table
-   `SERVICE_TAG_QUESTIONS` de `backend/app/services/marina_world.py`.
+1. Run the audit: `python scripts/audit_tags.py --out docs/audits/$(date +%F)-tags.md`.
+2. Look at the “outside catalogue” / “undocumented sub-keys” sections;
+   watch for OSM typos (`seamark:type=no`, `marina`…), that is exactly the
+   role of the human eye.
+3. Add the entry in `backend/data/seamark_catalog.json` (status
+   `candidat`, then `exploite` when a pipeline actually reads it).
+4. Update this document and, if the tag feeds a badge, the
+   `SERVICE_TAG_QUESTIONS` table in `backend/app/services/marina_world.py`.
 
-## Références
+## References
 
 - [OpenSeaMap — Seamark tag values](https://wiki.openstreetmap.org/wiki/OpenSeaMap/Seamark_Tag_Values)
 - [openwatersio/seamap](https://github.com/openwatersio/seamap) — `Seamark.java`, `SeamarkZoomRules.java`, `bin/audit-tags.ts`
-- `backend/app/services/marina_build.py` (`KEPT_TAGS`) et `capitainerie_world.py` (`kept_tags`)
+- `backend/app/services/marina_build.py` (`KEPT_TAGS`) and `capitainerie_world.py` (`kept_tags`)

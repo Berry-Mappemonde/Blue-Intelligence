@@ -1,6 +1,6 @@
-"""Probe Serper : phrase courte + TLD sur les 11 polygones, puis les autres ZEE.
+"""Serper probe: short phrase + TLD on the 11 polygons, then the other EEZs.
 
-Usage :
+Usage:
   python scripts/probe_serper_google_style.py
   python scripts/probe_serper_google_style.py --limit 80
 """
@@ -59,7 +59,7 @@ async def probe_zone(zone: dict, key: str) -> dict:
         shot_rows.append({"lang": lang, "query": q, "n": len(hits),
                           "domains": [h.get("domain") for h in hits[:8]]})
         if not hits and lang == shots[-1][0]:
-            # 402 / clé vide : le client renvoie [] — on le signale en haut.
+            # 402 / empty key: the client returns [] — flag it at the top.
             pass
     seen, merged = set(), []
     for h in all_hits:
@@ -89,13 +89,13 @@ async def probe_zone(zone: dict, key: str) -> dict:
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0,
-                    help="Plafond de ZEE hors des 11 (0 = toutes)")
+                    help="Cap of EEZs outside the 11 (0 = all)")
     ap.add_argument("--skip-mrgids", type=str, default="",
-                    help="mrgid déjà faits, séparés par des virgules")
+                    help="already-done mrgids, comma-separated")
     ap.add_argument("--skip-iso2", type=str, default="",
-                    help="iso2 déjà faits, séparés par des virgules")
+                    help="already-done iso2, comma-separated")
     ap.add_argument("--only-mrgids", type=str, default="",
-                    help="ne sonder que ces mrgid (11 + debug)")
+                    help="probe only these mrgids (11 + debug)")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
     key = serper_api_key()

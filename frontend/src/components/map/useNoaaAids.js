@@ -16,7 +16,7 @@ function parseBbox(map) {
 }
 
 /**
- * Feux / bouées NOAA ENC Direct — eaux US seulement (le backend filtre).
+ * NOAA ENC Direct lights / buoys — US waters only (the backend filters).
  */
 export default function useNoaaAids({ mapObj, enabled }) {
   const groupRef = useRef(null);

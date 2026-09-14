@@ -2,17 +2,17 @@ import L from "leaflet";
 import { computePopupFit, POPUP_FIT_PAD } from "../popupFit";
 import { POPUP_OPTS } from "../points";
 
-describe("politique d'affichage des popups", () => {
-  test("les popups ne déplacent pas la carte", () => {
+describe("popup display policy", () => {
+  test("popups do not move the map", () => {
     expect(POPUP_OPTS.autoPan).toBe(false);
     expect(POPUP_OPTS.keepInView).toBe(false);
   });
 
-  test("Leaflet repositionne via la politique (plus de translate du wrapper)", () => {
+  test("Leaflet repositions via the policy (no more wrapper translate)", () => {
     expect(L.Popup.prototype._updatePosition.name).toBe("patchedPopupPosition");
   });
 
-  test("au centre, la popup reste au-dessus et centrée", () => {
+  test("at the centre, the popup stays above and centred", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 500, anchorY: 400,
       popupW: 340, popupH: 280,
@@ -23,7 +23,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.maxHeight).toBe(280);
   });
 
-  test("trop près du haut, la popup bascule dessous", () => {
+  test("too close to the top, the popup flips below", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 500, anchorY: 80,
       popupW: 340, popupH: 420,
@@ -33,7 +33,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.maxHeight).toBeLessThanOrEqual(700 - POPUP_FIT_PAD * 2);
   });
 
-  test("une petite popup près du haut reste au-dessus si elle tient", () => {
+  test("a small popup near the top stays above if it fits", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 500, anchorY: 80,
       popupW: 220, popupH: 40,
@@ -41,7 +41,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.placeBelow).toBe(false);
   });
 
-  test("trop près de la droite, la boîte glisse à gauche et la flèche suit", () => {
+  test("too close to the right, the box slides left and the tip follows", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 960, anchorY: 400,
       popupW: 340, popupH: 200,
@@ -52,7 +52,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.tipShift).toBeGreaterThan(0);
   });
 
-  test("trop près de la gauche, la boîte reste dans la carte", () => {
+  test("too close to the left, the box stays inside the map", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 40, anchorY: 400,
       popupW: 340, popupH: 200,
@@ -61,7 +61,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.tipShift).toBeLessThan(0);
   });
 
-  test("cas Tunisie (haut-droit) : dessous + décalage gauche, entièrement dans la carte", () => {
+  test("Tunisia case (top-right): below + left shift, fully inside the map", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 850, anchorY: 120,
       popupW: 340, popupH: 420,
@@ -73,7 +73,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.maxHeight).toBeLessThanOrEqual(700 - POPUP_FIT_PAD * 2);
   });
 
-  test("une popup plus large que la carte est ramenée à l'emprise", () => {
+  test("a popup wider than the map is clamped to the bounds", () => {
     const fit = computePopupFit({
       mapW: 320, mapH: 500, anchorX: 160, anchorY: 250,
       popupW: 400, popupH: 180,
@@ -83,7 +83,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.left).toBe(POPUP_FIT_PAD);
   });
 
-  test("une popup plus haute que la carte est plafonnée", () => {
+  test("a popup taller than the map is capped", () => {
     const fit = computePopupFit({
       mapW: 800, mapH: 400, anchorX: 400, anchorY: 200,
       popupW: 300, popupH: 900,
@@ -92,7 +92,7 @@ describe("politique d'affichage des popups", () => {
     expect(fit.maxHeight).toBeGreaterThanOrEqual(80);
   });
 
-  test("au milieu, une grande popup se réduit au-dessus plutôt que de basculer", () => {
+  test("in the middle, a large popup shrinks above rather than flipping", () => {
     const fit = computePopupFit({
       mapW: 1000, mapH: 700, anchorX: 500, anchorY: 350,
       popupW: 340, popupH: 420,

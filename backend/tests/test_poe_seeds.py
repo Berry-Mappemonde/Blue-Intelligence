@@ -1,4 +1,4 @@
-"""Union bottom-up des seeds PoE — sans réseau, sans Mongo."""
+"""Bottom-up union of PoE seeds — no network, no Mongo."""
 import sys
 from pathlib import Path
 

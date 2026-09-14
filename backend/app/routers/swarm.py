@@ -1,5 +1,5 @@
-"""app.routers.swarm — Pilotage du swarm de découverte, KPIs, télémétrie,
-extractions échouées (Force Extract via le même pipeline isolé)."""
+"""app.routers.swarm — Discovery-swarm control, KPIs, telemetry,
+failed extractions (Force Extract via the same isolated pipeline)."""
 import asyncio
 
 from fastapi import APIRouter, HTTPException
@@ -44,7 +44,7 @@ async def stop():
 @router.get("/swarm/status")
 async def status():
     st = swarm.status()
-    # Moteur LLM unique : OpenRouter (badge dynamique côté UI).
+    # Single LLM engine: OpenRouter (dynamic badge on the UI side).
     st["engine"] = "openrouter"
     return st
 
@@ -69,8 +69,8 @@ async def stats(mode: str = "projects"):
         items = await db.capitaineries.count_documents({})
         tele_filter = {"dataset": "capitaineries"}
     elif m == "formalities":
-        # Refactor 2026-06 — mode Formalités = carte mondiale [ZEE -> PoE].
-        # ITEMS MAPPED = nombre de ports d'entrée extraits.
+        # Refactor 2026-06 — Formalities mode = world map [EEZ -> PoE].
+        # ITEMS MAPPED = number of ports of entry extracted.
         items = await db.poe_ports.count_documents({})
         tele_filter = {"dataset": "formalities"}
     elif m == "amp":
@@ -135,7 +135,7 @@ async def clear_audit():
 
 
 async def _force_extract_one(row: dict, settings: dict, *, finalize_own: bool = True):
-    """Même `_process_url` / gatekeeper, écriture run uniquement."""
+    """Same `_process_url` / gatekeeper, run write only."""
     if settings:
         swarm.settings = settings
     if not swarm.run_id:

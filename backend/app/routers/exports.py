@@ -1,16 +1,16 @@
 """
-app.routers.exports — Snapshots datés et immuables des exports GeoJSON.
+app.routers.exports — Dated, immutable GeoJSON export snapshots.
 
-Inspiration Open Waters: Seamap : chaque build publié est une archive datée
-qui ne change plus jamais (`<AAAA-MM-JJ>.pmtiles` chez eux). Ici, un snapshot
-écrit les sept jeux de données sous ``backend/exports/<AAAA-MM-JJ>/`` avec un
-``MANIFEST.json`` (version, empreinte, comptage par fichier). Un dossier déjà
-écrit n'est jamais réécrit : re-poster le même jour répond 409.
+Inspired by Open Waters: Seamap: each published build is a dated archive
+that never changes again (`<YYYY-MM-DD>.pmtiles` on their side). Here a snapshot
+writes the seven datasets under ``backend/exports/<YYYY-MM-DD>/`` with a
+``MANIFEST.json`` (version, fingerprint, per-file counts). An already-written
+folder is never rewritten: posting the same day again returns 409.
 
-Endpoints :
-  * ``POST /api/export/snapshot``                    — écrit le snapshot du jour
-  * ``GET  /api/export/snapshots``                   — liste les snapshots (manifestes)
-  * ``GET  /api/export/snapshots/{date}/{filename}`` — télécharge un fichier archivé
+Endpoints:
+  * ``POST /api/export/snapshot``                    — write today's snapshot
+  * ``GET  /api/export/snapshots``                   — list snapshots (manifests)
+  * ``GET  /api/export/snapshots/{date}/{filename}`` — download an archived file
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ async def _fc_route() -> tuple[dict, str]:
     return fc, "Naviguide — Berry-Mappemonde (route officielle)"
 
 
-# nom de dataset → (nom de fichier archivé, builder)
+# dataset name → (archived filename, builder)
 DATASETS: dict[str, tuple[str, object]] = {
     "projects": ("projects.geojson", _fc_projects),
     "marinas": ("marinas.geojson", _fc_marinas),
@@ -106,10 +106,10 @@ DATASETS: dict[str, tuple[str, object]] = {
 
 def write_snapshot_files(base_dir: Path, date: str,
                          datasets: dict[str, dict]) -> dict:
-    """Écrit les fichiers versionnés + MANIFEST.json. Refuse un dossier existant.
+    """Write versioned files + MANIFEST.json. Refuse an existing folder.
 
-    Fonction pure vis-à-vis de Mongo (testable) : ``datasets`` associe le nom du
-    dataset à sa FeatureCollection DÉJÀ versionnée (bloc ``metadata`` présent).
+    Pure vs Mongo (testable): ``datasets`` maps the dataset name
+    to its ALREADY versioned FeatureCollection (``metadata`` block present).
     """
     target = base_dir / date
     if target.exists():

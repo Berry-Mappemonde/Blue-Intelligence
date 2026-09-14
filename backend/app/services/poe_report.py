@@ -1,10 +1,9 @@
-"""
-poe_report — Rapport quantitatif d'un run PoE, construit sur DEUX matières :
-  1. l'analyse des ÉVÉNEMENTS structurés du run (poe_run_events : recherches,
-     gatekeeper, cascade de collecte, comparaisons LLM∥NER, géocodage double…) ;
-  2. la COMPARAISON PORT PAR PORT avec la base v1 (poe_diff).
+"""poe_report — Quantitative report of a PoE run, built from TWO materials:
+  1. analysis of the run's structured EVENTS (poe_run_events: searches,
+     gatekeeper, collection cascade, LLM∥NER comparisons, dual geocoding…);
+  2. PORT-BY-PORT COMPARISON with the v1 database (poe_diff).
 
-Sorties : dict JSON (API) et rendu markdown en français (langage naturel).
+Outputs: JSON dict (API) and French natural-language markdown.
 """
 import statistics
 
@@ -79,9 +78,9 @@ async def build_run_report(db, run_id: str, include_diff: bool = True) -> dict:
     }
 
     # --- Gatekeeper ----------------------------------------------------------
-    # Une zone relancée (reprise) émet plusieurs événements : on ne garde que le
-    # DERNIER par zone. Les domaines retenus en repli (ia_sans_source) ne sont
-    # PAS des domaines officiels — ils sont comptés à part.
+    # A relaunched (resumed) zone emits several events: keep only the
+    # LAST per zone. Domains kept as fallback (ia_sans_source) are
+    # NOT official domains — they are counted separately.
     gk_by_zone: dict = {}
     for e in by_step.get("gatekeeper", []):
         gk_by_zone[e.get("mrgid")] = e
@@ -136,9 +135,9 @@ async def build_run_report(db, run_id: str, include_diff: bool = True) -> dict:
     }
 
     # --- Extraction LLM ∥ NER ---------------------------------------------------
-    # Dernier événement par zone (les retries synthèse émettent plusieurs
-    # comparaisons) ; « NER actif » = le NER a réellement détecté des noms
-    # (un NER muet est un signal neutre, pas une disponibilité).
+    # Last event per zone (synthesis retries emit several
+    # comparisons); “active NER” = NER actually detected names
+    # (a mute NER is a neutral signal, not availability).
     extr_by_zone: dict = {}
     for e in by_step.get("extraction_compare", []):
         extr_by_zone[e.get("mrgid")] = e
@@ -153,7 +152,7 @@ async def build_run_report(db, run_id: str, include_diff: bool = True) -> dict:
         "ner_fallbacks": sum(1 for e in extr if e["payload"].get("fallback") == "ner"),
     }
 
-    # --- Géocodage double --------------------------------------------------------
+    # --- Dual geocoding ----------------------------------------------------------
     geo = by_step.get("geocode", [])
     both = [e for e in geo if e["payload"].get("nominatim") and e["payload"].get("geonames")]
     agreement_kms = [e["payload"]["agreement_km"] for e in both
@@ -175,7 +174,7 @@ async def build_run_report(db, run_id: str, include_diff: bool = True) -> dict:
         "geonames_available": any(e["payload"].get("geonames_available") for e in geo),
     }
 
-    # --- Zones & durées ----------------------------------------------------------
+    # --- Zones & durations -------------------------------------------------------
     zdones = by_step.get("zone_done", [])
     durations = [float(e["payload"].get("duration_s") or 0) for e in zdones]
     slowest = sorted(zdones, key=lambda e: -(e["payload"].get("duration_s") or 0))[:5]
@@ -240,7 +239,7 @@ async def build_run_report(db, run_id: str, include_diff: bool = True) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Rendu markdown (français, langage naturel)
+# Markdown render (French, natural language)
 # ---------------------------------------------------------------------------
 def report_to_markdown(rep: dict) -> str:
     r, z = rep["run"], rep["zones"]

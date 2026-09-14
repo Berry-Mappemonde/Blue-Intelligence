@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Vent AVERAGE mensuel depuis WIND_GLO_PHY_CLIMATE_L4_MY_012_003.
+"""Monthly AVERAGE wind from WIND_GLO_PHY_CLIMATE_L4_MY_012_003.
 
-Ce n'est PAS une rose MOST_LIKELY. Overlay V0 : une flèche par maille
-(moyenne 1994–2020 de ``eastward_wind`` / ``northward_wind``). Les roses
-8 secteurs restent le travail de ``gen_wind_atlas.py`` (MY 6 h).
+This is NOT a MOST_LIKELY rose. V0 overlay: one arrow per cell
+(1994–2020 mean of ``eastward_wind`` / ``northward_wind``). The 8-sector
+roses remain the job of ``gen_wind_atlas.py`` (MY 6 h).
 """
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ OUT = ROOT / "backend" / "data" / "climatology" / "wind"
 PRODUCT = "WIND_GLO_PHY_CLIMATE_L4_MY_012_003"
 DATASET = "cmems_obs-wind_glo_phy_my_l4_P1M"
 PERIOD = "1994-2020"
-# Citer le product ID. Le DOI CMEMS de 012_003 n'est pas recopié ici
-# tant qu'il n'est pas lu depuis la fiche produit.
+# Cite the product ID. The CMEMS DOI for 012_003 is not copied here
+# until it is read from the product sheet.
 DOI = None
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Tamponne un GeoJSON pilote avec metadata.version + sha256.
+"""Stamp a pilot GeoJSON with metadata.version + sha256.
 
-Usage (Mac, hors VPS) :
+Usage (Mac, off the VPS):
   python3 scripts/satellite/export_pilot.py --in raw.geojson --out coastline.geojson
 """
 from __future__ import annotations
@@ -21,9 +21,9 @@ from stamp import stamp_features  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Versionne un export Sentinel pilote")
-    p.add_argument("--in", dest="src", required=True, help="GeoJSON brut")
-    p.add_argument("--out", dest="dst", required=True, help="GeoJSON versionné")
+    p = argparse.ArgumentParser(description="Version a Sentinel pilot export")
+    p.add_argument("--in", dest="src", required=True, help="raw GeoJSON")
+    p.add_argument("--out", dest="dst", required=True, help="versioned GeoJSON")
     p.add_argument("--dataset", default="sentinel-coastline")
     args = p.parse_args()
     raw = json.loads(Path(args.src).read_text(encoding="utf-8"))

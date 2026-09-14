@@ -1,8 +1,7 @@
-"""
-File de revue humaine — une fiche à la fois, commentaire persisté.
+"""Human review queue — one card at a time, persisted comment.
 
-Ne lit que les collections de run / v1. N'écrit JAMAIS dans `projects`,
-`poe_ports`, `eez_zones`, `marinas`, `capitaineries` ni `amp_sites`. Mutées :
+Reads only run / v1 collections. NEVER writes `projects`,
+`poe_ports`, `eez_zones`, `marinas`, `capitaineries` or `amp_sites`. Mutated:
 `review_comments`, `review_gold`, `review_choices`,
 `review_suggest`, `review_lessons`.
 """
@@ -72,7 +71,7 @@ def now_iso() -> str:
 
 
 def comment_key(kind: str, entity_id: str, run_id: str | None = None) -> str:
-    """Clé union `{mode}:{entity_id}`. `run_id` ignoré (legacy debug)."""
+    """Union key `{mode}:{entity_id}`. `run_id` ignored (legacy debug)."""
     del run_id
     return f"{kind}:{_sid(entity_id)}"
 
@@ -142,7 +141,7 @@ async def _count(coll, q: dict | None = None) -> int:
 
 
 async def list_runs(db, kind: str) -> dict:
-    """Runs disponibles pour un type de fiche, plus la carte publiée (v1)."""
+    """Runs available for a card type, plus the published map (v1)."""
     if kind not in KINDS:
         raise ValueError("kind must be project|eez|poe|marina|capitainerie|amp")
     published_count = 0
@@ -236,7 +235,7 @@ async def list_runs(db, kind: str) -> dict:
 async def _label_zones(db, zones: list[dict]) -> list[dict]:
     if not zones:
         return zones
-    # Libellés : un polygone = une fiche (France hexagone ≠ Mayotte).
+    # Labels: one polygon = one card (France hexagon ≠ Mayotte).
     all_sibs: list[dict] = []
     try:
         all_sibs = await db.eez_zones.find(
@@ -834,7 +833,7 @@ def _amp_fiche(doc: dict) -> dict:
 
 
 async def _project_union_extras(db, doc: dict) -> list[dict]:
-    """Occurrences run du même projet (url / _id / same_site), hors canaris."""
+    """Run occurrences of the same project (url / _id / same_site), no canaries."""
     if not doc:
         return []
     eid = _sid(doc.get("_id") or doc.get("url"))
@@ -902,7 +901,7 @@ async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
             db, mid, run_id=fiche_run, union=union)
         if fiche is None:
             return None
-        # `kind` reste le verdict pipeline (none / general_list / …).
+        # `kind` stays the pipeline verdict (none / general_list / …).
         fiche["review_kind"] = "eez"
         fiche["id"] = str(mid)
 

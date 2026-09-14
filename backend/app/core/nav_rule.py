@@ -1,7 +1,7 @@
-"""Juge : cette mention est-elle une règle de navigation ?
+"""Judge: is this mention a navigation rule?
 
-Métier : oui / non + citation. Pas un calage pixel, pas une profondeur.
-Les fixtures de recette passent par l'heuristique (sans LLM).
+Business: yes / no + citation. Not a pixel alignment, not a depth.
+Acceptance fixtures go through the heuristic (no LLM).
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def parse_navigation_rule(data: dict | None) -> dict:
 
 
 def should_write_vhf(evidence_text: str | None, extracted_vhf) -> bool:
-    """N'écrit un canal que si la mention est une règle (C16)."""
+    """Write a channel only if the mention is a rule (C16)."""
     if extracted_vhf in (None, "", "null", "None"):
         return False
     return heuristic_navigation_rule(evidence_text or "")

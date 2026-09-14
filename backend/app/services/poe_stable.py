@@ -1,7 +1,7 @@
-"""Les 11 polygones Formalités dont la découverte de sources est stable.
+"""The 11 Formalities polygons whose source discovery is stable.
 
-Une seule liste canonique — les scripts de probe / run isolé réexportent
-`STABLE_REVIEW_MRGIDS` comme `TARGET_MRGIDS`. Ne pas importer `scripts/`.
+One canonical list — probe / isolated-run scripts re-export
+`STABLE_REVIEW_MRGIDS` as `TARGET_MRGIDS`. Do not import `scripts/`.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ STABLE_REVIEW_MRGIDS: tuple[int, ...] = (
 STABLE_REVIEW_SET = frozenset(STABLE_REVIEW_MRGIDS)
 STABLE_REVIEW_ORDER = {mid: i for i, mid in enumerate(STABLE_REVIEW_MRGIDS)}
 
-# Libellés de secours (file Review) si la ZEE n'est dans aucun run / v1.
+# Fallback labels (Review queue) if the EEZ is in no run / v1.
 STABLE_REVIEW_META: dict[int, dict[str, str]] = {
     5677: {"iso2": "FR", "name": "France", "sovereign": "France"},
     8429: {"iso2": "MX", "name": "Mexico", "sovereign": "Mexico"},

@@ -1,5 +1,5 @@
 /**
- * Onglet Explication — français courant, par mode.
+ * Explain tab — plain language, per mode.
  */
 export default function ExplainPanel({ t, mode }) {
   const key = {

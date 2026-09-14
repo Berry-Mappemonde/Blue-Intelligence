@@ -1,104 +1,102 @@
-# Vague 4 — Guide Mac, pas à pas (Sentinel)
+# Wave 4 — Mac step-by-step guide (Sentinel)
 
-À faire **sur votre Mac**, pas sur le serveur. Une étape après l’autre.
-Si une commande affiche une erreur, arrêtez-vous et relisez le cadre
-« Si ça bloque » de l’étape.
+Do this **on your Mac**, not on the server. One step at a time.
+If a command prints an error, stop and reread that step’s
+“If it blocks” box.
 
-Les images sont lourdes (~1 Go pièce). On commence par **une** scène.
+Images are heavy (~1 GB each). We start with **one** scene.
 
 ---
 
-## Avant de commencer (une seule fois)
+## Before you start (once)
 
-1. Ouvrez **Terminal** (Spotlight : tapez `Terminal`, Entrée).
-2. Allez dans le dossier du projet. Adaptez le chemin si le vôtre est ailleurs :
+1. Open **Terminal** (Spotlight: type `Terminal`, Enter).
+2. Go to the project folder. Change the path if yours is elsewhere:
 
 ```bash
 cd ~/Documents/Blue-Intelligence-Map
 ```
 
-3. Créez le fichier secret (s’il n’existe pas encore) :
+3. Create the secret file (if it does not exist yet):
 
 ```bash
 cp scripts/satellite/.env.example scripts/satellite/.env
 ```
 
-4. Ouvrez-le :
+4. Open it:
 
 ```bash
 open -e scripts/satellite/.env
 ```
 
-5. Remplissez, **mot de passe entre quotes** :
+5. Fill it in, **password in quotes**:
 
 ```
-CDSE_USERNAME=votre.email@exemple.com
-CDSE_PASSWORD='votre-mot-de-passe'
+CDSE_USERNAME=your.email@example.com
+CDSE_PASSWORD='your-password'
 ```
 
-Enregistrez. Ce fichier n’est **pas** envoyé dans Git.
+Save. This file is **not** sent to Git.
 
-6. Vérifiez le login :
+6. Check the login:
 
 ```bash
 python3 scripts/satellite/check_login.py
 ```
 
-Vous devez lire `CDSE : connexion OK`. Sinon le mot de passe ou le compte
-n’est pas le bon (CDSE = dataspace.copernicus.eu, pas CMEMS).
+You should read `CDSE : connexion OK`. Otherwise the password or the
+account is wrong (CDSE = dataspace.copernicus.eu, not CMEMS).
 
 ---
 
-## Étape 1 — Télécharger **une** photo L1C (S1)
+## Step 1 — Download **one** L1C photo (S1)
 
-ACOLITE a besoin du **L1C** (image brute). Le **L2A** (déjà corrigé par
-l’ESA) est refusé : *Level-2A data not supported*.
+ACOLITE needs **L1C** (raw image). **L2A** (already ESA-corrected)
+is rejected: *Level-2A data not supported*.
 
-**Pourquoi ne pas utiliser le L2A ESA, plus « prêt » ?** L’ESA corrige
-surtout pour la terre (champs, forêts). Sur l’eau, cette correction
-est souvent mauvaise. ACOLITE part du L1C et corrige pour le littoral.
-On ne saute donc pas ACOLITE : ce n’est pas plus long pour rien.
-Le zip L2A déjà téléchargé peut rester sur le Bureau ; on ne le
-pointe pas dans ACOLITE.
+**Why not use the “readier” ESA L2A?** ESA corrects mainly for land
+(fields, forests). Over water that correction is often poor. ACOLITE
+starts from L1C and corrects for the coast. So we do not skip ACOLITE:
+it is not extra time for nothing. A L2A zip already on the Desktop
+can stay there; do not point ACOLITE at it.
 
-D’abord rafraîchir la liste (scènes `MSIL1C`) :
+First refresh the list (`MSIL1C` scenes):
 
 ```bash
 python3 scripts/satellite/search_stac.py --limit 2 --out scripts/satellite/scenes_la_rochelle.json
 ```
 
-Les `id` doivent contenir `MSIL1C`, pas `MSIL2A`.
+The `id` values must contain `MSIL1C`, not `MSIL2A`.
 
-Ensuite télécharger **une** scène. Cela peut prendre 10 à 40 minutes
-selon votre box.
+Then download **one** scene. This can take 10 to 40 minutes
+depending on your connection.
 
 ```bash
 python3 scripts/satellite/download_scenes.py --limit 1
 ```
 
-Le zip arrive sur le Bureau : `~/Desktop/sentinel-pilot/`.
-Un fichier `download_receipt.json` donne le `sha256` (preuve S1).
+The zip lands on the Desktop: `~/Desktop/sentinel-pilot/`.
+A `download_receipt.json` file gives the `sha256` (S1 proof).
 
-Pour voir seulement si le catalogue répond, sans télécharger :
+To see only whether the catalogue answers, without downloading:
 
 ```bash
 python3 scripts/satellite/download_scenes.py --limit 1 --dry-run
 ```
 
-**Si ça bloque.** Espace disque : il faut ~2 Go libres (un zip +
-décompression). Menu Pomme → Réglages → Général → Stockage.
+**If it blocks.** Disk space: you need ~2 GB free (one zip +
+unzip). Apple menu → Settings → General → Storage.
 
-Décompressez ensuite le zip (double-clic). Vous obtenez un dossier
-`.SAFE`.
+Then unzip the zip (double-click). You get a `.SAFE` folder.
 
 ---
 
-## Étape 2 — Nettoyer le ciel et la brume (S2, ACOLITE)
+## Step 2 — Clean sky and haze (S2, ACOLITE)
 
-ACOLITE est un logiciel **à part**. Il ne tourne pas dans Blue Intelligence.
+ACOLITE is a **separate** program. It does not run inside Blue Intelligence.
 
-1. Installez Python 3 si besoin : [python.org/downloads](https://www.python.org/downloads/).
-2. Dans Terminal :
+1. Install Python 3 if needed: [python.org/downloads](https://www.python.org/downloads/).
+2. In Terminal:
 
 ```bash
 cd ~
@@ -108,70 +106,67 @@ python3 -m pip install -r requirements.txt
 python3 launch_acolite.py
 ```
 
-3. Dans ACOLITE :
-   - **Input** : le dossier `.SAFE` **L1C** de l’étape 1
-     (le nom contient `MSIL1C`). Pas le dossier `MSIL2A`.
-   - Output : par ex. `~/Desktop/sentinel-pilot/acolite`
-   - Laissez l’algorithme **DSF**. ACOLITE écrit le L2R tout seul.
-   - Lancez. Attendez la fin (souvent 15–40 min). Le premier run
-     peut télécharger des tables (LUT).
+3. In ACOLITE:
+   - **Input**: the **L1C** `.SAFE` folder from step 1
+     (the name contains `MSIL1C`). Not the `MSIL2A` folder.
+   - Output: e.g. `~/Desktop/sentinel-pilot/acolite`
+   - Leave the **DSF** algorithm. ACOLITE writes L2R on its own.
+   - Start. Wait for the end (often 15–40 min). The first run
+     may download tables (LUT).
 
-**Si le log dit** `Level-2A data not supported` : vous avez pointé
-un `.SAFE` L2A. Relancez l’étape 1 (recherche L1C + téléchargement)
-et changez l’Input.
+**If the log says** `Level-2A data not supported`: you pointed at
+an L2A `.SAFE`. Rerun step 1 (L1C search + download) and change Input.
 
-Vous devez voir des fichiers GeoTIFF ou NetCDF dans le dossier de sortie
-ACOLITE, avec des bandes vertes et SWIR (ex. `rhos_561`, `rhos_1614`).
-Un dossier qui ne contient que `*_log_file.txt` et `*_settings_user.txt`
-signifie que le calcul n’a pas tourné.
+You should see GeoTIFF or NetCDF files in the ACOLITE output folder,
+with green and SWIR bands (e.g. `rhos_561`, `rhos_1614`).
+A folder that only contains `*_log_file.txt` and `*_settings_user.txt`
+means the computation did not run.
 
 ---
 
-## Étape 3 — Trait de côte (S3, MNDWI)
+## Step 3 — Coastline (S3, MNDWI)
 
-L’eau est plus sombre en SWIR qu’en vert. On calcule :
+Water is darker in SWIR than in green. We compute:
 
-`MNDWI = (vert − SWIR) / (vert + SWIR)`
+`MNDWI = (green − SWIR) / (green + SWIR)`
 
-Puis on garde le **bord** eau / terre.
+Then we keep the water / land **edge**.
 
-**Chemin simple (QGIS, débutant)**
+**Simple path (QGIS, beginner)**
 
-1. Installez [QGIS](https://qgis.org) (Mac).
-2. Ouvrez les deux bandes ACOLITE (vert et SWIR).
-3. Raster → Calculatrice raster :
+1. Install [QGIS](https://qgis.org) (Mac).
+2. Open the two ACOLITE bands (green and SWIR).
+3. Raster → Raster calculator:
 
 ```
 ("vert" - "swir") / ("vert" + "swir")
 ```
 
-4. Extraction → Contour, seuil `0`.
-5. Exportez en GeoJSON sur le Bureau, par ex.  
+4. Extraction → Contour, threshold `0`.
+5. Export as GeoJSON on the Desktop, e.g.
    `~/Desktop/sentinel-pilot/coastline-raw.geojson`.
 
-Une seule ligne (ou quelques lignes) suffit. Ce n’est **pas** une carte
-marine.
+One line (or a few lines) is enough. This is **not** a nautical chart.
 
 ---
 
-## Étape 4 — Profondeur seulement si ICESat-2 (S4)
+## Step 4 — Depth only if ICESat-2 (S4)
 
 ```bash
 cd ~/Documents/Blue-Intelligence-Map
 python3 scripts/satellite/check_icesat2.py
 ```
 
-- Message *« on n’invente pas de profondeur »* : **sautez S4**.
-  Pas de `seamark:type=depth_area`. Passez à l’étape 5 avec le seul
-  trait de côte.
-- Message *« S4 est possible »* (c’est le cas autour de La Rochelle) :
-  des traces ICESat-2 **existent**. On ne calcule la profondeur **que**
-  quand le fichier ATL24/ATL03 est téléchargé et calé. En attendant :
-  trait de côte seulement, pas de sondage inventé.
+- Message *“we do not invent a depth”*: **skip S4**.
+  No `seamark:type=depth_area`. Go to step 5 with the coastline only.
+- Message *“S4 is possible”* (this is the case around La Rochelle):
+  ICESat-2 tracks **exist**. We compute depth **only**
+  when the ATL24/ATL03 file is downloaded and aligned. Until then:
+  coastline only, no invented sounding.
 
 ---
 
-## Étape 5 — Comparer à EMODnet (S5)
+## Step 5 — Compare to EMODnet (S5)
 
 ```bash
 python3 scripts/satellite/compare_emodnet.py \
@@ -179,13 +174,13 @@ python3 scripts/satellite/compare_emodnet.py \
   --out ~/Desktop/sentinel-pilot/coastline-emodnet.geojson
 ```
 
-Le script interroge le DTM EMODnet. S’il n’y a **pas** de profondeur
-estimée (cas normal sans S4), il note EMODnet et **n’invente pas**
-un sondage.
+The script queries the EMODnet DTM. If there is **no** estimated
+depth (normal case without S4), it records EMODnet and **does not
+invent** a sounding.
 
 ---
 
-## Étape 6 — Tamponner le fichier (S6)
+## Step 6 — Stamp the file (S6)
 
 ```bash
 python3 scripts/satellite/export_pilot.py \
@@ -194,10 +189,10 @@ python3 scripts/satellite/export_pilot.py \
   --dataset sentinel-coastline
 ```
 
-Le fichier reçoit `natural=coastline`, `source=sentinel-pilot`,
-une version et un avertissement « pas pour la navigation ».
+The file gets `natural=coastline`, `source=sentinel-pilot`,
+a version and a “not for navigation” warning.
 
-S’il existait une zone de profondeur (S4 seulement) :
+If a depth area existed (S4 only):
 
 ```bash
 python3 scripts/satellite/export_pilot.py \
@@ -208,19 +203,19 @@ python3 scripts/satellite/export_pilot.py \
 
 ---
 
-## Étape 7 — Voir dans Blue Intelligence (S7)
+## Step 7 — See it in Blue Intelligence (S7)
 
-1. Lancez le site en local (comme d’habitude).
-2. Entrez (modale d’avertissement).
-3. Mode **Science**.
-4. Roue dentée → **Importer GeoJSON** (compte admin).
-5. Choisissez `backend/data/satellite/coastline.geojson`.
-6. Filtre **Satellite (pilote)**.
+1. Start the site locally (as usual).
+2. Enter (warning modal).
+3. **Science** mode.
+4. Gear → **Import GeoJSON** (admin account).
+5. Choose `backend/data/satellite/coastline.geojson`.
+6. Filter **Satellite (pilot)**.
 
-La Review reste **éteinte** pour ce jeu. Ce n’est pas Gold.
-Ce n’est **pas** mélangé à la moisson Sextant / Argo.
+Review stays **off** for this set. This is not Gold.
+It is **not** mixed into the Sextant / Argo harvest.
 
-En ligne de commande (si le backend tourne déjà) :
+From the command line (if the backend is already running):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8001/api/import/science.geojson \
@@ -230,18 +225,18 @@ curl -s -X POST http://127.0.0.1:8001/api/import/science.geojson \
 
 ---
 
-## Ce qu’on ne fait jamais
+## What we never do
 
-- Recaler l’image avec un VLM ou `geo.py`.
-- Inventer une profondeur sans ICESat-2.
-- Présenter ce trait comme une carte de navigation.
-- Faire tourner ACOLITE ou le téléchargement **sur le VPS**.
+- Snap the image with a VLM or `geo.py`.
+- Invent a depth without ICESat-2.
+- Present this line as a navigation chart.
+- Run ACOLITE or the download **on the VPS**.
 
 ---
 
-## Déjà fait ici (pas à refaire)
+## Already done here (do not redo)
 
-- Compte CDSE vérifié (S0).
-- Ancienne liste L2A dans `scenes_la_rochelle.json` : **à régénérer**
-  avec `search_stac.py` (L1C) avant ACOLITE.
-- Filtre Science `sentinel-pilot` dans l’app.
+- CDSE account verified (S0).
+- Old L2A list in `scenes_la_rochelle.json`: **regenerate**
+  with `search_stac.py` (L1C) before ACOLITE.
+- Science filter `sentinel-pilot` in the app.

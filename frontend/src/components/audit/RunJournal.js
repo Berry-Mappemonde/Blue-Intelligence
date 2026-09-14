@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import api from "../../api";
 
-/** Dernier run Projets (hors import v1) — pour relire le journal à l'arrêt. */
+/** Latest Projects run (excluding v1 import) — reread the journal when idle. */
 export function pickJournalRunId(data, liveId) {
   if (liveId) return liveId;
   if (data?.active_run_id) return data.active_run_id;

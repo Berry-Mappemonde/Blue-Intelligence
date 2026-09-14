@@ -1,7 +1,7 @@
-"""Sources officielles attendues (FR hexagone, MX, VE, NU, NZ, NC).
+"""Expected official sources (FR hexagon, MX, VE, NU, NZ, NC).
 
-Les URL sont des *cibles de découverte*, pas l'affichage fiche.
-Les graines sont indexées par iso2 du polygone (Mayotte ≠ FR, Niue ≠ NZ).
+URLs are *discovery targets*, not the card display.
+Seeds are indexed by polygon iso2 (Mayotte ≠ FR, Niue ≠ NZ).
 """
 import asyncio
 
@@ -298,7 +298,7 @@ def test_google_style_query_matches_human_serp():
 
 
 def test_witness_polygon_gets_family_hints_without_iso_switch():
-    """Hors des 11 : legal + pleasure + EN, pas un if iso AL/FR."""
+    """Outside the 11: legal + pleasure + EN, not an if iso AL/FR."""
     hr = {"iso2": "HR", "sov_iso2": "HR", "name": "Croatia", "sovereign": "Croatia"}
     hints = " ".join(poe.default_search_hints(hr))
     assert "yacht" in hints and "first arrival" in hints
@@ -313,7 +313,7 @@ def test_witness_polygon_gets_family_hints_without_iso_switch():
 
 
 def test_sint_maarten_gov_org_is_whitelisted_not_sx_cctld():
-    """Le site d'État SX est sintmaartengov.org, pas un host .sx."""
+    """The SX state site is sintmaartengov.org, not a .sx host."""
     wl = poe.build_whitelist("SX", "NL")
     url = ("https://www.sintmaartengov.org/Ministries/Departments/"
            "Pages/Customs.aspx")
@@ -565,7 +565,7 @@ def test_nc_clearance_bureau_and_sx_generic_marina():
 
 def test_albania_dogana_kartela_yields_four_seaports():
     from app.core.extract import catalog_is_sufficient, extract_structured_ports
-    # Mise en page PDF : « Porti detar » puis le toponyme à la ligne suivante.
+    # PDF layout: “Porti detar” then the toponym on the next line.
     text = (
         "6. Ku mund të aplikoj?\n"
         "Degët doganore mbikëqyrëse (pranë porteve detare)\n"
@@ -596,7 +596,7 @@ def test_albania_dogana_kartela_yields_four_seaports():
 
 
 def test_marina_including_headings_work_without_country_name():
-    """Forme EG généralisée : titres « X Marina: » après including."""
+    """Generalized EG form: “X Marina:” titles after including."""
     from app.core.extract import catalog_is_sufficient, extract_structured_ports
     text = (
         "The state has established specialized marinas on its beaches, including:\n"

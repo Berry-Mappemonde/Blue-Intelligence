@@ -2,10 +2,10 @@ import { Compass, Flag, Search } from "lucide-react";
 import ProjectList from "./ProjectList";
 
 /**
- * Bandeau latéral du mode Projets — structure uniforme des 4 modes :
- * en-tête (icône + titre + compteur) → recherche → filtres → liste → action.
- * La légende cliquable fait office de filtre par catégorie (le menu déroulant
- * redondant a été retiré).
+ * Projects-mode side strip — same structure as the other four modes:
+ * header (icon + title + count) → search → filters → list → action.
+ * The clickable legend doubles as the category filter (the redundant
+ * dropdown was removed).
  */
 export default function SwarmPanel({ t, projects, funders, funderFilter, setFunderFilter, searchQuery, setSearchQuery, categories, categoryFilter, setCategoryFilter, onReport, onFlyTo }) {
   const legendCats = (categories || []).filter((c) => c.count > 0);
@@ -13,7 +13,7 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
   return (
     <aside className="w-[360px] shrink-0 flex flex-col border-r border-line bg-surface min-h-0" data-testid="swarm-panel">
       <div className="flex-1 overflow-y-auto min-h-0">
-        {/* En-tête + recherche */}
+        {/* Header + search */}
         <section className="p-4 border-b border-line" data-testid="projects-panel-header">
           <div className="flex items-center gap-2 mb-3">
             <Compass size={18} className="text-sonar" />
@@ -36,7 +36,7 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
           </div>
         </section>
 
-        {/* Filtre par organisation */}
+        {/* Filter by organisation */}
         <section className="p-4 border-b border-line">
           <label className="font-mono text-[9px] uppercase tracking-widest text-slate-500 block mb-1" htmlFor="org-filter-select">
             {t("orgFilter")}
@@ -55,7 +55,7 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
           </select>
         </section>
 
-        {/* Légende cliquable = filtre par catégorie */}
+        {/* Clickable legend = category filter */}
         <section className="p-4 border-b border-line" data-testid="map-legend">
           <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-2">{t("legend")}</p>
           <div className="grid grid-cols-1 gap-0.5">

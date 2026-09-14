@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Étape D + E (hors Complet) : scinder/exclure les noms collés, rafraîchir la file.
+"""Step D + E (off Complet): split/exclude glued names, refresh the queue.
 
-D reclasse les faux composés (un seul organisme avec « and »), scinde les
-listes (`A and B`, `X, Y, Z`) vers des graines existantes ou nouvelles
-(`source=split`, hors Complet tant que la home n'est pas officielle), et
-met la source scindée en `queue=skip`.
+D reclassifies false compounds (a single organization with “and”), splits
+lists (`A and B`, `X, Y, Z`) toward existing or new seeds
+(`source=split`, off Complet until the home is official), and
+sets the split source to `queue=skip`.
 
-E recalcule `queue` : Complet = home officielle ou page-liste, nom simple.
-N'écrit pas `projects`.
+E recomputes `queue`: Complet = official home or list page, simple name.
+Does not write `projects`.
 
     python3 scripts/split_compound_seeds.py --dry-run
     python3 scripts/split_compound_seeds.py --apply
@@ -38,7 +38,7 @@ def _load(path: Path) -> dict:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Scinde les noms composés et rafraîchit la file Complet")
+    p = argparse.ArgumentParser(description="Split compound names and refresh the Complet queue")
     p.add_argument("--seeds", type=Path, default=MASTER_SEEDS_PATH)
     p.add_argument("--audit-out", type=Path, default=AUDIT_PATH)
     p.add_argument("--report", type=Path, default=SPLITS_REPORT_PATH)

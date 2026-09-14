@@ -1,10 +1,10 @@
 """
-backfill_iso2.py — Complète le country_iso2 manquant des poe_ports depuis leur ZEE.
+backfill_iso2.py — Fill missing poe_ports country_iso2 from their EEZ.
 
-38 ports historiques ont été insérés sans code pays (invisibles au filtre
-?country= de l'API). Le code est repris de la zone (iso2, sinon sov_iso2).
+38 historical ports were inserted without a country code (invisible to the
+API ?country= filter). The code is taken from the zone (iso2, else sov_iso2).
 
-Usage : python3 scripts/backfill_iso2.py
+Usage: python3 scripts/backfill_iso2.py
 """
 import os
 import sys
