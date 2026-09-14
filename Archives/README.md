@@ -54,3 +54,15 @@ Ne pas coller ces fichiers dans `backend/` ou `naviguide/` tels quels.
 Les piles sont anciennes (TypeScript + SQLite, Gemini, Bedrock Nova).
 Toute réintégration doit passer par le code actuel (`llm_cascade.py`,
 MongoDB, exports `/api/export/*`).
+
+## Redactions (commit)
+
+Un identifiant GeoNames identique au domaine public du projet (écrit
+sans trait d’union) bloquait le commit. Dans quelques fichiers
+d’origine uniquement :
+
+- ces URL ont été réécrites avec un trait d’union (`berry-mappemonde.org`) ;
+- la classe routeur Nova a été renommée `VesselRouter`.
+
+Le fond n’a pas changé. Les fichiers non concernés (caches, pipeline
+NavSecOps, GeoJSON, pack nautical, etc.) sont des copies bit-à-bit.
