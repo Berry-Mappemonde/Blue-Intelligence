@@ -1,8 +1,8 @@
-"""Juge de documents Review Formalités.
+"""Formalities Review document judge.
 
-Local (bonus URL + catalogue) ∥ cascade NIM → OpenRouter → Claude.
-Les captures pleine page / pages PDF partent au LLM (vision si le backend suit).
-N'écrit jamais review_gold ni poe_ports.
+Local (URL bonus + catalogue) ∥ NIM → OpenRouter → Claude cascade.
+Full-page captures / PDF pages go to the LLM (vision if the backend follows).
+Never writes review_gold or poe_ports.
 """
 from __future__ import annotations
 
@@ -128,7 +128,7 @@ async def _evidence_for(url: str, log) -> dict:
 
 def local_pick(evidences: list[dict],
                token_scores: dict[str, float] | None = None) -> dict:
-    """Heuristique locale : catalogue / bonus d'URL. Tourne en parallèle du LLM."""
+    """Local heuristic: catalogue / URL bonus. Runs in parallel with the LLM."""
     keep, drop = [], []
     reasons = []
     for ev in evidences:
@@ -269,7 +269,7 @@ async def suggest_eez_documents(db, entity_id: str, *,
                                 settings: dict | None = None,
                                 log=None,
                                 lessons: list[dict] | None = None) -> dict:
-    """Pré-remplit keep/drop + commentaire. Pas de Gold."""
+    """Pre-fill keep/drop + comment. No Gold."""
     log = log or (lambda m: None)
     eid = _sid(entity_id)
     packed = await get_fiche(db, "eez", PUBLISHED_RUN, eid)
@@ -332,7 +332,7 @@ async def suggest_eez_documents(db, entity_id: str, *,
 
 
 async def all_eez_ids(db) -> list[str]:
-    """Toutes les fiches Formalités (union publiée), pas le filtre Stable / pré-Gold."""
+    """All Formalities cards (published union), not the Stable / pre-Gold filter."""
     packed = await list_queue(
         db, "eez", PUBLISHED_RUN, offset=0, limit=2000,
         q="", pre_gold=False, stable=False)
@@ -346,7 +346,7 @@ async def all_eez_ids(db) -> list[str]:
 
 
 async def run_suggest_batch(db, state, *, settings: dict | None = None) -> dict:
-    """Lot Proposer : une proposition par polygone. Écrase cases + commentaires."""
+    """Suggest batch: one suggestion per polygon. Overwrites ticks + comments."""
     log = state.log if hasattr(state, "log") else (lambda m: None)
     ids = await all_eez_ids(db)
     state.total = len(ids)
