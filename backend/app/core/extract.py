@@ -11,7 +11,11 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
                            pour les pages JavaScript et les challenges « soft ».
-                           Allumé seulement si le HTML simple ET Fetch ont échoué.
+                           Chromium tourne dans un sous-processus (comme
+                           PyMuPDF) : un ABRT ne tue plus l'API. Jamais sur une
+                           URL .pdf, une image (.png/.jpg…) ni un captcha dur
+                           (SiteGround, Akamai). Allumé seulement si le HTML
+                           simple ET Fetch ont échoué.
   Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
 
 TinyFish Fetch n'est pas supprimé : c'est le bon outil quand on a besoin du
@@ -69,7 +73,8 @@ UA_READER = {
 HARD_CHALLENGE_RE = re.compile(
     r"challenge validation|sec-cpt-if|sec-container|akamai|"
     r"just a moment|_cf_chl_|cf-browser-verification|"
-    r"challenges\.cloudflare|performing security verification",
+    r"challenges\.cloudflare|performing security verification|"
+    r"sg-captcha|robot challenge screen|checking the site connection security",
     re.I,
 )
 
@@ -86,7 +91,9 @@ SERP_HARD_RE = re.compile(
     r"|doordash\.com"
     r"|//unblock\.|\.unblock\.|/cdn-cgi/|captcha|datadome|perimeterx"
     r"|queue-it\.net|incapsula|distilnetworks"
-    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?))",
+    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?)"
+    r"|\.png($|\?)|\.jpe?g($|\?)|\.gif($|\?)|\.webp($|\?)|\.svg($|\?)"
+    r"|\.bmp($|\?)|\.ico($|\?)|\.tiff?($|\?)|\.avif($|\?))",
     re.I,
 )
 
@@ -120,7 +127,8 @@ BLOCKED_MARKERS_RE = re.compile(
     r"|automated access to this (?:site|page)|ddos protection by"
     r"|complete the captcha|prove (?:that )?you are human|browser verification"
     r"|unblock request|access from your area has been temporarily limited"
-    r"|challenge validation|sec-cpt-if|sec-container",
+    r"|challenge validation|sec-cpt-if|sec-container"
+    r"|sg-captcha|robot challenge screen|checking the site connection security",
     re.I,
 )
 
@@ -177,6 +185,91 @@ def serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
         if serp_drop_reason(u, extra_re=extra_re, protect=protect) is None:
             out.append(r)
     return out
+
+
+def url_looks_like_pdf(url: str | None) -> bool:
+    """Chemin .pdf — même si le serveur sert un HTML de captcha à la place."""
+    path = (urlparse(url or "").path or "").lower()
+    return path.endswith(".pdf")
+
+
+_IMAGE_EXTS = frozenset({
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "avif",
+})
+
+
+def path_looks_like_image(path: str | None) -> bool:
+    """Dernier segment .png/.jpg/… — portraits WordPress, pas une fiche."""
+    name = unquote((path or "").split("?")[0]).rsplit("/", 1)[-1].lower()
+    if "." not in name:
+        return False
+    return name.rsplit(".", 1)[-1] in _IMAGE_EXTS
+
+
+def url_looks_like_image(url: str | None) -> bool:
+    """URL d'image — Chromium + trafilatura dessus font exploser la RAM."""
+    return path_looks_like_image(urlparse(url or "").path)
+
+
+def content_is_image(content: bytes | None, content_type: str = "",
+                     url: str = "") -> bool:
+    """Vrais octets image (magic / Content-Type). Un HTML d'erreur n'en est pas une."""
+    blob = content or b""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:3] == b"\xff\xd8\xff":
+        return True
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    if len(blob) >= 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    head = blob.lstrip()[:80].lower()
+    if head.startswith(b"<") or head.startswith(b"{") or head.startswith(b"<!doctype"):
+        return False
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    if ctype.startswith("image/"):
+        return True
+    return bool(url_looks_like_image(url) and blob[:1] not in (b"<", b"{"))
+
+
+_HTMLISH_TYPES = frozenset({
+    "text/html", "application/xhtml+xml", "application/xhtml",
+    "text/xml", "application/xml", "text/plain",
+})
+
+
+def content_looks_like_html(content: bytes | None, content_type: str = "") -> bool:
+    """Vrai document à parser. Un PNG lu comme de l'UTF-8 n'en est pas un."""
+    blob = content or b""
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    head = blob.lstrip()[:80]
+    if head.startswith(b"<") or head.lower().startswith(b"<!doctype"):
+        return True
+    if ctype.startswith("image/") or ctype in {
+        "application/pdf", "application/zip", "application/octet-stream",
+        "application/gzip", "audio/mpeg", "video/mp4",
+    }:
+        return False
+    if ctype in _HTMLISH_TYPES or ctype.startswith("text/"):
+        return True
+    return False
+
+
+def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
+    """Captcha SiteGround / interstitiel : 202 + HTML, header sg-captcha, ou marqueurs."""
+    headers = getattr(resp, "headers", None)
+    if headers is not None and headers.get("sg-captcha"):
+        return True
+    blob = content or b""
+    probe = blob[:6000].decode("utf-8", errors="replace")
+    if looks_hard_challenge(text=probe[:2000], html=probe):
+        return True
+    status = getattr(resp, "status_code", None)
+    head = blob[:400].lstrip().lower()
+    if status == 202 and url_looks_like_pdf(url) and (
+            head.startswith(b"<") or head.startswith(b"<!doctype")):
+        return True
+    return False
 
 
 def looks_blocked(text: str, html: str = "", title: str = "") -> bool:
@@ -1621,7 +1714,11 @@ def _mirror_http_err(exc: Exception) -> str:
 
 
 def _mirror_usable(text: str | None) -> bool:
-    return bool(text and len(text) >= 400 and not looks_blocked(text))
+    if not text or len(text) < 400:
+        return False
+    if looks_blocked(text) or looks_hard_challenge(text=text, html=text):
+        return False
+    return True
 
 
 def _append_fetch_links(text: str, links: list | None) -> str:
@@ -1811,6 +1908,11 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
         out["error"] = "maps_render_url"
         return out
 
+    if url_looks_like_image(url):
+        log("URL image — cascade sautée (pas une fiche, pas de Chromium)")
+        out["error"] = "image_url"
+        return out
+
     content = None
     ctype = ""
     disposition = ""
@@ -1826,7 +1928,15 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
 
     if content is not None:
         out["md5"] = hashlib.md5(content).hexdigest()
+        if content_is_image(content, ctype, out["final_url"] or url):
+            log("contenu image — cascade sautée, pas de Chromium")
+            out["error"] = "image_content"
+            return out
         is_pdf = content_is_pdf(content, ctype, out["final_url"] or url, disposition)
+        if not is_pdf and not content_looks_like_html(content, ctype):
+            log("contenu binaire — cascade sautée, pas de Chromium")
+            out["error"] = "binary_content"
+            return out
         out["is_pdf"] = is_pdf
         if keep_raw and content:
             out["raw"] = content
@@ -1863,13 +1973,27 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
                 out["text"] = parsed["text"]
 
     # N3 — rendu navigateur local (gratuit) : pages JS et challenges « soft ».
-    # Un challenge Akamai dur n'est jamais résolu par Chromium : on passe au miroir.
-    # Pas de Chromium sur un PDF, ni si le texte N1/N2 est déjà utilisable.
-    hard = looks_hard_challenge(out.get("text") or "", out.get("html") or "", out.get("title") or "")
-    needs_render = (not out["is_pdf"]) and (out["blocked"] or len(out["text"]) < min_chars)
-    if needs_render and allow_render and hard:
-        log("challenge anti-bot dur — rendu Chromium sauté, tentative de miroir")
-    if needs_render and allow_render and not hard:
+    # Un challenge dur (Akamai, SiteGround, Cloudflare) n'est jamais résolu par
+    # Chromium : on passe au miroir (TinyFish Fetch passe SiteGround ; Jina non).
+    # Pas de Chromium sur un PDF — ni sur une URL .pdf qui a renvoyé du HTML.
+    if resp is not None and looks_bot_challenge_response(
+            resp, content, out.get("final_url") or url):
+        out["blocked"] = True
+        log("captcha anti-bot — Chromium sauté, tentative de miroir")
+    pdf_url = url_looks_like_pdf(url) or url_looks_like_pdf(out.get("final_url"))
+    hard = looks_hard_challenge(
+        out.get("text") or "", out.get("html") or "", out.get("title") or "")
+    skip_chromium = bool(out["is_pdf"] or pdf_url or hard or out["blocked"])
+    short = len(out["text"]) < min_chars
+    # 205 chars de page captcha ne doivent pas empêcher TinyFish Fetch (≥ 400).
+    want_mirror = bool(out["blocked"] or short or (pdf_url and not out["is_pdf"] and len(out["text"]) < 400))
+    needs_render = (not skip_chromium) and allow_render and (out["blocked"] or short)
+    if skip_chromium and want_mirror and (hard or out["blocked"] or pdf_url):
+        if pdf_url and not out["is_pdf"]:
+            log("URL .pdf sans octets PDF — Chromium sauté, tentative de miroir")
+        elif hard or out["blocked"]:
+            log("challenge anti-bot dur — rendu Chromium sauté, tentative de miroir")
+    if needs_render:
         from app.core.render import render_html
         rendered = await render_html(url, log=log)
         if rendered:
@@ -1894,8 +2018,9 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
             elif r_blocked:
                 out["blocked"] = True
 
-    # Miroir générique : page officielle bloquée ou trop courte (challenge Akamai…).
-    if (out["blocked"] or len(out["text"]) < min_chars) and not _is_mirror_url(url):
+    # Miroir générique : page officielle bloquée, trop courte, ou .pdf captcha
+    # (205 chars Chromium ne doivent pas court-circuiter TinyFish Fetch).
+    if want_mirror and not _is_mirror_url(url):
         mirrored = await fetch_mirror_text(url, log=log, skip_tinyfish=skip_fetch_mirror)
         if mirrored:
             text, level = mirrored[0], mirrored[1]

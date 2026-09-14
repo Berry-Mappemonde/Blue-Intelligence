@@ -956,6 +956,8 @@ async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
         if not doc:
             return None
         fiche = _marina_fiche(doc)
+        from app.services.control_ref import marina_control_ref
+        fiche["control_ref"] = await marina_control_ref(db, doc)
 
     comment = await get_comment(db, kind, rid, eid)
     source = doc if kind in ("project", "marina", "capitainerie", "amp") else None

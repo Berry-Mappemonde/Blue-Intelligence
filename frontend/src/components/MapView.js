@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
@@ -14,6 +14,11 @@ import useProjectsLayer from "./map/useProjectsLayer";
 import useRouteLayer from "./map/useRouteLayer";
 import useScienceLayer from "./map/useScienceLayer";
 import useScienceWms, { ensureWmsPanes } from "./map/useScienceWms";
+import useBiOverlay from "./map/useBiOverlay";
+import useSafetyIsobath from "./map/useSafetyIsobath";
+import useNoaaAids from "./map/useNoaaAids";
+import useClimatologyLayer from "./map/useClimatologyLayer";
+import { DEFAULT_SAFETY_M } from "./map/safetyIsobathSpec";
 import { attachDepthOnPopup } from "./map/depthRow";
 import { applyPenRadii, makePointGroup, POPUP_OPTS } from "./map/points";
 
@@ -29,7 +34,15 @@ export default function MapView({
   science,
   flyToScience,
   scienceWms,
+  overlayOn = true,
+  nauticalAllowed = true,
+  safetyM = DEFAULT_SAFETY_M,
+  noaaAidsOn = false,
   scienceSourceFilter = "argo",
+  climoMonth = 1,
+  climoFilters = { wind: true, wave: true, current: true, cyclones: true },
+  climoWaveStat = "mean",
+  onClimoPoint,
   ampLfpFilter = "All",
   anchorages,
   showAnchorages = true,
@@ -55,6 +68,7 @@ export default function MapView({
   categoryFilter,
   mapVisible = true,
   mapRun = null,
+  showReview = false,
 }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
@@ -188,7 +202,7 @@ export default function MapView({
     else if (mode === "science") {
       map.addLayer(scienceCluster);
       map.addLayer(scienceTracks);
-    } else map.addLayer(cluster);
+    } else if (mode !== "climatology") map.addLayer(cluster);
 
     const allGroups = () => [cluster, marinaCluster, capitainerieCluster, scienceCluster, anchorCluster, poeCluster];
     map.on("zoomstart", () => { zoomingRef.current = true; });
@@ -215,7 +229,12 @@ export default function MapView({
     // eslint-disable-next-line
   }, [minZoom]);
 
-  const nauticalActive = useNauticalBasemap({ mapObj, tileRef, basemap });
+  const [glMap, setGlMap] = useState(null);
+  const nauticalActive = useNauticalBasemap({
+    mapObj, tileRef, basemap, enabled: nauticalAllowed, onGlMap: setGlMap,
+  });
+  useBiOverlay({ mapObj, enabled: overlayOn && nauticalAllowed });
+  useSafetyIsobath({ glMap, enabled: nauticalActive && nauticalAllowed, meters: safetyM });
 
   useEffect(() => {
     if (!mapVisible || !mapObj.current) return;
@@ -237,7 +256,12 @@ export default function MapView({
     markersById: scienceMarkersById,
     science, tRef, sourceFilter: scienceSourceFilter,
   });
-  useScienceWms({ mapObj, mode, enabled: scienceWms });
+  useScienceWms({ mapObj, enabled: nauticalAllowed ? scienceWms : {} });
+  useNoaaAids({ mapObj, enabled: nauticalAllowed && noaaAidsOn && mode === "capitaineries" });
+  useClimatologyLayer({
+    mapObj, mode, month: climoMonth, filters: climoFilters,
+    waveStat: climoWaveStat, tRef, onPoint: onClimoPoint,
+  });
   useFormalitiesLayers({
     mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
     poeMarkersById,
@@ -251,6 +275,7 @@ export default function MapView({
     mapObj, ampLayerRef, ampLayersById, mode, tRef, onSites: onAmpSites, flyToAmp,
     runId: ampRunId,
     lfpFilter: ampLfpFilter,
+    visible: showReview,
   });
 
   useEffect(() => {
@@ -280,6 +305,8 @@ export default function MapView({
     } else if (mode === "science") {
       if (sci) map.addLayer(sci);
       if (sciTracks) map.addLayer(sciTracks);
+    } else if (mode === "climatology") {
+      /* roses / raster / pistes via useClimatologyLayer */
     } else if (mode === "formalities") {
       map.addLayer(formCluster);
     } else if (mode === "amp") {
@@ -379,6 +406,7 @@ export default function MapView({
     if (mode === "capitaineries") return capitaineries?.features?.length || 0;
     if (mode === "formalities") return poePorts?.features?.length || 0;
     if (mode === "science") return science?.features?.length || 0;
+    if (mode === "climatology") return -1;
     return -1;
   })();
 

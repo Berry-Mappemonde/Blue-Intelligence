@@ -16,7 +16,8 @@ import pytest
 from app.core.tinyfish import POE_PURPOSE, PROJECTS_DISCOVERY_PURPOSE, PROJECTS_LISTING_PURPOSE
 from app.services import run_journal
 from app.services.swarm_pipeline import (
-    Swarm, filter_discover_urls, official_site_from_hits, project_search_query,
+    Swarm, _is_soft_fiche_path, filter_discover_urls, is_project_fiche_path,
+    official_site_from_hits, project_search_query,
 )
 from tests.test_project_runs import _FakeDB
 
@@ -49,6 +50,10 @@ def _run(coro):
 def _no_paid_env(monkeypatch):
     monkeypatch.delenv("TINYFISH_API_KEY", raising=False)
     monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "app.services.swarm_pipeline.partner_site_reachable",
+        lambda url, timeout=5.0: True,
+    )
 
 
 def _swarm(settings=None):
@@ -109,6 +114,24 @@ def test_filter_exclude_urls_skips_already_eliminated():
     out = filter_discover_urls(
         hits, SEED, 10, exclude_urls=["https://example.org/projects/coral"])
     assert out == ["https://example.org/projects/kelp"]
+
+
+def test_portrait_png_is_not_a_project_fiche():
+    path = "/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+    assert is_project_fiche_path(path) is False
+    assert _is_soft_fiche_path(path) is False
+
+
+def test_filter_drops_image_urls_even_on_soft_path():
+    hits = [
+        {"url": "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png"},
+        {"url": "https://marviva.net/equipo/sandra-vilardy"},
+        {"url": "https://marviva.net/projects/manglares"},
+    ]
+    seed = {"name": "MarViva", "url": "https://marviva.net/"}
+    out = filter_discover_urls(hits, seed, 10)
+    assert out == ["https://marviva.net/projects/manglares"]
+    assert all(not u.endswith(".png") for u in out)
 
 
 def test_filter_soft_keeps_research_when_no_project_path():
@@ -467,6 +490,9 @@ def test_ftm_name_without_url_searches_then_discovers(monkeypatch):
     async def go():
         await sw._follow_the_money(
             {"partners": [{"name": "Wild Oysters", "url": None}]}, depth=0)
+        assert discovered == []
+        assert search_q == []
+        await sw._flush_ftm_inbox()
         await asyncio.sleep(0)
 
     _run(go())
@@ -497,8 +523,12 @@ def test_ftm_without_search_hit_ignores_partner(monkeypatch):
     monkeypatch.setattr(sp, "tf_search", empty)
     monkeypatch.setattr(sp, "serper_search", empty)
 
-    _run(sw._follow_the_money(
-        {"partners": [{"name": "Nobody Known", "url": ""}]}, depth=0))
+    async def go():
+        await sw._follow_the_money(
+            {"partners": [{"name": "Nobody Known", "url": ""}]}, depth=0)
+        await sw._flush_ftm_inbox()
+
+    _run(go())
     assert discovered == []
     assert sw.recursive_tasks == []
     assert sw.db.projects.docs == []
@@ -558,6 +588,8 @@ def test_ftm_hub_url_searches_official_site(monkeypatch):
         await sw._follow_the_money({
             "partners": [{"name": "BMKG", "url": "https://oceandecade.org/actions/foo"}],
         }, depth=0)
+        assert discovered == []
+        await sw._flush_ftm_inbox()
         await asyncio.sleep(0)
 
     _run(go())

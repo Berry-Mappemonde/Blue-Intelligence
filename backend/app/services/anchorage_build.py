@@ -13,6 +13,7 @@ Source : OpenStreetMap via Overpass uniquement.
 Tags OSM requêtés :
   - seamark:type = anchorage      (zone de mouillage S-57)
   - seamark:type = anchor_berth   (poste de mouillage individuel)
+  - seamark:type = mooring        (bouée / coffre)
   - natural      = bay            (baie naturelle — gardée seulement si nommée)
   - leisure      = anchorage      (tag non standard mais répandu)
 """
@@ -54,6 +55,7 @@ KEPT_TAGS = (
     "seamark:anchorage:depth",
     "seamark:anchorage:holding_ground",
     "seamark:anchorage:radius",
+    "seamark:mooring:category",
     "natural",
     "leisure",
     "description",
@@ -100,6 +102,8 @@ def _anchorage_query_body(lat: float, lon: float, radius_m: int) -> str:
   relation["seamark:type"="anchorage"](around:{r},{lat:.5f},{lon:.5f});
   node["seamark:type"="anchor_berth"](around:{r},{lat:.5f},{lon:.5f});
   way["seamark:type"="anchor_berth"](around:{r},{lat:.5f},{lon:.5f});
+  node["seamark:type"="mooring"](around:{r},{lat:.5f},{lon:.5f});
+  way["seamark:type"="mooring"](around:{r},{lat:.5f},{lon:.5f});
   node["natural"="bay"]["name"](around:{r},{lat:.5f},{lon:.5f});
   way["natural"="bay"]["name"](around:{r},{lat:.5f},{lon:.5f});
   relation["natural"="bay"]["name"](around:{r},{lat:.5f},{lon:.5f});
@@ -120,6 +124,8 @@ def anchorage_bbox_body(south: float, west: float, north: float, east: float) ->
   relation["seamark:type"="anchorage"]({bb});
   node["seamark:type"="anchor_berth"]({bb});
   way["seamark:type"="anchor_berth"]({bb});
+  node["seamark:type"="mooring"]({bb});
+  way["seamark:type"="mooring"]({bb});
   node["natural"="bay"]["name"]({bb});
   way["natural"="bay"]["name"]({bb});
   relation["natural"="bay"]["name"]({bb});
@@ -203,6 +209,8 @@ def _overpass_elem_to_anchorage(elem: dict) -> dict | None:
     natural_tag = tags.get("natural", "")
     if seamark_type == "anchor_berth":
         anchorage_type = "anchor_berth"
+    elif seamark_type == "mooring":
+        anchorage_type = "mooring"
     elif seamark_type == "anchorage":
         anchorage_type = "anchorage"
     elif natural_tag == "bay":

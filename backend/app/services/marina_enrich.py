@@ -259,12 +259,15 @@ async def fetch_readable(url: str, client: httpx.AsyncClient | None = None,
 
 def marina_from_pages(pages: list[dict]) -> dict:
     """Tél / VHF par règle simple — pas les places ni le tirant."""
+    from app.core.nav_rule import should_write_vhf
     from app.services.capitainerie_world import contact_from_text
     phone = vhf = None
     for page in pages or []:
-        p, v = contact_from_text(page.get("text") or "")
+        text = page.get("text") or ""
+        p, v = contact_from_text(text)
         phone = phone or p
-        vhf = vhf or v
+        if v and should_write_vhf(text, v):
+            vhf = vhf or v
         if phone and vhf:
             break
     return {"telephone_capitainerie": phone, "canal_vhf": vhf}

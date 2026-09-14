@@ -18,8 +18,9 @@ def _run(coro):
 
 class _FakeResp:
     def __init__(self, content: bytes, content_type="text/html",
-                 disposition="", url="https://example.gov/x"):
+                 disposition="", url="https://example.gov/x", status_code=200):
         self.content = content
+        self.status_code = status_code
         self.headers = {
             "content-type": content_type,
             "content-disposition": disposition,
@@ -29,6 +30,48 @@ class _FakeResp:
     @property
     def text(self):
         return self.content.decode("utf-8", errors="replace")
+
+
+class TestPdfUrlAndCaptcha:
+    def test_url_looks_like_pdf(self):
+        assert ext.url_looks_like_pdf(
+            "https://blueactionfund.org/wp-content/uploads/a.pdf") is True
+        assert ext.url_looks_like_pdf("https://example.org/projects/") is False
+
+    def test_url_looks_like_image(self):
+        assert ext.url_looks_like_image(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png") is True
+        assert ext.url_looks_like_image(
+            "https://arcticnet.ca/wp-content/uploads/2025/10/SSF-Funding-from-Canada.png") is True
+        assert ext.path_looks_like_image("/photos/team.jpg") is True
+        assert ext.url_looks_like_image("https://example.org/projects/coral") is False
+
+    def test_serp_hard_drops_image_urls(self):
+        assert ext.serp_drop_reason(
+            "https://marviva.net/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+        ) == "hard"
+        assert ext.serp_drop_reason(
+            "https://example.org/projects/coral-reef") is None
+
+    def test_siteground_is_hard_challenge(self):
+        html = "<html><body>Checking the site connection security. sg-captcha</body></html>"
+        assert ext.looks_hard_challenge(html=html, title="Robot Challenge Screen") is True
+        assert ext.looks_blocked("Robot Challenge Screen", html=html,
+                                 title="Robot Challenge Screen") is True
+
+    def test_jina_captcha_mirror_rejected(self):
+        blob = (
+            "Title: Robot Challenge Screen\n\n"
+            "Warning: This page maybe requiring CAPTCHA\n\n"
+            "Checking the site connection security\n"
+        )
+        assert ext._mirror_usable(blob) is False
+        assert ext._mirror_usable("GRANT FACT SHEET " * 40) is True
+
+    def test_sg_header_is_challenge(self):
+        resp = _FakeResp(b"<html>hi</html>", url="https://x.org/a.pdf", status_code=202)
+        resp.headers["sg-captcha"] = "challenge"
+        assert ext.looks_bot_challenge_response(resp, resp.content, resp.url) is True
 
 
 class TestContentIsPdf:
@@ -51,6 +94,32 @@ class TestContentIsPdf:
         assert ext.content_is_pdf(
             html, "text/html", "https://gov.example/x",
             'attachment; filename="lista.pdf"') is False
+
+
+class TestContentIsImage:
+    def test_png_magic(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_is_image(png, "text/html", "https://x") is True
+
+    def test_jpeg_magic(self):
+        assert ext.content_is_image(b"\xff\xd8\xff\xe0rest", "application/octet-stream") is True
+
+    def test_html_at_png_url_is_not_image(self):
+        html = b"<!DOCTYPE html><html><body>error</body></html>"
+        assert ext.content_is_image(
+            html, "text/html", "https://cdn.example/portrait.png") is False
+
+    def test_content_type_image(self):
+        assert ext.content_is_image(b"xxxx", "image/png") is True
+
+
+class TestContentLooksLikeHtml:
+    def test_html_and_png(self):
+        assert ext.content_looks_like_html(
+            b"<!DOCTYPE html><html></html>", "text/html") is True
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_looks_like_html(png, "image/png") is False
+        assert ext.content_looks_like_html(b"\x00\x01\x02\xff", "application/octet-stream") is False
 
 
 class TestMapsUrl:
@@ -171,6 +240,70 @@ class TestReadUrls:
         assert len(page["text"]) >= 200
         assert page["level"] in ("N1-trafilatura", "N2-readability")
 
+    def test_captcha_at_pdf_url_skips_chromium_uses_mirror(self, monkeypatch):
+        html = (
+            "<html><head><title>Robot Challenge Screen</title></head>"
+            "<body>Checking the site connection security. sg-captcha</body></html>"
+        )
+        rendered = []
+        mirrors = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(
+                html.encode(), "text/html",
+                url="https://www.blueactionfund.org/wp-content/uploads/x.pdf",
+                status_code=202)
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on captcha pdf")
+
+        async def fake_mirror(url, log=None, skip_tinyfish=False):
+            mirrors.append(url)
+            return ("GRANT FACT SHEET Strengthening MPAs " * 20, "N3-mirror-tinyfish")
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", fake_mirror)
+
+        page = _run(ext.extract_cascade(
+            "https://www.blueactionfund.org/wp-content/uploads/x.pdf",
+            min_chars=200))
+        assert rendered == []
+        assert mirrors == [
+            "https://www.blueactionfund.org/wp-content/uploads/x.pdf"]
+        assert page["render_used"] is False
+        assert page["level"] == "N3-mirror-tinyfish"
+        assert "GRANT FACT SHEET" in page["text"]
+        assert page["blocked"] is False
+
+    def test_short_html_at_pdf_url_still_mirrors(self, monkeypatch):
+        """205 chars de HTML (seuil N1) ne doivent pas empêcher TinyFish."""
+        html = "<html><body>" + ("lorem ipsum " * 18) + "</body></html>"
+        rendered = []
+        mirrors = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(html.encode(), "text/html",
+                             url="https://cdn.example/fact.pdf")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on .pdf url")
+
+        async def fake_mirror(url, log=None, skip_tinyfish=False):
+            mirrors.append(url)
+            return ("Blue Action Fund grant fact sheet " * 25, "N3-mirror-tinyfish")
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", fake_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/fact.pdf", min_chars=200))
+        assert rendered == []
+        assert mirrors
+        assert page["level"] == "N3-mirror-tinyfish"
+
     def test_pdf_magic_uses_pymupdf(self, monkeypatch):
         async def fake_raw(url, timeout=25):
             return _FakeResp(
@@ -245,6 +378,89 @@ class TestReadUrls:
         links = ext.html_hrefs(html, "https://parc.fr/index")
         assert "https://parc.fr/visite" in links
         assert "https://ext.example/x" in links
+
+    def test_png_url_skips_fetch_and_chromium(self, monkeypatch):
+        fetched = []
+        rendered = []
+        mirrored = []
+
+        async def boom_raw(url, timeout=25):
+            fetched.append(url)
+            raise AssertionError("no fetch on .png url")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on .png url")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return ("portrait page " * 40, "N3-mirror-wayback")
+
+        monkeypatch.setattr(ext, "fetch_raw", boom_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade(
+            "https://marviva.net/wp-content/uploads/2026/05/Sandra-Vilardy.png",
+            min_chars=200))
+        assert fetched == []
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_url"
+        assert page["text"] == ""
+        assert page["render_used"] is False
+
+    def test_image_magic_skips_chromium(self, monkeypatch):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00IHDR" + b"\xff" * 80
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(png, "image/png", url="https://cdn.example/download")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on image bytes")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/download", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "image_content"
+        assert page["text"] == ""
+
+    def test_binary_octet_stream_skips_chromium(self, monkeypatch):
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(b"\x00\x01\x02\xff" * 40, "application/octet-stream",
+                             url="https://cdn.example/blob")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on binary")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/blob", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "binary_content"
+        assert page["text"] == ""
 
 
 class TestKeepIfLinks:

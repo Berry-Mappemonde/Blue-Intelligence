@@ -19,6 +19,11 @@ export const LEAFLET_BUILTIN_PANES = {
 export const PANES = [
   // Fond vectoriel « Carte marine » (MapLibre GL) — sous les tuiles raster.
   { name: "basemap-gl", zIndex: 190 },
+  // Atlas du 7ᵉ mode — allumés seulement si mode === "climatology".
+  { name: "climatology-raster", zIndex: 250, pointerEvents: "none" },
+  { name: "climatology-vector", zIndex: 260, pointerEvents: "none" },
+  // Overlay hebdomadaire tippecanoe — au-dessus du GL Seamap, sous la route.
+  { name: "bi-overlay", zIndex: 270, pointerEvents: "none" },
   // Route NAVIGUIDE — sous les clusters et marqueurs.
   { name: "route", zIndex: 380 },
   // Polygones AMP — au-dessus de l'overlayPane, sous les escales.
@@ -29,8 +34,10 @@ export const PANES = [
 
 /** Crée tous les panes personnalisés sur la carte, dans l'ordre verrouillé. */
 export function createPanes(map) {
-  PANES.forEach(({ name, zIndex }) => {
+  PANES.forEach(({ name, zIndex, pointerEvents }) => {
     map.createPane(name);
-    map.getPane(name).style.zIndex = String(zIndex);
+    const pane = map.getPane(name);
+    pane.style.zIndex = String(zIndex);
+    if (pointerEvents) pane.style.pointerEvents = pointerEvents;
   });
 }

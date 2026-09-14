@@ -58,6 +58,9 @@ def test_cdc_numbers_are_catalogued():
         "formalities.peer_near_km", "formalities.listing_name_sim_mid",
         "shared.extract_agree_sim", "shared.llm_geocode_min_confidence",
         "shared.content_changed_sim",
+        "science.csr_max_records",
+        "climatology.kind_is_climatology", "climatology.no_llm_for_numbers",
+        "climatology.wave_nogo_m", "climatology.cyclone_first_year",
     ):
         assert rid in ids
 
@@ -85,7 +88,9 @@ def test_defaults_match_code_constants():
     from app.services.marina_maps_place import MAX_PLACE_DISTANCE_M
     assert catalog_default("marinas.place_match_m") == MAX_PLACE_DISTANCE_M
     assert catalog_default("projects.tinyfish_agents") == 2
-    assert catalog_default("projects.listing_judge_concurrency") == 2
+    assert catalog_default("projects.listing_judge_concurrency") == 1
+    assert catalog_default("projects.max_partner_orgs") == 15
+    assert catalog_default("projects.ftm_min_s_ocean") == 0.7
     assert catalog_default("projects.extract_concurrency") == 2
     assert catalog_default("projects.nvidia_max_concurrency") == 2
     assert catalog_default("shared.extract_agree_sim") == 0.55

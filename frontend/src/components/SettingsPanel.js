@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Download, FileDown, Upload, X } from "lucide-react";
 import api, { BACKEND_URL } from "../api";
+import MapLayersSidebar from "./MapLayersSidebar";
 
 // Settings : docs, import/export, zoom / max markers.
 // Les seuils métier vivent dans Console → Règles (catalogue).
@@ -26,6 +27,7 @@ const EXPORT_URLS = {
   formalities: "/api/export/poe.geojson",
   amp:         "/api/export/amp.geojson",
   science:     "/api/export/science.geojson",
+  climatology: "/api/climatology/cyclones.geojson?month=9",
 };
 
 // 2026-08-24 bug-fix — import endpoint per mode. Formalities (PoE) data is
@@ -44,7 +46,11 @@ const IMPORT_TOTAL_KEY = {
   science:     "total_science",
 };
 
-export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSaved, onImported, onProjectsCleared, onClose }) {
+export default function SettingsPanel({
+  t, mode, settings, isAdmin = false, onSaved, onImported, onProjectsCleared, onClose,
+  overlayOn, onToggleOverlay, scienceWms, onToggleWms, safetyM, onSafetyM,
+  noaaAidsOn, onToggleNoaaAids, showNoaa = false,
+}) {
   const [form, setForm] = useState(null);
   const [saved, setSaved] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -53,8 +59,6 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
   useEffect(() => {
     if (settings) setForm({ ...settings });
   }, [settings]);
-
-  if (!form) return null;
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -82,6 +86,10 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
     }
     if (currentMode === "amp") {
       alert(t("importUnsupportedAmp"));
+      return;
+    }
+    if (currentMode === "climatology") {
+      alert(t("reviewClimatologyUnavailable"));
       return;
     }
     setImporting(true);
@@ -149,6 +157,19 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
         </div>
       </div>
       <div className="p-4 space-y-5">
+        <MapLayersSidebar
+          t={t}
+          overlayOn={overlayOn}
+          onToggleOverlay={onToggleOverlay}
+          scienceWms={scienceWms}
+          onToggleWms={onToggleWms}
+          safetyM={safetyM}
+          onSafetyM={onSafetyM}
+          noaaAidsOn={noaaAidsOn}
+          onToggleNoaaAids={onToggleNoaaAids}
+          showNoaa={showNoaa}
+        />
+
         {/* Docs */}
         <section>
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70 mb-2">{t("downloads")}</p>
@@ -198,7 +219,7 @@ export default function SettingsPanel({ t, mode, settings, isAdmin = false, onSa
         {/* Phase 7 — Marine filtering block migrated to Audit → Projects card. */}
 
         {/* Map — transverse (écriture protégée par la clé admin) */}
-        {isAdmin && (
+        {form && isAdmin && (
           <section className="space-y-2.5">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70">{t("mapSettings")}</p>
             <Field label={t("minZoom")}>
