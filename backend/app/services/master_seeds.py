@@ -42,13 +42,13 @@ _INITIAL_STOP = {
     "at", "to", "by", "or", "und", "der", "die", "das",
 }
 
-# Trop courts / trop courants pour coller un domaine (Pew/Oak/WWF restent).
+# Too short / too common to glue a domain (Pew/Oak/WWF stay).
 _TOKEN_STOP_3 = _INITIAL_STOP | {
     "usa", "org", "com", "net", "www", "inc", "ltd", "llc", "new", "old",
     "red", "bay", "sea", "ngo",
 }
 
-# « Blue Carbon » ≠ bluenaturalcapital.org ; on retombe sur les jetons
+# “Blue Carbon” ≠ bluenaturalcapital.org; fall back to the tokens
 # complete if the name has nothing left after this filter.
 _GENERIC_ORG_TOKENS = {
     "blue", "ocean", "oceans", "marine", "fund", "fonds", "foundation",
@@ -63,12 +63,12 @@ _GENERIC_ORG_TOKENS = {
 }
 
 # A domain carried by ≥ N distinct v1 names is a shared catalog
-# (surfrider.org = 99 financeurs, pas la Coastal Commission).
+# (surfrider.org = 99 funders, not the Coastal Commission).
 _FREQUENT_HUB_MIN = 3
 _FREQUENT_HUBS: frozenset[str] | None = None
 
 # Shared catalogs: many v1 funders have this "home" because
-# que leurs fiches vivent sur le hub (Decade Actions, HUB Ocean), pas sur
+# that their cards live on the hub (Decade Actions, HUB Ocean), not on
 # the organization's site. This is not a home to crawl.
 SHARED_HUB_NETLOCS = {
     "oceandecade.org",
@@ -231,7 +231,7 @@ def name_owns_hub(name: str, url_or_domain: str | None) -> bool:
             continue
         if n == on:
             return True
-        # Chapters Surfrider ; pas les programmes « Ocean Decade Programme … ».
+        # Surfrider chapters; not “Ocean Decade Programme …” programs.
         if d == "surfrider.org" and n.startswith(on + " "):
             return True
     return False
@@ -263,7 +263,7 @@ def needs_official_home(seed: dict | None) -> bool:
 
 
 def official_site_query(name: str) -> str:
-    """Un shot : « "BMKG" official site ». Pas de site:hub."""
+    """One shot: “BMKG official site”. No site:hub."""
     n = (name or "").strip()
     return f'"{n}" official site' if n else ""
 
@@ -291,7 +291,7 @@ def is_publisher_host(url_or_domain: str | None) -> bool:
 
 
 def official_name_tokens(name: str) -> list[str]:
-    """Jetons pour matcher un domaine : mots, acronymes (BMFTR, Pew, WWF)."""
+    """Tokens to match a domain: words, acronyms (BMFTR, Pew, WWF)."""
     tokens = [t for t in norm_name(name).split() if len(t) >= 4]
     for t in norm_name(name).split():
         if len(t) == 3 and t not in _TOKEN_STOP_3 and t not in tokens:
@@ -324,7 +324,7 @@ def official_name_tokens(name: str) -> list[str]:
 
 
 def domain_matches_org(url_or_domain: str | None, name: str) -> bool:
-    """Le domaine porte un jeton distinctif du nom (pas juste « blue »)."""
+    """The domain carries a distinctive name token (not just “blue”)."""
     d = domain_of(url_or_domain)
     if not d:
         raw = (url_or_domain or "").strip().lower().replace("www.", "")
@@ -402,7 +402,7 @@ def names_soft_match(a: str, b: str, aliases: list | None = None) -> bool:
         nal = norm_name(al)
         if not nal or " " in nal or not (2 <= len(nal) <= 6):
             continue
-        # Les deux noms doivent porter l'acronyme. Sinon « WWF Oceans »
+        # Both names must carry the acronym. Else “WWF Oceans”
         # (alias WWF) collerait n'importe quel partenaire.
         a_has = na == nal or na.startswith(nal + " ")
         b_has = nb == nal or nb.startswith(nal + " ")

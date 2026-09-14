@@ -119,7 +119,7 @@ def is_project_fiche_path(path: str, *, apply_blacklist: bool = True) -> bool:
 
 
 def project_search_query(seed: dict) -> str:
-    """Une seule phrase : site:{domaine} … ocean project, ou \"{nom}\" marine conservation."""
+    """One sentence: site:{domain} … ocean project, or "{name}" marine conservation."""
     name = (seed.get("name") or "").strip() if isinstance(seed, dict) else ""
     url = (seed.get("url") or "").strip() if isinstance(seed, dict) else ""
     domain = domain_of(url)
@@ -1363,7 +1363,7 @@ class Swarm:
             self._tf_untrack_run(aid)
 
     async def _tinyfish_listing_discover(self, aid, seed, key):
-        """Agent TinyFish n°1 : une URL catalogue, pas de fiches individuelles."""
+        """TinyFish Agent #1: one catalogue URL, no individual cards."""
         self.set_agent(aid, status="RUNNING")
         goal = listing_goal(seed["name"])
         result = await self._tf_agent_run(
@@ -1433,9 +1433,10 @@ class Swarm:
         return hygiene_listing_urls([{"url": u} for u in hrefs], seed, max_urls)
 
     async def _crawl_discover(self, seed, max_urls):
-        """1er passage fiches : chemins URL_PATTERNS (≥ 2 segments). Les 8
-        liens internes hors blacklist ne comptent pas comme vraies fiches —
-        sinon les homes sauteraient Fetch/Search."""
+        """1st card pass: URL_PATTERNS paths (≥ 2 segments). The 8
+        internal links outside the blacklist do not count as real cards —
+        else homes would skip Fetch/Search.
+        """
         hrefs = await self._crawl_page_links(seed)
         urls = []
         for href in hrefs:
@@ -1893,7 +1894,7 @@ class Swarm:
                 self._bump_saturation(False)
                 return {"status": "rejected", "url": url}
 
-            # RAG local : sur les pages longues, seuls les chunks pertinents partent au LLM
+            # Local RAG: on long pages, only relevant chunks go to the LLM
             llm_text = text
             if len(text) > 6000:
                 llm_text = select_context(f"marine ocean coastal conservation project {page_title}",

@@ -69,7 +69,7 @@ SIMPLIFY_TOLERANCE_DEG = 0.01
 # MRGIDs verified on real VLIZ WFS + GeoPackage v12 data (2026-06).
 # ---------------------------------------------------------------------------
 MRGID_TO_TERRITORY: dict[int, str | None] = {
-    5677: "france_metropolitaine",     # French Exclusive Economic Zone (métropole)
+    5677: "france_metropolitaine",     # French Exclusive Economic Zone (mainland)
     48966: "france_metropolitaine",    # Joint regime area: Spain / France (Golfe de Gascogne)
     48976: "france_metropolitaine",    # Joint regime area: France / Italy
     8440: "polynesie_francaise",       # French Polynesia EEZ
@@ -81,7 +81,7 @@ MRGID_TO_TERRITORY: dict[int, str | None] = {
     8495: "saint_martin",              # Collectivity of Saint Martin EEZ
     8462: "guyane",                    # French Guiana EEZ
     8454: "wallis_et_futuna",          # Wallis and Futuna EEZ
-    8338: "la_reunion",                # Réunion EEZ
+    8338: "la_reunion",                # Reunion EEZ
     48944: "mayotte",                  # Overlapping claim Mayotte: France / Comores
     8494: "saint_pierre_et_miquelon",  # Saint-Pierre and Miquelon EEZ
     # TAAF — Scattered Islands + southern districts
@@ -93,7 +93,7 @@ MRGID_TO_TERRITORY: dict[int, str | None] = {
     8386: "taaf",                      # Amsterdam & Saint Paul Islands EEZ
     8385: "taaf",                      # Crozet Islands EEZ
     8387: "taaf",                      # Kerguélen EEZ
-    8401: None,                        # Clipperton Island — française mais hors territories.json
+    8401: None,                        # Clipperton Island — French but outside territories.json
 }
 
 # Fallback: substring match on the geoname (lower-cased),

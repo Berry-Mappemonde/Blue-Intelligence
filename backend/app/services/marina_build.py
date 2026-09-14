@@ -849,9 +849,8 @@ class CorridorPoint:
 
 
 def load_route(route_path: Path) -> tuple[list[Waypoint], list[list[tuple[float, float]]]]:
-    """
-    Return (waypoints, maritime_segments).
-    - waypoints: 17 escales + 19 intermediates, in file order.
+    """Return (waypoints, maritime_segments).
+    - waypoints: 17 stops + 19 intermediates, in file order.
     - maritime_segments: list of polylines [(lat, lon), ...] for maritime segments only.
     """
     data = json.loads(route_path.read_text(encoding="utf-8"))

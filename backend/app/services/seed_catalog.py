@@ -165,7 +165,7 @@ WIDE_CORP_NETLOCS = frozenset({
 
 
 def _looks_like_org_part(part: str) -> bool:
-    """« BlueInvest » ou « Corals for Conservation » : un organisme, pas un suffixe."""
+    """“BlueInvest” or “Corals for Conservation”: an organization, not a suffix."""
     raw = (part or "").strip()
     if not raw or classify_name(raw) == NAME_EXCLUDE:
         return False
@@ -192,7 +192,7 @@ def _syllable_count(word: str) -> int:
 
 
 def name_needs_official_search(name: str) -> bool:
-    """Nom trop court ou une syllabe → Search « official site », pas l'URL brute."""
+    """Name too short or one syllable → Search “official site”, not the raw URL."""
     display = re.sub(r"\s*\(partner\)\s*$", "", (name or "").strip(), flags=re.I)
     words = re.findall(r"[A-Za-zÀ-ÿ0-9]+", display)
     if not words:
@@ -493,7 +493,7 @@ def is_crawl_ready(seed: dict | None) -> bool:
         return bool(url)
     if status == HOME_STATUS_OFFICIAL:
         return bool(url)
-    # Partenaire Follow the Money / graine legacy : URL propre, pas un hub.
+    # Follow the Money partner / legacy seed: clean URL, not a hub.
     if not url:
         return False
     from app.services.master_seeds import is_shared_hub_home, needs_official_home
@@ -566,7 +566,7 @@ def _atomic_write_text(path: Path, text: str) -> Path:
 
 
 def apply_official_site_result(seed: dict, site: str | None) -> dict:
-    """Applique un hit Search B. Conserve `borrowed_domain` pour l'audit."""
+    """Apply a Search B hit. Keep `borrowed_domain` for audit."""
     site = (site or "").strip()
     if site:
         listing = (seed.get("listing_url") or "").strip() or None
@@ -600,7 +600,7 @@ def append_search_journal(path: Path, record: dict) -> Path:
 
 
 def load_search_journal(path: Path) -> dict[str, dict]:
-    """Dernier enregistrement par nom (journal append-only)."""
+    """Last record by name (append-only journal)."""
     out: dict[str, dict] = {}
     path = Path(path)
     if not path.is_file():
@@ -723,7 +723,7 @@ def write_search_progress(path: Path, payload: dict) -> Path:
 
 
 def apply_listing_result(seed: dict, listing: str | None, *, source: str = LISTING_SOURCE_SEARCH) -> dict:
-    """Pose une page-liste sur le domaine de la home. Miss → homepage, toujours crawlable."""
+    """Set a list page on the home domain. Miss → homepage, still crawlable."""
     listing = (listing or "").strip()
     home = (seed.get("home_url") or seed.get("url") or "").strip()
     if listing:
@@ -852,7 +852,7 @@ def infer_listings_onto_official_homes(seeds: list[dict], projects: list[dict] |
 
 
 def apply_home_review(seed: dict, rec: dict) -> dict:
-    """Revue humaine d'une home B. Gagne sur Search."""
+    """Human review of a home B. Wins over Search."""
     action = (rec.get("action") or REVIEW_REJECT).strip()
     seed["review_action"] = action
     seed["home_source"] = HOME_SOURCE_REVIEW
@@ -950,7 +950,7 @@ def assign_queue(seed: dict) -> str:
 
 
 def refresh_catalog_queues(seeds: list[dict]) -> list[dict]:
-    """Recalcule `queue` pour tout le catalogue (E)."""
+    """Recompute `queue` for the whole catalogue (E)."""
     for seed in seeds:
         seed["queue"] = assign_queue(seed)
     return seeds
@@ -1262,7 +1262,7 @@ def decide_follow_the_money_partner(
                 }
         return {**empty, "reason": "catalog_not_ready"}
 
-    # Nom trop court / une syllabe : Search obligatoire, jamais l'URL brute
+    # Name too short / one syllable: Search required, never the raw URL
     # (Wacan → wacan.com, chasse → chasseurdefrance.com).
     if name_needs_official_search(raw_name):
         if not did_search:
@@ -1333,7 +1333,7 @@ def ftm_page_allows_collect(
 
 
 def _ftm_inbox_penalty(name: str, url: str | None) -> float:
-    """Univ / .edu : on ne jette pas, on recule dans le classement."""
+    """Univ / .edu: do not drop, push back in the ranking."""
     penalty = 0.0
     if _UNI_NAME.search(name or ""):
         penalty += 20.0
@@ -1344,7 +1344,7 @@ def _ftm_inbox_penalty(name: str, url: str | None) -> float:
 
 
 def rank_ftm_inbox(entries: list[dict]) -> list[dict]:
-    """Une ligne par organisme : mentions × 10 + URL + max S_ocean − univ."""
+    """One row per organization: mentions × 10 + URL + max S_ocean − univ."""
     groups: dict[str, dict] = {}
     for raw in entries or []:
         seed = raw.get("seed") if isinstance(raw.get("seed"), dict) else {}
