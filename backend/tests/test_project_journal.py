@@ -1,4 +1,4 @@
-"""Journal complet d'un run Projets — fichier, Mongo, API, sans écrire `projects`."""
+"""Full journal of a Projects run — file, Mongo, API, without writing `projects`."""
 from __future__ import annotations
 
 import asyncio
@@ -243,7 +243,7 @@ def test_journal_txt_starts_with_params_and_rules():
     assert "sk-secret" not in text
     assert "Isolated run" in text
     assert "# --- Récit ---" in text
-    # la ligne meta n'est pas rejouée dans le flux horodaté
+    # the meta line is not replayed in the timestamped stream
     assert "19:00:00 INFO" not in text
 
 
@@ -261,7 +261,7 @@ def test_header_reconstructed_from_mongo_params_without_meta():
     assert packed["header_text"]
     assert "cdc_default" in packed["header_text"] or packed["params"]["profile"]
     assert packed["params"]["rules"]["shared.no_snap"]["value"] is True
-    # tail=true : items sans meta, l'en-tête reste présent
+    # tail=true: items without meta, the header stays present
     tail = {"items": [{"kind": "log", "msg": "late line"}], "total": 50}
     run_journal.enrich_journal_payload(tail, params)
     assert "shared.no_snap" in tail["header_text"]

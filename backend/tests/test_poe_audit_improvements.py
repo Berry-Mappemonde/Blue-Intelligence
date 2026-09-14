@@ -98,9 +98,9 @@ class TestSpatialCoastal:
 
     def test_ten_km_land_is_coastal(self):
         from shapely.geometry import box
-        # Mer du Nord allemande (approx.) ; Hambourg est à terre plus au sud-est.
+        # German North Sea (approx.); Hamburg is inland further southeast.
         geom = box(6.5, 53.9, 8.8, 55.2)
-        # Cuxhaven / Elbe ~10 km au sud du polygone, à terre
+        # Cuxhaven / Elbe ~10 km south of the polygon, inland
         out = classify_poe_point(53.86, 8.70, geom)
         assert out["kind"] == "coastal_land"
         assert out["validated"] is True
@@ -109,7 +109,7 @@ class TestSpatialCoastal:
     def test_hundred_km_city_rejected(self):
         from shapely.geometry import box
         geom = box(6.5, 53.9, 8.8, 55.2)
-        # Munich : même pays, ville intérieure, pas un port
+        # Munich: same country, inland city, not a port
         out = classify_poe_point(
             48.14, 11.58, geom,
             inland={"country_ok": True, "harbour_like": False},
@@ -120,7 +120,7 @@ class TestSpatialCoastal:
     def test_hundred_km_harbour_is_inland_river(self):
         from shapely.geometry import box
         geom = box(6.5, 53.9, 8.8, 55.2)
-        # Hambourg / Elbe ~100 km dans les terres
+        # Hamburg / Elbe ~100 km inland
         out = classify_poe_point(
             53.54, 9.99, geom,
             inland={"country_ok": True, "harbour_like": True},
@@ -132,7 +132,7 @@ class TestSpatialCoastal:
     def test_five_hundred_km_harbour_rejected(self):
         from shapely.geometry import box
         geom = box(6.5, 53.9, 8.8, 55.2)
-        # Trop loin même avec preuve de port
+        # Too far even with port evidence
         out = classify_poe_point(
             48.14, 11.58, geom,
             inland={"country_ok": True, "harbour_like": True},
@@ -166,7 +166,7 @@ class TestHarbourEvidence:
             {"iso2": "MQ", "sov_iso2": "FR"},
             {"osm_type": "harbour"},
         )
-        # iso2 de la zone (Martinique) : le géocodeur est déjà borné à MQ
+        # Zone iso2 (Martinique): the geocoder is already bounded to MQ
         assert flags["country_ok"] is True
         assert flags["harbour_like"] is True
         empty = inland_exception_flags({"name": "Paris"}, {"iso2": ""})

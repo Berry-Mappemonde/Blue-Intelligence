@@ -1,4 +1,4 @@
-"""WPI contre-liste — parse, appariement, jamais une preuve PoE. Hors réseau."""
+"""WPI counter-list — parse, matching, never PoE evidence. Offline."""
 import io
 import sys
 from pathlib import Path
@@ -67,7 +67,7 @@ def test_match_name_and_1km_not_far_marina():
     assert match_wpi_port(_seed("Fort Bay", near_lat, near_lon), ports)
     far_lat, far_lon = destination_point(17.62, -63.25, 0, 3.0)
     assert match_wpi_port(_seed("Fort Bay", far_lat, far_lon), ports) is None
-    # Même GPS, autre nom : pas de jeton (marina à côté d'un terminal).
+    # Same GPS, other name: no token (marina next to a terminal).
     assert match_wpi_port(_seed("Yacht Basin", 17.62, -63.25), ports) is None
     assert match_wpi_port(_seed("Yacht Club Superba", 17.62, -63.25), ports) is None
     assert WPI_PROXIMITY_KM == 1.0
@@ -91,7 +91,7 @@ def test_attach_token_does_not_create_or_confirm():
     assert "wpi_commercial" not in (seed.get("seed_sources") or [])
     assert verdict_for_seed(seed) == before == "unverified"
     assert "wpi_commercial" in format_seed_line(seed)
-    # WPI First Port of Entry = Yes n'en fait pas un listing PoE.
+    # WPI First Port of Entry = Yes does not make it a PoE listing.
     assert verdict_for_seed({
         **seed, "seed_sources": ["wpi"], "wpi_commercial": True,
         "has_coords": True,

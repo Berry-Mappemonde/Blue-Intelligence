@@ -1,4 +1,4 @@
-"""Journal structuré des dumps isolés (events + tiles HTTP + cancel marinas)."""
+"""Structured journal of isolated dumps (events + HTTP tiles + marina cancel)."""
 from __future__ import annotations
 
 import asyncio

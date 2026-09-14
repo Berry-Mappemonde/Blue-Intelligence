@@ -1,5 +1,5 @@
 """
-app.routers.ml — Endpoints FastAPI du Bootstrapping ML (weak supervision, anomalies, NER).
+app.routers.ml — FastAPI endpoints for ML bootstrapping (weak supervision, anomalies, NER).
 """
 import asyncio
 import time
@@ -67,7 +67,7 @@ async def gatekeeper_predict(body: dict = Body(...)):
     return pred
 
 
-# --- Anomalies spatiales des PoE --------------------------------------------
+# --- Spatial PoE anomalies --------------------------------------------------
 @router.post("/anomalies/scan", status_code=202)
 async def anomalies_scan(body: dict | None = Body(default=None)):
     if ANOM_STATE.running:

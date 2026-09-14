@@ -1,4 +1,4 @@
-"""Adaptateur NVIDIA NIM — aucun réseau."""
+"""NVIDIA NIM adapter — no network."""
 import asyncio
 import sys
 from pathlib import Path
@@ -184,14 +184,14 @@ class TestProvider:
         kimi = nvidia.chat_payload("moonshotai/kimi-k3", "sys", "user", 32)
         assert kimi["temperature"] == 1.0
         assert kimi["reasoning_effort"] == "low"
-        assert "top_p" not in kimi  # non exposé sur kimi-k3-infer
+        assert "top_p" not in kimi  # not exposed on kimi-k3-infer
         kimi_legal = nvidia.chat_payload(
             "moonshotai/kimi-k3", "sys", "user", 32, role="legal")
         assert kimi_legal["reasoning_effort"] == "high"
 
         pro = nvidia.chat_payload("deepseek-ai/deepseek-v4-pro-0813", "sys", "user", 32)
         assert pro["temperature"] == 0
-        assert "top_p" not in pro  # infer : ne pas toucher temp et top_p ensemble
+        assert "top_p" not in pro  # infer: do not touch temp and top_p together
         assert pro["reasoning_effort"] == "none"
         assert pro["chat_template_kwargs"] == {"thinking": False}
         assert pro["response_format"] == {"type": "json_object"}

@@ -122,7 +122,7 @@ async def _auto_refresh_cycle():
 
 
 async def _auto_refresh_loop():
-    await asyncio.sleep(90)  # laisser l'app démarrer
+    await asyncio.sleep(90)  # let the app start
     while True:
         due = (AUTO_STATE["last_cycle_at"] or 0) + CYCLE_EVERY_H * 3600 <= time.time()
         busy = REF_STATE.running
@@ -325,7 +325,7 @@ OSM_STATE = TaskState()
 
 class OsmValidateBody(BaseModel):
     only_unchecked: bool = True
-    limit: int = 0          # 0 = tous
+    limit: int = 0          # 0 = all
     radius_m: int = 3000
 
 

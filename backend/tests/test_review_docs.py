@@ -1,4 +1,4 @@
-"""Review Formalités : documents, pin mrgid, extract, juge local ∥ LLM."""
+"""Formalities Review: documents, mrgid pin, extract, local ∥ LLM judge."""
 import asyncio
 import sys
 from pathlib import Path

@@ -141,9 +141,9 @@ async def _all_marinas(q: dict | None = None, projection: dict | None = None) ->
 
 
 # ---------------------------------------------------------------------------
-# Cache du dump GeoJSON mondial (GET /api/marinas sans filtre).
-# Sur un Mongo distant (Atlas M0), reconstruire les ~32 000 features prend
-# plusieurs minutes : on sert le dernier GeoJSON construit et on reconstruit
+# Cache of the world GeoJSON dump (GET /api/marinas without a filter).
+# On a remote Mongo (Atlas M0), rebuilding the ~32,000 features takes
+# several minutes: serve the last built GeoJSON and rebuild
 # in the background (stale-while-revalidate). Exports and snapshots
 # always re-read the DB (freshness guaranteed for archives).
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ def _schedule_marinas_fc_refresh() -> asyncio.Task:
     global _marinas_fc_task
     if _marinas_fc_task is None or _marinas_fc_task.done():
         # Check the loop BEFORE creating the coroutine, otherwise an out-of-
-        # asyncio laisse une coroutine jamais attendue (RuntimeWarning).
+        # asyncio leaves a never-awaited coroutine (RuntimeWarning).
         asyncio.get_running_loop()
         _marinas_fc_task = asyncio.create_task(_rebuild_marinas_fc())
         _marinas_fc_task.add_done_callback(_log_marinas_fc_result)
@@ -217,7 +217,7 @@ def mark_marinas_fc_stale() -> None:
     try:
         _schedule_marinas_fc_refresh()
     except RuntimeError:
-        pass  # pas de boucle asyncio (contexte de test)
+        pass  # no asyncio loop (test context)
 
 
 def start_marinas_fc_warmup() -> None:
@@ -602,7 +602,7 @@ async def anchorages_build_start(body: AnchoragesBuildBody | None = None):
     body = body or AnchoragesBuildBody()
     scope = (body.scope or "full").lower()
     if scope != "corridor":
-        # 2026-09 — dump mondial en tuiles : plus de corridor 25 NM.
+        # 2026-09 — tiled world dump: no more 25 NM corridor.
         # Write the public map (db.anchorages), upsert by dedup_key.
         if body.clear_before:
             raise HTTPException(400, "clear_before is forbidden (shared.no_purge)")
@@ -749,7 +749,7 @@ MARINA_ENRICH_TASKS: dict[str, dict] = {}
 
 
 class MarinaEnrichBatchBody(BaseModel):
-    limit: int = 10   # 0 = toutes les marinas restantes (mode "Tout enchaîner")
+    limit: int = 10   # 0 = all remaining marinas ("Chain all" mode)
     priority: int | None = None
     include_enriched: bool = False   # if True, re-enrich already-enriched ones
     stale_only: bool = False   # if True, filter to stale-only (needs enriched_at)

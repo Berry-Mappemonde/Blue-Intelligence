@@ -1,4 +1,4 @@
-"""Ordre commun d'enrichissement marina / capitainerie — aucun réseau."""
+"""Shared marina / harbormaster enrichment order — no network."""
 from __future__ import annotations
 
 import asyncio

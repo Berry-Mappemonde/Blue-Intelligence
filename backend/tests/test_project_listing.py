@@ -1,4 +1,4 @@
-"""Home → catalogue : filtres, deux Agents TinyFish, pas de dump cache from scratch."""
+"""Home → catalogue: filters, two TinyFish Agents, no from-scratch cache dump."""
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,4 @@
-"""Proposer Review hors Formalités : AMP, Projets, marinas, capitaineries."""
+"""Review Suggest outside Formalities: AMP, Projects, marinas, harbormasters."""
 import asyncio
 import sys
 from pathlib import Path

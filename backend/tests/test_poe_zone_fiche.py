@@ -1,4 +1,4 @@
-"""Fiche ZEE — PoE + URLs TD/BU, jamais une preuve Noonsite, 0 écriture Atlas."""
+"""EEZ card — PoE + TD/BU URLs, never Noonsite evidence, 0 Atlas writes."""
 import asyncio
 import sys
 from pathlib import Path

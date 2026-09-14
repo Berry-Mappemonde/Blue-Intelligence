@@ -1,4 +1,4 @@
-"""Onglet Review — file de fiches par run + commentaire en base, 0 écriture v1."""
+"""Review tab — per-run card queue + comment in the database, 0 v1 writes."""
 import asyncio
 import sys
 from pathlib import Path
@@ -106,8 +106,8 @@ class _FakeDB:
         return self._cols[name]
 
 
-# Sources de zone : placeholders. Pour mrgid 5677, assemble_zone_fiche
-# préfère la liste plaisance curée (territories.json), pas ces URL.
+# Zone sources: placeholders. For mrgid 5677, assemble_zone_fiche
+# prefers the curated pleasure-craft list (territories.json), not these URLs.
 _HEX = {
     "mrgid": 5677, "name": "France", "geoname": "French Exclusive Economic Zone",
     "iso2": "FR", "sov_iso2": "FR", "sovereign": "France", "pol_type": "200NM",
@@ -289,7 +289,7 @@ def test_comment_persists_per_fiche_without_writing_v1():
     assert by["48944"]["has_comment"] is False
     fiche = asyncio.run(review_queue.get_fiche(db, "eez", "published", "5677"))
     assert fiche["comment"] == "TD OK, Mayotte à part"
-    # hexagone.pdf n'existe pas : la fiche prend la liste plaisance curée (mrgid 5677).
+    # hexagone.pdf does not exist: the card takes the curated pleasure-craft list (mrgid 5677).
     td = (fiche["fiche"].get("url_td") or {}).get("url") or ""
     assert "plaisance" in td.lower() and "dispositif.pdf" in td
     assert [p["name"] for p in fiche["fiche"]["ports"]] == ["Marseille", "Sète"]
@@ -340,7 +340,7 @@ def test_run_fiche_uses_run_ports_not_v1():
     db = _db()
     fiche = asyncio.run(build_zone_fiche(db, 5677, run_id="poe-run-1"))
     assert [p["name"] for p in fiche["ports"]] == ["Sète"]
-    # run.gouv.fr/liste.pdf est un placeholder : l'URL TD France reste la liste curée.
+    # run.gouv.fr/liste.pdf is a placeholder: the France TD URL stays the curated list.
     td = (fiche.get("url_td") or {}).get("url") or ""
     assert "plaisance" in td.lower() and "dispositif.pdf" in td
     pub = asyncio.run(build_zone_fiche(db, 5677, run_id="published"))
@@ -949,11 +949,11 @@ def test_gold_ready_none_and_zero_ports():
 
 
 def test_review_report_surfaces_comments_choices_and_manual_urls():
-    """Rapport de review : commentaires + choix + Gold, URLs manuelles en tête.
+    """Review report: comments + choices + Gold, manual URLs first.
 
-    Cas d'usage : le pipeline n'a pas trouvé la liste PoE d'un polygone ZEE.
-    Le réviseur la trouve à la main (Gemini), la colle dans le commentaire,
-    et le rapport la ressort comme URL « à rendre lisible par le pipeline ».
+    Use case: the pipeline did not find the PoE list of an EEZ polygon.
+    The reviewer finds it by hand (Gemini), pastes it in the comment,
+    and the report surfaces it as a URL “for the pipeline to make readable”.
     """
     from app.services.review_choices import save_choice
     from app.services.review_report import build_report, report_markdown
@@ -992,7 +992,7 @@ def test_review_report_surfaces_comments_choices_and_manual_urls():
     assert rep["summary"]["eez"]["fiches"] == 2
     assert rep["summary"]["eez"]["comments"] == 1
 
-    # Filtre par mode : kind=eez ne remonte pas la fiche AMP.
+    # Filter by mode: kind=eez does not surface the AMP card.
     only_eez = asyncio.run(build_report(db, "eez"))
     assert {i["kind"] for i in only_eez["items"]} == {"eez"}
 
@@ -1003,7 +1003,7 @@ def test_review_report_surfaces_comments_choices_and_manual_urls():
     assert "Parc marin du cap" in md
     assert "à rendre lisibles par le pipeline" in md
 
-    # Lecture seule : rien n'est écrit dans les collections live.
+    # Read-only: nothing is written to live collections.
     assert len(db.eez_zones.docs) == n_zones
     assert len(db.amp_sites.docs) == n_amp
 

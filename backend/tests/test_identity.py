@@ -1,4 +1,4 @@
-"""Garde-fou identité : same_site n'est pas find_building — aucun réseau."""
+"""Identity guardrail: same_site is not find_building — no network."""
 from __future__ import annotations
 
 import asyncio
@@ -133,7 +133,7 @@ class TestFindBuilding:
     def test_antimeridian_still_matches(self):
         west = {"lat": 0.0, "lon": 179.9992, "_id": "w"}
         elat, elon = destination_point(0.0, 179.9992, 90.0, 0.18)
-        assert elon < 0  # a croisé 180°
+        assert elon < 0  # crossed 180°
         hit = identity.find_building(elat, elon, [west])
         assert hit is not None
         assert hit.doc["_id"] == "w"

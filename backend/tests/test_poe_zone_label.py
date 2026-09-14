@@ -1,4 +1,4 @@
-"""Une fiche = un polygone VLIZ : France (hexagone) ≠ France (Mayotte)."""
+"""One card = one VLIZ polygon: France (hexagon) ≠ France (Mayotte)."""
 import copy
 import json
 import sys
