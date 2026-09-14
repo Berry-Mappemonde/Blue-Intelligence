@@ -4,22 +4,28 @@ Filière 4 du plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 Le VPS **sert** un GeoJSON versionné. Il ne télécharge pas d’images,
 n’exécute pas ACOLITE / CoastSat / ICESat-2.
 
-## S0 — Compte CDSE (bloquant humain)
+## S0 — Compte CDSE (confirmé)
 
 CMEMS (vent, houle, courant, climatologie —
 `scripts/climatology/cmems_auth.py`) **n’est pas** CDSE
 (images Sentinel-2, `dataspace.copernicus.eu`).
 
-| Question | Réponse (à remplir par l’opérateur) |
-|----------|-------------------------------------|
-| Accès CDSE distinct du login CMEMS ? | **non vérifié** (aucun secret dans git, 2026-09-14) |
-| Qui possède le login ? | — |
+| Question | Réponse |
+|----------|---------|
+| Accès CDSE distinct du login CMEMS ? | **oui** (2026-09-14, opérateur Berry) |
+| Qui possède le login ? | Compte dataspace.copernicus.eu de l’opérateur Berry |
 
-Sans S0 = oui, **pas de downloader**. Ce dossier n’en contient pas.
+Les identifiants vont dans `scripts/satellite/.env` (gitignoré).
+Modèle : `scripts/satellite/.env.example`.
+**Aucun mot de passe dans git.**
+
+Helper : `scripts/satellite/cdse_auth.py` (charge `CDSE_USERNAME` /
+`CDSE_PASSWORD`). Pas de downloader d’images dans ce dossier tant
+qu’on n’a pas lancé S1 à la main.
 
 ## Recette Mac (opérateur)
 
-1. Confirmer S0.
+1. S0 est confirmé. Copier `.env.example` → `.env` et remplir.
 2. Télécharger 1–2 scènes Sentinel-2 qui couvrent le corridor
    `backend/data/route.geojson` (buffer ~30 M) via le STAC CDSE.
 3. ACOLITE + MNDWI / CoastSat **en local**.
