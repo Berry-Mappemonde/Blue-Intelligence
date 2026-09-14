@@ -1,18 +1,18 @@
-"""Recherche nommée : TinyFish Search, serp_filter, DuckDuckGo si pas de clé.
+"""Named search: TinyFish Search, serp_filter, DuckDuckGo if no key.
 
-Porte d'entrée : ``search_named``. Même question partout (« où est la page
-officielle de *ce* nom »). Les requêtes et listes de domaines restent
-propres à chaque mode. Pas de SearXNG ici : c'est l'outil du top-down
-(liste réglementaire d'un polygone), pas d'une marina, d'une AMP ou
-d'une capitainerie.
+Entry point: ``search_named``. Same question everywhere ("where is the
+official page for *this* name"). Queries and domain lists stay
+mode-specific. No SearXNG here: that is the top-down tool
+(regulatory list of a polygon), not of a marina, an MPA or
+a harbormaster.
 
-  1. TinyFish Search (paginé) si une clé est là.
-  2. ``serp_filter`` — forums, OTA, réseaux : déjà le filtre du top-down / AMP.
-  3. DuckDuckGo HTML seulement si la clé TinyFish manque (filet gratuit).
+  1. TinyFish Search (paginated) if a key is present.
+  2. ``serp_filter`` — forums, OTAs, social: already the top-down / AMP filter.
+  3. DuckDuckGo HTML only if the TinyFish key is missing (free net).
 
-DuckDuckGo n'est pas un second avis après un TinyFish vide : si la clé
-existe, on fait confiance à TinyFish. Les ``include_domains`` / ``exclude_domains``
-du caller survivent au filet DDG (opérateur ``site:`` + filtre d'hôte).
+DuckDuckGo is not a second opinion after an empty TinyFish: if the key
+exists, trust TinyFish. The caller's ``include_domains`` / ``exclude_domains``
+survive the DDG net (``site:`` operator + host filter).
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _host(url: str) -> str:
 
 
 def url_key(url: str) -> str:
-    """Clé de dédup : hôte sans www, chemin sans slash final."""
+    """Dedupe key: host without www, path without a trailing slash."""
     raw = (url or "").strip()
     try:
         p = urlparse(raw)
@@ -68,7 +68,7 @@ def domain_list(domains) -> list[str]:
 
 
 def url_matches_domains(url: str, domains) -> bool:
-    """True si l'hôte est l'un des domaines (suffixe), y compris un TLD nu (``gov``)."""
+    """True if the host is one of the domains (suffix), including a bare TLD (``gov``)."""
     wanted = domain_list(domains)
     if not wanted:
         return True
@@ -115,7 +115,7 @@ def ddg_kl(location: str | None) -> str:
 
 
 def ddg_query(query: str, include_domains=None) -> str:
-    """Ajoute ``site:`` quand DDG ne peut pas filtrer à l'API, sauf si la requête l'a déjà."""
+    """Add ``site:`` when DDG cannot filter at the API, unless the query already has it."""
     q = (query or "").strip()
     if not q:
         return ""
@@ -213,7 +213,7 @@ def _apply_domain_filters(hits: list[dict], *, include_domains=None,
                           exclude_domains=None, engine: str = "") -> list[dict]:
     excluded = domain_list(exclude_domains)
     included = domain_list(include_domains)
-    # TinyFish applique déjà include_domains à l'API ; DDG non.
+    # TinyFish already applies include_domains at the API; DDG does not.
     apply_include = bool(included) and engine != "tinyfish"
     out = []
     for h in hits:
@@ -253,9 +253,9 @@ async def search_named(
     stop_when=None,
     log=None,
 ) -> list[dict]:
-    """Page officielle d'un lieu déjà nommé. Pas de SearXNG, pas de Serper.
+    """Official page of an already named place. No SearXNG, no Serper.
 
-    ``key=None`` résout ``TINYFISH_API_KEY``. ``key=""`` force le filet DuckDuckGo.
+    ``key=None`` resolves ``TINYFISH_API_KEY``. ``key=""`` forces the DuckDuckGo net.
     """
     log = log or (lambda m: None)
     q = (query or "").strip()

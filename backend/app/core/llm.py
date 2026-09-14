@@ -416,7 +416,7 @@ def coerce_ports(data, context: str | None = None) -> list[dict]:
             row["lat"] = lat
             row["lon"] = lon
         out.append(row)
-    return out[:150]  # plafond de sécurité élevé — pas de cap par pays (grands États maritimes)
+    return out[:150]  # high safety ceiling — no per-country cap (large maritime states)
 
 
 async def _json_openrouter(prompt: str, system: str, settings: dict | None,

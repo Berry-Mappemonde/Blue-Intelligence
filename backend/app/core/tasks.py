@@ -1,7 +1,7 @@
 """
-app.core.tasks — État générique des tâches de fond (unifie les 4 classes
-historiques : TaskState de poe_routes, EnrichBatchState et ZeeComputeState de
-server.py, BuildState de marinas.py).
+app.core.tasks — Generic background-task state (unifies the 4 historic
+classes: TaskState from poe_routes, EnrichBatchState and ZeeComputeState from
+server.py, BuildState from marinas.py).
 """
 import time
 
@@ -9,7 +9,7 @@ LOGS_TAIL_N = 200
 
 
 class TaskState:
-    """État in-memory d'une tâche/batch de fond, avec journal borné."""
+    """In-memory state of a background task/batch, with a bounded journal."""
 
     def __init__(self, max_logs: int = 800):
         self.max_logs = max_logs
@@ -53,12 +53,12 @@ class TaskState:
         }
 
 
-# Alias sémantiques (signatures historiques)
+# Semantic aliases (historic signatures)
 BuildState = TaskState
 
 
 def prune_tasks(registry: dict, max_age_s: int = 3600):
-    """Purge les tâches à la demande (dict par id) terminées depuis > max_age_s."""
+    """Purge on-demand tasks (dict by id) finished for > max_age_s."""
     now = time.time()
     for k in list(registry.keys()):
         t = registry.get(k) or {}
@@ -68,6 +68,6 @@ def prune_tasks(registry: dict, max_age_s: int = 3600):
 
 
 def new_task() -> dict:
-    """Descripteur d'une tâche unitaire à la demande (enrich marina/projet, génération PoE)."""
+    """Descriptor of a one-shot on-demand task (marina/project enrich, PoE generation)."""
     return {"state": "running", "started_at": time.time(), "finished_at": None,
             "result": None, "error": None, "logs": []}
