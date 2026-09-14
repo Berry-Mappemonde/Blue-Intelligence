@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unicodedata
 from contextvars import ContextVar
 from pathlib import Path
@@ -191,6 +192,93 @@ def url_looks_like_pdf(url: str | None) -> bool:
     """Path .pdf — even if the server serves captcha HTML instead."""
     path = (urlparse(url or "").path or "").lower()
     return path.endswith(".pdf")
+
+
+# Ministères renommés / DNS NXDOMAIN connus (SCT mexicain → SICT, etc.).
+RETIRED_HOST_SUFFIXES = (
+    "sct.gob.mx",
+)
+
+_DOWNLOAD_PATH_RE = re.compile(
+    r"/file-download/|/download\.php\b",
+    re.I,
+)
+
+_FETCH_FAIL_ERRORS = frozenset({
+    "ConnectError", "ConnectTimeout", "ReadTimeout", "TimeoutException",
+    "NetworkError", "ProxyError", "RemoteProtocolError",
+})
+
+_WAYBACK_PAUSE_AFTER = 3
+_WAYBACK_PAUSE_S = 15 * 60
+_wayback_503s = 0
+_wayback_pause_until = 0.0
+
+
+def url_host(url: str | None) -> str:
+    return (urlparse(url or "").hostname or "").lower().rstrip(".")
+
+
+def host_is_retired(url: str | None) -> bool:
+    """Hôte dont le DNS est mort — ne pas fetcher ni capturer."""
+    host = url_host(url)
+    if not host:
+        return False
+    return any(host == suf or host.endswith("." + suf)
+               for suf in RETIRED_HOST_SUFFIXES)
+
+
+def url_looks_like_download(url: str | None, disposition: str = "") -> bool:
+    """Fichier à télécharger (PDF, attachment) — Chromium ne peut pas le photographier."""
+    if "attachment" in (disposition or "").lower():
+        return True
+    if url_looks_like_pdf(url):
+        return True
+    path = urlparse(url or "").path or ""
+    return bool(_DOWNLOAD_PATH_RE.search(path))
+
+
+def should_skip_screenshot(url: str | None, page: dict | None = None) -> str | None:
+    """Raison de sauter la capture Review, ou None."""
+    page = page or {}
+    if host_is_retired(url) or host_is_retired(page.get("final_url")):
+        return "hôte retiré (DNS mort)"
+    if page.get("error") == "dead_host":
+        return "hôte retiré (DNS mort)"
+    if page.get("is_pdf"):
+        return "PDF"
+    if page.get("download") or url_looks_like_download(
+            url, page.get("disposition") or ""):
+        return "téléchargement / PDF"
+    if page.get("fetch_failed") or page.get("error") in _FETCH_FAIL_ERRORS:
+        return "URL déjà morte / fetch N1 échoué"
+    if page.get("blocked"):
+        return "anti-bot"
+    return None
+
+
+def reset_wayback_circuit() -> None:
+    """Tests : rouvre le circuit Wayback."""
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s = 0
+    _wayback_pause_until = 0.0
+
+
+def wayback_circuit_open(now: float | None = None) -> bool:
+    return (now if now is not None else time.time()) < _wayback_pause_until
+
+
+def _note_wayback_503() -> None:
+    global _wayback_503s, _wayback_pause_until
+    _wayback_503s += 1
+    if _wayback_503s >= _WAYBACK_PAUSE_AFTER:
+        _wayback_pause_until = time.time() + _WAYBACK_PAUSE_S
+        _wayback_503s = 0
+
+
+def _note_wayback_ok() -> None:
+    global _wayback_503s
+    _wayback_503s = 0
 
 
 _IMAGE_EXTS = frozenset({
@@ -1707,9 +1795,16 @@ async def _wayback_snapshot_url(url: str) -> str | None:
         return f"https://web.archive.org/web/{ts}id_/{orig}"
 
 
-def _mirror_http_err(exc: Exception) -> str:
+def _mirror_http_status(exc: Exception) -> int | None:
     if isinstance(exc, httpx.HTTPStatusError):
-        return f"HTTP {exc.response.status_code}"
+        return exc.response.status_code
+    return None
+
+
+def _mirror_http_err(exc: Exception) -> str:
+    code = _mirror_http_status(exc)
+    if code is not None:
+        return f"HTTP {code}"
     return type(exc).__name__
 
 
@@ -1776,6 +1871,8 @@ async def _jina_mirror_text(url: str, log) -> str | None:
                 log(f"miroir Jina: texte inutilisable ({len(text)} chars)")
         except Exception as e:
             log(f"miroir Jina: indisponible ({_mirror_http_err(e)})")
+            if _mirror_http_status(e) == 422:
+                return None
             if attempt == 0:
                 await asyncio.sleep(1.2)
     return None
@@ -1828,6 +1925,9 @@ async def _jorf_reader_text(url: str, log) -> str | None:
 
 
 async def _wayback_mirror_text(url: str, log) -> str | None:
+    if wayback_circuit_open():
+        log("miroir Wayback: en pause (503 répétés)")
+        return None
     try:
         snap = await _wayback_snapshot_url(url)
         if snap:
@@ -1838,9 +1938,12 @@ async def _wayback_mirror_text(url: str, log) -> str | None:
                 parsed = await dual_parse_html(content.decode("utf-8", errors="replace"))
                 text = parsed.get("text") or ""
             if _mirror_usable(text):
+                _note_wayback_ok()
                 log(f"miroir Wayback: {len(text)} chars")
                 return text
     except Exception as e:
+        if _mirror_http_status(e) == 503:
+            _note_wayback_503()
         log(f"miroir Wayback: indisponible ({_mirror_http_err(e)})")
     return None
 
@@ -1903,6 +2006,11 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
     log = log or (lambda m: None)
     out = empty_page(url)
 
+    if host_is_retired(url):
+        log(f"hôte retiré (DNS mort) — cascade sautée ({url_host(url)})")
+        out["error"] = "dead_host"
+        return out
+
     if is_maps_render_url(url):
         log("URL Google Maps — cascade locale sautée (DOM JS, Fetch seulement)")
         out["error"] = "maps_render_url"
@@ -1923,8 +2031,12 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
         ctype = (resp.headers.get("content-type") or "").lower()
         disposition = resp.headers.get("content-disposition") or ""
         out["final_url"] = str(resp.url) or url
+        out["disposition"] = disposition
+        out["download"] = "attachment" in disposition.lower()
     except Exception as e:
         log(f"N1 fetch: échec ({type(e).__name__})")
+        out["fetch_failed"] = True
+        out["error"] = type(e).__name__
 
     if content is not None:
         out["md5"] = hashlib.md5(content).hexdigest()
@@ -1983,7 +2095,10 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
     pdf_url = url_looks_like_pdf(url) or url_looks_like_pdf(out.get("final_url"))
     hard = looks_hard_challenge(
         out.get("text") or "", out.get("html") or "", out.get("title") or "")
-    skip_chromium = bool(out["is_pdf"] or pdf_url or hard or out["blocked"])
+    skip_chromium = bool(
+        out["is_pdf"] or pdf_url or hard or out["blocked"]
+        or out.get("fetch_failed") or out.get("download")
+        or url_looks_like_download(url, out.get("disposition") or ""))
     short = len(out["text"]) < min_chars
     # 205 chars of captcha page must not prevent TinyFish Fetch (≥ 400).
     want_mirror = bool(out["blocked"] or short or (pdf_url and not out["is_pdf"] and len(out["text"]) < 400))

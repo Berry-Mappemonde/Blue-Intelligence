@@ -41,12 +41,12 @@ class TestFingerprint:
         assert "sk-ant-secret" not in blob
         assert "nvapi-secret" not in blob
         assert fp["nvidia_configured"] is True
-        assert fp["nvidia_model"] == "deepseek-ai/deepseek-v4-pro-0813"
-        assert fp["nvidia_judge_chain"][0] == "deepseek-ai/deepseek-v4-pro-0813"
-        assert fp["nvidia_judge_chain"][1] == "openai/gpt-oss-20b"
-        assert "meta/muse-glimmer-30b" in fp["nvidia_judge_chain"]
+        assert fp["nvidia_model"] == "openai/gpt-oss-20b"
+        assert fp["nvidia_judge_chain"][0] == "openai/gpt-oss-20b"
+        assert fp["nvidia_judge_chain"][1] == "meta/muse-glimmer-30b"
+        assert "deepseek-ai/deepseek-v4-flash-0731" in fp["nvidia_judge_chain"]
+        assert "deepseek-ai/deepseek-v4-pro-0813" not in fp["nvidia_judge_chain"]
         assert fp["nvidia_page_chain"] == [
-            "deepseek-ai/deepseek-v4-pro-0813",
             "openai/gpt-oss-20b",
             "meta/muse-glimmer-30b",
         ]

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from app.config import DATA_DIR
 
@@ -98,3 +99,43 @@ def curated_td_urls(mrgid) -> list[dict]:
         seen.add(u)
         out.append({"url": u, "official": True, "from_arm": "td"})
     return out
+
+
+def official_domains_for_mrgid(mrgid) -> tuple[str, ...]:
+    terr = _territory_for_mrgid(mrgid)
+    return tuple(
+        str(d).lower().lstrip(".")
+        for d in (terr.get("official_domains") or [])
+        if d
+    )
+
+
+def _host_matches_domain(host: str, domain: str) -> bool:
+    host = (host or "").lower().lstrip(".")
+    domain = (domain or "").lower().lstrip(".")
+    if not host or not domain:
+        return False
+    return host == domain or host.endswith("." + domain)
+
+
+def td_url_fits_polygon(url: str, zone: dict | None) -> bool:
+    """True si la page peut appartenir à CE polygone.
+
+    Quand le polygone n'est pas le souverain (NC ≠ FR), on n'accepte que
+    les domaines curés / le ccTLD local. Légifrance et mer.gouv.fr restent
+    sur la France hexagone, pas sur Nouméa.
+    Sans référentiel (Saba…) : on ne filtre pas.
+    """
+    zone = zone or {}
+    iso2 = str(zone.get("iso2") or "").strip().upper()
+    sov = str(zone.get("sov_iso2") or "").strip().upper()
+    official = official_domains_for_mrgid(zone.get("mrgid"))
+    if not official or not iso2 or not sov or iso2 == sov:
+        return True
+    host = (urlparse(url or "").hostname or "").lower().lstrip(".")
+    if not host:
+        return False
+    if any(_host_matches_domain(host, d) for d in official):
+        return True
+    cc = iso2.lower()
+    return host == cc or host.endswith("." + cc)
