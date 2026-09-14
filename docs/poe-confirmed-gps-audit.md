@@ -1,56 +1,56 @@
-# Audit GPS des graines `confirmed`
+# GPS audit of `confirmed` seeds
 
-Étape du 2026-09-07. **Pas de rebuild** (`POST /api/poe/seeds/build` interdit).
-**Pas de lot** `unverified` / `probable` tant que les flags restants n’ont pas
-été relus. On ne touche aux 781 `confirmed` **que** pour un GPS clairement faux.
-Tanjung Pinang et Bandar Bintan Telani restent deux marinas distinctes.
+Step of 2026-09-07. **No rebuild** (`POST /api/poe/seeds/build` is forbidden).
+**No batch** of `unverified` / `probable` until the remaining flags have been
+re-read. Touch the 781 `confirmed` records **only** for a clearly wrong GPS.
+Tanjung Pinang and Bandar Bintan Telani remain two distinct marinas.
 
-Export machine : [`data/poe-confirmed-gps-audit.json`](data/poe-confirmed-gps-audit.json).
+Machine export: [`data/poe-confirmed-gps-audit.json`](data/poe-confirmed-gps-audit.json).
 
-## Méthode
+## Method
 
-Sur les **781** `confirmed` géocodés, sans réseau :
+On the **781** geocoded `confirmed` records, offline:
 
-1. **Reclasser** le GPS contre le polygone VLIZ (`spatial_class_for_point`).
-   - `inland_far` : `inland_river` > 30 km, ou `inland` / `other_water` > 8 km
-   - `outside_eez_far` : hors polygone et loin de la côte (même seuil 30 km
-     pour `inland_river`, pour ne pas noyer Shanghai / Bristol)
-2. **`homonym_paren_mismatch`** : le nom (ou `listing_name`) a une parenthèse
-   (Bintan Island, Oregon, Georgia…) dont les tokens ne collent pas au GPS.
-   Suggestion = **centroïde d’île** (Bintan 1,08°N / 104,42°E), jamais le GPS
-   d’une autre marina (pas Bandar Bintan Telani).
-3. **`listing_group_outlier`** : isolé > 300 km du cluster *sain* (in_eez /
-   côtier) du même `listing_group` + `mrgid`. Un confirmed déjà in_eez n’est
-   flaggé que s’il est > 1 500 km (Astoria NY vs côte ouest).
-4. **`nominatim_inland_listing_only`** : `seed_sources=["listing"]`,
+1. **Reclassify** the GPS against the VLIZ polygon (`spatial_class_for_point`).
+   - `inland_far`: `inland_river` > 30 km, or `inland` / `other_water` > 8 km
+   - `outside_eez_far`: outside the polygon and far from the coast (same 30 km
+     threshold for `inland_river`, so as not to drown Shanghai / Bristol)
+2. **`homonym_paren_mismatch`**: the name (or `listing_name`) has a parenthesis
+   (Bintan Island, Oregon, Georgia…) whose tokens do not match the GPS.
+   Suggestion = **island centroid** (Bintan 1.08°N / 104.42°E), never the GPS
+   of another marina (not Bandar Bintan Telani).
+3. **`listing_group_outlier`**: isolated > 300 km from the *healthy* cluster
+   (in_eez / coastal) of the same `listing_group` + `mrgid`. A confirmed record
+   already in_eez is flagged only if it is > 1,500 km (Astoria NY vs west coast).
+4. **`nominatim_inland_listing_only`**: `seed_sources=["listing"]`,
    `geocode_source=nominatim`, GPS inland > 30 km.
 
-`verify_verdict` / `confirmation_status` ne bougent pas.
+`verify_verdict` / `confirmation_status` do not change.
 
-### Corrections automatiques (cas évidents seulement)
+### Automatic corrections (obvious cases only)
 
-- **Tanjung Pinang** : Nominatim a pris le village de Sumatra (Palembang), pas
-  Bintan. Centroïde Bintan, `geocode_source=manual_audit`.
-- Tout `confirmed` spatialement hors côte **et** > 30 km **dont une observation
-  in_eez du même `name_norm` existe** : on prend ce GPS,
+- **Tanjung Pinang**: Nominatim took the Sumatra village (Palembang), not
+  Bintan. Bintan centroid, `geocode_source=manual_audit`.
+- Any `confirmed` spatially off the coast **and** > 30 km **for which an
+  in_eez observation of the same `name_norm` exists**: take that GPS,
   `geocode_source=observation`.
 
-Si un homonyme reste possible (St-Nazaire Gard vs Loire-Atlantique, Astoria NY
-vs Oregon, Safi, Gabes, Savannah sans obs côtière) : **flag seulement**, pas de
-changement `lat`/`lon`.
+If a homonym remains possible (St-Nazaire Gard vs Loire-Atlantique, Astoria NY
+vs Oregon, Safi, Gabes, Savannah without a coastal observation): **flag only**,
+no `lat`/`lon` change.
 
-`poe_ports` (1280) n’est modifié que si la même `dedup_key` y porte **le même**
-GPS aberrant. Log : `poe_audit_log.action = gps_audit_correct`.
+`poe_ports` (1280) is modified only if the same `dedup_key` there carries **the
+same** aberrant GPS. Log: `poe_audit_log.action = gps_audit_correct`.
 
-Code : `backend/app/services/poe_confirmed_gps_audit.py`.  
-API atelier : `GET /api/poe/seeds/gps-audit` (dry-run).  
-Script : `python3 backend/scripts/audit_confirmed_gps.py [--persist]`.
+Code: `backend/app/services/poe_confirmed_gps_audit.py`.
+Workshop API: `GET /api/poe/seeds/gps-audit` (dry-run).
+Script: `python3 backend/scripts/audit_confirmed_gps.py [--persist]`.
 
-## Résultat Atlas (2026-09-07T08:01:30Z)
+## Atlas result (2026-09-07T08:01:30Z)
 
-Avant / après persist :
+Before / after persist:
 
-| | avant | après |
+| | before | after |
 |---|---:|---:|
 | `poe_seed_ports` | 4034 | 4034 |
 | `poe_ports` | 1280 | 1280 |
@@ -58,101 +58,102 @@ Avant / après persist :
 | `gps_audit_status=corrected` | 0 | **4** |
 | `gps_audit_status=flagged` | 0 | **16** |
 | `gps_audit_status=ok` | 0 | 761 |
-| `poe_ports` patchés (même clé + même GPS aberrant) | — | 3 |
-| fusions de clés | 0 | 0 |
+| `poe_ports` patched (same key + same aberrant GPS) | — | 3 |
+| key merges | 0 | 0 |
 
-20 flags au scan (13 haute, 7 moyenne) ; 4 corrections évidentes.
+20 flags at scan (13 high, 7 medium); 4 obvious corrections.
 
-### Corrigés
+### Corrected
 
-| Clé | Nom | GPS avant | GPS après | Source |
+| Key | Name | GPS before | GPS after | Source |
 |---|---|---|---|---|
-| `8492:tanjungpinangbintanislandriauislands` | Tanjung Pinang (Bintan Island) | −3,356 / 104,657 (Sumatra) | **1,08 / 104,42** (centroïde Bintan) | `manual_audit` |
-| `8429:ensenada` | Ensenada | 24,06 / −106,70 | 31,85 / −116,63 (Baja) | `observation` |
-| `8429:lapaz` | La Paz | 19,35 / −98,96 | 24,16 / −110,33 (BCS) | `observation` |
-| `5675:parnu2parnuport` | Pärnu 2 (Pärnu Port) | 57,77 / 26,03 (inland) | 58,38 / 24,50 (côte) | `observation` |
+| `8492:tanjungpinangbintanislandriauislands` | Tanjung Pinang (Bintan Island) | −3.356 / 104.657 (Sumatra) | **1.08 / 104.42** (Bintan centroid) | `manual_audit` |
+| `8429:ensenada` | Ensenada | 24.06 / −106.70 | 31.85 / −116.63 (Baja) | `observation` |
+| `8429:lapaz` | La Paz | 19.35 / −98.96 | 24.16 / −110.33 (BCS) | `observation` |
+| `5675:parnu2parnuport` | Pärnu 2 (Pärnu Port) | 57.77 / 26.03 (inland) | 58.38 / 24.50 (coast) | `observation` |
 
-Les trois derniers existaient dans `poe_ports` avec le même GPS aberrant :
-corrigés aussi, count 1280 inchangé. Tanjung Pinang n’était pas dans
+The last three already existed in `poe_ports` with the same aberrant GPS:
+corrected as well, count 1280 unchanged. Tanjung Pinang was not in
 `poe_ports` (listing-only).
 
-### Corrigés ensuite (recherche UN/LOCODE / autorités)
+### Corrected later (UN/LOCODE / authority research)
 
-15 GPS tranchés, `geocode_source=manual_audit`. Pas de fusion de clés.
-Pas de centroïde de groupe (Savannah ≠ Delaware, Vancouver ≠ Prince Rupert).
+15 GPS points settled, `geocode_source=manual_audit`. No key merges.
+No group centroid (Savannah ≠ Delaware, Vancouver ≠ Prince Rupert).
 
-Source de vérité **révisable en PR** : [`data/poe-gps-arbitrated.json`](data/poe-gps-arbitrated.json)
-(plus un dict Python). Chargeur : `backend/app/services/poe_gps_registry.py`.
-Atelier : `GET /api/poe/seeds/gps-arbitrated` (lecture git, pas de persist).
+**PR-revisable** source of truth: [`data/poe-gps-arbitrated.json`](data/poe-gps-arbitrated.json)
+(plus a Python dict). Loader: `backend/app/services/poe_gps_registry.py`.
+Workshop: `GET /api/poe/seeds/gps-arbitrated` (git read, no persist).
 
-| Clé | Nom | GPS avant | GPS après |
+| Key | Name | GPS before | GPS after |
 |---|---|---|---|
-| `8456:savannah` | Savannah | Finger Lakes NY | **32,08 / −81,09** (USSAV) |
-| `8456:astoria` | Astoria | Queens NY | **46,19 / −123,83** (Oregon) |
-| `5677:stnazaire` | St Nazaire | Gard | **47,28 / −2,20** (FRSNR). Clé `nantessaintnazaire` inchangée |
-| `8367:safi` | Safi | hinterland | **32,31 / −9,25** (MASFI) |
-| `8366:gabes` | Gabes | hinterland | **33,91 / 10,10** (TNGAE) |
-| `8479:portofmtwara` | Port of Mtwara | 86 km inland | **−10,27 / 40,20** (TZMYW) |
-| `8479:portoftanga` | Port of Tanga | 82 km inland | **−5,07 / 39,11** (TZTGT) |
-| `8464:recife` | Recife | Paraná | **−8,06 / −34,87** (BRREC) |
-| `8493:vancouver` | Vancouver | Gold River / Nootka | **49,29 / −123,11** (Canada Place) |
-| `8456:brunswick` | Brunswick | NY inland | **31,13 / −81,54** (Géorgie) |
-| `8484:tpdanang` | Tp Da Nang | Quảng Nam inland | **16,10 / 108,23** (VNDAD) |
-| `5697:canakkale` | Çanakkale | hinterland | **40,10 / 26,38** (Kepez) |
-| `5697:mersin` | Mersin | hinterland Mut | **36,80 / 34,64** (TRMER) |
-| `8349:portofkilifi` | Port of Kilifi | hinterland | **−3,64 / 39,86** (Kilifi Creek) |
-| `8324:portofmadang` | Port of Madang | −5,0 / 145,5 | **−5,21 / 145,80** (PGMAG) |
+| `8456:savannah` | Savannah | Finger Lakes NY | **32.08 / −81.09** (USSAV) |
+| `8456:astoria` | Astoria | Queens NY | **46.19 / −123.83** (Oregon) |
+| `5677:stnazaire` | St Nazaire | Gard | **47.28 / −2.20** (FRSNR). Key `nantessaintnazaire` unchanged |
+| `8367:safi` | Safi | hinterland | **32.31 / −9.25** (MASFI) |
+| `8366:gabes` | Gabes | hinterland | **33.91 / 10.10** (TNGAE) |
+| `8479:portofmtwara` | Port of Mtwara | 86 km inland | **−10.27 / 40.20** (TZMYW) |
+| `8479:portoftanga` | Port of Tanga | 82 km inland | **−5.07 / 39.11** (TZTGT) |
+| `8464:recife` | Recife | Paraná | **−8.06 / −34.87** (BRREC) |
+| `8493:vancouver` | Vancouver | Gold River / Nootka | **49.29 / −123.11** (Canada Place) |
+| `8456:brunswick` | Brunswick | NY inland | **31.13 / −81.54** (Georgia) |
+| `8484:tpdanang` | Tp Da Nang | Quảng Nam inland | **16.10 / 108.23** (VNDAD) |
+| `5697:canakkale` | Çanakkale | hinterland | **40.10 / 26.38** (Kepez) |
+| `5697:mersin` | Mersin | hinterland Mut | **36.80 / 34.64** (TRMER) |
+| `8349:portofkilifi` | Port of Kilifi | hinterland | **−3.64 / 39.86** (Kilifi Creek) |
+| `8324:portofmadang` | Port of Madang | −5.0 / 145.5 | **−5.21 / 145.80** (PGMAG) |
 
-`5693:puertodemelilla` : GPS déjà le quai (~400 m de Wikipedia). Faux positif
-VLIZ (enclave). Registre `action=keep` → `gps_audit_status=ok`, lat/lon inchangés.
+`5693:puertodemelilla`: GPS already on the quay (~400 m from Wikipedia). VLIZ
+false positive (enclave). Registry `action=keep` → `gps_audit_status=ok`,
+lat/lon unchanged.
 
-Sidney BC (`8493:portofsidney`) : **ok**, pas flaggé malgré des obs Sydney NS.
+Sidney BC (`8493:portofsidney`): **ok**, not flagged despite Sydney NS observations.
 
-## Scorer d'homonymes (géocodage)
+## Homonym scorer (geocoding)
 
-`geocode_port_dual` / `pick_geocode` notent jusqu'à **10** candidats (filet Nominatim ;
-le système c'est parenthèses, `listing_group`, pairs, et le registre JSON) :
+`geocode_port_dual` / `pick_geocode` score up to **10** candidates (Nominatim
+net; the system is parentheses, `listing_group`, pairs, and the JSON registry):
 
-- parenthèses conservées dans la requête (Bintan avant Sumatra)
-- polygone VLIZ de **ce** mrgid + classe OSM harbour
-- `listing_group` comme filtre (West Coast USA → lon < −90°), jamais un GPS à copier
-- pairs côtiers du même groupe : proximité, pas fusion
-- deux bassins à score proche **sans** hint → `geocode_status=ambiguous`, on ne
-  pose pas de GPS (et on n'écrase pas un GPS existant)
-- `geocode_one` consulte le registre `accepted` **avant** Nominatim
-  (`geocode_arbitration=gps_registry`). Claude ne choisit pas un point.
+- parentheses kept in the query (Bintan before Sumatra)
+- VLIZ polygon of **this** mrgid + OSM harbour class
+- `listing_group` as a filter (West Coast USA → lon < −90°), never a GPS to copy
+- coastal pairs of the same group: proximity, not merge
+- two basins with close scores **without** a hint → `geocode_status=ambiguous`,
+  no GPS is set (and an existing GPS is not overwritten)
+- `geocode_one` consults the `accepted` registry **before** Nominatim
+  (`geocode_arbitration=gps_registry`). Claude does not pick a point.
 
-`_needs_geocode` : `name_only` sans point, ou `inland_far` / `ambiguous`.
-Les confirmed `ok` / `corrected` ne sont **pas** re-géocodés.
+`_needs_geocode`: `name_only` without a point, or `inland_far` / `ambiguous`.
+Confirmed `ok` / `corrected` records are **not** re-geocoded.
 
-17 `unverified` inland_far ont été re-géocodés avec le scorer (Ibiza Madrid →
-Ibiza, Semarang, Huatulco, Punta Cana, etc.). Trois retours : **Sevilla**
-(port fluvial Guadalquivir), **Kingston** (saut Terre-Neuve), **Hokkaido**
-(île, pas Sapporo). Le scorer refuse désormais un quai lointain dont le
-libellé n’est pas le toponyme, et un pair listing à > 1 500 km.
+17 `unverified` inland_far records were re-geocoded with the scorer (Ibiza Madrid →
+Ibiza, Semarang, Huatulco, Punta Cana, etc.). Three returns: **Sevilla**
+(Guadalquivir river port), **Kingston** (Newfoundland jump), **Hokkaido**
+(island, not Sapporo). The scorer now rejects a distant quay whose label is
+not the toponym, and a listing pair more than 1,500 km away.
 
-## Tanjung Pinang — avant / après
+## Tanjung Pinang — before / after
 
-Nominatim a renvoyé le village *Tanjung Pinang, Ogan Ilir, Sumatera Selatan*
-(−3,36 / 104,66) au lieu de la ville *Tanjungpinang, Kepulauan Riau*
-(~0,92 / 104,45). Le juge Claude avait dit OUI (textes Bintan). Le GPS était
-faux.
+Nominatim returned the village *Tanjung Pinang, Ogan Ilir, Sumatera Selatan*
+(−3.36 / 104.66) instead of the city *Tanjungpinang, Kepulauan Riau*
+(~0.92 / 104.45). The Claude judge had said YES (Bintan texts). The GPS was
+wrong.
 
 | | lat | lon | source | spatial |
 |---|---:|---:|---|---|
-| Avant | −3,3564491 | 104,6571166 | nominatim | inland_river 40,8 km |
-| Après | **1,08** | **104,42** | manual_audit | in_eez (sliver 1,4 km) |
-| Bandar Bintan Telani (inchangé) | 1,1605006 | 104,3201677 | — | — |
-| name_only `…bbtbintanisland` | — | — | — | toujours name_only, pas fusionné |
+| Before | −3.3564491 | 104.6571166 | nominatim | inland_river 40.8 km |
+| After | **1.08** | **104.42** | manual_audit | in_eez (sliver 1.4 km) |
+| Bandar Bintan Telani (unchanged) | 1.1605006 | 104.3201677 | — | — |
+| name_only `…bbtbintanisland` | — | — | — | still name_only, not merged |
 
-La suggestion n’est **pas** le GPS de Bandar Bintan Telani (autre marina,
-1,1605 / 104,3202).
+The suggestion is **not** the GPS of Bandar Bintan Telani (another marina,
+1.1605 / 104.3202).
 
-## Ce qu’on ne fait pas maintenant
+## What we are not doing now
 
 - `POST /api/poe/seeds/build`
-- Enrich `unverified` / `probable` (~1 805) — seulement les graines
-  `inland_far` / `ambiguous`, pas les 781 confirmed ok
-- Fusion de clés
+- Enrich `unverified` / `probable` (~1,805) — only the
+  `inland_far` / `ambiguous` seeds, not the 781 confirmed ok
+- Key merges
 
-**Prochain pas** : lot `unverified` (hors confirmed ok).
+**Next step**: `unverified` batch (excluding confirmed ok).

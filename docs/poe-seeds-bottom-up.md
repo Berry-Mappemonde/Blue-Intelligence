@@ -1,150 +1,149 @@
-# Vérification bottom-up des Ports d’Entrée
+# Bottom-up verification of Ports of Entry
 
-## En langage simple
+## In plain language
 
-On ne part plus d’une carte du monde découpée en zones (ZEE) pour demander à
-une IA : « liste-moi tous les ports d’entrée de ce pays ».
+We no longer start from a world map cut into zones (EEZs) to ask an
+AI: “list every port of entry in this country.”
 
-On part de ce qu’on a **déjà trouvé** : la carte v1, les runs mondiaux
-précédents, le listing communautaire Noonsite, et OpenStreetMap. Chaque lieu
-connu devient une **graine** — une fiche. Sur cette fiche on garde toutes les
-origines (qui l’a vu, sous quel nom, avec ou sans GPS, douane OSM à côté,
-etc.). On n’écrase pas ça en un seul oui/non.
+We start from what we have **already found**: the v1 map, previous world
+runs, the Noonsite community listing, and OpenStreetMap. Each known place
+becomes a **seed** — a record. On that record we keep every origin (who
+saw it, under which name, with or without GPS, nearby OSM customs, etc.).
+We do not flatten that into a single yes/no.
 
-Ensuite, pour chaque fiche encore douteuse, on fait deux choses :
+Then, for each record that is still doubtful, we do two things:
 
-1. **TinyFish cherche ce lieu-là** — le nom du port, pas la zone entière.
-   Noonsite est exclu : on a déjà extrait cette liste.
-2. **Claude lit les pages trouvées** et répond seulement : *est-ce que CE
-   lieu est un Port d’Entrée officiel ?* Oui, non, ou on ne peut pas dire.
+1. **TinyFish searches that place** — the port name, not the whole zone.
+   Noonsite is excluded: we have already extracted that list.
+2. **Claude reads the pages found** and answers only: *is THIS place an
+   official Port of Entry?* Yes, no, or we cannot say.
 
-Les ports déjà recoupés (listing + un run + coordonnées) ne sont pas
-retouchés. La carte v1 (`poe_ports`) n’est jamais écrasée automatiquement.
+Ports already cross-checked (listing + a run + coordinates) are not
+touched again. The v1 map (`poe_ports`) is never overwritten automatically.
 
-C’est tout. Inventaire → recherche ciblée → jugement. Pas de découverte
-mondiale, pas de canari sur les ZEE les plus dures.
-
----
-
-## Pourquoi on a changé d’approche
-
-L’ancien pipeline (top-down) faisait, pour chaque ZEE VLIZ :
-
-recherche web de la zone → extraire une liste de ports → géocoder.
-
-Le canari 12 ZEE visait justement les trous et les erreurs. Il mesurait le
-pire cas, pas le monde. Relancer un 6ᵉ run mondial de découverte reproduisait
-le même bruit, au risque de polluer v1.
-
-Les sources existantes couvrent déjà une grande partie du listing (près de
-la moitié après union, contre ~10 % sur le canari). Il manquait un
-**inventaire unique** et une **vérification lieu par lieu**.
+That is all. Inventory → targeted search → judgment. No world-wide
+discovery, no canary on the hardest EEZs.
 
 ---
 
-## Inventaire : une graine = un lieu
+## Why we changed approach
 
-### Identité
+The old (top-down) pipeline did, for each VLIZ EEZ:
 
-Clé : `mrgid` VLIZ + nom normalisé (`dedup_key`, ex. `8447:alofi`).
-VLIZ sert à savoir **où** est le port, pas à lancer un crawl de zone.
+web search of the zone → extract a list of ports → geocode.
 
-L’appariement est local à la ZEE (fuzzy + alias « Port of / Port de / (…) »).
-Un même toponyme dans deux ZEE reste deux graines.
+The 12-EEZ canary was aimed exactly at the holes and the errors. It
+measured the worst case, not the world. Relaunching a 6th world discovery
+run reproduced the same noise, at the risk of polluting v1.
 
-### Sources (union, pas intersection)
+Existing sources already cover a large part of the listing (nearly half
+after union, versus ~10% on the canary). What was missing was a
+**single inventory** and **place-by-place verification**.
 
-| Source | Collection / fichier | Ce qu’elle apporte |
+---
+
+## Inventory: one seed = one place
+
+### Identity
+
+Key: VLIZ `mrgid` + normalized name (`dedup_key`, e.g. `8447:alofi`).
+VLIZ is used to know **where** the port is, not to launch a zone crawl.
+
+Matching is local to the EEZ (fuzzy + “Port of / Port de / (…)” aliases).
+The same toponym in two EEZs remains two seeds.
+
+### Sources (union, not intersection)
+
+| Source | Collection / file | What it contributes |
 |---|---|---|
-| Carte v1 | `poe_ports` | Nom, coords, URLs — **intacte** |
-| Runs mondiaux | `poe_run_ports` | Extraíts versionnés (5 runs 285 ZEE par défaut) |
-| Listing Noonsite | `backend/data/listing_control/all_countries.json` | Rôle `poe` ou `other`, souvent sans GPS |
-| OSM cache | Mongo `osm_port_seeds` | Havres commerciaux, `port_of_entry`, contrôles ; marinas **seulement** si douane / border / PoE ≤ 800 m (`marina_pleasure`) |
-| Priors OSM | `backend/data/osm_port_priors.json` | Harbour / marina ≤ 800 m d’une douane ou `border_control` |
-| WPI | `backend/data/wpi_ports.json` | Contre-liste commerce/industriel. Jeton `wpi_commercial`. **Jamais** une preuve PoE |
+| v1 map | `poe_ports` | Name, coords, URLs — **intact** |
+| World runs | `poe_run_ports` | Versioned extracts (5 runs, 285 EEZs by default) |
+| Noonsite listing | `backend/data/listing_control/all_countries.json` | Role `poe` or `other`, often without GPS |
+| OSM cache | Mongo `osm_port_seeds` | Commercial harbours, `port_of_entry`, controls; marinas **only** if customs / border / PoE ≤ 800 m (`marina_pleasure`) |
+| OSM priors | `backend/data/osm_port_priors.json` | Harbour / marina ≤ 800 m from customs or `border_control` |
+| WPI | `backend/data/wpi_ports.json` | Commerce/industrial counter-list. Token `wpi_commercial`. **Never** PoE proof |
 
-Une graine vue seulement par v1, seulement par OSM ou seulement par le
-listing **reste** dans l’union. On ne jette pas un nom parce qu’une autre
-source ne le connaît pas.
+A seed seen only by v1, only by OSM, or only by the listing **stays** in
+the union. We do not drop a name because another source does not know it.
 
-Chaque fusion ajoute une **observation** (origine, nom vu, coords, tags).
-On n’aplatit pas listing / OSM / runs en un champ `is_poe`.
+Each merge adds an **observation** (origin, name seen, coords, tags).
+We do not flatten listing / OSM / runs into an `is_poe` field.
 
-### Verdicts (tri du travail, pas une vérité officielle)
+### Verdicts (work triage, not official truth)
 
-| Verdict | Règle | Action |
+| Verdict | Rule | Action |
 |---|---|---|
-| `confirmed` | listing PoE ∩ (v1 \| run \| osm) **et** coordonnées | GPS audité (homonymes). Re-géocoder seulement `inland_far` / `ambiguous`, pas les `ok`. |
-| `probable` | OSM confiance ≥ 0,5, ou ≥ 2 sources extraites, ou listing ∩ extrait sans point | Plus tard, optionnel |
-| `unverified` | Une seule source extraite + coords | Juger |
-| `name_only` | Listing PoE sans point | Géocoder, puis juger |
+| `confirmed` | listing PoE ∩ (v1 \| run \| osm) **and** coordinates | GPS audited (homonyms). Re-geocode only `inland_far` / `ambiguous`, not the `ok` ones. |
+| `probable` | OSM confidence ≥ 0.5, or ≥ 2 extracted sources, or listing ∩ extract without a point | Later, optional |
+| `unverified` | A single extracted source + coords | Judge |
+| `name_only` | Listing PoE without a point | Geocode, then judge |
 
-Un jeton absent (`osm:customs`, `listing:poe`…) signifie **inconnu**, jamais
-« faux ».
+A missing token (`osm:customs`, `listing:poe`…) means **unknown**, never
+“false.”
 
 ### Collection
 
-`POST /api/poe/seeds/build` reconstruit `poe_seed_ports` (delete + insert).
-Ne touche pas `poe_ports` ni `poe_run_ports`.
+`POST /api/poe/seeds/build` rebuilds `poe_seed_ports` (delete + insert).
+Does not touch `poe_ports` or `poe_run_ports`.
 
-Chaque document porte au minimum :
+Each document carries at least:
 
-- identité : `name`, `mrgid`, `zone_name`, `lat` / `lon`, `dedup_key`
+- identity: `name`, `mrgid`, `zone_name`, `lat` / `lon`, `dedup_key`
 - `seed_sources`, `observations`
-- signaux OSM / listing
+- OSM / listing signals
 - `verify_verdict`
-- `search_query` — **c’est ça que TinyFish doit chercher**
-- `search_exclude_domains` : `noonsite.com`
-- `seed_line` — résumé humain des jetons, **pas envoyé à Claude**
+- `search_query` — **this is what TinyFish must search**
+- `search_exclude_domains`: `noonsite.com`
+- `seed_line` — human summary of tokens, **not sent to Claude**
 
-Mesure Atlas du 2026-09-06 (v1 + 5 runs + listing + priors OSM, cache OSM
-Mongo vide) : **4027** graines — 592 confirmed, 1805 probable, 1058
+Atlas measurement of 2026-09-06 (v1 + 5 runs + listing + OSM priors, empty
+OSM Mongo cache): **4027** seeds — 592 confirmed, 1805 probable, 1058
 unverified, 572 name_only.
 
-Après le run name_only + reprise unverified : 33 `name_only` restants
-(échec géocode). Dossier de revue : [`poe-name-only-33.md`](poe-name-only-33.md).
+After the name_only run + unverified resume: 33 remaining `name_only`
+(geocode failure). Review dossier: [`poe-name-only-33.md`](poe-name-only-33.md).
 
 ---
 
-## Recherche : la graine pilote TinyFish
+## Search: the seed drives TinyFish
 
-Pour une graine à vérifier :
+For a seed to verify:
 
 ```
-{nom} official port of entry OR clearance OR "puerto habilitado" {zone}
+{name} official port of entry OR clearance OR "puerto habilitado" {zone}
 ```
 
-Exemple : `Alofi official port of entry OR clearance OR "puerto habilitado" Niue`.
+Example: `Alofi official port of entry OR clearance OR "puerto habilitado" Niue`.
 
-Aucun jeton listing/OSM dans la requête (ça biaiserait vers les forums).
+No listing/OSM token in the query (that would bias toward forums).
 
-### Filtres
+### Filters
 
-1. **`exclude_domains=noonsite.com`** sur l’API Search TinyFish.
-2. Filet côté client : toute URL `noonsite.com` est jetée avant Fetch.
-3. Premier passage : `include_domains` = whitelist gouvernementale de la ZEE
-   (ISO2 / souverain).
-4. Si zéro hit officiel : même requête **sans** whitelist, toujours sans
-   Noonsite.
-5. Fetch : tous les hits whitelistés, cap 10, 150 URL/min.
-6. Search : pagination (≤ 3 pages), 30 req/min PAYG, **une requête logique
-   par graine**.
+1. **`exclude_domains=noonsite.com`** on the TinyFish Search API.
+2. Client-side net: any `noonsite.com` URL is dropped before Fetch.
+3. First pass: `include_domains` = the EEZ government whitelist
+   (ISO2 / sovereign).
+4. If zero official hits: same query **without** the whitelist, still
+   without Noonsite.
+5. Fetch: all whitelisted hits, cap 10, 150 URL/min.
+6. Search: pagination (≤ 3 pages), 30 req/min PAYG, **one logical query
+   per seed**.
 
-L’Agent TinyFish (lite puis stealth) n’est appelé que si Fetch renvoie
-`bot_blocked`, sur **une** URL officielle déjà connue, 2 concurrents, cap
-crédits.
+The TinyFish Agent (lite then stealth) is called only if Fetch returns
+`bot_blocked`, on **one** already-known official URL, 2 concurrent, credit
+cap.
 
 ---
 
-## Jugement : Claude lit les extraits, pas la fiche
+## Judgment: Claude reads the extracts, not the record
 
-Claude reçoit uniquement :
+Claude receives only:
 
-- le nom du candidat
-- la zone VLIZ (nom + ISO2)
-- les extraits (pages Fetch, ou extraits Agent, ou à défaut snippets SERP)
+- the candidate name
+- the VLIZ zone (name + ISO2)
+- the extracts (Fetch pages, or Agent extracts, or failing that SERP snippets)
 
-Il répond en JSON strict :
+It replies in strict JSON:
 
 ```json
 {"is_poe": true, "confidence": 0, "reason": "", "official_name": null, "kind": "pleasure"}
@@ -152,95 +151,96 @@ Il répond en JSON strict :
 
 `kind` = `pleasure` | `mixed` | `cargo` | `other` | `unknown`.
 
-- `true` : une source **officielle** désigne **ce** lieu comme PoE / clearance
-  / puerto habilitado **pour la plaisance** (yacht, recreational, pleasure
-  craft) **ou mixte** (commerce **et** plaisance explicites).
-- `false` : cargo-only, terminal conteneur, industriel, aéroport, ville,
-  autre pays. Une **marina n’est pas** un faux automatique : clearance
-  officielle à **cette** marina → `true`, `kind=pleasure`.
-- `null` : extraits insuffisants, ou port désigné sans trafic lisible.
-- Filet déterministe : `kind=cargo` (ou alias commercial / freight /
-  industrial) force `rejected`, même si le modèle a mis `is_poe=true`.
+- `true`: an **official** source designates **this** place as PoE / clearance
+  / puerto habilitado **for pleasure craft** (yacht, recreational, pleasure
+  craft) **or mixed** (commerce **and** pleasure stated explicitly).
+- `false`: cargo-only, container terminal, industrial, airport, city,
+  other country. A **marina is not** an automatic false: official
+  clearance at **this** marina → `true`, `kind=pleasure`.
+- `null`: extracts insufficient, or a designated port with no readable traffic.
+- Deterministic net: `kind=cargo` (or commercial / freight / industrial
+  aliases) forces `rejected`, even if the model set `is_poe=true`.
 
-Escalade : Haiku → Sonnet si listing ou `inconclusive` → OpenRouter si échec
-ou budget.
+Escalation: Haiku → Sonnet if listing or `inconclusive` → OpenRouter on
+failure or budget.
 
-Les jetons `listing:poe` / `osm:customs` **ne vont pas** dans le prompt.
-Les passer ferait confirmer Noonsite au lieu de lire l’officiel.
+The `listing:poe` / `osm:customs` tokens **do not go** into the prompt.
+Passing them would confirm Noonsite instead of reading the official source.
 
-Après jugement :
+After judgment:
 
-- `accepted` + listing + coords → peut passer `confirmed`
-- `accepted` sans listing → `probable`
-- `rejected` → reste `unverified` (jamais promu tout seul)
-- un `confirmed` existant n’est **jamais** rétrogradé
+- `accepted` + listing + coords → may become `confirmed`
+- `accepted` without listing → `probable`
+- `rejected` → stays `unverified` (never promoted on its own)
+- an existing `confirmed` is **never** demoted
 
-Écriture : `poe_seed_ports` (source `seeds`) ou `poe_run_ports` (run
-versionné). **Jamais** `poe_ports`.
+Write: `poe_seed_ports` (source `seeds`) or `poe_run_ports` (versioned
+run). **Never** `poe_ports`.
 
 ---
 
-## Enchaînement d’un run
+## Run sequence
 
 ```
-POST /api/poe/seeds/build          inventaire, 0 crawl
+POST /api/poe/seeds/build          inventory, 0 crawl
 POST /api/poe/seeds/enrich         source=seeds
-        name_only  → géocode → juge
-        unverified → juge
-        (probable optionnel)
+        name_only  → geocode → judge
+        unverified → judge
+        (probable optional)
 ```
 
-Reprise : saute `geocoded_at` / coords déjà là, et `judge_status` déjà posé.
+Resume: skips `geocoded_at` / coords already present, and `judge_status`
+already set.
 
-Lots : `limit: 200` possible. `limit: 0` = tout le verdict demandé, en
-géocodant d’abord les `name_only` pour ne pas juger deux fois la même fiche.
+Batches: `limit: 200` is possible. `limit: 0` = the whole requested verdict,
+geocoding `name_only` first so the same record is not judged twice.
 
-Interdit pour la découverte mondiale : `POST /api/poe/runs` avec `limit: 0`,
-`generate-batch` (410), `extract_ports` par ZEE via un clic carte.
+Forbidden for world discovery: `POST /api/poe/runs` with `limit: 0`,
+`generate-batch` (410), `extract_ports` per EEZ via a map click.
 
-Promotion vers la carte = **manuelle**.
+Promotion to the map = **manual**.
 
 ---
 
 ## API
 
-| Méthode | Route | Rôle |
+| Method | Route | Role |
 |---|---|---|
-| POST | `/api/poe/seeds/build` | Reconstruit `poe_seed_ports` |
-| GET | `/api/poe/seeds` | Lecture filtrable (`mrgid`, `verdict`) |
-| GET | `/api/poe/seeds/line` | `search_query` + résumé humain |
-| GET | `/api/poe/seeds/union` | Comptes sans persister |
-| POST | `/api/poe/seeds/verify` | Option run versionné `poe_run_ports` |
-| POST | `/api/poe/seeds/enrich` | Géocode + juge (`source=seeds` par défaut) |
-| GET | `/api/poe/seeds/enrich/status` | Suivi (`run_id=seed-enrich`) |
-| POST | `/api/poe/seeds/enrich/cancel` | Stoppe les graines pas encore parties |
-| GET/POST | `/api/poe/seeds/osm` | Cache / refresh Overpass |
+| POST | `/api/poe/seeds/build` | Rebuilds `poe_seed_ports` |
+| GET | `/api/poe/seeds` | Filterable read (`mrgid`, `verdict`) |
+| GET | `/api/poe/seeds/line` | `search_query` + human summary |
+| GET | `/api/poe/seeds/union` | Counts without persisting |
+| POST | `/api/poe/seeds/verify` | Optional versioned run `poe_run_ports` |
+| POST | `/api/poe/seeds/enrich` | Geocode + judge (`source=seeds` by default) |
+| GET | `/api/poe/seeds/enrich/status` | Progress (`run_id=seed-enrich`) |
+| POST | `/api/poe/seeds/enrich/cancel` | Stops seeds that have not yet started |
+| GET/POST | `/api/poe/seeds/osm` | Overpass cache / refresh |
 
 ---
 
-## Fichiers
+## Files
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `backend/app/services/poe_seeds.py` | Union, verdicts, `search_query`, persistance |
-| `backend/app/services/poe_seed_enrich.py` | Géocode, Search/Fetch/Agent, juge |
-| `backend/app/services/osm_seeds.py` | Cache Overpass v3 |
-| `backend/app/core/tinyfish.py` | Search paginé, `exclude_domains`, Agent |
-| `backend/app/core/claude.py` | `complete_json_claude` (juge Haiku/Sonnet) |
-| `backend/app/routers/runs.py` | Routes ci-dessus |
-| `backend/data/osm_port_priors.json` | 967 harbours/marinas près d’un contrôle |
-| `backend/scripts/run_seed_enrich_full.py` | Enchaîne name_only puis unverified |
+| `backend/app/services/poe_seeds.py` | Union, verdicts, `search_query`, persistence |
+| `backend/app/services/poe_seed_enrich.py` | Geocode, Search/Fetch/Agent, judge |
+| `backend/app/services/osm_seeds.py` | Overpass cache v3 |
+| `backend/app/core/tinyfish.py` | Paginated Search, `exclude_domains`, Agent |
+| `backend/app/core/claude.py` | `complete_json_claude` (Haiku/Sonnet judge) |
+| `backend/app/routers/runs.py` | Routes above |
+| `backend/data/osm_port_priors.json` | 967 harbours/marinas near a control |
+| `backend/scripts/run_seed_enrich_full.py` | Chains name_only then unverified |
 
 ---
 
 ## Invariants
 
-1. Aucun upsert automatique vers `poe_ports`.
-2. Listing = signal, pas gold.
-3. OSM = infra / prior, pas désignation (sauf `port_of_entry=yes` comme
-   signal fort, pas comme verdict seul).
-4. Noonsite absent des recherches TinyFish.
-5. Une graine = une recherche = un jugement. Claude ne liste pas d’autres
+1. No automatic upsert to `poe_ports`.
+2. Listing = signal, not gold.
+3. OSM = infra / prior, not designation (except `port_of_entry=yes` as a
+   strong signal, not as a verdict on its own).
+4. Noonsite absent from TinyFish searches.
+5. One seed = one search = one judgment. Claude does not list other
    ports.
-6. Hints SERP sans liste de noms de ports (leçon Niue / Mexique).
-7. Runs versionnés comparables ; promotion carte manuelle.
+6. SERP hints without a list of port names (Niue / Mexico lesson).
+7. Comparable versioned runs; manual map promotion.
