@@ -47,10 +47,9 @@ hors V1 API (on ne télécharge pas de cellules S-57).
 
 ## S0 — Compte CDSE vs CMEMS
 
-**Non vérifiable ici** (pas de secret dans git, pas de login
-opérateur). CMEMS est déjà utilisé par `scripts/climatology/cmems_auth.py`.
-CDSE (images Sentinel-2) est un **autre** portail
-(`dataspace.copernicus.eu`).
+**Oui** (2026-09-14, opérateur Berry). CMEMS reste le login
+climatologie (`scripts/climatology/cmems_auth.py`). CDSE
+(`dataspace.copernicus.eu`) est un **autre** portail, autre mot
+de passe, stocké dans `scripts/satellite/.env` (gitignoré).
 
-À faire par l’opérateur : noter oui/non dans
-`scripts/satellite/README.md`. Sans CDSE, pas de downloader.
+Voir `scripts/satellite/README.md`. Pas de secret dans git.
