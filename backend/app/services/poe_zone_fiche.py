@@ -22,7 +22,7 @@ from app.services.poe_pipeline import domain_of, list_url_bonus, zone_to_item
 from app.services.poe_zone_label import attach_zone_labels
 from app.services.poe_seeds import SEARCH_EXCLUDE_DOMAINS, url_is_excluded_search
 from app.services.review_gold import is_test_run
-from app.services.territory_ref import curated_td_urls
+from app.services.territory_ref import curated_td_urls, td_url_fits_polygon
 
 # Bannière / popup carte : une URL TD (liste/PDF d'abord). Review n'applique pas ce cap.
 FICHE_TD_URL_CAP = 1
@@ -256,6 +256,10 @@ def assemble_zone_fiche(zone: dict, ports: list[dict], *,
     td_raw.append(curated_td_urls(zone.get("mrgid")))
     td_raw.append(_list_like_from_docs(list(seeds or []) + list(run_ports or [])))
     td_map = _collect(td_raw, "td")
+    td_map = {
+        key: rec for key, rec in td_map.items()
+        if td_url_fits_polygon(rec.get("url") or "", zone)
+    }
     bu_lists = bus_by_port_name(list(seeds or []) + list(run_ports or []) + list(ports or []))
 
     rows = []
