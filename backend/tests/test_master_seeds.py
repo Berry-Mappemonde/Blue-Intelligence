@@ -10,10 +10,20 @@ os.environ.setdefault("DB_NAME", "bi_test_master_seeds")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pytest
+
 from app.services import master_seeds as ms
 from app.services.swarm_pipeline import Swarm
 from app.static_data.seeds import CURATED_SEEDS, MASTER_SEEDS, TEST_SEED_COUNT
 from tests.test_project_runs import _FakeDB
+
+
+@pytest.fixture(autouse=True)
+def _ftm_sites_reachable(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.swarm_pipeline.partner_site_reachable",
+        lambda url, timeout=5.0: True,
+    )
 
 
 CURATED = [
@@ -63,10 +73,48 @@ def test_shared_hub_home_not_for_owner():
     assert ms.is_shared_hub_home(decade) is False
     assert ms.is_shared_hub_home(team) is False
     assert ms.is_shared_hub_home(aker) is True
-    assert ms.is_shared_hub_home(hub) is False
+    assert ms.is_shared_hub_home(hub) is True
     assert ms.is_shared_hub_home(own) is False
+    ccc = {
+        "name": "California Coastal Commission",
+        "url": "https://surfrider.org/",
+    }
+    surfrider = {
+        "name": "Surfrider Foundation",
+        "url": "https://surfrider.org/",
+    }
+    bloom = {
+        "name": "Bloomberg Philanthropies",
+        "url": "https://archive.oceanx.org/",
+    }
+    assert ms.is_shared_hub("https://surfrider.org/") is True
+    assert ms.is_shared_hub_home(ccc) is True
+    assert ms.needs_official_home(ccc) is True
+    assert ms.is_shared_hub_home(surfrider) is False
+    assert ms.needs_official_home(surfrider) is False
+    assert ms.is_shared_hub_home(bloom) is True
+    assert "pew" in ms.official_name_tokens("The Pew Charitable Trusts")
+    assert "wwf" in ms.official_name_tokens("WWF Oceans")
+    assert "msc" in ms.official_name_tokens("MSC Ocean Stewardship Fund")
+    assert ms.domain_matches_org("https://www.pew.org/", "The Pew Charitable Trusts")
+    assert ms.domain_matches_org(
+        "https://www.msc.org/", "MSC Ocean Stewardship Fund") is True
+    assert ms.domain_matches_org(
+        "https://bluenaturalcapital.org/", "Blue Carbon Accelerator Fund (BCAF)"
+    ) is False
     assert ms.official_site_query(bmkg["name"]) == f'"{bmkg["name"]}" official site'
     assert ms.official_site_retry_query(bmkg["name"]) == '"BMKG" official website'
+    assert ms.is_publisher_host("https://www.nature.com/articles/x") is True
+    assert ms.is_publisher_host("https://www.bmkg.go.id/") is False
+    assert "bmkg" in ms.official_name_tokens(bmkg["name"])
+    assert ms.domain_matches_org("https://www.bmkg.go.id/", bmkg["name"]) is True
+    assert ms.domain_matches_org("bmkg.go.id", bmkg["name"]) is True
+    assert ms.domain_matches_org("saveourseas.com", "Save Our Seas Foundation") is True
+    assert ms.domain_matches_org("oceans5.org", "Oceans 5") is True
+    assert ms.domain_matches_org("oceandecade.org", "Ocean Decade Programme SMARTNET") is False
+    assert ms.domain_matches_org("https://www.nature.com/", bmkg["name"]) is False
+    assert "awi" in ms.official_name_tokens("Alfred Wegener Institute (AWI)")
+    assert "awi" in ms.official_name_tokens("Alfred Wegener Institute")
     assert ms.is_known_funder(
         [decade], "BMKG", "https://oceandecade.org/actions/x") is False
     assert ms.is_known_funder(
@@ -101,16 +149,52 @@ def test_merge_curated_alias_no_priority():
     assert "priority" not in by["Blue Marine Foundation"]
 
 
-def test_seeds_for_run_keeps_name_only_skips_blank():
+def test_seeds_for_run_only_crawl_ready():
     seeds = [
-        {"name": "P2-big", "url": "https://b.org/", "priority": 2, "project_count": 99},
-        {"name": "P1", "url": "https://a.org/", "priority": 1, "project_count": 1},
-        {"name": "NoURL", "url": None, "priority": 2, "project_count": 50},
+        {"name": "P2-big", "url": "https://b.org/", "home_status": "official",
+         "queue": "crawl", "project_count": 99},
+        {"name": "P1", "url": "https://a.org/", "home_status": "official",
+         "queue": "crawl", "project_count": 1},
+        {"name": "NoURL", "url": None, "home_status": "unknown", "queue": "resolve"},
         {"name": "", "url": None, "project_count": 1},
-        {"name": "Alpha", "url": "https://z.org/", "project_count": 0},
+        {"name": "Alpha", "url": "https://z.org/", "home_status": "official",
+         "queue": "crawl"},
+        {"name": "BMKG", "url": "https://oceandecade.org/",
+         "home_status": "borrowed_hub", "queue": "resolve"},
     ]
     queued = ms.seeds_for_run(seeds)
-    assert [s["name"] for s in queued] == ["Alpha", "NoURL", "P1", "P2-big"]
+    assert [s["name"] for s in queued] == ["P2-big", "P1", "Alpha"]
+
+
+def test_seeds_for_run_curated_first_then_project_count():
+    seeds = [
+        {"name": "Z-v1-big", "url": "https://z.org/", "home_status": "official",
+         "queue": "crawl", "source": "v1", "project_count": 80},
+        {"name": "A-curated", "url": "https://a.org/", "home_status": "official",
+         "queue": "crawl", "source": "curated", "project_count": 1},
+        {"name": "M-v1", "url": "https://m.org/", "home_status": "official",
+         "queue": "crawl", "source": "v1", "project_count": 3},
+    ]
+    queued = ms.seeds_for_run(seeds)
+    assert [s["name"] for s in queued] == ["A-curated", "Z-v1-big", "M-v1"]
+
+
+def test_merge_curated_keeps_hosted_on_cordis():
+    v1 = [
+        {"name": "Horizon Europe", "url": None, "project_count": 24,
+         "listing_kind": "unknown", "home_status": "borrowed_hub", "queue": "resolve"},
+        {"name": "CORDIS Europe", "url": "https://cordis.europa.eu/", "project_count": 1},
+    ]
+    curated = [{
+        "name": "CORDIS Europe", "url": "https://cordis.europa.eu/projects/en",
+        "listing_kind": "projects_index", "aliases": [],
+    }]
+    merged = ms.merge_curated(v1, curated)
+    names = {s["name"] for s in merged}
+    assert "CORDIS Europe" in names
+    assert "Horizon Europe" in names
+    hor = next(s for s in merged if s["name"] == "Horizon Europe")
+    assert hor.get("queue") == "resolve"
 
 
 def test_dump_and_load_strip_legacy_priority(tmp_path):
@@ -142,9 +226,22 @@ def test_loaded_catalog_has_v1_scale():
     assert len(CURATED_SEEDS) == 21
     assert CURATED_SEEDS[0]["name"] == "The Ocean Foundation"
     # Sans JSON : repli 21. Avec JSON généré : ~861.
-    assert len(MASTER_SEEDS) >= 700
+    assert len(MASTER_SEEDS) >= 800
     assert all("priority" not in s for s in MASTER_SEEDS)
     assert all("priority" not in s for s in CURATED_SEEDS)
+    queues = {s.get("queue") for s in MASTER_SEEDS}
+    assert "crawl" in queues and "resolve" in queues
+    crawl = [s for s in MASTER_SEEDS if s.get("queue") == "crawl"]
+    # Virgules composées + sièges trop larges sortent de Complet, pas un cap artificiel.
+    assert len(crawl) >= 450
+    assert not any((s.get("home_status") or "") == "borrowed_hub" for s in crawl)
+    sey = next(s for s in MASTER_SEEDS if "SeyCCAT" in (s.get("name") or ""))
+    assert sey["queue"] == "crawl"
+    assert "seyccat.org" in (sey.get("home_url") or "")
+    assert sum(
+        1 for s in MASTER_SEEDS
+        if s.get("home_source") in {"search", "review"}
+    ) >= 500
 
 
 def test_follow_the_money_caps_only_new_orgs():
@@ -171,12 +268,18 @@ def test_follow_the_money_caps_only_new_orgs():
         sw._queue_partner("Another New", "https://brand-new.example/")
         await asyncio.sleep(0)
 
-        assert "https://rare.org/our-work/" in discovered
+        assert "https://rare.org/program/fish-forever/" in discovered
+        assert "https://rare.org/our-work/" not in discovered
         assert "https://wild-oysters.org/" in discovered
         assert "https://brand-new.example/" not in discovered
         assert sw.new_partner_count == 1
         extras = sw.db.master_seeds.docs
-        assert any(d.get("domain") == "wild-oysters.org" for d in extras)
+        assert any(
+            d.get("domain") == "wild-oysters.org"
+            and d.get("home_status") == "official"
+            and d.get("queue") == "crawl"
+            for d in extras
+        )
         assert all("priority" not in d for d in extras)
 
     asyncio.run(run())
@@ -216,3 +319,176 @@ def test_follow_the_money_skips_already_queued_domain():
     sw.recursive_tasks = []
     sw._queue_partner("Wild Oysters", "https://wild-oysters.org/tyne/")
     assert sw.recursive_tasks == []
+
+
+def test_follow_the_money_skips_exclude_and_catalog_not_ready():
+    async def run():
+        sw = Swarm(_FakeDB())
+        sw.running = True
+        sw.settings = {"follow_the_money": True, "max_partner_orgs": 5}
+        sw.master_seeds = [{
+            "name": "Drake Enterprise Foundation",
+            "url": "https://drakespm.com/",
+            "home_status": "official",
+            "queue": "skip",
+            "review_action": "no_projects",
+            "listing_kind": "home_only",
+            "name_status": "ok",
+        }]
+        sw.partner_domains = set()
+        sw.recursive_tasks = []
+        discovered = []
+
+        async def fake_discover(seed, max_urls, depth=0):
+            discovered.append(seed["url"])
+
+        sw._discover = fake_discover
+        await sw._follow_the_money({
+            "partners": [
+                {"name": "Unknown", "url": None},
+                {"name": "CEA and CNRS", "url": "https://www.cnrs.fr/"},
+                {"name": "Drake Enterprise Foundation", "url": "https://drakespm.com/"},
+            ],
+        }, depth=0)
+        await asyncio.sleep(0)
+        assert discovered == []
+        assert sw.recursive_tasks == []
+        assert sw.new_partner_count == 0
+
+    asyncio.run(run())
+
+
+def test_follow_the_money_queue_rejects_hub_url():
+    sw = Swarm(_FakeDB())
+    sw.running = True
+    sw.settings = {"follow_the_money": True, "max_partner_orgs": 5}
+    sw.master_seeds = [
+        {"name": "Rare Fish Forever", "url": "https://rare.org/program/fish-forever/",
+         "aliases": ["Rare"], "home_status": "official", "queue": "crawl"},
+    ]
+    sw.partner_domains = set()
+    sw.recursive_tasks = []
+    sw._queue_partner("BMKG", "https://oceandecade.org/actions/")
+    assert sw.recursive_tasks == []
+    assert sw.new_partner_count == 0
+
+
+def test_prefer_official_home_drops_borrowed_hub():
+    seed = {
+        "name": "Aker Biomarine",
+        "url": "https://hubocean.earth/data",
+        "home_url": "https://www.akerbiomarine.com/",
+        "home_status": "official",
+        "listing_kind": "projects_index",
+        "listing_url": "https://hubocean.earth/data",
+    }
+    out = ms.prefer_official_home(seed)
+    assert out["url"] == "https://www.akerbiomarine.com/"
+    assert out["listing_kind"] == "homepage"
+
+
+def test_follow_the_money_unreachable_site_does_not_burn_cap(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.swarm_pipeline.partner_site_reachable",
+        lambda url, timeout=5.0: False,
+    )
+    sw = Swarm(_FakeDB())
+    sw.running = True
+    sw.settings = {"follow_the_money": True, "max_partner_orgs": 1}
+    sw.master_seeds = []
+    sw.partner_domains = set()
+    sw.recursive_tasks = []
+    sw._queue_partner("Wild Oysters", "https://wild-oysters.org/")
+    assert sw.recursive_tasks == []
+    assert sw.new_partner_count == 0
+    msgs = " ".join(e["msg"] for e in sw.logs)
+    assert "injoignable" in msgs
+    assert "plafond intact" in msgs
+
+
+def test_ftm_new_org_goes_to_inbox_until_flush():
+    async def run():
+        sw = Swarm(_FakeDB())
+        sw.running = True
+        sw.settings = {"follow_the_money": True, "max_partner_orgs": 5}
+        sw.master_seeds = []
+        sw.partner_domains = set()
+        sw.recursive_tasks = []
+        discovered = []
+
+        async def fake_discover(seed, max_urls, depth=0):
+            discovered.append(seed["url"])
+            return 1
+
+        sw._discover = fake_discover
+        await sw._follow_the_money({
+            "partners": [{"name": "Wild Oysters", "url": "https://wild-oysters.org/"}],
+            "s_ocean": 0.9,
+        }, depth=0, published=True)
+        assert discovered == []
+        assert sw.new_partner_count == 0
+        assert sw.ftm_inbox
+        await sw._flush_ftm_inbox()
+        assert "https://wild-oysters.org/" in discovered
+        assert sw.new_partner_count == 1
+
+    asyncio.run(run())
+
+
+def test_ftm_flush_prefers_voted_org_and_refunds_empty():
+    async def run():
+        sw = Swarm(_FakeDB())
+        sw.running = True
+        sw.settings = {"follow_the_money": True, "max_partner_orgs": 1}
+        sw.master_seeds = []
+        sw.partner_domains = set()
+        sw.recursive_tasks = []
+        discovered = []
+
+        async def fake_discover(seed, max_urls, depth=0):
+            discovered.append(seed.get("url"))
+            return 1 if "wild-oysters.org" in (seed.get("url") or "") else 0
+
+        sw._discover = fake_discover
+        ghost = {"name": "Ghost Partner", "url": "https://ghost-partner.org/"}
+        wild = {"name": "Wild Oysters", "url": "https://wild-oysters.org/"}
+        await sw._follow_the_money(
+            {"partners": [ghost, wild], "s_ocean": 0.91}, depth=0)
+        await sw._follow_the_money(
+            {"partners": [ghost], "s_ocean": 0.88}, depth=0)
+        await sw._follow_the_money(
+            {"partners": [ghost], "s_ocean": 0.85}, depth=0)
+        await sw._flush_ftm_inbox()
+        assert any("ghost-partner.org" in (u or "") for u in discovered)
+        assert any("wild-oysters.org" in (u or "") for u in discovered)
+        assert sw.new_partner_count == 1
+        extras = sw.db.master_seeds.docs
+        assert any(d.get("domain") == "wild-oysters.org" for d in extras)
+        assert not any(d.get("domain") == "ghost-partner.org" for d in extras)
+        msgs = " ".join(e["msg"] for e in sw.logs)
+        assert "ticket remboursé" in msgs
+
+    asyncio.run(run())
+
+
+def test_ftm_skips_unlocated_and_low_s_ocean():
+    async def run():
+        sw = Swarm(_FakeDB())
+        sw.running = True
+        sw.settings = {
+            "follow_the_money": True,
+            "max_partner_orgs": 5,
+            "ftm_min_s_ocean": 0.7,
+        }
+        sw.master_seeds = []
+        sw.partner_domains = set()
+        sw.recursive_tasks = []
+        sw.ftm_inbox = []
+        partner = {"name": "Wild Oysters", "url": "https://wild-oysters.org/"}
+        await sw._follow_the_money(
+            {"partners": [partner], "s_ocean": 0.95}, depth=0, published=False)
+        await sw._follow_the_money(
+            {"partners": [partner], "s_ocean": 0.4}, depth=0, published=True)
+        assert sw.ftm_inbox == []
+
+    asyncio.run(run())

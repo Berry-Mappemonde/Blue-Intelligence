@@ -71,6 +71,7 @@ class SettingsBody(BaseModel):
     serper_api_key: str | None = None
     tinyfish_agents: int | None = None
     extract_concurrency: int | None = None
+    nvidia_max_concurrency: int | None = None
     max_coast_km: float | None = None
     max_inland_km: float | None = None
     min_marine_score: float | None = None
@@ -83,6 +84,7 @@ class SettingsBody(BaseModel):
     max_markers: int | None = None
     follow_the_money: bool | None = None
     max_partner_orgs: int | None = None
+    ftm_min_s_ocean: float | None = None
     discover_concurrency: int | None = None
     listing_judge_concurrency: int | None = None
     saturation_limit: int | None = None

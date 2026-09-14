@@ -90,10 +90,16 @@ def parse_json_flexible(txt: str):
 # ---------------------------------------------------------------------------
 async def _call_openrouter(prompt: str, system: str, key: str, model: str | None = None,
                            json_mode: bool = True, max_tokens: int = 2000,
-                           retries: int = 2) -> str:
+                           retries: int = 2,
+                           images: list[bytes] | None = None) -> str:
+    from app.core.vision_msg import openai_user_content
+
     payload = {
         "model": model or openrouter_model(),
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": openai_user_content(prompt, images)},
+        ],
         "temperature": 0,
         "max_tokens": max_tokens,
     }
@@ -177,10 +183,20 @@ def heuristic_gatekeeper(text: str, settings: dict) -> dict:
     land = sum(low.count(k) for k in LAND_KW)
     score = marine / (marine + land * 1.5 + 1e-9) if marine else 0.0
     score = round(min(1.0, score), 3)
-    accepted = marine >= 3 and score >= float(settings.get("min_marine_score", 0.5))
+    accepted = marine >= 3 and s_ocean_meets_min(score, settings)
     return {"accepted": accepted, "score": score,
             "reason": f"heuristic: {marine} marine / {land} terrestrial keyword hits",
             "engine": "Heuristic Gatekeeper"}
+
+
+def s_ocean_meets_min(s_ocean, settings: dict | None = None) -> bool:
+    """CDC §10 : le seuil coupe le faisceau S_ocean, après extract aussi."""
+    try:
+        score = float(s_ocean)
+    except (TypeError, ValueError):
+        return False
+    floor = float((settings or {}).get("min_marine_score", 0.5))
+    return score >= floor
 
 
 async def gatekeeper_check(title: str, text: str, settings: dict) -> dict:
@@ -217,8 +233,7 @@ Return JSON: {{"marine": true/false, "score": 0.0-1.0, "reason": "<short reason>
         yes = await ask_yes_no(
             JSON_SYSTEM, prompt, settings=settings, role="json", max_tokens=400)
         score = float((yes.raw or {}).get("score") or 0)
-        accepted = bool(yes.accepted) and score >= float(
-            settings.get("min_marine_score", 0.5))
+        accepted = bool(yes.accepted) and s_ocean_meets_min(score, settings)
         return {"accepted": accepted, "score": round(score, 3),
                 "reason": (yes.reason or "")[:300],
                 "engine": _public_engine(yes.engine, "Gatekeeper")}
@@ -405,12 +420,14 @@ def coerce_ports(data, context: str | None = None) -> list[dict]:
 
 
 async def _json_openrouter(prompt: str, system: str, settings: dict | None,
-                           max_tokens: int) -> dict:
+                           max_tokens: int,
+                           images: list[bytes] | None = None) -> dict:
     key = get_llm_key(settings)
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY missing")
     raw = await _call_openrouter(
-        prompt, system, key, json_mode=True, max_tokens=max_tokens)
+        prompt, system, key, json_mode=True, max_tokens=max_tokens,
+        images=images)
     data = parse_json_flexible(raw)
     if isinstance(data, dict):
         return data

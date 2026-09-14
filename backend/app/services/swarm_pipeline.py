@@ -10,7 +10,9 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from app.core.llm import extract_project, gatekeeper_check, has_llm
+from app.core.llm import (
+    extract_project, gatekeeper_check, has_llm, s_ocean_meets_min,
+)
 from app.static_data.categories import normalize_category
 from app.core.dedup import is_duplicate
 from app.core.extract import extract_cascade
@@ -20,19 +22,28 @@ from app.static_data.seeds import (
     CRAWL_BLACKLIST, CURATED_SEEDS, MASTER_SEEDS, TEST_SEED_COUNT, URL_PATTERNS,
 )
 from app.services.master_seeds import (
-    SKIP_LISTING_NETLOCS, domain_of, is_known_funder, is_shared_hub,
-    is_shared_hub_home, listing_url_for_name, name_owns_hub, norm_name,
-    official_site_query, official_site_retry_query, seeds_for_run,
+    SKIP_LISTING_NETLOCS, domain_matches_org, domain_of, is_known_funder,
+    is_publisher_host, is_shared_hub, name_owns_hub, needs_official_home,
+    norm_name, official_site_query, official_site_retry_query,
+    prefer_official_home, seeds_for_run,
+)
+from app.services.seed_catalog import (
+    FTM_DISCOVER, FTM_SEARCH, FTM_MIN_S_OCEAN, decide_follow_the_money_partner,
+    find_catalog_seed, ftm_page_allows_collect, is_crawl_ready,
+    partner_site_reachable, rank_ftm_inbox,
 )
 from app.core.tinyfish import (
-    AGENT_CREDIT_CAP, DISCOVERY_SCHEMA, FICHE_AGENT_DURATION_S,
-    LISTING_AGENT_DURATION_S, LISTING_SCHEMA, PROJECTS_DISCOVERY_PURPOSE,
+    DISCOVERY_SCHEMA, FICHE_AGENT_DURATION_S, LISTING_AGENT_DURATION_S,
+    LISTING_SCHEMA, POLL_GRACE_S, PROJECTS_DISCOVERY_PURPOSE,
     PROJECTS_LISTING_PURPOSE, discovery_goal, listing_goal, find_live_url,
-    tf_fetch, tf_get_run, tf_run_async, tf_run_sse, tf_search,
+    await_agent_cooldown, is_http_status, is_sse_stream_end, mark_agent_429,
+    public_agent_config, retry_after_s, sse_wall_budget_s, tf_api_key,
+    tf_cancel_run, tf_fetch, tf_get_run, tf_poll_run, tf_run_async, tf_run_sse,
+    tf_search,
 )
 from app.services.project_listing import (
-    LISTING_JUDGE_CAP, accept_listing_url, apply_learned_listings,
-    fiche_search_retry_query, hygiene_listing_urls,
+    LISTING_JUDGE_CAP, ListingJudgeQuotaError, accept_listing_url,
+    apply_learned_listings, fiche_search_retry_query, hygiene_listing_urls,
     infer_listing_from_project_urls, is_listing_url, listing_search_query,
     listing_search_retry_query, llm_judge_listing, merge_listing_candidates,
     needs_listing_hop, pick_listing_url,
@@ -150,7 +161,31 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
         elif _is_skip_listing_domain(d):
             continue
         path = urlparse(href).path
-        if not is_project_fiche_path(path, apply_blacklist=True):
+        if href in seen:
+            continue
+        if is_project_fiche_path(path, apply_blacklist=True):
+            seen.add(href)
+            urls.append(href)
+            if cap and len(urls) >= cap:
+                break
+    if urls:
+        return urls[:cap]
+    # Même hôte, page profonde, pas news/donate : Scripps /research/… n'a pas /project/.
+    for hit in hits or []:
+        raw = _hit_url(hit)
+        if not raw.startswith("http"):
+            continue
+        href = raw.split("#")[0].split("?")[0]
+        key = href.rstrip("/")
+        if key in excluded or (seed_url and key == seed_url):
+            continue
+        d = domain_of(href)
+        if host and d != host:
+            continue
+        if not host and _is_skip_listing_domain(d):
+            continue
+        path = urlparse(href).path
+        if not _is_soft_fiche_path(path):
             continue
         if href in seen:
             continue
@@ -161,13 +196,23 @@ def filter_discover_urls(hits, seed, max_urls, *, exclude_urls=None) -> list[str
     return urls[:cap]
 
 
-def official_site_from_hits(hits, funder_name: str = "") -> str:
-    """Premier hit hors réseaux / hubs partagés → origine du site.
+def _is_soft_fiche_path(path: str) -> bool:
+    """Page interne utilisable si aucun motif /project/ n'a matché."""
+    if not path:
+        return False
+    low = path.lower()
+    if any(b in low for b in CRAWL_BLACKLIST):
+        return False
+    parts = [p for p in path.strip("/").split("/") if p]
+    return len(parts) >= 2
 
-    Si le nom a des jetons (≥4 lettres) présents dans un domaine, ce hit
-    gagne (BMKG → bmkg.go.id plutôt que oceandecade.org).
+
+def official_site_from_hits(hits, funder_name: str = "") -> str:
+    """Vrai site de l'organisme : jeton du nom (ou acronyme) dans le domaine.
+
+    Jamais le 1er hit SERP « parce qu'il reste » (BMKG ≠ nature.com).
+    Journaux / éditeurs et hubs partagés exclus. Rien de propre → vide.
     """
-    tokens = [t for t in norm_name(funder_name).split() if len(t) >= 4]
     scored: list[tuple[int, int, str]] = []
     for i, hit in enumerate(hits or []):
         raw = _hit_url(hit)
@@ -175,19 +220,29 @@ def official_site_from_hits(hits, funder_name: str = "") -> str:
             continue
         href = raw.split("#")[0].split("?")[0]
         d = domain_of(href)
-        if _is_skip_listing_domain(d) or is_shared_hub(d):
+        if _is_skip_listing_domain(d) or is_publisher_host(d):
             continue
         parsed = urlparse(href)
         if not parsed.netloc:
             continue
+        if not domain_matches_org(href, funder_name):
+            continue
         scheme = parsed.scheme or "https"
-        compact = d.replace(".", "").replace("-", "")
-        bonus = 2 if any(t in compact for t in tokens) else 0
-        scored.append((bonus, -i, f"{scheme}://{parsed.netloc}/"))
+        scored.append((2, -i, f"{scheme}://{parsed.netloc}/"))
     if not scored:
         return ""
     scored.sort(reverse=True)
     return scored[0][-1]
+
+
+def agent_host_is_worthwhile(url: str, name: str) -> bool:
+    """L'Agent TinyFish ne part que si l'hôte est (probablement) l'organisme."""
+    if not (url or "").strip():
+        return False
+    d = domain_of(url)
+    if not d or _is_skip_listing_domain(d) or is_publisher_host(d):
+        return False
+    return domain_matches_org(url, name)
 
 
 def _links_from_fetch_record(rec: dict | None, base_url: str) -> list[str]:
@@ -222,9 +277,11 @@ class Swarm:
         self.partner_domains = set()
         self.partner_count = 0
         self.new_partner_count = 0
+        self.ftm_inbox: list[dict] = []
         self.master_seeds = []
         self._tf_sem = None
         self._judge_sem = None
+        self._serper_sem = None
         self.no_new_streak = 0
         self.saturated = False
         self.run_id = None
@@ -233,6 +290,7 @@ class Swarm:
         self.wrote_projects = False
         self._journal_seq = 0
         self._serper_queries = 0
+        self._tf_live_runs: dict[str, str] = {}
 
     # ---------- state helpers ----------
     def log(self, msg, level="info"):
@@ -446,6 +504,7 @@ class Swarm:
         self.logs.clear()
         self._journal_seq = 0
         self._serper_queries = 0
+        self._tf_live_runs = {}
         self.no_new_streak = 0
         self.saturated = False
         await self._write_journal_header()
@@ -468,8 +527,36 @@ class Swarm:
                  "info" if has_llm(settings) else "warn")
         self.main_task = asyncio.create_task(self._run())
 
+    def _tf_track_run(self, aid, rid):
+        if rid:
+            self._tf_live_runs[aid] = rid
+
+    def _tf_untrack_run(self, aid):
+        self._tf_live_runs.pop(aid, None)
+
+    async def _tf_cancel_live_runs(self):
+        """POST /v1/runs/{id}/cancel — sinon un Complet stoppé laisse des PENDING."""
+        live = list(self._tf_live_runs.items())
+        if not live:
+            return
+        key = tf_api_key(self.settings)
+        if not key:
+            self._tf_live_runs.clear()
+            return
+        for aid, rid in live:
+            try:
+                await tf_cancel_run(rid, key)
+                self.agent_log(aid, f"TinyFish run {str(rid)[:8]}… cancel (stop)")
+            except Exception as exc:
+                logger.warning("tf cancel on stop failed run=%s: %s", rid, exc)
+        self._tf_live_runs.clear()
+
     async def stop(self):
         self.log("Stop requested — cancelling agents and flushing queue", "warn")
+        for a in self.agents.values():
+            if a["status"] in ("PENDING", "RUNNING"):
+                a["status"] = "CANCELLED"
+        await self._tf_cancel_live_runs()
         if self.main_task:
             self.main_task.cancel()
         for w in self.workers:
@@ -483,9 +570,6 @@ class Swarm:
                 except asyncio.QueueEmpty:
                     break
         self.queued_count = 0
-        for a in self.agents.values():
-            if a["status"] in ("PENDING", "RUNNING"):
-                a["status"] = "CANCELLED"
         self.running = False
         self.log("Swarm stopped")
 
@@ -508,10 +592,13 @@ class Swarm:
                 extras = await self.db.master_seeds.find({}).to_list(2000)
             except Exception:
                 extras = []
-            self.master_seeds = apply_learned_listings(list(MASTER_SEEDS), extras) + [
-                e for e in extras
-                if (e.get("url") or e.get("name"))
-                and not is_known_funder(MASTER_SEEDS, e.get("name"), e.get("url"))
+            self.master_seeds = [
+                prefer_official_home(s)
+                for s in apply_learned_listings(list(MASTER_SEEDS), extras) + [
+                    e for e in extras
+                    if (e.get("url") or e.get("name"))
+                    and not is_known_funder(MASTER_SEEDS, e.get("name"), e.get("url"))
+                ]
             ]
             if self.mode == "test":
                 seeds = list(CURATED_SEEDS[:TEST_SEED_COUNT])
@@ -531,19 +618,28 @@ class Swarm:
                 self.partner_domains.add(d)
             self.partner_count = 0
             self.new_partner_count = 0
-            concurrency = max(1, min(20, int(self.settings.get("extract_concurrency", 6))))
-            discover_n = max(1, min(12, int(self.settings.get("discover_concurrency", 8))))
+            self.ftm_inbox = []
             from app.core.run_rules import get_rule
+            from app.core import nvidia as nvidia_core
+            concurrency = max(1, min(20, int(get_rule(
+                "projects.extract_concurrency",
+                self.settings.get("extract_concurrency", 2)))))
+            discover_n = max(1, min(12, int(self.settings.get("discover_concurrency", 8))))
             judge_n = max(1, min(4, int(get_rule(
                 "projects.listing_judge_concurrency",
-                self.settings.get("listing_judge_concurrency", 2)))))
+                self.settings.get("listing_judge_concurrency", 1)))))
+            nv_n = max(1, min(4, int(get_rule(
+                "projects.nvidia_max_concurrency",
+                self.settings.get("nvidia_max_concurrency", 2)))))
+            nvidia_core.configure_concurrency(nv_n)
             self.workers = [asyncio.create_task(self._extract_worker(i)) for i in range(concurrency)]
             self.log(
                 f"MasterSeeds loaded: {len(seeds)} portals in queue "
                 f"(catalog={len(self.master_seeds)}, "
                 f"discover_concurrency={discover_n}, "
                 f"listing_judge_concurrency={judge_n}, "
-                f"extract_concurrency={concurrency})"
+                f"extract_concurrency={concurrency}, "
+                f"nvidia_max_concurrency={nv_n})"
             )
 
             if self.mode == "full" and not getattr(self, "force_rescan", False):
@@ -563,6 +659,7 @@ class Swarm:
                 self.settings.get("tinyfish_agents", 2)))))
             self._tf_sem = asyncio.Semaphore(tf_agents)
             self._judge_sem = asyncio.Semaphore(judge_n)
+            self._serper_sem = asyncio.Semaphore(2)
             discover_sem = asyncio.Semaphore(discover_n)
 
             async def guarded(seed):
@@ -571,13 +668,13 @@ class Swarm:
 
             await asyncio.gather(*[guarded(s) for s in seeds], return_exceptions=True)
             self.log("Discovery phase complete — waiting for extraction queue to drain")
-            while True:
-                await self.queue.join()
-                pending = [t for t in self.recursive_tasks if not t.done()]
-                if not pending:
-                    break
-                self.log(f"Follow the Money: waiting on {len(pending)} recursive discovery agent(s)")
-                await asyncio.gather(*pending, return_exceptions=True)
+            await self._wait_extract_and_recursive()
+            if self.ftm_inbox and self.settings.get("follow_the_money", True):
+                self.log(
+                    f"Follow the Money: phase inbox — {len(self.ftm_inbox)} mention(s)"
+                )
+                await self._flush_ftm_inbox()
+                await self._wait_extract_and_recursive()
             for w in self.workers:
                 w.cancel()
             self.workers = []
@@ -606,19 +703,54 @@ class Swarm:
             self.running = False
 
     # ---------- discovery (home→catalogue, puis N1 → Fetch → Search → Agent fiches) ----------
+    async def _wait_extract_and_recursive(self):
+        """File d'extraction + découvertes FTM déjà lancées."""
+        while True:
+            await self.queue.join()
+            pending = [t for t in self.recursive_tasks if not t.done()]
+            if not pending:
+                break
+            self.log(
+                f"Follow the Money: waiting on {len(pending)} recursive discovery agent(s)"
+            )
+            await asyncio.gather(*pending, return_exceptions=True)
+
     async def _discover(self, seed, max_urls, depth=0):
-        seed = dict(seed or {})
-        if is_shared_hub_home(seed) or not (seed.get("url") or "").strip():
+        seed = prefer_official_home(dict(seed or {}))
+        queue = (seed.get("queue") or "").strip().lower()
+        if queue in {"resolve", "skip"}:
+            self.log(
+                f"[{seed.get('name')}] skipped — file {queue} (pas d'Agent)",
+                "warn",
+            )
+            return 0
+        classified = bool(seed.get("home_status") or seed.get("queue"))
+        status = (seed.get("home_status") or "").strip().lower()
+        if classified and status in {
+            "borrowed_hub", "publisher", "social", "empty", "unknown",
+        }:
+            self.log(
+                f"[{seed.get('name')}] skipped — home_status={status}",
+                "warn",
+            )
+            return 0
+        if needs_official_home(seed):
+            if classified:
+                self.log(
+                    f"[{seed.get('name')}] skipped — home déjà classée, pas de Search live",
+                    "warn",
+                )
+                return 0
             home = await self._resolve_official_home(seed)
             if home:
                 seed["url"] = home
                 seed["listing_kind"] = "homepage"
-            elif is_shared_hub_home(seed) or not (seed.get("url") or "").strip():
-                return
+            else:
+                return 0
         start_url = (seed.get("url") or "").strip()
         if not start_url:
             self.log(f"[{seed.get('name')}] skipped — no listing URL", "warn")
-            return
+            return 0
         await self._emit("discover_seed", seed=seed.get("name"), url=start_url,
                          depth=depth)
         force = bool(getattr(self, "force_rescan", False))
@@ -634,7 +766,7 @@ class Swarm:
                             f"[{seed['name']}] discovery skipped — scanned {age_days:.1f}d ago "
                             f"(TTL {rescan_days:g}d, cache reused)"
                         )
-                        return
+                        return 0
                 except ValueError:
                     pass
             if force:
@@ -665,7 +797,7 @@ class Swarm:
                 self.log(
                     f"[{seed['name']}] delta scan — {len(known_urls)} known URLs excluded from mission"
                 )
-        await self._discover_fiches(seed, max_urls, depth, known_urls)
+        return await self._discover_fiches(seed, max_urls, depth, known_urls)
 
     async def _resolve_official_home(self, seed):
         """Hub partagé ou pas d'URL → vrai site de l'organisme, puis hop listing."""
@@ -735,6 +867,7 @@ class Swarm:
             self.set_agent(aid, status="RUNNING")
             crawled = fetched = searched = []
             pool: list[str] = []
+            judge_quota = False
             self.agent_log(aid, "Listing N1: crawler (hygiène + feuilles curées)")
             try:
                 crawled = await self._crawl_listing(seed, LISTING_JUDGE_CAP)
@@ -798,6 +931,12 @@ class Swarm:
                         async with sem:
                             found = await llm_judge_listing(
                                 seed, pool, settings=self.settings, log=log_fn)
+                    except ListingJudgeQuotaError as e:
+                        found = None
+                        judge_quota = True
+                        self.agent_log(
+                            aid, f"Listing juge quota 429: {str(e)[:80]}")
+                        self.log(f"[{name}] Listing juge quota 429 — pas d'Agent")
                     except Exception as e:
                         found = None
                         self.agent_log(
@@ -806,29 +945,41 @@ class Swarm:
                     if found:
                         self.agent_log(aid, f"Listing juge → {found}")
                         self.log(f"[{name}] Listing juge → {found}")
-                    else:
+                    elif not judge_quota:
                         self.agent_log(
                             aid, f"Listing juge: aucune des {len(pool)} URLs")
                         self.log(f"[{name}] Listing juge: aucune des {len(pool)} URLs")
 
-            if not found and key and self.settings.get("allow_tinyfish_agent", True):
-                used_engine = "TinyFish listing"
-                self.set_agent(aid, engine="TinyFish Agent listing")
-                if (n_tf + n_sp) == 0 and not crawled and not fetched:
-                    reason = "Listing Search: 0 hit → TinyFish Agent listing"
-                elif pool:
-                    reason = "Listing juge: aucune → TinyFish Agent listing"
-                else:
-                    reason = "Listing Search: hits hygiène 0 → TinyFish Agent listing"
+            allow_agent = bool(key) and bool(self.settings.get("allow_tinyfish_agent", True))
+            if not found and allow_agent and judge_quota:
+                reason = "TinyFish Agent listing sauté — quota juge 429"
                 self.agent_log(aid, reason)
                 self.log(f"[{name}] {reason}")
-                try:
-                    sem = self._tf_sem or asyncio.Semaphore(1)
-                    async with sem:
-                        found = await self._tinyfish_listing_discover(aid, seed, key)
-                except Exception as e:
-                    self.agent_log(aid, f"TinyFish Agent listing failed: {str(e)[:120]}")
-                    self.log(f"TinyFish listing failed on {name}: {str(e)[:120]}", "error")
+            elif not found and allow_agent and not pool:
+                reason = "TinyFish Agent listing sauté — aucun candidat"
+                self.agent_log(aid, reason)
+                self.log(f"[{name}] {reason}")
+            elif not found and allow_agent:
+                if not agent_host_is_worthwhile(seed.get("url") or "", seed.get("name") or ""):
+                    reason = (
+                        "TinyFish Agent listing sauté — "
+                        "site absent ou pas l'organisme"
+                    )
+                    self.agent_log(aid, reason)
+                    self.log(f"[{name}] {reason}")
+                else:
+                    used_engine = "TinyFish listing"
+                    self.set_agent(aid, engine="TinyFish Agent listing")
+                    reason = "Listing juge: aucune → TinyFish Agent listing"
+                    self.agent_log(aid, reason)
+                    self.log(f"[{name}] {reason}")
+                    try:
+                        sem = self._tf_sem or asyncio.Semaphore(1)
+                        async with sem:
+                            found = await self._tinyfish_listing_discover(aid, seed, key)
+                    except Exception as e:
+                        self.agent_log(aid, f"TinyFish Agent listing failed: {str(e)[:120]}")
+                        self.log(f"TinyFish listing failed on {name}: {str(e)[:120]}", "error")
 
             if found:
                 self.set_agent(aid, status="SUCCESS")
@@ -893,23 +1044,32 @@ class Swarm:
         name = seed.get("name") or ""
         for item in self.master_seeds or []:
             same = domain and domain_of(item.get("url")) == domain
-            if same and is_shared_hub(domain) and not name_owns_hub(
-                    item.get("name") or "", domain):
+            if same and is_shared_hub(domain) and not (
+                name_owns_hub(item.get("name") or "", domain)
+                or domain_matches_org(domain, item.get("name") or "")
+            ):
                 same = False
             if same or (name and (item.get("name") or "") == name):
                 item["url"] = listing_url
+                item["listing_url"] = listing_url
                 item["listing_kind"] = "projects_index"
+                if item.get("queue") != "skip":
+                    item["queue"] = "crawl"
                 break
         if not domain:
             return
         try:
+            key = {"name": name} if name else {"domain": domain}
             await self.db.master_seeds.update_one(
-                {"domain": domain},
+                key,
                 {"$set": {
                     "name": name,
                     "url": listing_url,
+                    "listing_url": listing_url,
                     "domain": domain,
                     "listing_kind": "projects_index",
+                    "home_status": "official",
+                    "queue": "crawl",
                     "source": "listing_hop",
                     "ts": now_iso(),
                 },
@@ -973,24 +1133,35 @@ class Swarm:
                 self.log(f"[{seed['name']}] {line}")
 
             if not urls and key and self.settings.get("allow_tinyfish_agent", True):
-                used_engine = "TinyFish"
-                self.set_agent(aid, engine="TinyFish Agent fiches")
-                reason = (
-                    "Search: 0 hit → TinyFish Agent fiches"
-                    if (n_tf + n_sp) == 0
-                    else "Search: hits filtrés (0 fiches) → TinyFish Agent fiches"
-                )
-                self.agent_log(aid, reason)
-                self.log(f"[{seed['name']}] {reason}")
-                try:
-                    sem = self._tf_sem or asyncio.Semaphore(1)
-                    async with sem:
-                        urls = await self._tinyfish_discover(
-                            aid, seed, key, max_urls, known_urls)
-                except Exception as e:
-                    tf_err = str(e)[:120]
-                    self.agent_log(aid, f"TinyFish Agent fiches failed: {tf_err}")
-                    self.log(f"TinyFish discovery failed on {seed['name']}: {tf_err}", "error")
+                host_ok = agent_host_is_worthwhile(
+                    seed.get("url") or "", seed.get("name") or "")
+                if not host_ok:
+                    reason = (
+                        "TinyFish Agent fiches sauté — "
+                        "site absent ou pas l'organisme"
+                    )
+                    tf_err = "skipped: host not the organization"
+                    self.agent_log(aid, reason)
+                    self.log(f"[{seed['name']}] {reason}")
+                else:
+                    used_engine = "TinyFish"
+                    self.set_agent(aid, engine="TinyFish Agent fiches")
+                    reason = (
+                        "Search: 0 hit → TinyFish Agent fiches"
+                        if (n_tf + n_sp) == 0
+                        else "Search: hits filtrés (0 fiches) → TinyFish Agent fiches"
+                    )
+                    self.agent_log(aid, reason)
+                    self.log(f"[{seed['name']}] {reason}")
+                    try:
+                        sem = self._tf_sem or asyncio.Semaphore(1)
+                        async with sem:
+                            urls = await self._tinyfish_discover(
+                                aid, seed, key, max_urls, known_urls)
+                    except Exception as e:
+                        tf_err = str(e)[:120]
+                        self.agent_log(aid, f"TinyFish Agent fiches failed: {tf_err}")
+                        self.log(f"TinyFish discovery failed on {seed['name']}: {tf_err}", "error")
             urls = urls[:max_urls]
             engine_code = {
                 "TinyFish": "N3",
@@ -1030,6 +1201,7 @@ class Swarm:
                 )
                 await self.telemetry(seed["url"], used_engine, "FAILED", (time.time() - t0) * 1000, 0, detail)
                 await self.add_failed(seed["url"], seed["url"], seed["name"], detail, "discover")
+            return len(urls)
         except asyncio.CancelledError:
             self.set_agent(aid, status="CANCELLED")
             raise
@@ -1037,6 +1209,7 @@ class Swarm:
             self.set_agent(aid, status="FAILED")
             await self.telemetry(seed["url"], used_engine, "FAILED", (time.time() - t0) * 1000, 0, str(e))
             await self.add_failed(seed["url"], seed["url"], seed["name"], str(e), "discover")
+            return 0
 
     def _tf_agent_on_event(self, aid):
         async def on_event(ev):
@@ -1049,21 +1222,142 @@ class Swarm:
                 self.agent_log(aid, str(ev["purpose"])[:110])
         return on_event
 
+    def _tf_poll_hooks(self, aid):
+        ticks = {"n": 0}
+
+        async def on_run(run):
+            live = find_live_url(run)
+            if live:
+                self.set_agent(aid, live_url=live)
+            ticks["n"] += 1
+            if ticks["n"] == 1 or ticks["n"] % 5 == 0:
+                st = run.get("status") or "PENDING"
+                self.agent_log(aid, f"status {st} — même run TinyFish")
+
+        def should_stop():
+            a = self.agents.get(aid) or {}
+            return a.get("status") == "CANCELLED"
+
+        return on_run, should_stop
+
+    async def _tf_agent_run(self, aid, seed, key, goal, schema, max_duration_s):
+        """SSE ; 429 → pause + retry ; flux coupé → poll ; plafond → cancel."""
+        cfg = public_agent_config({"max_duration_seconds": max_duration_s})
+        run_id = {"id": None}
+        inner = self._tf_agent_on_event(aid)
+        log = lambda m: self.agent_log(aid, m)
+        budget = sse_wall_budget_s(max_duration_s)
+
+        async def on_event(ev):
+            rid = ev.get("run_id")
+            if rid:
+                run_id["id"] = rid
+                self._tf_track_run(aid, rid)
+            await inner(ev)
+
+        async def cancel_live():
+            rid = run_id["id"]
+            if not rid:
+                return {}
+            try:
+                await tf_cancel_run(rid, key)
+            except Exception:
+                pass
+            try:
+                last = await tf_get_run(rid, key)
+            except Exception:
+                return {}
+            if str(last.get("status") or "").upper() == "COMPLETED":
+                return last.get("result") or {}
+            return {}
+
+        last_err = None
+        try:
+            for attempt in range(2):
+                await await_agent_cooldown(log)
+                run_id["id"] = None
+                self._tf_untrack_run(aid)
+                try:
+                    return await asyncio.wait_for(
+                        tf_run_sse(
+                            seed["url"], goal, schema, key,
+                            on_event=on_event, agent_config=cfg),
+                        timeout=budget)
+                except asyncio.CancelledError:
+                    await cancel_live()
+                    raise
+                except TimeoutError as e:
+                    last_err = e
+                    if is_sse_stream_end(e) and run_id["id"]:
+                        self.agent_log(
+                            aid,
+                            f"SSE coupé ({type(e).__name__}) → poll {run_id['id'][:8]} "
+                            f"(même run, pas un 2ᵉ Agent)")
+                        on_run, should_stop = self._tf_poll_hooks(aid)
+                        return await tf_poll_run(
+                            run_id["id"], key,
+                            budget_s=int(max_duration_s) + POLL_GRACE_S,
+                            log=log, on_run=on_run, should_stop=should_stop)
+                    if run_id["id"]:
+                        self.agent_log(
+                            aid,
+                            f"SSE plafond {budget:.0f}s → cancel {run_id['id'][:8]} "
+                            f"(pas de 2ᵉ Agent)")
+                        return await cancel_live()
+                    if not is_sse_stream_end(e):
+                        self.agent_log(
+                            aid,
+                            f"SSE plafond {budget:.0f}s sans run_id — sauté "
+                            f"(pas de 2ᵉ Agent)")
+                        return {}
+                    break
+                except httpx.HTTPError as e:
+                    last_err = e
+                    if run_id["id"]:
+                        self.agent_log(
+                            aid,
+                            f"SSE coupé ({type(e).__name__}) → poll {run_id['id'][:8]} "
+                            f"(même run, pas un 2ᵉ Agent)")
+                        on_run, should_stop = self._tf_poll_hooks(aid)
+                        return await tf_poll_run(
+                            run_id["id"], key,
+                            budget_s=int(max_duration_s) + POLL_GRACE_S,
+                            log=log, on_run=on_run, should_stop=should_stop)
+                    if is_http_status(e, 429) and attempt == 0:
+                        wait = retry_after_s(e)
+                        await mark_agent_429(wait)
+                        self.agent_log(
+                            aid,
+                            f"TinyFish Agent 429 — pause {wait:.0f}s, retry SSE "
+                            f"(pas de 2ᵉ run)")
+                        continue
+                    break
+            if is_http_status(last_err, 429):
+                self.agent_log(aid, "TinyFish Agent 429 encore — sauté")
+                return {}
+            if is_http_status(last_err, 401) or is_http_status(last_err, 402):
+                self.agent_log(aid, f"SSE HTTP {last_err.response.status_code} — sauté")
+                return {}
+            self.agent_log(aid, f"SSE refusé ({str(last_err)[:80]}) → run-async")
+            try:
+                return await self._tinyfish_discover_poll(
+                    aid, seed, key, goal, schema=schema,
+                    max_duration_s=max_duration_s)
+            except httpx.HTTPStatusError as e:
+                if is_http_status(e, 429):
+                    await mark_agent_429(retry_after_s(e))
+                    self.agent_log(aid, "TinyFish run-async 429 — sauté")
+                    return {}
+                raise
+        finally:
+            self._tf_untrack_run(aid)
+
     async def _tinyfish_listing_discover(self, aid, seed, key):
         """Agent TinyFish n°1 : une URL catalogue, pas de fiches individuelles."""
         self.set_agent(aid, status="RUNNING")
         goal = listing_goal(seed["name"])
-        cfg = {"max_duration_seconds": LISTING_AGENT_DURATION_S, "max_steps": AGENT_CREDIT_CAP}
-        try:
-            result = await tf_run_sse(
-                seed["url"], goal, LISTING_SCHEMA, key,
-                on_event=self._tf_agent_on_event(aid),
-                timeout=240, agent_config=cfg)
-        except (httpx.HTTPError, TimeoutError) as e:
-            self.agent_log(aid, f"SSE listing dropped ({str(e)[:60]}) → polling fallback")
-            result = await self._tinyfish_discover_poll(
-                aid, seed, key, goal, schema=LISTING_SCHEMA,
-                max_duration_s=LISTING_AGENT_DURATION_S)
+        result = await self._tf_agent_run(
+            aid, seed, key, goal, LISTING_SCHEMA, LISTING_AGENT_DURATION_S)
         raw = ((result or {}).get("listing_url") or "").strip()
         self.agent_log(aid, f"agent listing finished: {raw or 'empty'}")
         if not raw.startswith("http"):
@@ -1072,21 +1366,11 @@ class Swarm:
         return accept_listing_url(href, seed)
 
     async def _tinyfish_discover(self, aid, seed, key, max_urls, known_urls=None):
-        """Agent TinyFish n°2 : fiches individuelles (SSE puis polling)."""
+        """Agent TinyFish n°2 : fiches individuelles (SSE puis poll du même run)."""
         self.set_agent(aid, status="RUNNING")
         goal = discovery_goal(seed["name"], known_urls)
-        cfg = {"max_duration_seconds": FICHE_AGENT_DURATION_S, "max_steps": AGENT_CREDIT_CAP}
-
-        try:
-            result = await tf_run_sse(
-                seed["url"], goal, DISCOVERY_SCHEMA, key,
-                on_event=self._tf_agent_on_event(aid),
-                agent_config=cfg)
-        except (httpx.HTTPError, TimeoutError) as e:
-            self.agent_log(aid, f"SSE dropped ({str(e)[:60]}) → polling fallback")
-            result = await self._tinyfish_discover_poll(
-                aid, seed, key, goal, schema=DISCOVERY_SCHEMA,
-                max_duration_s=FICHE_AGENT_DURATION_S)
+        result = await self._tf_agent_run(
+            aid, seed, key, goal, DISCOVERY_SCHEMA, FICHE_AGENT_DURATION_S)
         projects = (result or {}).get("projects") or []
         self.agent_log(aid, f"agent fiches finished: {len(projects)} candidates")
         urls, seen = [], set()
@@ -1110,24 +1394,12 @@ class Swarm:
         if live:
             self.set_agent(aid, live_url=live)
         self.agent_log(aid, f"run_id {run_id[:12]}… agent navigating")
-        budget = int(max_duration_s or 360)
-        rounds = max(1, budget // 3)
-        for i in range(rounds):
-            await asyncio.sleep(3)
-            run = await tf_get_run(run_id, key)
-            st = run.get("status", "")
-            if not self.agents.get(aid) or self.agents[aid]["status"] == "CANCELLED":
-                return {}
-            live2 = find_live_url(run)
-            if live2:
-                self.set_agent(aid, live_url=live2)
-            if st in ("COMPLETED", "FAILED", "CANCELLED"):
-                if st != "COMPLETED":
-                    raise ValueError(f"run {st}: {str(run.get('error'))[:100]}")
-                return run.get("result") or {}
-            if i % 5 == 0:
-                self.agent_log(aid, f"status {st or 'PENDING'} — navigating pagination/forms")
-        raise TimeoutError(f"TinyFish run timed out ({budget}s)")
+        on_run, should_stop = self._tf_poll_hooks(aid)
+        return await tf_poll_run(
+            run_id, key,
+            budget_s=int(max_duration_s or 120) + POLL_GRACE_S,
+            log=lambda m: self.agent_log(aid, m),
+            on_run=on_run, should_stop=should_stop)
 
     async def _crawl_page_links(self, seed):
         async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=UA) as client:
@@ -1209,8 +1481,10 @@ class Swarm:
         key = self._serper_key()
         if not key:
             return []
-        self._serper_queries += 1
-        return await serper_search(query, key, log=log or (lambda m: None))
+        sem = self._serper_sem or asyncio.Semaphore(2)
+        async with sem:
+            self._serper_queries += 1
+            return await serper_search(query, key, log=log or (lambda m: None))
 
     async def _search_with_filter(self, seed, query, max_urls, *,
                                   filter_fn, purpose, log=None,
@@ -1256,17 +1530,26 @@ class Swarm:
             retry_query=retry_query)
 
     async def _search_partner_site(self, name: str, log=None) -> str:
+        """Même Search que l'étape B : « official site », pas « marine conservation »."""
         seed = {"name": name, "url": ""}
-        query = project_search_query(seed)
+        query = official_site_query(name)
+        retry = official_site_retry_query(name)
         tf_hits, sp_hits = await asyncio.gather(
             self._tf_search_discover(query, seed, log=log),
             self._serper_discover(query, log=log),
         )
-        site = official_site_from_hits(
-            list(tf_hits or []) + list(sp_hits or []), funder_name=name)
+        hits = list(tf_hits or []) + list(sp_hits or [])
+        site = official_site_from_hits(hits, funder_name=name)
+        if not site and retry:
+            tf2, sp2 = await asyncio.gather(
+                self._tf_search_discover(retry, seed, log=log),
+                self._serper_discover(retry, log=log),
+            )
+            hits = list(tf2 or []) + list(sp2 or []) + hits
+            site = official_site_from_hits(hits, funder_name=name)
         self.log(
-            f"Follow the Money: Search '{name}' → {site or 'aucun site'} "
-            f"(serper {self._serper_queries})"
+            f"Follow the Money: Search official site '{name}' → "
+            f"{site or 'aucun site'} (serper {self._serper_queries})"
         )
         return site
 
@@ -1289,69 +1572,230 @@ class Swarm:
                     pass
 
     def _queue_partner(self, name: str, purl: str):
+        catalog = self.master_seeds or MASTER_SEEDS
+        decision = decide_follow_the_money_partner(name, purl, catalog=catalog)
+        if decision.get("action") != FTM_DISCOVER or not decision.get("seed"):
+            return
+        self._queue_partner_seed(decision["seed"])
+
+    def _ftm_new_org_blocked(self, name: str, url: str | None = None) -> bool:
+        catalog = self.master_seeds or MASTER_SEEDS
+        if find_catalog_seed(catalog, name, url):
+            return False
+        cap = int(self.settings.get("max_partner_orgs", 15))
+        return self.new_partner_count >= cap
+
+    def _queue_partner_seed(
+        self, seed: dict, *, start_discover: bool = True, persist: bool = True,
+    ):
         if not self.running or not self.settings.get("follow_the_money", True):
-            return
+            return None
+        purl = (seed.get("url") or "").strip()
+        name = (seed.get("name") or "").strip()
         domain = domain_of(purl)
-        if not domain:
-            return
+        if not domain or not name:
+            return None
         hosted_on_hub = is_shared_hub(domain) and not name_owns_hub(name, domain)
-        if domain in self.partner_domains and not hosted_on_hub:
-            return
-        seeds = self.master_seeds or MASTER_SEEDS
-        known_seed = next((s for s in seeds if is_known_funder([s], name, purl)), None)
+        if hosted_on_hub:
+            self.log(
+                f"Follow the Money: skip '{name}' — hub {domain} (pas de crawl)",
+                "warn",
+            )
+            return None
+        if domain in self.partner_domains:
+            return None
+        catalog = self.master_seeds or MASTER_SEEDS
+        known_seed = find_catalog_seed(catalog, name, purl)
         known = known_seed is not None
-        cap = int(self.settings.get("max_partner_orgs", 5))
+        cap = int(self.settings.get("max_partner_orgs", 15))
+        stored = None
         if not known:
             if self.new_partner_count >= cap:
-                return
+                return None
+            if not partner_site_reachable(purl):
+                self.log(
+                    f"Follow the Money: skip '{name}' — site injoignable "
+                    f"({purl}) — plafond intact",
+                    "warn",
+                )
+                return None
             self.new_partner_count += 1
-            self.master_seeds.append({
-                "name": name, "url": purl,
-                "listing_kind": "homepage", "source": "follow_the_money",
+            stored = {
+                "name": name,
+                "url": purl,
+                "listing_kind": seed.get("listing_kind") or "homepage",
+                "home_status": seed.get("home_status") or "official",
+                "queue": seed.get("queue") or "crawl",
+                "source": "follow_the_money",
                 "project_count": 0,
-            })
-            try:
-                asyncio.create_task(self.db.master_seeds.update_one(
-                    {"domain": domain},
-                    {"$set": {
-                        "name": name, "url": purl, "domain": domain,
-                        "source": "follow_the_money",
-                        "ts": now_iso(),
-                    },
-                     "$setOnInsert": {"_id": str(uuid.uuid4())}},
-                    upsert=True))
-            except Exception:
-                pass
+            }
+            if seed.get("home_url"):
+                stored["home_url"] = seed["home_url"]
+            if seed.get("listing_url"):
+                stored["listing_url"] = seed["listing_url"]
+            self.master_seeds.append(stored)
+            if persist:
+                try:
+                    asyncio.create_task(self._persist_ftm_seed(stored))
+                except Exception:
+                    pass
             kind = f"new org ({self.new_partner_count}/{cap})"
         else:
             kind = "known v1 — queued (cap does not apply)"
-        if not hosted_on_hub:
-            self.partner_domains.add(domain)
+        self.partner_domains.add(domain)
         self.partner_count = len(self.partner_domains)
-        self.log(f"Follow the Money: {kind} '{name}' ({domain}) → recursive discovery", "success")
-        label = known_seed["name"] if known_seed else f"{name} (partner)"
-        seed = {"name": label, "url": purl}
-        self.recursive_tasks.append(asyncio.create_task(self._discover(seed, 6, depth=1)))
+        self.log(
+            f"Follow the Money: {kind} '{name}' ({domain}) → recursive discovery",
+            "success",
+        )
+        if known_seed and known_seed.get("source") != "follow_the_money":
+            label = known_seed["name"]
+        elif known:
+            label = name
+        else:
+            label = f"{name} (partner)"
+        discover = {
+            "name": label,
+            "url": purl,
+            "listing_kind": seed.get("listing_kind") or "homepage",
+            "home_status": seed.get("home_status") or "official",
+            "queue": seed.get("queue") or "crawl",
+        }
+        if seed.get("listing_url"):
+            discover["listing_url"] = seed["listing_url"]
+        if start_discover:
+            self.recursive_tasks.append(
+                asyncio.create_task(self._discover(discover, 6, depth=1)))
+        return {"new": not known, "discover": discover, "stored": stored}
 
-    async def _follow_the_money(self, proj: dict, depth: int):
+    async def _persist_ftm_seed(self, stored: dict):
+        domain = domain_of(stored.get("url"))
+        if not domain:
+            return
+        try:
+            await self.db.master_seeds.update_one(
+                {"domain": domain},
+                {"$set": {
+                    "name": stored.get("name"), "url": stored.get("url"),
+                    "domain": domain,
+                    "source": "follow_the_money",
+                    "listing_kind": stored.get("listing_kind"),
+                    "home_status": stored.get("home_status"),
+                    "queue": stored.get("queue"),
+                    "ts": now_iso(),
+                },
+                 "$setOnInsert": {"_id": str(uuid.uuid4())}},
+                upsert=True)
+        except Exception:
+            pass
+
+    def _refund_new_partner(self, seed: dict):
+        name = (seed.get("name") or "").strip()
+        domain = domain_of(seed.get("url"))
+        self.new_partner_count = max(0, self.new_partner_count - 1)
+        if domain:
+            self.partner_domains.discard(domain)
+        self.partner_count = len(self.partner_domains)
+        key = norm_name(name)
+        self.master_seeds = [
+            s for s in self.master_seeds
+            if not (
+                (s.get("source") or "") == "follow_the_money"
+                and domain_of(s.get("url")) == domain
+                and norm_name(s.get("name") or "") == key
+            )
+        ]
+        self.log(
+            f"Follow the Money: ticket remboursé '{name}' — 0 fiche, plafond intact",
+            "warn",
+        )
+
+    def _inbox_ftm(self, name: str, url: str | None, seed: dict | None, proj: dict):
+        self.ftm_inbox.append({
+            "name": name,
+            "url": (url or "").strip(),
+            "seed": dict(seed) if seed else None,
+            "s_ocean": proj.get("s_ocean"),
+        })
+        self.log(f"Follow the Money: inbox '{name}' (classement en fin de catalogue)")
+
+    async def _try_new_partner(self, seed: dict) -> bool:
+        registered = self._queue_partner_seed(
+            seed, start_discover=False, persist=False)
+        if not registered:
+            return False
+        n = await self._discover(registered["discover"], 6, depth=1)
+        useful = n is None or int(n) > 0
+        if useful:
+            if registered.get("new") and registered.get("stored"):
+                await self._persist_ftm_seed(registered["stored"])
+            return True
+        if registered.get("new"):
+            self._refund_new_partner(seed)
+        return False
+
+    async def _flush_ftm_inbox(self):
+        ranked = rank_ftm_inbox(self.ftm_inbox)
+        cap = int(self.settings.get("max_partner_orgs", 15))
+        self.log(
+            f"Follow the Money: inbox {len(self.ftm_inbox)} mention(s) → "
+            f"{len(ranked)} org(s), cap {cap}"
+        )
+        catalog = self.master_seeds or MASTER_SEEDS
+        for row in ranked:
+            if self.new_partner_count >= cap:
+                self.log(f"Follow the Money: {cap}/{cap} tickets utiles atteints")
+                break
+            name = row.get("name") or ""
+            purl = (row.get("url") or (row.get("seed") or {}).get("url") or "").strip() or None
+            if self._ftm_new_org_blocked(name, purl):
+                continue
+            decision = decide_follow_the_money_partner(name, purl, catalog=catalog)
+            if decision.get("action") == FTM_SEARCH or decision.get("needs_search"):
+                home = await self._search_partner_site(name)
+                decision = decide_follow_the_money_partner(
+                    name, purl, catalog=catalog,
+                    searched_home=home, did_search=True,
+                )
+            if decision.get("action") != FTM_DISCOVER or not decision.get("seed"):
+                reason = decision.get("reason") or "skip"
+                self.log(f"Follow the Money: skip '{name}' ({reason})")
+                continue
+            found = find_catalog_seed(catalog, name, decision["seed"].get("url"))
+            if found and is_crawl_ready(found):
+                self._queue_partner_seed(decision["seed"])
+                continue
+            await self._try_new_partner(decision["seed"])
+            catalog = self.master_seeds or MASTER_SEEDS
+
+    async def _follow_the_money(self, proj: dict, depth: int, *, published: bool = True):
         if depth != 0:
             return
-        seeds = self.master_seeds or MASTER_SEEDS
+        min_s = float(self.settings.get("ftm_min_s_ocean", FTM_MIN_S_OCEAN))
+        if not ftm_page_allows_collect(published, proj.get("s_ocean"), min_s):
+            return
+        catalog = self.master_seeds or MASTER_SEEDS
         for p in (proj.get("partners") or []):
             if not isinstance(p, dict) or not p.get("name"):
                 continue
             name = p["name"]
-            purl = (p.get("url") or "").strip() or listing_url_for_name(seeds, name) or ""
-            if not purl:
-                known = is_known_funder(seeds, name, None)
-                if not known:
-                    cap = int(self.settings.get("max_partner_orgs", 5))
-                    if self.new_partner_count >= cap:
-                        continue
-                purl = await self._search_partner_site(name)
-                if not purl:
+            purl = (p.get("url") or "").strip() or None
+            decision = decide_follow_the_money_partner(name, purl, catalog=catalog)
+            if decision.get("action") == FTM_DISCOVER and decision.get("seed"):
+                found = find_catalog_seed(catalog, name, decision["seed"].get("url") or purl)
+                if found and is_crawl_ready(found):
+                    self._queue_partner_seed(decision["seed"])
                     continue
-            self._queue_partner(name, purl)
+            if decision.get("reason") in {
+                "exclude", "compound", "empty_name", "catalog_not_ready",
+            }:
+                self.log(f"Follow the Money: skip '{name}' ({decision.get('reason')})")
+                continue
+            if decision.get("action") in {FTM_DISCOVER, FTM_SEARCH} or decision.get("needs_search"):
+                self._inbox_ftm(name, purl, decision.get("seed"), proj)
+                continue
+            reason = decision.get("reason") or "skip"
+            self.log(f"Follow the Money: skip '{name}' ({reason})")
 
     async def _process_url(self, item):
         if not self.run_id:
@@ -1422,6 +1866,28 @@ class Swarm:
             self.agent_log(aid, f"Extraction + S_ocean scoring ({'LLM cascade' if has_llm(self.settings) else 'heuristic'})")
             proj = await extract_project(page_title, llm_text, meta_desc, url, funder, self.settings, ext_links=ext_links)
 
+            if not s_ocean_meets_min(proj.get("s_ocean"), self.settings):
+                min_s = float(self.settings.get("min_marine_score", 0.5))
+                reason = (
+                    f"S_ocean {proj.get('s_ocean')} < min_marine_score {min_s}"
+                )
+                self.set_agent(aid, status="REJECTED")
+                self.agent_log(aid, f"REJECTED: {reason}")
+                await self._write_verdict(
+                    item, "rejected",
+                    title=proj.get("title") or page_title,
+                    reason=reason, engine=proj.get("engine"),
+                    s_ocean=proj.get("s_ocean"),
+                )
+                await self._emit("rejected", url=url, reason=reason,
+                                 engine=proj.get("engine"))
+                await self.telemetry(
+                    url, proj.get("engine") or "Extractor", "REJECTED",
+                    (time.time() - t0) * 1000, 0, reason)
+                await self.add_failed(url, source, funder, reason, "s_ocean")
+                self._bump_saturation(False)
+                return {"status": "rejected", "url": url}
+
             lat, lon = proj.get("latitude"), proj.get("longitude")
             geo_src = "extracted"
             if not valid_coords(lat, lon):
@@ -1455,7 +1921,7 @@ class Swarm:
             if not ok:
                 self.set_agent(aid, status="FAILED")
                 self.agent_log(aid, f"UNLOCATED ({kind}): no boat-accessible site — not published")
-                await self._follow_the_money(proj, depth)
+                await self._follow_the_money(proj, depth, published=False)
                 await self._write_verdict(
                     item, "unlocated", title=proj.get("title") or page_title,
                     location=proj.get("location"), lat=lat, lon=lon,
@@ -1500,7 +1966,7 @@ class Swarm:
             self.agent_log(aid, f"Site recorded in run — S_ocean {proj.get('s_ocean')}")
             self.log(f"+ {proj['title'][:60]} ({funder}) → run {self.run_id}", "success")
             await self.telemetry(url, proj["engine"], "SUCCESS", (time.time() - t0) * 1000, 1)
-            await self._follow_the_money(proj, depth)
+            await self._follow_the_money(proj, depth, published=True)
             return {"status": "site", "url": url}
         except asyncio.CancelledError:
             self.set_agent(aid, status="CANCELLED")

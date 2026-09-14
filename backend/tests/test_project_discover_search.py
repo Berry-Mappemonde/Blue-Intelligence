@@ -49,6 +49,10 @@ def _run(coro):
 def _no_paid_env(monkeypatch):
     monkeypatch.delenv("TINYFISH_API_KEY", raising=False)
     monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "app.services.swarm_pipeline.partner_site_reachable",
+        lambda url, timeout=5.0: True,
+    )
 
 
 def _swarm(settings=None):
@@ -111,6 +115,17 @@ def test_filter_exclude_urls_skips_already_eliminated():
     assert out == ["https://example.org/projects/kelp"]
 
 
+def test_filter_soft_keeps_research_when_no_project_path():
+    hits = [
+        {"url": "https://scripps.edu/science/earth-section/"},
+        {"url": "https://scripps.edu/news/expedition"},
+        {"url": "https://other.edu/science/ignored"},
+    ]
+    seed = {"name": "Scripps", "url": "https://scripps.edu/"}
+    out = filter_discover_urls(hits, seed, 10)
+    assert out == ["https://scripps.edu/science/earth-section/"]
+
+
 def test_filter_drops_news_and_other_domain():
     hits = [
         {"url": "https://example.org/projects/coral"},
@@ -141,7 +156,7 @@ def test_official_site_skips_facebook():
         {"url": "https://www.facebook.com/wildoysters"},
         {"url": "https://wild-oysters.org/about"},
     ]
-    assert official_site_from_hits(hits) == "https://wild-oysters.org/"
+    assert official_site_from_hits(hits, "Wild Oysters") == "https://wild-oysters.org/"
 
 
 def test_official_site_skips_shared_hub_prefers_name_domain():
@@ -155,6 +170,49 @@ def test_official_site_skips_shared_hub_prefers_name_domain():
     ) == "https://www.bmkg.go.id/"
     only_hub = [{"url": "https://hubocean.earth/use-cases"}]
     assert official_site_from_hits(only_hub, "Aker Biomarine") == ""
+
+
+def test_official_site_rejects_publisher_and_first_serp():
+    name = "Agency for Meteorology (BMKG) – Indonesia"
+    assert official_site_from_hits(
+        [{"url": "https://www.nature.com/articles/s41586-bmkg"}], name
+    ) == ""
+    assert official_site_from_hits(
+        [
+            {"url": "https://www.nature.com/articles/s41586-bmkg"},
+            {"url": "https://www.usgs.gov/centers/"},
+        ],
+        name,
+    ) == ""
+    assert official_site_from_hits(
+        [
+            {"url": "https://www.nature.com/articles/s41586-bmkg"},
+            {"url": "https://www.bmkg.go.id/"},
+        ],
+        name,
+    ) == "https://www.bmkg.go.id/"
+
+
+def test_official_site_matches_short_acronym():
+    hits = [
+        {"url": "https://www.helmholtz.de/en/"},
+        {"url": "https://www.awi.de/en/"},
+    ]
+    assert official_site_from_hits(
+        hits, "Alfred Wegener Institute (AWI)"
+    ) == "https://www.awi.de/"
+    assert official_site_from_hits(
+        hits, "Alfred Wegener Institute"
+    ) == "https://www.awi.de/"
+
+
+def test_official_site_nature_org_not_nature_com():
+    assert official_site_from_hits(
+        [{"url": "https://www.nature.com/"}], "The Nature Conservancy"
+    ) == ""
+    assert official_site_from_hits(
+        [{"url": "https://www.nature.org/"}], "The Nature Conservancy"
+    ) == "https://www.nature.org/"
 
 
 def test_purpose_is_projects_not_poe():
@@ -413,12 +471,15 @@ def test_ftm_name_without_url_searches_then_discovers(monkeypatch):
     async def go():
         await sw._follow_the_money(
             {"partners": [{"name": "Wild Oysters", "url": None}]}, depth=0)
+        assert discovered == []
+        assert search_q == []
+        await sw._flush_ftm_inbox()
         await asyncio.sleep(0)
 
     _run(go())
-    assert search_q[0][1] == '"Wild Oysters" marine conservation'
-    assert ("tf", '"Wild Oysters" marine conservation', None) in search_q
-    assert ("sp", '"Wild Oysters" marine conservation') in search_q
+    assert search_q[0][1] == '"Wild Oysters" official site'
+    assert ("tf", '"Wild Oysters" official site', None) in search_q
+    assert ("sp", '"Wild Oysters" official site') in search_q
     assert sw._serper_queries == 1
     assert discovered == [("Wild Oysters (partner)", "https://wild-oysters.org/", 1)]
     assert sw.db.projects.docs == []
@@ -443,11 +504,79 @@ def test_ftm_without_search_hit_ignores_partner(monkeypatch):
     monkeypatch.setattr(sp, "tf_search", empty)
     monkeypatch.setattr(sp, "serper_search", empty)
 
-    _run(sw._follow_the_money(
-        {"partners": [{"name": "Nobody Known", "url": ""}]}, depth=0))
+    async def go():
+        await sw._follow_the_money(
+            {"partners": [{"name": "Nobody Known", "url": ""}]}, depth=0)
+        await sw._flush_ftm_inbox()
+
+    _run(go())
     assert discovered == []
     assert sw.recursive_tasks == []
     assert sw.db.projects.docs == []
+
+
+def test_ftm_exclude_name_does_not_search(monkeypatch):
+    sw = _swarm()
+    sw.master_seeds = [
+        {"name": "Rare Fish Forever", "url": "https://rare.org/program/fish-forever/",
+         "aliases": ["Rare"], "home_status": "official", "queue": "crawl"},
+    ]
+    sw.partner_domains = set()
+    sw.recursive_tasks = []
+    search = []
+
+    async def track(*a, **k):
+        search.append(1)
+        return []
+
+    import app.services.swarm_pipeline as sp
+    monkeypatch.setattr(sp, "tf_search", track)
+    monkeypatch.setattr(sp, "serper_search", track)
+
+    _run(sw._follow_the_money(
+        {"partners": [{"name": "Unknown", "url": None}]}, depth=0))
+    assert search == []
+    assert sw.recursive_tasks == []
+
+
+def test_ftm_hub_url_searches_official_site(monkeypatch):
+    sw = _swarm()
+    sw.master_seeds = [
+        {"name": "Rare Fish Forever", "url": "https://rare.org/program/fish-forever/",
+         "aliases": ["Rare"], "home_status": "official", "queue": "crawl"},
+    ]
+    sw.partner_domains = set()
+    sw.recursive_tasks = []
+    discovered = []
+    search_q = []
+
+    async def fake_discover(seed, max_urls, depth=0):
+        discovered.append((seed["name"], seed["url"], seed.get("home_status")))
+
+    async def fake_tf(query, key, **kw):
+        search_q.append(query)
+        return [{"url": "https://oceandecade.org/actions/x"}, {"url": "https://bmkg.go.id/"}]
+
+    async def fake_sp(query, key, **kw):
+        return []
+
+    sw._discover = fake_discover
+    import app.services.swarm_pipeline as sp
+    monkeypatch.setattr(sp, "tf_search", fake_tf)
+    monkeypatch.setattr(sp, "serper_search", fake_sp)
+
+    async def go():
+        await sw._follow_the_money({
+            "partners": [{"name": "BMKG", "url": "https://oceandecade.org/actions/foo"}],
+        }, depth=0)
+        assert discovered == []
+        await sw._flush_ftm_inbox()
+        await asyncio.sleep(0)
+
+    _run(go())
+    assert search_q[0] == '"BMKG" official site'
+    assert discovered == [("BMKG (partner)", "https://bmkg.go.id/", "official")]
+    assert all("oceandecade.org" not in (u or "") for _, u, _ in discovered)
 
 
 def test_known_v1_name_without_url_does_not_search(monkeypatch):

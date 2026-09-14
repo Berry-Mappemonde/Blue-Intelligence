@@ -18,8 +18,9 @@ def _run(coro):
 
 class _FakeResp:
     def __init__(self, content: bytes, content_type="text/html",
-                 disposition="", url="https://example.gov/x"):
+                 disposition="", url="https://example.gov/x", status_code=200):
         self.content = content
+        self.status_code = status_code
         self.headers = {
             "content-type": content_type,
             "content-disposition": disposition,
@@ -29,6 +30,33 @@ class _FakeResp:
     @property
     def text(self):
         return self.content.decode("utf-8", errors="replace")
+
+
+class TestPdfUrlAndCaptcha:
+    def test_url_looks_like_pdf(self):
+        assert ext.url_looks_like_pdf(
+            "https://blueactionfund.org/wp-content/uploads/a.pdf") is True
+        assert ext.url_looks_like_pdf("https://example.org/projects/") is False
+
+    def test_siteground_is_hard_challenge(self):
+        html = "<html><body>Checking the site connection security. sg-captcha</body></html>"
+        assert ext.looks_hard_challenge(html=html, title="Robot Challenge Screen") is True
+        assert ext.looks_blocked("Robot Challenge Screen", html=html,
+                                 title="Robot Challenge Screen") is True
+
+    def test_jina_captcha_mirror_rejected(self):
+        blob = (
+            "Title: Robot Challenge Screen\n\n"
+            "Warning: This page maybe requiring CAPTCHA\n\n"
+            "Checking the site connection security\n"
+        )
+        assert ext._mirror_usable(blob) is False
+        assert ext._mirror_usable("GRANT FACT SHEET " * 40) is True
+
+    def test_sg_header_is_challenge(self):
+        resp = _FakeResp(b"<html>hi</html>", url="https://x.org/a.pdf", status_code=202)
+        resp.headers["sg-captcha"] = "challenge"
+        assert ext.looks_bot_challenge_response(resp, resp.content, resp.url) is True
 
 
 class TestContentIsPdf:
@@ -170,6 +198,70 @@ class TestReadUrls:
         assert page["is_pdf"] is False
         assert len(page["text"]) >= 200
         assert page["level"] in ("N1-trafilatura", "N2-readability")
+
+    def test_captcha_at_pdf_url_skips_chromium_uses_mirror(self, monkeypatch):
+        html = (
+            "<html><head><title>Robot Challenge Screen</title></head>"
+            "<body>Checking the site connection security. sg-captcha</body></html>"
+        )
+        rendered = []
+        mirrors = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(
+                html.encode(), "text/html",
+                url="https://www.blueactionfund.org/wp-content/uploads/x.pdf",
+                status_code=202)
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on captcha pdf")
+
+        async def fake_mirror(url, log=None, skip_tinyfish=False):
+            mirrors.append(url)
+            return ("GRANT FACT SHEET Strengthening MPAs " * 20, "N3-mirror-tinyfish")
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", fake_mirror)
+
+        page = _run(ext.extract_cascade(
+            "https://www.blueactionfund.org/wp-content/uploads/x.pdf",
+            min_chars=200))
+        assert rendered == []
+        assert mirrors == [
+            "https://www.blueactionfund.org/wp-content/uploads/x.pdf"]
+        assert page["render_used"] is False
+        assert page["level"] == "N3-mirror-tinyfish"
+        assert "GRANT FACT SHEET" in page["text"]
+        assert page["blocked"] is False
+
+    def test_short_html_at_pdf_url_still_mirrors(self, monkeypatch):
+        """205 chars de HTML (seuil N1) ne doivent pas empêcher TinyFish."""
+        html = "<html><body>" + ("lorem ipsum " * 18) + "</body></html>"
+        rendered = []
+        mirrors = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(html.encode(), "text/html",
+                             url="https://cdn.example/fact.pdf")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on .pdf url")
+
+        async def fake_mirror(url, log=None, skip_tinyfish=False):
+            mirrors.append(url)
+            return ("Blue Action Fund grant fact sheet " * 25, "N3-mirror-tinyfish")
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", fake_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/fact.pdf", min_chars=200))
+        assert rendered == []
+        assert mirrors
+        assert page["level"] == "N3-mirror-tinyfish"
 
     def test_pdf_magic_uses_pymupdf(self, monkeypatch):
         async def fake_raw(url, timeout=25):
