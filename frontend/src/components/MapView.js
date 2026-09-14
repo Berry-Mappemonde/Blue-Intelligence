@@ -35,7 +35,6 @@ export default function MapView({
   science,
   flyToScience,
   scienceWms,
-  onToggleWms,
   overlayOn = true,
   onToggleOverlay,
   nauticalAllowed = true,
@@ -420,8 +419,6 @@ export default function MapView({
         t={t}
         overlayOn={overlayOn}
         onToggleOverlay={onToggleOverlay}
-        scienceWms={scienceWms}
-        onToggleWms={onToggleWms}
         nauticalActive={nauticalActive}
         safetyM={safetyM}
         onSafetyM={setSafetyM}

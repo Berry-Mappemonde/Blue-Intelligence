@@ -1,10 +1,10 @@
 /**
- * Acceptation « NOT FOR NAVIGATION ».
+ * Acceptation « cette carte n’est pas faite pour naviguer ».
  * Le bandeau reste affiché ; cette clé dit seulement si l'utilisateur
- * a cliqué Accepter. Si le texte change (version), on redemande.
+ * a cliqué pour entrer. Si le texte change (version), on redemande.
  */
 export const NOT_FOR_NAV_STORAGE_KEY = "bi.notForNav.accepted";
-export const NOT_FOR_NAV_VERSION = "2026-09-14.v1";
+export const NOT_FOR_NAV_VERSION = "2026-09-14.v2";
 
 export function disclaimerFingerprint(title, body) {
   const text = `${NOT_FOR_NAV_VERSION}\n${title || ""}\n${body || ""}`;
@@ -40,12 +40,7 @@ export function writeNotForNavAccepted(storage, title, body) {
   return rec;
 }
 
-export function restrictedIntentNeedsAccept(accepted, intent) {
-  if (accepted) return false;
-  if (!intent) return false;
-  if (intent.basemap === "sea") return true;
-  if (intent.overlay) return true;
-  if (intent.wms && Object.values(intent.wms).some(Boolean)) return true;
-  if (intent.satellite) return true;
-  return false;
+/** Tant que l'avertissement n'est pas accepté, le site reste fermé. */
+export function siteEntryNeedsAccept(accepted) {
+  return !accepted;
 }
