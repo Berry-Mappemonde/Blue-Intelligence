@@ -1,7 +1,7 @@
-"""Charge COPERNICUS_* depuis l'environnement et les .env gitignorés.
+"""Load COPERNICUS_* from the environment and gitignored .env files.
 
-Ne jamais imprimer le mot de passe. Les scripts de génération passent
-username/password à ``copernicusmarine.open_dataset``.
+Never print the password. Generation scripts pass username/password
+to ``copernicusmarine.open_dataset``.
 """
 from __future__ import annotations
 
