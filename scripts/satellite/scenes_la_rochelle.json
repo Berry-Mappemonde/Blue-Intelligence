@@ -1,0 +1,19 @@
+{
+  "bbox": [-1.666101688825009, 45.65499831117499, -0.667898311174991, 46.65320168882501],
+  "collection": "sentinel-2-l2a",
+  "note": "Liste STAC seulement — pas d'images téléchargées. Généré par search_stac.py.",
+  "scenes": [
+    {
+      "id": "S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321",
+      "datetime": "2026-09-12T11:06:31.025000Z",
+      "cloud_cover": 0.0,
+      "platform": "sentinel-2c"
+    },
+    {
+      "id": "S2C_MSIL2A_20260724T110621_N0512_R137_T30TXR_20260724T144105",
+      "datetime": "2026-07-24T11:06:21.025000Z",
+      "cloud_cover": 0.0,
+      "platform": "sentinel-2c"
+    }
+  ]
+}
