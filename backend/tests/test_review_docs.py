@@ -117,11 +117,48 @@ def test_evidence_skips_screenshot_after_failed_fetch(monkeypatch):
 def test_render_screenshot_none_when_playwright_missing(monkeypatch):
     import app.core.render as render
 
-    async def no_browser(log):
-        return None
+    def missing(url, timeout_s, settle_ms, max_height=2400):
+        raise render.RenderUnavailable("playwright missing")
 
-    monkeypatch.setattr(render, "_get_browser", no_browser)
+    monkeypatch.setattr(render, "_run_screenshot_worker", missing)
+    render._unavailable = False
     out = asyncio.run(render.render_screenshot("https://example.com"))
+    assert out is None
+    assert render._unavailable is True
+
+
+def test_render_screenshot_uses_isolated_worker_not_inprocess_browser(monkeypatch):
+    import app.core.render as render
+
+    called = {}
+
+    def fake_shot(url, timeout_s, settle_ms, max_height=2400):
+        called["url"] = url
+        called["max_height"] = max_height
+        return b"\xff\xd8\xffCLIP"
+
+    async def boom_browser(log):
+        raise AssertionError("Chromium must not live in the API process")
+
+    monkeypatch.setattr(render, "_run_screenshot_worker", fake_shot)
+    monkeypatch.setattr(render, "_get_browser", boom_browser)
+    render._unavailable = False
+    out = asyncio.run(render.render_screenshot("https://douane.gouv.nc/fiche"))
+    assert out == b"\xff\xd8\xffCLIP"
+    assert called["url"] == "https://douane.gouv.nc/fiche"
+    assert called["max_height"] <= 2400
+
+
+def test_render_screenshot_timeout_returns_none(monkeypatch):
+    import app.core.render as render
+    import subprocess
+
+    def boom(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="worker", timeout=1)
+
+    monkeypatch.setattr(render, "_run_worker_argv", boom)
+    render._unavailable = False
+    out = asyncio.run(render.render_screenshot("https://legifrance.gouv.fr/jorf"))
     assert out is None
 
 
@@ -436,6 +473,74 @@ def test_gold_records_proposer_miss_and_report():
     md = report_markdown(rep)
     assert "Proposer s'est trompé ici" in md
     assert "annuaire-news" in md
+
+
+def test_suggest_fetches_documents_one_by_one(monkeypatch):
+    db = _db()
+    fiche = {
+        "mrgid": 8312, "name": "New Caledonia", "iso2": "NC",
+        "sov_iso2": "FR", "sovereign": "France",
+        "sources_td": [
+            {"url": "https://douane.gouv.nc/a", "official": True},
+            {"url": "https://douane.gouv.nc/b", "official": True},
+        ],
+        "ports": [],
+    }
+    active = 0
+    max_active = 0
+
+    async def fake_get_fiche(*_a, **_k):
+        return {"fiche": fiche, "comment": "", "choices": {}, "gold_on": False}
+
+    async def fake_evidence(url, _log):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {
+            "url": url, "text": "liste", "excerpt": "liste",
+            "images": [], "is_pdf": False, "catalog_n": 0,
+            "looks_catalog": False, "sufficient": False, "bonus": 0.3,
+        }
+
+    async def boom(*_a, **_k):
+        raise RuntimeError("no llm")
+
+    monkeypatch.setattr(
+        "app.services.review_doc_picker.get_fiche", fake_get_fiche)
+    monkeypatch.setattr(
+        "app.services.review_doc_picker._evidence_for", fake_evidence)
+    monkeypatch.setattr(
+        "app.services.review_doc_picker.complete_json_cascade", boom)
+    asyncio.run(suggest_eez_documents(db, "8312", settings={}))
+    assert max_active == 1
+
+
+def test_rank_td_urls_drops_metropolitan_france_on_new_caledonia():
+    from app.services.review_doc_picker import rank_td_urls
+
+    fiche = {
+        "mrgid": 8312, "name": "New Caledonia", "iso2": "NC",
+        "sov_iso2": "FR",
+        "sources_td": [
+            {"url": "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000047858148",
+             "official": True},
+            {"url": "https://www.mer.gouv.fr/acteurs-reseau-et-activites-portuaires-en-france"},
+            {"url": "https://dictionary.cambridge.org/dictionary/english/official"},
+            {"url": "https://www.france.fr/en/"},
+            {"url": "https://douane.gouv.nc/particuliers/formalites-douanieres-pour-les-navires-de-plaisance",
+             "official": True},
+            {"url": "https://davar.gouv.nc/sites/default/files/x.pdf"},
+        ],
+    }
+    urls = rank_td_urls(fiche)
+    assert any("douane.gouv.nc" in u for u in urls)
+    assert any("davar.gouv.nc" in u for u in urls)
+    assert not any("legifrance" in u for u in urls)
+    assert not any("mer.gouv.fr" in u for u in urls)
+    assert not any("cambridge.org" in u for u in urls)
+    assert not any("france.fr" in u for u in urls)
 
 
 def test_batch_proposer_runs_all_fiches(monkeypatch):

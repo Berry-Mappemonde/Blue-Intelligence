@@ -19,6 +19,7 @@ from app.core.extract import (
 from app.core.judge import complete_json_cascade
 from app.services.poe_pipeline import list_url_bonus
 from app.services.poe_zone_label import search_polygon_name
+from app.services.territory_ref import td_url_fits_polygon
 from app.services.review_choices import (
     empty_choices,
     gold_ready,
@@ -80,7 +81,7 @@ def rank_td_urls(fiche: dict | None) -> list[str]:
     rows = []
     for rec in (fiche or {}).get("sources_td") or []:
         url = rec.get("url")
-        if url:
+        if url and td_url_fits_polygon(url, fiche):
             rows.append((list_url_bonus(url) + (0.4 if rec.get("official") else 0), url))
     rows.sort(key=lambda x: x[0], reverse=True)
     seen, out = set(), []
@@ -304,10 +305,16 @@ async def suggest_eez_documents(db, entity_id: str, *,
         from app.services.review_lessons import load_lessons
         lessons = await load_lessons(db)
     scores = token_scores_from_lessons(lessons)
-    evidences = await asyncio.gather(*[_evidence_for(u, log) for u in urls])
-    local_task = asyncio.to_thread(local_pick, list(evidences), scores)
-    llm_task = _llm_pick(fiche, list(evidences), settings, log, lessons=lessons)
-    local, llm = await asyncio.gather(local_task, llm_task)
+    evidences: list[dict] = []
+    try:
+        for url in urls:
+            evidences.append(await _evidence_for(url, log))
+        local_task = asyncio.to_thread(local_pick, list(evidences), scores)
+        llm_task = _llm_pick(fiche, list(evidences), settings, log, lessons=lessons)
+        local, llm = await asyncio.gather(local_task, llm_task)
+    finally:
+        from app.core.render import shutdown_render
+        await shutdown_render()
     picked = merge_picks(local, llm, {ev["url"] for ev in evidences})
 
     public = empty_choices()
