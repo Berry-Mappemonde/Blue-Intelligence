@@ -141,7 +141,7 @@ async def amp_set_visit_url(site_id: str, body: VisitUrlBody):
 
 @router.post("/amp/resolve-visit-urls")
 async def amp_resolve_visit_urls(limit: int = 500):
-    """Heuristique synchrone : other_helpful_links seulement."""
+    """Synchronous heuristic: other_helpful_links only."""
     return await amp_svc.resolve_visit_urls(db, limit=min(max(limit, 1), 2000))
 
 
