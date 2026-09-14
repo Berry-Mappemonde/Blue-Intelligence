@@ -1,7 +1,7 @@
-"""Proposer Review Projets : page projet + sites d'action.
+"""Projects Review Suggest: project page + action sites.
 
-Liste fermée d'URLs et de site_id. Pas de GPS inventé. Pas de Gold.
-``unlocated`` reste en file (aucun site keep).
+Closed list of URLs and site_ids. No invented GPS. No Gold.
+``unlocated`` stays in queue (no keep site).
 """
 from __future__ import annotations
 
