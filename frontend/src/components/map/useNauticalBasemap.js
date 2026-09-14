@@ -11,7 +11,7 @@ import { maplibreWorkerUrl } from "./maplibreWorker";
  * de tuiles nécessaire, nginx statique suffit.
  */
 let glLoader = null;
-function loadGl() {
+export function loadGl() {
   if (!glLoader) {
     glLoader = (async () => {
       // Un seul Promise.all : des imports séquentiels feraient la queue
@@ -78,9 +78,13 @@ function isWebGlFailure(err) {
  * Retourne `true` quand la carte marine est affichée — l'appelant montre alors
  * l'avertissement « Ne convient pas à la navigation ».
  */
-export default function useNauticalBasemap({ mapObj, tileRef, basemap }) {
+export default function useNauticalBasemap({
+  mapObj, tileRef, basemap, enabled = true, onGlMap,
+}) {
   const glRef = useRef(null);
   const [nauticalActive, setNauticalActive] = useState(false);
+  const onGlMapRef = useRef(onGlMap);
+  onGlMapRef.current = onGlMap;
 
   // Préchargement dès le montage : sur HTTP/1.1 le navigateur n'a que
   // 6 connexions par origine, vite saturées par les requêtes API longues.
@@ -95,8 +99,9 @@ export default function useNauticalBasemap({ mapObj, tileRef, basemap }) {
     if (!map) return undefined;
     const conf = BASEMAPS[basemap] || BASEMAPS.dark;
     let cancelled = false;
+    const wantGl = conf.kind === "gl" && enabled !== false;
 
-    if (conf.kind === "gl") {
+    if (wantGl) {
       Promise.all([
         loadGl(),
         loadSeaStyle(conf.styleUrl).catch(() => conf.styleUrl),
@@ -123,6 +128,7 @@ export default function useNauticalBasemap({ mapObj, tileRef, basemap }) {
           }
           const glMap = glRef.current.getMaplibreMap?.() || glRef.current._glMap;
           setNauticalActive(true);
+          if (typeof onGlMapRef.current === "function") onGlMapRef.current(glMap || null);
           if (glMap && typeof glMap.on === "function") {
             glMap.on("error", (ev) => {
               const err = ev?.error || ev;
@@ -131,6 +137,7 @@ export default function useNauticalBasemap({ mapObj, tileRef, basemap }) {
               dropGlLayer(m, glRef);
               restoreRaster(m, tileRef);
               setNauticalActive(false);
+              if (typeof onGlMapRef.current === "function") onGlMapRef.current(null);
             });
           }
         })
@@ -140,16 +147,21 @@ export default function useNauticalBasemap({ mapObj, tileRef, basemap }) {
           dropGlLayer(mapObj.current, glRef);
           restoreRaster(mapObj.current, tileRef);
           setNauticalActive(false);
+          if (typeof onGlMapRef.current === "function") onGlMapRef.current(null);
         });
     } else {
       dropGlLayer(map, glRef);
       restoreRaster(map, tileRef);
-      if (tileRef.current) tileRef.current.setUrl(conf.url);
+      if (tileRef.current) {
+        const raster = conf.kind === "raster" ? conf : BASEMAPS.dark;
+        tileRef.current.setUrl(raster.url);
+      }
       setNauticalActive(false);
+      if (typeof onGlMapRef.current === "function") onGlMapRef.current(null);
     }
     return () => { cancelled = true; };
     // eslint-disable-next-line
-  }, [basemap]);
+  }, [basemap, enabled]);
 
   return nauticalActive;
 }

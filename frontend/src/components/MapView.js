@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
@@ -14,7 +14,12 @@ import useProjectsLayer from "./map/useProjectsLayer";
 import useRouteLayer from "./map/useRouteLayer";
 import useScienceLayer from "./map/useScienceLayer";
 import useScienceWms, { ensureWmsPanes } from "./map/useScienceWms";
+import useBiOverlay from "./map/useBiOverlay";
+import useSafetyIsobath from "./map/useSafetyIsobath";
+import MapChrome from "./map/MapChrome";
+import useNoaaAids from "./map/useNoaaAids";
 import useClimatologyLayer from "./map/useClimatologyLayer";
+import { DEFAULT_SAFETY_M } from "./map/safetyIsobathSpec";
 import { attachDepthOnPopup } from "./map/depthRow";
 import { applyPenRadii, makePointGroup, POPUP_OPTS } from "./map/points";
 
@@ -30,6 +35,10 @@ export default function MapView({
   science,
   flyToScience,
   scienceWms,
+  onToggleWms,
+  overlayOn = true,
+  onToggleOverlay,
+  nauticalAllowed = true,
   scienceSourceFilter = "argo",
   climoMonth = 1,
   climoFilters = { wind: true, wave: true, current: true, cyclones: true },
@@ -60,6 +69,7 @@ export default function MapView({
   categoryFilter,
   mapVisible = true,
   mapRun = null,
+  showReview = false,
 }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
@@ -220,7 +230,14 @@ export default function MapView({
     // eslint-disable-next-line
   }, [minZoom]);
 
-  const nauticalActive = useNauticalBasemap({ mapObj, tileRef, basemap });
+  const [glMap, setGlMap] = useState(null);
+  const [safetyM, setSafetyM] = useState(DEFAULT_SAFETY_M);
+  const [noaaAidsOn, setNoaaAidsOn] = useState(false);
+  const nauticalActive = useNauticalBasemap({
+    mapObj, tileRef, basemap, enabled: nauticalAllowed, onGlMap: setGlMap,
+  });
+  useBiOverlay({ mapObj, enabled: overlayOn && nauticalAllowed });
+  useSafetyIsobath({ glMap, enabled: nauticalActive && nauticalAllowed, meters: safetyM });
 
   useEffect(() => {
     if (!mapVisible || !mapObj.current) return;
@@ -242,7 +259,8 @@ export default function MapView({
     markersById: scienceMarkersById,
     science, tRef, sourceFilter: scienceSourceFilter,
   });
-  useScienceWms({ mapObj, mode, enabled: scienceWms });
+  useScienceWms({ mapObj, enabled: nauticalAllowed ? scienceWms : {} });
+  useNoaaAids({ mapObj, enabled: nauticalAllowed && noaaAidsOn && mode === "capitaineries" });
   useClimatologyLayer({
     mapObj, mode, month: climoMonth, filters: climoFilters,
     waveStat: climoWaveStat, tRef, onPoint: onClimoPoint,
@@ -260,6 +278,7 @@ export default function MapView({
     mapObj, ampLayerRef, ampLayersById, mode, tRef, onSites: onAmpSites, flyToAmp,
     runId: ampRunId,
     lfpFilter: ampLfpFilter,
+    visible: showReview,
   });
 
   useEffect(() => {
@@ -397,6 +416,19 @@ export default function MapView({
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} data-testid="map-container" className="w-full h-full" />
+      <MapChrome
+        t={t}
+        overlayOn={overlayOn}
+        onToggleOverlay={onToggleOverlay}
+        scienceWms={scienceWms}
+        onToggleWms={onToggleWms}
+        nauticalActive={nauticalActive}
+        safetyM={safetyM}
+        onSafetyM={setSafetyM}
+        mode={mode}
+        noaaAidsOn={noaaAidsOn}
+        onToggleNoaaAids={setNoaaAidsOn}
+      />
       {nauticalActive ? (
         <div
           data-testid="nautical-disclaimer"
