@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Télécharge 1–2 scènes Sentinel-2 (SAFE zip) via CDSE OData.
+"""Télécharge 1–2 scènes Sentinel-2 L1C (SAFE zip) via CDSE OData.
 
+ACOLITE refuse le L2A. Le manifeste doit lister des scènes MSIL1C.
 À lancer sur le Mac. Par défaut : 1 scène, dossier ~/Desktop/sentinel-pilot.
 N'imprime jamais le mot de passe.
 """
@@ -54,6 +55,19 @@ def product_name(scene_id: str) -> str:
     if not name.endswith(".SAFE"):
         name = f"{name}.SAFE"
     return name
+
+
+def is_l2a_scene(scene_id: str) -> bool:
+    return "MSIL2A" in (scene_id or "").upper()
+
+
+def require_l1c(scene_id: str) -> None:
+    if is_l2a_scene(scene_id):
+        raise SystemExit(
+            "ACOLITE refuse Sentinel-2 L2A. Relancez d'abord : "
+            "python3 scripts/satellite/search_stac.py "
+            "--out scripts/satellite/scenes_la_rochelle.json"
+        )
 
 
 def lookup_product(token: str, scene_id: str) -> dict:
@@ -134,6 +148,7 @@ def main() -> int:
     receipts = []
     for scene in scenes:
         sid = scene.get("id")
+        require_l1c(sid)
         meta = lookup_product(token, sid)
         zip_name = meta["name"].replace(".SAFE", ".zip")
         dest = Path(out_dir) / zip_name

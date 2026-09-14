@@ -49,9 +49,21 @@ n’est pas le bon (CDSE = dataspace.copernicus.eu, pas CMEMS).
 
 ---
 
-## Étape 1 — Télécharger **une** photo (S1)
+## Étape 1 — Télécharger **une** photo L1C (S1)
 
-Cela peut prendre 10 à 40 minutes selon votre box.
+ACOLITE a besoin du **L1C** (image brute). Le **L2A** (déjà corrigé par
+l’ESA) est refusé : *Level-2A data not supported*.
+
+D’abord rafraîchir la liste (scènes `MSIL1C`) :
+
+```bash
+python3 scripts/satellite/search_stac.py --limit 2 --out scripts/satellite/scenes_la_rochelle.json
+```
+
+Les `id` doivent contenir `MSIL1C`, pas `MSIL2A`.
+
+Ensuite télécharger **une** scène. Cela peut prendre 10 à 40 minutes
+selon votre box.
 
 ```bash
 python3 scripts/satellite/download_scenes.py --limit 1
@@ -90,12 +102,21 @@ python3 launch_acolite.py
 ```
 
 3. Dans ACOLITE :
-   - **Input** : le dossier `.SAFE` de l’étape 1.
-   - Cochez une sortie **L2R** (réflectance de surface).
-   - Lancez. Attendez la fin (souvent 15–40 min).
+   - **Input** : le dossier `.SAFE` **L1C** de l’étape 1
+     (le nom contient `MSIL1C`). Pas le dossier `MSIL2A`.
+   - Output : par ex. `~/Desktop/sentinel-pilot/acolite`
+   - Laissez l’algorithme **DSF**. ACOLITE écrit le L2R tout seul.
+   - Lancez. Attendez la fin (souvent 15–40 min). Le premier run
+     peut télécharger des tables (LUT).
+
+**Si le log dit** `Level-2A data not supported` : vous avez pointé
+un `.SAFE` L2A. Relancez l’étape 1 (recherche L1C + téléchargement)
+et changez l’Input.
 
 Vous devez voir des fichiers GeoTIFF ou NetCDF dans le dossier de sortie
 ACOLITE, avec des bandes vertes et SWIR (ex. `rhos_561`, `rhos_1614`).
+Un dossier qui ne contient que `*_log_file.txt` et `*_settings_user.txt`
+signifie que le calcul n’a pas tourné.
 
 ---
 
@@ -214,6 +235,6 @@ curl -s -X POST http://127.0.0.1:8001/api/import/science.geojson \
 ## Déjà fait ici (pas à refaire)
 
 - Compte CDSE vérifié (S0).
-- 2 scènes La Rochelle listées dans `scenes_la_rochelle.json`
-  (12 sept. 2026 et 24 juil. 2026, 0 % de nuages).
+- Ancienne liste L2A dans `scenes_la_rochelle.json` : **à régénérer**
+  avec `search_stac.py` (L1C) avant ACOLITE.
 - Filtre Science `sentinel-pilot` dans l’app.
