@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Étape C (hors Complet) : Search page-liste sur la home officielle.
+"""Step C (off Complet): Search a list page on the official home.
 
-Règle : même domaine que la home, chemin catalogue (`/projects/`, `/nos-projets/`…).
-Pas d'Agent TinyFish, pas de juge LLM. Miss → on garde la homepage (toujours crawlable).
+Rule: same domain as the home, catalogue path (`/projects/`, `/nos-projets/`…).
+No TinyFish Agent, no LLM judge. Miss → keep the homepage (still crawlable).
 
-Chaque résultat est append dans `official_listings_search.jsonl` (fsync),
-puis le catalogue est réécrit atomiquement tous les N organismes.
+Each result is appended to `official_listings_search.jsonl` (fsync),
+then the catalogue is rewritten atomically every N organizations.
 
     python3 scripts/resolve_project_listings.py --dry-run
     python3 scripts/resolve_project_listings.py --apply
@@ -274,7 +274,7 @@ async def apply(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Search page-liste hors Complet")
+    p = argparse.ArgumentParser(description="Search list page off Complet")
     p.add_argument("--seeds", type=Path, default=MASTER_SEEDS_PATH)
     p.add_argument("--journal", type=Path, default=LISTING_JOURNAL_PATH)
     p.add_argument("--audit-out", type=Path, default=AUDIT_PATH)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Audit + enrichissement hors Complet de backend/data/master_seeds.json.
+"""Audit + off-Complet enrichment of backend/data/master_seeds.json.
 
-Ne touche pas `projects`. Classe homes / listes / noms, puis n'envoie en
-file Complet que les graines crawlables.
+Does not touch `projects`. Classify homes / lists / names, then send to
+the Complet queue only crawlable seeds.
 
     python3 scripts/enrich_master_seeds.py --from-geojson ../seed/projects.geojson
 """
@@ -39,7 +39,7 @@ def projects_from_mongo() -> list[dict]:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Enrichit MasterSeeds sans crawler Complet")
+    p = argparse.ArgumentParser(description="Enrich MasterSeeds without the Complet crawler")
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--from-geojson", type=Path, help="GeoJSON v1 (seed/projects.geojson)")
     src.add_argument("--from-api", action="store_true")
@@ -49,7 +49,7 @@ def main() -> int:
     p.add_argument(
         "--reset-search",
         action="store_true",
-        help="Ne pas réappliquer les homes Search B (journal + catalogue actuel)",
+        help="Do not reapply Search B homes (journal + current catalogue)",
     )
     args = p.parse_args()
 

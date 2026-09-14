@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 /**
- * Fenêtre bloquante d'entrée sur le site.
- * Le bandeau nautique reste ensuite en bas de la carte.
+ * Blocking site-entry dialog.
+ * The nautical banner then stays at the bottom of the map.
  */
 export default function NotForNavModal({ t, open, onAccept }) {
   const [acked, setAcked] = useState(false);

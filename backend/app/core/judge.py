@@ -1,23 +1,23 @@
-"""Oui ou non : un branchement LLM, trois prompts.
+"""Yes or no: one LLM branch, three prompts.
 
-Porte d'entrée : ``ask_yes_no``. Même question technique partout
-(« j'accepte ou je refuse, éventuellement cette URL parmi les
-candidates, voici pourquoi »). Les textes de prompt et les rôles
-NVIDIA restent propres à chaque mode. On n'écrit pas un juge
-« projet ou port ou aire protégée ». Une URL hors liste n'est
-jamais retenue.
+Entry point: ``ask_yes_no``. Same technical question everywhere
+("I accept or I refuse, optionally this URL among the
+candidates, here is why"). Prompt texts and NVIDIA roles
+stay mode-specific. We do not write a judge
+"project or port or protected area". An off-list URL is
+never kept.
 
-Chaîne d'appel (un seul endroit à corriger) :
+Call chain (one place to fix):
 
-  1. NVIDIA NIM (chaîne du ``role``)
+  1. NVIDIA NIM (``role`` chain)
   2. OpenRouter
-  3. Claude (Haiku, puis Sonnet seulement si le caller le demande)
+  3. Claude (Haiku, then Sonnet only if the caller asks)
 
-Le hop listing / inconclusive du bottom-up n'est pas un second métier :
-c'est le même câble, avec ``hop_if`` pour essayer le modèle NIM suivant
-ou Sonnet. Les questions « projet marin ? », « port plaisance ? »,
-« quelle URL de visite déjà trouvée ? », « quelle URL catalogue ? »
-restent des prompts distincts.
+The bottom-up listing / inconclusive hop is not a second job:
+it is the same cable, with ``hop_if`` to try the next NIM model
+or Sonnet. "marine project?", "pleasure-craft port?",
+"which visit URL already found?", "which catalog URL?"
+remain distinct prompts.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ _NULL_URL = {"", "null", "none", "n/a", "-", "undefined"}
 
 @dataclass(frozen=True)
 class YesNo:
-    """Réponse normalisée. ``raw`` garde le JSON métier du spécialiste."""
+    """Normalized answer. ``raw`` keeps the specialist's business JSON."""
 
     accepted: bool | None
     url: str | None
@@ -46,7 +46,7 @@ class YesNo:
 
 
 def as_bool(value: Any) -> bool | None:
-    """True / False / None. ``bool("false")`` Python n'est pas un juge."""
+    """True / False / None. Python ``bool("false")`` is not a judge."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -63,7 +63,7 @@ def as_bool(value: Any) -> bool | None:
 
 
 def as_confidence(raw) -> int:
-    """0-100. Les NIM renvoient souvent 0.9 au lieu de 90."""
+    """0-100. NIMs often return 0.9 instead of 90."""
     if raw is None or raw == "":
         return 0
     try:
@@ -76,7 +76,7 @@ def as_confidence(raw) -> int:
 
 
 def normalize_listed_url(url: str | None) -> str | None:
-    """Clé de comparaison : schéma, hôte sans www, chemin sans slash final."""
+    """Comparison key: scheme, host without www, path without trailing slash."""
     raw = (url or "").strip()
     if not raw or raw.lower() in _NULL_URL:
         return None
@@ -101,7 +101,7 @@ def listed_url(
     *,
     key: UrlKeyFn | None = None,
 ) -> str | None:
-    """Retourne l'URL candidate originale, ou None si hors liste / inventée."""
+    """Return the original candidate URL, or None if off-list / invented."""
     if allowed is None:
         return None
     blob = ("" if raw is None else str(raw)).strip()
@@ -139,7 +139,7 @@ def parse_yes_no(
     forbidden_urls: Sequence[str] | None = None,
     url_key: UrlKeyFn | None = None,
 ) -> YesNo:
-    """``accept`` / ``is_poe`` / ``marine`` → accepted. URL seulement si listée."""
+    """``accept`` / ``is_poe`` / ``marine`` → accepted. URL only if listed."""
     data = data if isinstance(data, dict) else {}
     accepted: bool | None = None
     for field_name in ("accept", "is_poe", "marine"):
@@ -197,7 +197,7 @@ async def complete_json_cascade(
     openrouter_max_tokens: int | None = None,
     images: list[bytes] | None = None,
 ) -> tuple[dict, str]:
-    """NVIDIA → OpenRouter → Claude. Un branchement pour JSON strict."""
+    """NVIDIA → OpenRouter → Claude. One branch for strict JSON."""
     from app.core import claude, llm, nvidia
 
     last: Exception | None = None
@@ -336,10 +336,10 @@ async def ask_yes_no(
     claude_models: Sequence[str] | None = None,
     on_empty: str = "raise",
 ) -> YesNo:
-    """Envoie un prompt, reçoit un YesNo. Un câble, pas un juge unique.
+    """Send a prompt, get a YesNo. One cable, not a single judge.
 
-    ``on_empty`` : ``raise`` (gatekeeper → heuristique) ou ``inconclusive``
-    (bottom-up / AMP : pas d'invention).
+    ``on_empty``: ``raise`` (gatekeeper → heuristic) or ``inconclusive``
+    (bottom-up / AMP: no invention).
     """
     from app.core import claude, llm
 
@@ -376,13 +376,13 @@ async def ask_yes_no(
                 log(f"juge: {type(e).__name__}: {str(e)[:80]}")
             return empty_yes_no()
 
-    # Hop : NVIDIA n'a pas tranché (ou pas de clé). OpenRouter, puis Claude.
+    # Hop: NVIDIA did not decide (or no key). OpenRouter, then Claude.
     or_result: YesNo | None = None
     if llm.get_llm_key(settings):
         try:
             data = await llm._json_openrouter(prompt, system, settings, or_tokens)
             or_result = parse_yes_no(data, engine="openrouter", **parse_kwargs)
-            # Décision nette : on ne passe pas à Claude (listing y compris).
+            # Clear decision: do not fall through to Claude (listing included).
             if or_result.accepted is not None:
                 return or_result
         except Exception as e:

@@ -25,7 +25,7 @@ def test_valid_coords_rejects_null_island_and_garbage():
 
 
 def test_site_publishable_ocean_ok():
-    # Milieu du golfe de Gascogne
+    # Middle of the Bay of Biscay
     ok, kind = site_publishable(45.5, -5.0, {"max_inland_km": 15})
     assert ok is True
     assert kind == "ocean"
@@ -44,8 +44,8 @@ def test_site_publishable_no_coords():
 
 
 def test_site_publishable_inland_threshold_configurable():
-    # Point ~30 km à l'intérieur : rejeté à 15 km, accepté si le seuil est large
-    lat, lon = 48.4, -1.5  # Bretagne intérieure approximative
+    # Point ~30 km inland: rejected at 15 km, accepted if the threshold is wide
+    lat, lon = 48.4, -1.5  # Approximate inland Brittany
     ok_strict, _ = site_publishable(lat, lon, {"max_inland_km": 5})
     ok_wide, kind_wide = site_publishable(lat, lon, {"max_inland_km": 200})
     assert ok_strict is False or ok_wide is True

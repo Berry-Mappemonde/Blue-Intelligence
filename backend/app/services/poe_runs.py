@@ -1,17 +1,16 @@
-"""
-poe_runs — Runs versionnés « from scratch » du pipeline PoE.
+"""poe_runs — Versioned “from scratch” PoE pipeline runs.
 
-Un run re-génère les zones sélectionnées (force, monitoring court-circuité)
-dans un espace dédié, sans jamais toucher les collections v1 :
-  - poe_runs        : méta du run (paramètres, progression, résumé) ;
-  - poe_run_zones   : résultat par zone {run_id, mrgid, status, poe_count…} ;
-  - poe_run_ports   : ports extraits {run_id, …} ;
-  - poe_run_events  : journal structuré de chaque micro-étape (events_core),
-                      doublé en JSONL dans backend/data/runs/<run_id>.jsonl.
+A run regenerates the selected zones (force, monitoring short-circuited)
+in a dedicated space, never touching v1 collections:
+  - poe_runs        : run meta (parameters, progress, summary);
+  - poe_run_zones   : per-zone result {run_id, mrgid, status, poe_count…};
+  - poe_run_ports   : extracted ports {run_id, …};
+  - poe_run_events  : structured journal of each micro-step (events_core),
+                      also JSONL in backend/data/runs/<run_id>.jsonl.
 
-Reprise : un run interrompu (redémarrage serveur…) reprend là où il s'était
-arrêté — les zones déjà présentes dans poe_run_zones pour ce run sont sautées.
-La comparaison v1 ↔ run et le rapport sont dans poe_diff / poe_report.
+Resume: an interrupted run (server restart…) continues where it
+stopped — zones already in poe_run_zones for this run are skipped.
+v1 ↔ run comparison and the report live in poe_diff / poe_report.
 """
 import asyncio
 import time
@@ -25,7 +24,7 @@ from app.services.run_fingerprint import (
     build_code_fingerprint, merge_run_params, resume_params,
 )
 
-ZONE_TIMEOUT_S = 900  # le pipeline v2 fait plus de travail (rendu, double géocodage)
+ZONE_TIMEOUT_S = 900  # the v2 pipeline does more work (render, dual geocoding)
 
 
 def new_run_id() -> str:
@@ -59,9 +58,10 @@ async def execute_run(db, state, run_id: str, label: str = "",
                       variant: str = "tinyfish",
                       rules_overrides: dict | None = None,
                       profile: str | None = None) -> dict:
-    """Exécute (ou reprend) un run complet. `state` est un TaskState (logs live,
-    progression, annulation) ; l'état durable vit dans db.poe_runs.
-    variant : v1 | v2 | tinyfish — n'écrit jamais dans poe_ports."""
+    """Execute (or resume) a full run. `state` is a TaskState (live logs,
+    progress, cancel); durable state lives in db.poe_runs.
+    variant: v1 | v2 | tinyfish — never writes poe_ports.
+    """
     await ensure_run_indexes(db)
     variant = normalize_variant(variant)
     recorder = RunRecorder(run_id, db=db)

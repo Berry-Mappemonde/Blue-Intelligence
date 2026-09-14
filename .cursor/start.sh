@@ -33,7 +33,7 @@ start_searxng_venv() {
   STARTED_SEARXNG=1
 }
 
-# SearXNG local (JSON) — requis par les runs PoE v1/v2/tinyfish
+# Local SearXNG (JSON) — required by PoE v1/v2/tinyfish runs
 if searxng_json_ok; then
   echo "SearXNG already up on 127.0.0.1:8888"
 elif command -v docker >/dev/null 2>&1 && { docker info >/dev/null 2>&1 || sudo docker info >/dev/null 2>&1; }; then

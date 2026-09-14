@@ -1,10 +1,9 @@
-"""
-Tests reconstruction v2 — hygiène (filtre interstitiels, détection de blocage),
-parallèle-comparaison (double parsing, double géocodage, LLM∥NER), journal
-d'événements, diff port par port et rapport de run.
+"""v2 reconstruction tests — hygiene (interstitial filter, block detection),
+parallel-compare (dual parsing, dual geocoding, LLM∥NER), event
+journal, port-by-port diff and run report.
 
-Aucun serveur ni réseau requis. Les tests Mongo utilisent une base dédiée
-(bi_test_poe_v2), détruite à la fin.
+No server or network required. Mongo tests use a dedicated database
+(bi_test_poe_v2), destroyed at the end.
 """
 import asyncio
 import json
@@ -29,7 +28,7 @@ from app.services.poe_diff import diff_ports  # noqa: E402
 from app.services.poe_report import report_to_markdown  # noqa: E402
 
 
-# --- Hygiène : filtre SERP anti-interstitiels --------------------------------
+# --- Hygiene: anti-interstitial SERP filter ----------------------------------
 class TestSerpFilterInterstitials:
     def test_unblock_and_challenge_urls_rejected(self):
         results = [
@@ -63,7 +62,7 @@ class TestSerpFilterInterstitials:
         assert kept == ["https://www.douane.gouv.fr/demarche/ports-entree"]
 
 
-# --- Hygiène : détection des pages de blocage --------------------------------
+# --- Hygiene: block-page detection -------------------------------------------
 class TestLooksBlocked:
     def test_cloudflare_challenge_detected(self):
         text = "Just a moment... Enable JavaScript and cookies to continue"
@@ -81,13 +80,13 @@ class TestLooksBlocked:
         assert looks_blocked(text) is False
 
     def test_long_text_with_marker_not_blocked(self):
-        # Un vrai contenu réglementaire long qui cite « access denied » reste accepté
+        # Long genuine regulatory content that cites “access denied” stays accepted
         text = ("Access to this page has been denied in the past for vessels without "
                 "clearance. The full regulation follows. " * 40)
         assert looks_blocked(text) is False
 
 
-# --- Parallèle : double parsing comparé --------------------------------------
+# --- Parallel: compared dual parsing -----------------------------------------
 class TestDualParse:
     def test_dual_parse_returns_comparison_signals(self):
         html = ("<html><head><title>Ports</title></head><body><article>"
@@ -101,7 +100,7 @@ class TestDualParse:
         assert 0.0 <= res["similarity"] <= 1.0
 
 
-# --- Parallèle : géocodage double Nominatim ∥ GeoNames ------------------------
+# --- Parallel: dual Nominatim ∥ GeoNames geocoding ---------------------------
 class TestGeocodeDual:
     def _run(self, monkeypatch, nomi_rows, geon_rows):
         async def fake_nomi(query, country_code=None, limit=1):
@@ -147,7 +146,7 @@ class TestGeocodeDual:
         assert res["nominatim"] and not res["geonames"]
 
 
-# --- Parallèle : extraction LLM ∥ NER ------------------------------------------
+# --- Parallel: LLM ∥ NER extraction -------------------------------------------
 class FakeRec:
     def __init__(self):
         self.events = []
@@ -205,7 +204,7 @@ class TestExtractionCompare:
         assert ports[0]["extraction_engine"] == "ner"
 
 
-# --- Journal d'événements (JSONL, sans Mongo) ----------------------------------
+# --- Event journal (JSONL, no Mongo) -------------------------------------------
 class TestRunRecorder:
     def test_jsonl_written_with_sequence(self):
         rec = RunRecorder("testrun-jsonl", db=None)
@@ -231,7 +230,7 @@ class TestRunRecorder:
             path.unlink(missing_ok=True)
 
 
-# --- Diff port par port -----------------------------------------------------------
+# --- Port-by-port diff ------------------------------------------------------------
 def _port(mrgid, name, lat=None, lon=None, sources=None, zone="TestZone"):
     from app.core.dedup import normalize_name
     return {"mrgid": mrgid, "zone_name": zone, "name": name, "lat": lat, "lon": lon,
@@ -248,9 +247,9 @@ class TestDiffPorts:
             _port(100, "Port Delta", 12.0, 22.0, ["https://gov.tl/d"]),
         ]
         v2 = [
-            _port(100, "Port Alpha", 10.0, 20.0, ["https://gov.tl/a"]),      # inchangé
-            _port(100, "Beta Port", 10.5, 20.5, ["https://gov.tl/b"]),       # renommé
-            _port(100, "Port Gamma", 11.1, 21.0, ["https://douane.tl/c"]),   # déplacé + re-sourcé
+            _port(100, "Port Alpha", 10.0, 20.0, ["https://gov.tl/a"]),      # unchanged
+            _port(100, "Beta Port", 10.5, 20.5, ["https://gov.tl/b"]),       # renamed
+            _port(100, "Port Gamma", 11.1, 21.0, ["https://douane.tl/c"]),   # moved + re-sourced
             _port(100, "Port Epsilon", 13.0, 23.0, ["https://gov.tl/e"]),    # nouveau
         ]
         d = diff_ports(v1, v2, moved_km=2.0)
@@ -267,7 +266,7 @@ class TestDiffPorts:
         assert gamma["move_km"] > 2.0
 
     def test_zones_isolated(self):
-        # Deux ports homonymes dans deux zones différentes ne s'apparient pas
+        # Two homonym ports in two different zones do not match
         v1 = [_port(100, "Port Alpha", 10.0, 20.0)]
         v2 = [_port(200, "Port Alpha", 10.0, 20.0)]
         d = diff_ports(v1, v2)
@@ -275,7 +274,7 @@ class TestDiffPorts:
         assert d["summary"]["added"] == 1 and d["summary"]["removed"] == 1
 
 
-# --- Rapport de run (Mongo dédiée) + rendu markdown -------------------------------
+# --- Run report (dedicated Mongo) + markdown render -------------------------------
 @pytest.fixture(scope="module")
 def seeded_db():
     from motor.motor_asyncio import AsyncIOMotorClient
@@ -363,9 +362,9 @@ class TestRunReport:
         assert "TinyFish" in md
 
 
-# --- Découverte automatique (catalogue source + seeds, pas une liste figée) --
+# --- Auto discovery (source catalogue + seeds, not a frozen list) ------------
 class TestStructuredDiscovery:
-    # Format réel r.jina.ai (gras), pas une table markdown de test.
+    # Real r.jina.ai format (bold), not a test markdown table.
     _MX_JINA = """
 ### **Puertos habilitados**
 #### [1.-](https://www.gob.mx/puertosymarinamercante/acciones-y-programas/puertos-y-terminales#)Bahía Colonet
@@ -426,7 +425,7 @@ class TestStructuredDiscovery:
         assert "Ensenada" in names and "Manzanillo" in names
 
     def test_name_only_catalog_skip_keeps_ports(self, monkeypatch):
-        """PPF / kartelë / SIS : skip LLM mais garder les noms (pas 0 port)."""
+        """PPF / kartelë / SIS: skip LLM but keep the names (not 0 ports)."""
         called = []
 
         async def boom(context, zone, settings=None, log=None):
@@ -720,7 +719,7 @@ class TestStructuredDiscovery:
         assert UA_READER["User-Agent"] != UA_BROWSER["User-Agent"]
 
 
-# --- UNCLOS : îles vides du run ----------------------------------------------
+# --- UNCLOS: empty islands of the run ----------------------------------------
 class TestUnclosEmptyIslands:
     def test_uninhabited_run_islands(self):
         for name in (
@@ -747,7 +746,7 @@ class TestUnclosEmptyIslands:
         assert q and q["code"] == "uninhabited", q
 
 
-# --- NER réentraîné : texte réglementaire, plus seulement « Nom, ville (zone) »
+# --- Retrained NER: regulatory text, no longer only “Name, city (zone)”
 class TestNerRegulatory:
     def test_extracts_ports_from_prose(self):
         from app.core.ml import extract_entities, has_ner_model
@@ -1292,7 +1291,7 @@ class TestGeocodePolicy:
                     "geonames_available": True}
 
         async def fake_llm(port, zone, settings=None, log=None):
-            return -12.78, 45.30  # Mayotte, pas l'hexagone
+            return -12.78, 45.30  # Mayotte, not the hexagon
 
         monkeypatch.setattr(poe, "extract_ports_llm", fake_extract)
         monkeypatch.setattr(poe, "geocode_port_dual", fake_dual)

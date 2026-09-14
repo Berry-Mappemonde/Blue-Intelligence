@@ -1,6 +1,6 @@
 /**
- * S-52 allégée : aplat sur les DEPARE Seascape dont drval1 < seuil.
- * M14 (2026-09-14) : l'attribut existe. Pas un moteur ECDIS.
+ * Lightweight S-52: fill on Seascape DEPARE features whose drval1 < threshold.
+ * M14 (2026-09-14): the attribute exists. Not an ECDIS engine.
  */
 export const SAFETY_ISOBATH_LAYER_ID = "bi-safety-depare";
 export const SAFETY_DEPTHS_M = [2, 5, 10];

@@ -1,4 +1,4 @@
-"""Registre GPS arbitrés — JSON git, scorer, pas de réseau."""
+"""Arbitrated GPS registry — git JSON, scorer, no network."""
 from __future__ import annotations
 
 import asyncio

@@ -1,7 +1,7 @@
-"""Empreinte code d'un run PoE — relie poe_runs.params à un commit et des flags.
+"""Code fingerprint of a PoE run — ties poe_runs.params to a commit and flags.
 
-Aucun secret : seulement des booléens / SHA / plafonds. Les runs déjà
-terminés ne sont pas rétro-étiquetés.
+No secret: only booleans / SHA / caps. Already
+finished runs are not retro-labeled.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _module_has(mod: str, name: str) -> bool:
 
 
 def git_state(cwd: Path | None = None) -> tuple[str | None, bool | None]:
-    """Retourne (sha, dirty). (None, None) si git est indisponible."""
+    """Return (sha, dirty). (None, None) if git is unavailable."""
     root = str(cwd or _REPO_ROOT)
     try:
         sha = subprocess.check_output(
@@ -48,7 +48,7 @@ def _key_configured(*candidates: str) -> bool:
 
 def build_code_fingerprint(settings: dict | None = None,
                            zone_timeout_s: int | None = None) -> dict:
-    """Snapshot du code et des flags (pas des secrets) au moment du run."""
+    """Snapshot of the code and flags (not secrets) at run time."""
     from app.core import claude
 
     s = settings or {}
@@ -120,14 +120,14 @@ def build_code_fingerprint(settings: dict | None = None,
 
 
 def merge_run_params(base: dict, fingerprint: dict) -> dict:
-    """Fusionne l'empreinte sous params.code sans écraser variant / label."""
+    """Merge the fingerprint under params.code without overwriting variant / label."""
     out = dict(base)
     out["code"] = fingerprint
     return out
 
 
 def resume_params(existing: dict, current_fingerprint: dict) -> dict:
-    """Garde l'empreinte d'origine ; note le SHA de reprise s'il diffère."""
+    """Keep the original fingerprint; note the resume SHA if it differs."""
     params = dict(existing or {})
     orig = params.get("code") if isinstance(params.get("code"), dict) else {}
     orig_sha = orig.get("git_sha")

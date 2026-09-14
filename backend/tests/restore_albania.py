@@ -1,4 +1,4 @@
-"""Ancien utilitaire Albania — POST generate a été retiré (410)."""
+"""Old Albania utility — POST generate was removed (410)."""
 from pathlib import Path
 import sys
 

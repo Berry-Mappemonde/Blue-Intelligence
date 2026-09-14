@@ -49,8 +49,8 @@ python -m playwright install --with-deps chromium
 deactivate
 
 echo "==> [4/6] backend/.env"
-# Squelette localhost seulement si le fichier n'existe pas. Puis on aligne
-# MONGO_URL / clés API sur les secrets du process (Atlas, NIM) sans les logger.
+# Localhost skeleton only if the file does not exist. Then we align
+# MONGO_URL / API keys on process secrets (Atlas, NIM) without logging them.
 if [ ! -f "$REPO/backend/.env" ]; then
   cat > "$REPO/backend/.env" <<EOF
 MONGO_URL=mongodb://localhost:27017
@@ -73,10 +73,10 @@ ensure_searxng_url "$REPO/backend/.env"
 echo "==> [5/6] SearXNG (venv /opt/searxng — do not start the server here)"
 install_searxng_venv
 
-echo "==> [6/6] Frontend (npm + production build, preview unifié port 8001)"
+echo "==> [6/6] Frontend (npm + production build, unified preview on port 8001)"
 if [ ! -f "$REPO/frontend/.env" ]; then
   cat > "$REPO/frontend/.env" <<'EOF'
-# Laisser vide pour le mode même-origine (preview Cloud Agent + prod derrière reverse proxy).
+# Leave empty for same-origin mode (Cloud Agent preview + prod behind reverse proxy).
 REACT_APP_BACKEND_URL=
 PORT=3000
 DANGEROUSLY_DISABLE_HOST_CHECK=true

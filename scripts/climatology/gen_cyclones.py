@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Construit l'index IBTrACS compact depuis le CSV officiel since1980.
+"""Build the compact IBTrACS index from the official since1980 CSV.
 
-Ne recopie pas le C++ OpenCPN. TRACK_TYPE == main. Vent : USA_WIND sinon
-WMO_WIND (mélange 1 min / 10 min documenté dans wind_source).
+Does not copy the OpenCPN C++. TRACK_TYPE == main. Wind: USA_WIND else
+WMO_WIND (1 min / 10 min mix documented in wind_source).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ IBTRACS_URL = (
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "backend" / "data" / "climatology" / "cyclones" / "ibtracs_since1980.json"
 
-# Sous-échantillon : un point toutes les N heures (CSV = 3 h).
+# Subsample: one point every N hours (CSV = 3 h).
 KEEP_EVERY = 2  # 6 h
 MAX_POINTS = 48
 
@@ -54,7 +54,7 @@ def parse_csv(path: Path) -> list[dict]:
     with path.open(encoding="utf-8", newline="") as fh:
         reader = csv.reader(fh)
         header = next(reader)
-        # Ligne unités IBTrACS
+        # IBTrACS units line
         peek = next(reader)
         if not peek or peek[0].startswith("SID") or (peek[0] and peek[0][0].isdigit()):
             fh.seek(0)
@@ -72,7 +72,7 @@ def parse_csv(path: Path) -> list[dict]:
         for row in reader:
             n += 1
             if n == 1 and row and not row[0][0].isdigit() and row[0] != "1980001S":
-                # éventuelle 2e ligne d'unités
+                # optional 2nd units line
                 if "units" in ",".join(row).lower() or row[0] in ("", " "):
                     continue
             track_type = col(row, "TRACK_TYPE").strip().lower()
@@ -177,7 +177,7 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {args.out} ({len(storms)} storms, {args.out.stat().st_size} bytes)")
-    # Contrôles A
+    # A checks
     by_month_basin = defaultdict(int)
     for s in storms:
         for m in s["months"]:

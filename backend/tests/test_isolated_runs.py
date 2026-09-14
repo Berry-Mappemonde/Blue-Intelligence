@@ -1,4 +1,4 @@
-"""Runs isolés Marinas / Capitaineries / AMP : pas d’écriture live, historique conservé."""
+"""Isolated Marinas / Harbormasters / AMP runs: no live write, history kept."""
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,4 @@
-"""H2–H4 : NOAA ENC Direct feux/bouées — API mockée, pas de S-57."""
+"""H2–H4: NOAA ENC Direct lights/buoys — mocked API, no S-57."""
 from __future__ import annotations
 
 import sys

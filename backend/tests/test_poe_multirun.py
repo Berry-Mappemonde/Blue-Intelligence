@@ -1,6 +1,6 @@
-"""Variants v1/v2/tinyfish, synthèse best-of, SearXNG health helpers.
+"""v1/v2/tinyfish variants, best-of synthesis, SearXNG health helpers.
 
-Aucun réseau. Mongo dédiée pour le best-of (bi_test_poe_bestof).
+No network. Dedicated Mongo for best-of (bi_test_poe_bestof).
 """
 import asyncio
 import os

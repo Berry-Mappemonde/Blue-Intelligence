@@ -1,4 +1,4 @@
-"""Porte unique search_named — aucun réseau."""
+"""Single door search_named — no network."""
 from __future__ import annotations
 
 import asyncio

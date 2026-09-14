@@ -1,21 +1,20 @@
-"""
-Anchorages layer — Phase 8 (Mouillages).
+"""Anchorages layer — Phase 8 (Anchorages).
 
-Découvre les mouillages naturels et postes de mouillage le long de la route
-Berry-Mappemonde avec la même logique de corridor ±25 NM que les marinas
-(buffer spatial réel : bbox-batched + post-filtre de bande exacte).
+Discover natural anchorages and anchorage berths along the
+Berry-Mappemonde route with the same ±25 NM corridor logic as marinas
+(real spatial buffer: bbox-batched + exact-band post-filter).
 
-Source : OpenStreetMap via Overpass uniquement.
-  * Pas de SHOM (pas de couche mouillages dans le WFS public).
-  * Pas de seed curated (features naturelles, pas de base maintenue).
-  * Pas d'enrichissement TinyFish (pas de site officiel pour une baie).
+Source: OpenStreetMap via Overpass only.
+  * No SHOM (no anchorage layer in the public WFS).
+  * No curated seed (natural features, no maintained base).
+  * No TinyFish enrichment (no official site for a bay).
 
-Tags OSM requêtés :
-  - seamark:type = anchorage      (zone de mouillage S-57)
-  - seamark:type = anchor_berth   (poste de mouillage individuel)
-  - seamark:type = mooring        (bouée / coffre)
-  - natural      = bay            (baie naturelle — gardée seulement si nommée)
-  - leisure      = anchorage      (tag non standard mais répandu)
+OSM tags queried:
+  - seamark:type = anchorage      (S-57 anchorage area)
+  - seamark:type = anchor_berth   (individual anchorage berth)
+  - seamark:type = mooring        (buoy / mooring)
+  - natural      = bay            (natural bay — kept only if named)
+  - leisure      = anchorage      (non-standard but widespread tag)
 """
 from __future__ import annotations
 
@@ -44,7 +43,7 @@ from app.services.marina_build import (
 )
 
 # ---------------------------------------------------------------------------
-# Tags OSM conservés sur le document mouillage
+# OSM tags kept on the anchorage document
 # ---------------------------------------------------------------------------
 
 KEPT_TAGS = (
@@ -77,7 +76,7 @@ KEPT_TAGS = (
     "addr:country",
 )
 
-# Catégorie S-57 (catach) → libellés
+# S-57 category (catach) → labels
 ANCHORAGE_CAT_LABELS = {
     "1": "Non restreint",
     "2": "Réservé",
@@ -115,7 +114,7 @@ out center tags;
 
 
 def anchorage_bbox_body(south: float, west: float, north: float, east: float) -> str:
-    """Requête bbox groupée pour la couverture corridor (buffer réel)."""
+    """Grouped bbox query for corridor coverage (real buffer)."""
     bb = f"{south:.5f},{west:.5f},{north:.5f},{east:.5f}"
     return f"""[out:json][timeout:120];
 (
@@ -144,7 +143,7 @@ async def overpass_fetch_anchorages(
     max_retries: int = 3,
     logger=None,
 ) -> list[dict]:
-    """Comme marinas.overpass_fetch mais avec la requête mouillages."""
+    """Like marinas.overpass_fetch but with the anchorage query."""
     body = _anchorage_query_body(lat, lon, radius_m)
     last_err: Exception | None = None
     for attempt in range(max_retries):
@@ -227,8 +226,8 @@ def _overpass_elem_to_anchorage(elem: dict) -> dict | None:
         or tags.get("alt_name")
     )
     if not name:
-        # Baies anonymes = bruit → écartées. Les mouillages seamark anonymes
-        # sont volontairement cartographiés, on les garde avec un nom fallback.
+        # Anonymous bays = noise → dropped. Anonymous seamark anchorages
+        # are mapped on purpose; keep them with a fallback name.
         if anchorage_type == "bay":
             return None
         if anchorage_type == "anchor_berth":
@@ -275,7 +274,7 @@ def _anchorage_doc(cand: dict, wps, now_iso: str) -> dict:
         },
         "dedup_key": dedup_key(cand["name"], cand["lat"], cand["lon"]),
         "fetched_at": now_iso,
-        "enriched": False,   # jamais d'enrichissement pour les mouillages
+        "enriched": False,   # never enrich anchorages
         "stale": False,
     }
 
@@ -295,10 +294,9 @@ async def build_anchorages(
     corridor_radius_nm: float = 25.0,
     run_id: str | None = None,
 ) -> dict:
-    """
-    Build complet : OSM autour de chaque waypoint + bande corridor
-    ±corridor_radius_nm (bbox-batched, fallback per-point), dedup,
-    `run_id` : écriture isolée (collection `marina_run_anchorages`).
+    """Full build: OSM around each waypoint + corridor band
+    ±corridor_radius_nm (bbox-batched, per-point fallback), dedup,
+    `run_id`: isolated write (collection `marina_run_anchorages`).
     """
     from app.services.isolated_runs import bind_run, reset_run
 
@@ -480,9 +478,9 @@ async def build_anchorages(
 
 
 # ---------------------------------------------------------------------------
-# Dump mondial (2026-09) — tuiles côtières, plus de corridor 25 NM.
-# Même mécanique que build_world_marinas : grille WORLD_TILES, curseur
-# reprenable, upsert par dedup_key, jamais de purge.
+# World dump (2026-09) — coastal tiles, no more 25 NM corridor.
+# Same mechanics as build_world_marinas: WORLD_TILES grid, cursor
+# resumable, upsert by dedup_key, never purge.
 # ---------------------------------------------------------------------------
 
 async def fetch_tile_anchorages(
@@ -491,7 +489,7 @@ async def fetch_tile_anchorages(
     *,
     logger=None,
 ) -> list[dict]:
-    """Bbox Overpass mouillages sur une tuile ; split récursif si trop vaste."""
+    """Overpass anchorage bbox on a tile; recursive split if too large."""
     from app.services.marina_build import overpass_fetch_bbox
     from app.services.marina_world import (
         should_split_before_overpass,
@@ -526,7 +524,7 @@ async def fetch_tile_anchorages(
 
 
 async def upsert_world_anchorage(coll, doc: dict) -> str:
-    """Upsert par dedup_key — on ne purge jamais, on ne duplique jamais."""
+    """Upsert by dedup_key — never purge, never duplicate."""
     existing = await coll.find_one({"dedup_key": doc["dedup_key"]}, {"_id": 1})
     if existing:
         payload = dict(doc)
@@ -549,11 +547,10 @@ async def build_world_anchorages(
     throttle_s: float | None = None,
     fetch_tile=None,
 ) -> dict:
-    """
-    Balaye les tuiles côtières mondiales (comme les marinas) et upsert les
-    mouillages par dedup_key. La route ne sert plus qu'à calculer la
-    priorité / le waypoint le plus proche de chaque mouillage.
-    `fetch_tile` est injectable pour les tests (pas d'Overpass).
+    """Sweep world coastal tiles (like marinas) and upsert
+    anchorages by dedup_key. The route is only used to compute
+    priority / the nearest waypoint of each anchorage.
+    `fetch_tile` is injectable for tests (no Overpass).
     """
     from app.services.marina_world import (
         USER_AGENT as MW_USER_AGENT,

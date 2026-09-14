@@ -1,16 +1,17 @@
-"""URLs officielles curées (territories.json) rattachées à un polygone VLIZ.
+"""Curated official URLs (territories.json) attached to a VLIZ polygon.
 
-Lecture seule. Ne pas importer zee_crossings (WFS / shapely) depuis la fiche.
-Le mapping MRGID → code est le même que dans zee_crossings.MRGID_TO_TERRITORY.
+Read-only. Do not import zee_crossings (WFS / shapely) from the card.
+The MRGID → code mapping is the same as in zee_crossings.MRGID_TO_TERRITORY.
 """
 from __future__ import annotations
 
 import json
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from app.config import DATA_DIR
 
-# VLIZ v12 → territories.json (vérifié 2026-06, même table que zee_crossings).
+# VLIZ v12 → territories.json (checked 2026-06, same table as zee_crossings).
 MRGID_TO_TERRITORY: dict[int, str | None] = {
     5677: "france_metropolitaine",
     48966: "france_metropolitaine",
@@ -66,11 +67,11 @@ def _territory_for_mrgid(mrgid) -> dict:
 
 
 def curated_landing_urls(mrgid) -> list[dict]:
-    """Page d'État de CE polygone — point d'entrée crawl, pas un PDF figé.
+    """State page of THIS polygon — crawl entry point, not a frozen PDF.
 
-    Les PDF liés changent (liste plaisance 2025 → 2026). On part de la page
-    et on suit les pièces jointes courantes. Jamais les ref_url des ports
-    (elles pinent un fichier périmé).
+    Linked PDFs change (pleasure-craft list 2025 → 2026). Start from the page
+    and follow current attachments. Never port ref_urls
+    (they pin a stale file).
     """
     raw = (_territory_for_mrgid(mrgid).get("ref_url") or "").strip()
     if not raw.startswith("http"):
@@ -79,7 +80,7 @@ def curated_landing_urls(mrgid) -> list[dict]:
 
 
 def curated_td_urls(mrgid) -> list[dict]:
-    """Pages / PDF d'État curés pour CE polygone — pas l'agrégat souverain."""
+    """Curated state pages / PDFs for THIS polygon — not the sovereign aggregate."""
     terr = _territory_for_mrgid(mrgid)
     if not terr:
         return []
@@ -98,3 +99,43 @@ def curated_td_urls(mrgid) -> list[dict]:
         seen.add(u)
         out.append({"url": u, "official": True, "from_arm": "td"})
     return out
+
+
+def official_domains_for_mrgid(mrgid) -> tuple[str, ...]:
+    terr = _territory_for_mrgid(mrgid)
+    return tuple(
+        str(d).lower().lstrip(".")
+        for d in (terr.get("official_domains") or [])
+        if d
+    )
+
+
+def _host_matches_domain(host: str, domain: str) -> bool:
+    host = (host or "").lower().lstrip(".")
+    domain = (domain or "").lower().lstrip(".")
+    if not host or not domain:
+        return False
+    return host == domain or host.endswith("." + domain)
+
+
+def td_url_fits_polygon(url: str, zone: dict | None) -> bool:
+    """True si la page peut appartenir à CE polygone.
+
+    Quand le polygone n'est pas le souverain (NC ≠ FR), on n'accepte que
+    les domaines curés / le ccTLD local. Légifrance et mer.gouv.fr restent
+    sur la France hexagone, pas sur Nouméa.
+    Sans référentiel (Saba…) : on ne filtre pas.
+    """
+    zone = zone or {}
+    iso2 = str(zone.get("iso2") or "").strip().upper()
+    sov = str(zone.get("sov_iso2") or "").strip().upper()
+    official = official_domains_for_mrgid(zone.get("mrgid"))
+    if not official or not iso2 or not sov or iso2 == sov:
+        return True
+    host = (urlparse(url or "").hostname or "").lower().lstrip(".")
+    if not host:
+        return False
+    if any(_host_matches_domain(host, d) for d in official):
+        return True
+    cc = iso2.lower()
+    return host == cc or host.endswith("." + cc)

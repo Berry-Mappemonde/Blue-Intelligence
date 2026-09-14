@@ -1,4 +1,4 @@
-"""Pilote Sentinel : hors moisson SOURCES, GeoJSON versionné."""
+"""Sentinel pilot: outside the SOURCES harvest, versioned GeoJSON."""
 from __future__ import annotations
 
 import sys
