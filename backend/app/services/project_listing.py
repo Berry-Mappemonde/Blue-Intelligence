@@ -131,7 +131,7 @@ def is_listing_path(path: str, *, apply_blacklist: bool = True) -> bool:
     if last not in leaves:
         return False
     # A card often has a slug after the motif (4th segment already excluded).
-    # 2+ meaningful dont le dernier n'est PAS seulement le motif? last IS a leaf
+    # 2+ meaningful whose last is NOT only the motif? last IS a leaf
     # `/projects/coral-restore` → meaningful=[projects, coral-restore], last not leaf → False. OK.
     return True
 
