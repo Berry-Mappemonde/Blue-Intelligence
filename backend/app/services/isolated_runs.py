@@ -1,11 +1,11 @@
-"""Runs isolés communs (Marinas, Capitaineries, AMP).
+"""Shared isolated runs (Marinas, Harbormasters, AMP).
 
-Calque Projets / PoE : un `run_id`, des collections `*_run_*`, snapshot de
-règles, journal d'événements. Les collections live (`marinas`,
-`capitaineries`, `amp_sites`, `anchorages`) ne sont jamais écrites.
+Projects / PoE overlay: a `run_id`, `*_run_*` collections, rules
+snapshot, event journal. Live collections (`marinas`,
+`capitaineries`, `amp_sites`, `anchorages`) are never written.
 
-Les documents déjà présents dans `marina_runs` (dumps live historiques) sont
-conservés : `open_run` n'écrase que par `_id` inexistant (`$setOnInsert`).
+Documents already in `marina_runs` (historic live dumps) are
+kept: `open_run` only overwrites when `_id` is missing (`$setOnInsert`).
 """
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def run_doc_id(raw_id) -> str:
 
 
 def stamp(doc: dict, *, source_id=None, wrote_flag: str | None = None) -> dict:
-    """Pose run_id / source_id / wrote_* sur une copie. No-op hors run isolé."""
+    """Stamp run_id / source_id / wrote_* on a copy. No-op outside an isolated run."""
     rid = current_run_id()
     out = dict(doc)
     if not rid:
@@ -199,7 +199,7 @@ async def open_run(
     profile: str | None = None, to_file: bool = True,
     resume: bool = False,
 ) -> dict:
-    """Crée (ou reprend) un document de run. N'écrit jamais la collection live."""
+    """Create (or resume) a run document. Never write the live collection."""
     spec = spec_for(dataset)
     await ensure_indexes(db, dataset)
     settings = settings or {}
@@ -212,7 +212,7 @@ async def open_run(
 
     rid = run_id or new_run_id()
     existing = await meta.find_one({"_id": rid})
-    # Dumps live historiques (`wrote_*=true`) : ne pas les reprendre ni les muter.
+    # Historic live dumps (`wrote_*=true`): do not resume or mutate them.
     if existing and existing.get(spec.wrote_flag):
         existing = None
         rid = new_run_id()
@@ -316,7 +316,7 @@ async def finalize_run(db, dataset: str, run_id: str, *, cancelled: bool = False
 
 async def write_item(db, dataset: str, run_id: str, doc: dict, *,
                      source_id=None) -> str:
-    """Upsert une fiche dans l'espace du run. Jamais la collection live."""
+    """Upsert a card in the run space. Never the live collection."""
     if not run_id:
         raise ValueError("run_id required — isolated run only")
     spec = spec_for(dataset)
@@ -398,7 +398,7 @@ def _summary_count(doc: dict) -> int:
 
 
 async def list_meta_runs(db, dataset: str, *, skip_kinds: tuple[str, ...] = ()) -> list[dict]:
-    """Liste les méta-runs (y compris les dumps live historiques)."""
+    """List meta-runs (including historic live dumps)."""
     spec = spec_for(dataset)
     try:
         docs = await coll(db, spec.meta_coll).find({}).to_list(200)
@@ -446,7 +446,7 @@ async def list_meta_runs(db, dataset: str, *, skip_kinds: tuple[str, ...] = ()) 
 
 
 async def get_meta_run(db, dataset: str, run_id: str) -> dict | None:
-    """Détail d'un run : snapshot `chosen` complet."""
+    """Run detail: full `chosen` snapshot."""
     spec = spec_for(dataset)
     try:
         doc = await coll(db, spec.meta_coll).find_one({"_id": run_id})
@@ -492,11 +492,11 @@ _PROMOTE_SKIP = {
 
 async def promote_run_to_live(db, dataset: str, run_id: str, *,
                               replace: bool = False) -> int:
-    """Copie les fiches d'un run terminé vers la collection publique.
+    """Copy cards of a finished run onto the public collection.
 
-    ``replace=True`` (run Full from scratch) : la carte live devient *ce* dump.
-    On ne vide la live que si le run a au moins une fiche — un dump vide
-    n'efface pas la carte.
+    ``replace=True`` (Full from-scratch run): the live map becomes *this* dump.
+    Clear live only if the run has at least one card — an empty dump
+    does not wipe the map.
     """
     spec = spec_for(dataset)
     live_name = LIVE_COLL.get(dataset)
