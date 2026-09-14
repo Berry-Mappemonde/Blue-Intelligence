@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from app.services.review_choices import public_choices
+from app.services.review_lessons import load_lessons, report_rows_from_lessons
 
 REPORT_KINDS = ("eez", "project", "marina", "capitainerie", "amp")
 KIND_LABELS = {
@@ -141,6 +142,9 @@ async def build_report(db, kind: str | None = None) -> dict:
         "visit_kept": [],
         "no_visit": [],
         "domains_dropped": [],
+        "proposer_errors": [],
+        "proposer_agreed": [],
+        "proposer_code_hints": [],
     }
     domains: set[str] = set()
     for row in by_key.values():
@@ -179,6 +183,17 @@ async def build_report(db, kind: str | None = None) -> dict:
             actions["no_visit"].append(base)
     actions["domains_dropped"] = sorted(d for d in domains if d)
 
+    if "eez" in kinds:
+        lessons = await load_lessons(db)
+        titles = {
+            _sid(row["id"]): row["title"]
+            for (k, _eid), row in by_key.items() if k == "eez"
+        }
+        prop = report_rows_from_lessons(lessons, titles)
+        actions["proposer_errors"] = prop["proposer_errors"]
+        actions["proposer_agreed"] = prop["proposer_agreed"]
+        actions["proposer_code_hints"] = prop["proposer_code_hints"]
+
     order = {k: i for i, k in enumerate(REPORT_KINDS)}
     items = sorted(
         by_key.values(),
@@ -186,12 +201,15 @@ async def build_report(db, kind: str | None = None) -> dict:
     summary: dict[str, dict] = {}
     for row in items:
         s = summary.setdefault(row["kind"],
-                               {"fiches": 0, "comments": 0, "gold": 0})
+                               {"fiches": 0, "comments": 0, "gold": 0,
+                                "proposer_errors": 0})
         s["fiches"] += 1
         if row["comment"]:
             s["comments"] += 1
         if row["gold_on"]:
             s["gold"] += 1
+    if "eez" in summary:
+        summary["eez"]["proposer_errors"] = len(actions.get("proposer_errors") or [])
 
     return {
         "generated_at": _now_iso(),
@@ -276,6 +294,35 @@ def report_markdown(report: dict) -> str:
     _section("AMP sans page visite (constat réviseur)",
              actions.get("no_visit") or [],
              lambda r: f"- {r['title']} ({r['id']})")
+
+    misses = actions.get("proposer_errors") or []
+    hints = actions.get("proposer_code_hints") or []
+    agreed_n = len(actions.get("proposer_agreed") or [])
+    if misses or hints or agreed_n:
+        lines += ["## Proposer s'est trompé ici", "",
+                  "Le juge automatique (lot **Proposer**) a divergé du Gold "
+                  "humain. Ces écarts servent à corriger `local_pick`, "
+                  "`list_url_bonus` et le prompt.", ""]
+        if misses:
+            lines.append("### Écarts keep / drop")
+            lines.append("")
+            for r in misses:
+                lines.append(
+                    f"- **{r.get('title')}** ({r.get('id')}) — "
+                    f"<{r.get('url')}> : Proposer `{r.get('proposer')}`, "
+                    f"humain `{r.get('human')}`")
+            lines.append("")
+        else:
+            lines.append("_Aucun écart Proposer / Gold pour l'instant._")
+            lines.append("")
+        lines.append(f"Accords Proposer / humain : {agreed_n} URL(s).")
+        lines.append("")
+        if hints:
+            lines.append("### Indices pour le code")
+            lines.append("")
+            for h in hints:
+                lines.append(f"- {h.get('hint')}")
+            lines.append("")
 
     lines += ["## Détail des fiches", ""]
     items = report.get("items") or []

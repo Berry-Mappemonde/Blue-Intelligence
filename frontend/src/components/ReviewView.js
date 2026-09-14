@@ -46,6 +46,8 @@ export default function ReviewView({ t, mode, onMapDirty }) {
   const [goldOn, setGoldOn] = useState(false);
   const [goldBusy, setGoldBusy] = useState(false);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [suggestJob, setSuggestJob] = useState(null);
+  const [ficheTick, setFicheTick] = useState(0);
   const [goldReady, setGoldReady] = useState(false);
   const [choices, setChoices] = useState({ td: {}, ports: {}, bu: {} });
   const dirtyRef = useRef(false);
@@ -204,7 +206,7 @@ export default function ReviewView({ t, mode, onMapDirty }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [kind, effectiveRunId, current?.id, current?.source_run_id]);
+  }, [kind, effectiveRunId, current?.id, current?.source_run_id, ficheTick]);
 
   const go = useCallback(async (delta) => {
     if (!total) return;
@@ -307,28 +309,34 @@ export default function ReviewView({ t, mode, onMapDirty }) {
   };
 
   const suggestDocs = async () => {
-    if (!current || suggestBusy || kind !== "eez") return;
+    if (suggestBusy || kind !== "eez") return;
     try {
       setSuggestBusy(true);
-      const { data } = await api.post("/review/suggest", { kind, id: current.id });
-      setChoices(data.choices || { td: {}, ports: {}, bu: {} });
-      if (data.comment != null) {
-        setComment(data.comment);
-        commentRef.current = data.comment;
-        dirtyRef.current = false;
-      }
-      if (data.comment_updated_at) setSavedAt(data.comment_updated_at);
-      setGoldReady(Boolean(data.gold_ready));
-      setQueue((items) => items.map((it) => (
-        it.id === current.id
-          ? { ...it, has_comment: Boolean((data.comment || "").trim()) }
-          : it
-      )));
+      await api.post("/review/suggest", { kind, scope: "all" });
     } catch (e) {
-      /* transient */
-    } finally {
-      setSuggestBusy(false);
+      const status = e?.response?.status;
+      if (status !== 409) {
+        setSuggestBusy(false);
+        return;
+      }
     }
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const { data } = await api.get("/review/suggest/status");
+        setSuggestJob(data);
+        if (data.running) {
+          window.setTimeout(poll, 2000);
+          return;
+        }
+        setSuggestBusy(false);
+        setFicheTick((n) => n + 1);
+      } catch (err) {
+        setSuggestBusy(false);
+      }
+    };
+    poll();
   };
 
   const renderFiche = () => {
@@ -528,11 +536,16 @@ export default function ReviewView({ t, mode, onMapDirty }) {
               <button
                 type="button"
                 data-testid="review-suggest"
+                title={t("reviewSuggestHint")}
                 onClick={suggestDocs}
-                disabled={!current || suggestBusy}
+                disabled={suggestBusy}
                 className="px-3 py-1.5 text-[11px] font-semibold border border-line rounded-sm text-slate-300 hover:bg-raised disabled:opacity-40"
               >
-                {suggestBusy ? t("reviewSuggesting") : t("reviewSuggest")}
+                {suggestBusy
+                  ? `${t("reviewSuggesting")} ${suggestJob?.total
+                    ? `${suggestJob.progress || 0}/${suggestJob.total}`
+                    : ""}`.trim()
+                  : t("reviewSuggest")}
               </button>
             ) : null}
             <button
