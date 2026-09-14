@@ -16,7 +16,6 @@ import useScienceLayer from "./map/useScienceLayer";
 import useScienceWms, { ensureWmsPanes } from "./map/useScienceWms";
 import useBiOverlay from "./map/useBiOverlay";
 import useSafetyIsobath from "./map/useSafetyIsobath";
-import MapChrome from "./map/MapChrome";
 import useNoaaAids from "./map/useNoaaAids";
 import useClimatologyLayer from "./map/useClimatologyLayer";
 import { DEFAULT_SAFETY_M } from "./map/safetyIsobathSpec";
@@ -36,8 +35,9 @@ export default function MapView({
   flyToScience,
   scienceWms,
   overlayOn = true,
-  onToggleOverlay,
   nauticalAllowed = true,
+  safetyM = DEFAULT_SAFETY_M,
+  noaaAidsOn = false,
   scienceSourceFilter = "argo",
   climoMonth = 1,
   climoFilters = { wind: true, wave: true, current: true, cyclones: true },
@@ -230,8 +230,6 @@ export default function MapView({
   }, [minZoom]);
 
   const [glMap, setGlMap] = useState(null);
-  const [safetyM, setSafetyM] = useState(DEFAULT_SAFETY_M);
-  const [noaaAidsOn, setNoaaAidsOn] = useState(false);
   const nauticalActive = useNauticalBasemap({
     mapObj, tileRef, basemap, enabled: nauticalAllowed, onGlMap: setGlMap,
   });
@@ -415,17 +413,6 @@ export default function MapView({
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} data-testid="map-container" className="w-full h-full" />
-      <MapChrome
-        t={t}
-        overlayOn={overlayOn}
-        onToggleOverlay={onToggleOverlay}
-        nauticalActive={nauticalActive}
-        safetyM={safetyM}
-        onSafetyM={setSafetyM}
-        mode={mode}
-        noaaAidsOn={noaaAidsOn}
-        onToggleNoaaAids={setNoaaAidsOn}
-      />
       {nauticalActive ? (
         <div
           data-testid="nautical-disclaimer"

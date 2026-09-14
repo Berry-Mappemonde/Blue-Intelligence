@@ -18,7 +18,7 @@ const SOURCE_FILTERS = [
 /**
  * SciencePanel — liste latérale du mode Science : jeux de données océano
  * (Sextant/ODATIS/EDMED) + flotteurs Argo + tracés CSR, filtres par source.
- * Les couches WMS EMODnet sont dans EmodnetWmsBox (bas de barre latérale).
+ * Les couches WMS EMODnet sont dans MapLayersSidebar (barre droite).
  */
 export default function SciencePanel({
   t, science, onFlyTo, onRefresh,
