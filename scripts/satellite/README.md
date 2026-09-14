@@ -54,6 +54,13 @@ n’est pas le bon (CDSE = dataspace.copernicus.eu, pas CMEMS).
 ACOLITE a besoin du **L1C** (image brute). Le **L2A** (déjà corrigé par
 l’ESA) est refusé : *Level-2A data not supported*.
 
+**Pourquoi ne pas utiliser le L2A ESA, plus « prêt » ?** L’ESA corrige
+surtout pour la terre (champs, forêts). Sur l’eau, cette correction
+est souvent mauvaise. ACOLITE part du L1C et corrige pour le littoral.
+On ne saute donc pas ACOLITE : ce n’est pas plus long pour rien.
+Le zip L2A déjà téléchargé peut rester sur le Bureau ; on ne le
+pointe pas dans ACOLITE.
+
 D’abord rafraîchir la liste (scènes `MSIL1C`) :
 
 ```bash
