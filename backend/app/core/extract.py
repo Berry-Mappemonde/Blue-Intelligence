@@ -11,9 +11,11 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
                            pour les pages JavaScript et les challenges « soft ».
-                           Jamais sur une URL .pdf ni un captcha dur (SiteGround,
-                           Akamai) — Chromium plante le process sous MemoryHigh.
-                           Allumé seulement si le HTML simple ET Fetch ont échoué.
+                           Chromium tourne dans un sous-processus (comme
+                           PyMuPDF) : un ABRT ne tue plus l'API. Jamais sur une
+                           URL .pdf, une image (.png/.jpg…) ni un captcha dur
+                           (SiteGround, Akamai). Allumé seulement si le HTML
+                           simple ET Fetch ont échoué.
   Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
 
 TinyFish Fetch n'est pas supprimé : c'est le bon outil quand on a besoin du
@@ -89,7 +91,9 @@ SERP_HARD_RE = re.compile(
     r"|doordash\.com"
     r"|//unblock\.|\.unblock\.|/cdn-cgi/|captcha|datadome|perimeterx"
     r"|queue-it\.net|incapsula|distilnetworks"
-    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?))",
+    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?)"
+    r"|\.png($|\?)|\.jpe?g($|\?)|\.gif($|\?)|\.webp($|\?)|\.svg($|\?)"
+    r"|\.bmp($|\?)|\.ico($|\?)|\.tiff?($|\?)|\.avif($|\?))",
     re.I,
 )
 
@@ -187,6 +191,68 @@ def url_looks_like_pdf(url: str | None) -> bool:
     """Chemin .pdf — même si le serveur sert un HTML de captcha à la place."""
     path = (urlparse(url or "").path or "").lower()
     return path.endswith(".pdf")
+
+
+_IMAGE_EXTS = frozenset({
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "avif",
+})
+
+
+def path_looks_like_image(path: str | None) -> bool:
+    """Dernier segment .png/.jpg/… — portraits WordPress, pas une fiche."""
+    name = unquote((path or "").split("?")[0]).rsplit("/", 1)[-1].lower()
+    if "." not in name:
+        return False
+    return name.rsplit(".", 1)[-1] in _IMAGE_EXTS
+
+
+def url_looks_like_image(url: str | None) -> bool:
+    """URL d'image — Chromium + trafilatura dessus font exploser la RAM."""
+    return path_looks_like_image(urlparse(url or "").path)
+
+
+def content_is_image(content: bytes | None, content_type: str = "",
+                     url: str = "") -> bool:
+    """Vrais octets image (magic / Content-Type). Un HTML d'erreur n'en est pas une."""
+    blob = content or b""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:3] == b"\xff\xd8\xff":
+        return True
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    if len(blob) >= 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    head = blob.lstrip()[:80].lower()
+    if head.startswith(b"<") or head.startswith(b"{") or head.startswith(b"<!doctype"):
+        return False
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    if ctype.startswith("image/"):
+        return True
+    return bool(url_looks_like_image(url) and blob[:1] not in (b"<", b"{"))
+
+
+_HTMLISH_TYPES = frozenset({
+    "text/html", "application/xhtml+xml", "application/xhtml",
+    "text/xml", "application/xml", "text/plain",
+})
+
+
+def content_looks_like_html(content: bytes | None, content_type: str = "") -> bool:
+    """Vrai document à parser. Un PNG lu comme de l'UTF-8 n'en est pas un."""
+    blob = content or b""
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    head = blob.lstrip()[:80]
+    if head.startswith(b"<") or head.lower().startswith(b"<!doctype"):
+        return True
+    if ctype.startswith("image/") or ctype in {
+        "application/pdf", "application/zip", "application/octet-stream",
+        "application/gzip", "audio/mpeg", "video/mp4",
+    }:
+        return False
+    if ctype in _HTMLISH_TYPES or ctype.startswith("text/"):
+        return True
+    return False
 
 
 def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
@@ -1842,6 +1908,11 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
         out["error"] = "maps_render_url"
         return out
 
+    if url_looks_like_image(url):
+        log("URL image — cascade sautée (pas une fiche, pas de Chromium)")
+        out["error"] = "image_url"
+        return out
+
     content = None
     ctype = ""
     disposition = ""
@@ -1857,7 +1928,15 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
 
     if content is not None:
         out["md5"] = hashlib.md5(content).hexdigest()
+        if content_is_image(content, ctype, out["final_url"] or url):
+            log("contenu image — cascade sautée, pas de Chromium")
+            out["error"] = "image_content"
+            return out
         is_pdf = content_is_pdf(content, ctype, out["final_url"] or url, disposition)
+        if not is_pdf and not content_looks_like_html(content, ctype):
+            log("contenu binaire — cascade sautée, pas de Chromium")
+            out["error"] = "binary_content"
+            return out
         out["is_pdf"] = is_pdf
         if keep_raw and content:
             out["raw"] = content
