@@ -4,6 +4,8 @@ Le cahier `docs/CAHIER_DES_CHARGES_REVIEW.md` v1.1 est le **contrat de relecture
 
 Ce document propose le **même geste Review**, adapté à chaque mode produit. Review reste le **troisième onglet** (Map / Console / Review) : il ouvre la file du **mode actif**.
 
+Formalités est le **mode de référence déjà implémenté** (documents, pas les ports ; Proposer ; leçons Gold ; extract après Gold). On calque **le geste**, pas l’objet, pas les jetons `habilitados` / `jorf`, pas le filtre EN·FR·ES. Avant d’écrire un Proposer AMP / Projets / marinas, on met à jour **cette** page.
+
 **Science** et **Climatologie** n’ont **pas** de file Review en V1 (plan C8) : moisson / snapshot, pas un run Gold. L’onglet Review y affiche un placeholder. Ce document ne les couvre pas.
 
 Hérite de : `docs/CAHIER_DES_CHARGES_REVIEW.md`, `docs/CONTRATS_MODES.md`, `docs/CAHIER_DES_CHARGES_POE.md`, `docs/CAHIER_DES_CHARGES_PROJETS.md`.
@@ -26,10 +28,52 @@ Review est une **file de relecture qui aboutit à un run certifié**. Ce n’est
 | **Run isolé = debug** | Utile pour comprendre un moteur. On ne goldise pas un canari / smoke / seed-enrich. |
 | **Clé de commentaire** | `{mode}:{entity_id}` sur la fiche union. Plus `{kind}:{run_id}:{id}` comme clé de job. |
 | **Listing-control** | Reste en Console. Pas une file Review. |
+| **Gold = la preuve, pas la liste dérivée** | On tranche le document / l’identité / le couple d’URLs. On ne goldise pas 137 ports, ni chaque mention financeur, ni le polygone AMP. |
+| **Montrer toutes les preuves** | Le pipeline range ; l’UI ne cache rien « pour faire propre ». Une home reste visible pour qu’on l’écarte. |
+| **« Aucune preuve » est une décision** | UNCLOS / `none` (Formalités), `no_visit` (AMP), `unlocated` (Projets, **pas** un GPS inventé), « pas une marina / pas un bureau ». |
+| **Proposer ≠ Gold** | Un juge (local ∥ LLM) peut pré-remplir. Il écrase cases et commentaires. **Il ne Gold pas.** Il n’écrit pas le live. |
+| **Gold d’abord, dérivé ensuite** | Le snapshot fige la preuve. Un job plus tard extrait / nettoie **depuis cette preuve seulement**. |
+| **Pré-Gold = file, pas certificat** | « OSM a un point » range la fiche. Ça n’allume pas Gold. |
 
-**Phrase de test.** Un test qui enregistre un commentaire et voit la collection live mutée **casse le contrat**. Un test qui clique Gold et ne voit **pas** la fiche dans le run certifié **casse aussi le contrat**. Un test qui clique Gold et voit la Map **changer sans** « Afficher la review » **casse le contrat**.
+**Phrase de test.** Un test qui enregistre un commentaire et voit la collection live mutée **casse le contrat**. Un test qui clique Gold et ne voit **pas** la fiche dans le run certifié **casse aussi le contrat**. Un test qui clique Gold et voit la Map **changer sans** « Afficher la review » **casse le contrat**. Un test où Proposer allume Gold **casse le contrat**.
 
 Ce qui change par mode : **la question que le réviseur tranche**, **ce qui est une preuve**, **quand Gold s’allume**. L’effet Map est **le même** pour tous les modes (§8).
+
+---
+
+## 0.1 Leçons Formalités — ce qu’on calque, ce qu’on ne copie pas
+
+Ces règles viennent du contrat Formalités déjà en prod (Gold documents, juge vision, lot Proposer, `review_lessons`). Elles **priment** sur une copie naïve du code `review_doc_picker.py`.
+
+### Ce qu’on calque (geste)
+
+| Leçon | Sens pour les autres files |
+|-------|----------------------------|
+| **Une question par mode** | Gold s’allume quand *cette* question est tranchée, pas quand tout est coché. |
+| **Grain de l’objet** | France hexagone ≠ Mayotte (`mrgid`). Un projet à n sites ≠ un centroïde mondial. Un bureau ≠ la marina à 400 m. Une AMP = un `site_id` sur **une** façade. |
+| **Blacklist au grain du chemin / de l’objet** | Une actu `gob.mx` nulle n’interdit pas le PDF officiel du même domaine. On blackliste un **chemin** ou un `mrgid`, pas un hostname entier par défaut. |
+| **Local ∥ LLM, liste fermée** | L’heuristique tourne en parallèle du LLM. Le LLM **n’invente aucune URL** hors des candidats déjà sur la fiche. Vision utile si la preuve est une page / un PDF ; inutile pour un tag OSM. |
+| **HITL** | Proposer écrit `review_suggest`. Gold écrit `review_lessons` (écart keep/drop). Le lot suivant relit ces leçons (few-shot + score de chemin). Le rapport dit « Proposer s’est trompé ici » — **il n’écrit pas les règles**. |
+| **Clés par `kind`** | Aujourd’hui `review_lessons` / `review_suggest` sont préfixés `eez:`. En copiant : `project:`, `amp:`, etc. Pas un fourre-tout Formalités. |
+
+### Ce qu’on ne copie pas (métier Formalités)
+
+- Jetons de chemin `habilitados`, `jorf`, `puertos` — chaque mode a **sa** liste.
+- Filtre de langue EN / FR / ES du pilote Toloka / SERP Formalités.
+- Cases `ports_ok` / un clic par objet dérivé comme condition Gold.
+- Gold automatique parce que « la source a l’air officielle » (OSM ⇒ marina certifiée ; toutes les capitaineries `gold_on`).
+- Une QA LLM qui **rejoue** Proposer (même pages, même question) au lieu d’auditer l’humain.
+- Relancer un crawl, SearXNG, ou écrire `poe_ports` / live « pour voir la carte tout de suite ».
+
+### Ordre d’implémentation (quand on copiera)
+
+1. **AMP** — même geste « parmi ces URLs, laquelle est *la* preuve de *cet* objet ». `visit_candidates` + `no_visit` déjà là. Un Proposer + leçons s’y branche presque tel quel.
+2. **Projets** — deux questions (URL projet + site `site_ok`). Gold déjà plus strict. Le juge refuse `snap_to_ocean` / HQ et n’invente aucune URL.
+3. **Marinas / Capitaineries** — d’abord le méta-contrat (Gold = clic identité + GPS). Ensuite un petit juge de **champs sourcés**, pas un lot mondial sur tout le dump OSM.
+
+Infrastructure à **factoriser** (pas le prompt) : job `TaskState` + `GET /review/suggest/status`, `compare_verdicts`, few-shot par proximité (pays / façade / souverain), cascade vision déjà dans `complete_json_cascade`, rapport en lecture seule.
+
+**Crowd / Toloka** (hors V1) : si on délègue, on délègue **le même geste** (ces liens sont-ils la bonne preuve de *cet* objet ?), pas l’extraction des ports / sites / VHF. Ça n’entre pas dans ce contrat produit.
 
 ---
 
@@ -49,13 +93,15 @@ Cinq modes produit, **cinq files**. Pas de file `poe` séparée (accident d’im
 
 ## 2. Formalités — contrat de référence (déjà écrit)
 
-C’est `docs/CAHIER_DES_CHARGES_REVIEW.md` §3.4 / §7.2 / §11. On ne le réécrit pas. On le **nomme** pour que les autres files calquent le geste, pas l’objet.
+C’est `docs/CAHIER_DES_CHARGES_REVIEW.md` §3.4 / §7.2 / §11. On ne le réécrit pas. On le **nomme** pour que les autres files calquent le geste, pas l’objet. État code (référence, pas à recopier mot à mot) : `review_doc_picker.py`, `review_lessons.py`, `review_extract.py`.
 
 **Question.** Parmi toutes les TD déjà trouvées pour **ce** `mrgid`, laquelle (ou lesquelles) est *la* liste d’État de **ce** polygone ? Gold fige ces documents. Les ports sont extraits ensuite depuis ces URLs (pas un clic par nom). Sinon UNCLOS.
 
-**Interdit.** Pays à la place du polygone. File ports séparée. Cacher des TD « pour n’en garder qu’une ». Noonsite / wiki / forum comme preuve. WPI comme preuve **positive** de plaisance (sauf mixte explicite). Goldiser un canari.
+**Interdit.** Pays à la place du polygone. File ports séparée. Cacher des TD « pour n’en garder qu’une ». Noonsite / wiki / forum comme preuve. WPI comme preuve **positive** de plaisance (sauf mixte explicite). Goldiser un canari. Cocher les ports comme condition Gold. Blacklister un domaine entier parce qu’une actu est nulle.
 
-**Écritures Review.** Commentaire ; `keep_td` / `blacklist_url` / `blacklist_domain` / `keep_port` / `drop_port` (grain `mrgid`, agrégat souverain) ; Gold = snapshot dans le **run certifié**. Map Formalités reste le **run unique** tant que « Afficher la review » est décoché.
+**Écritures Review.** Commentaire ; keep/drop **TD** (et URLs collées) au grain `mrgid` ; pin / blacklist de **chemin** (secours ISO2) ; Gold = snapshot `{sources_td, ports: [], ports_status: pending_extract}` dans le **run certifié**. Le job extract remplit ensuite `review_gold.snapshot` seulement — jamais `poe_ports`. Map Formalités reste le **run unique** tant que « Afficher la review » est décoché.
+
+**Proposer (déjà là).** Un clic lance le lot sur **toutes** les fiches Formalités (`POST /api/review/suggest` `scope=all`). Écrase cases et commentaires. **Ne Gold pas.** Au Gold : `review_lessons` compare la dernière proposition à tes keep/drop. Le lot suivant réinjecte few-shot + score de chemin. Le rapport a une section **« Proposer s’est trompé ici »**.
 
 ---
 
@@ -100,11 +146,22 @@ Files d’entrée (CDC phase D) : `snapped`, `fallback`, `unlocated`, `hq_suspec
 
 **Le clic** : fige URLs + sites acceptés ; écrit la fiche dans le **run certifié** (`review_gold` kind `project`). Map Projets continue d’afficher le **run unique**. Le run certifié n’apparaît que si « Afficher la review » est coché. Sert ensuite à recalibrer le gatekeeper (CDC D2–D3) — **après** un Gold, pas avant.
 
-**Ne fait pas** : goldiser tout le run d’un coup ; republier un `ocean_fallback` ; coller un polygone AMP comme preuve de projet ; retirer un projet de la carte par défaut.
+**Ne fait pas** : goldiser tout le run d’un coup ; republier un `ocean_fallback` ; coller un polygone AMP comme preuve de projet ; retirer un projet de la carte par défaut ; goldiser parce que le pipeline a dit `site_ok`.
 
 ### 3.6 Ce que Review ne décide pas
 
 Relancer le swarm. Purger `projects`. Traiter un financeur comme un projet. Croiser projet ↔ PoE (hors périmètre CDC).
+
+### 3.7 Ce qu’on calque de Formalités (pas encore implémenté)
+
+Deuxième file à doter d’un Proposer, **après AMP** (§0.1).
+
+- **Question du juge.** Parmi les URLs déjà sur la fiche, lesquelles sont une **page projet** ? Parmi les `sites[]`, lesquels sont un **lieu d’action** `site_ok` (pas HQ, pas snapped, pas fallback) ?
+- **Liste fermée.** Aucune URL inventée. Aucun GPS inventé. `unlocated` reste en file.
+- **Montrer tout.** Toutes les URLs, tous les sites, tous les verdicts pipeline — visibles, pas une URL « pour faire propre ».
+- **HITL.** `review_suggest` kind `project` ; leçons au Gold ; few-shot prioritaire même pays / même financeur ; score de chemin `donate` / `careers` / `news` / `jobs` (liste **Projets**, pas les jetons Formalités).
+- **Après Gold.** Recalibrer le gatekeeper (CDC D2–D3) à partir du rapport, **pas** en écrivant `projects` depuis Proposer.
+- **Vision.** Utile (page projet vs listing / donate). Même cascade que Formalités, autre prompt.
 
 ---
 
@@ -153,13 +210,23 @@ L’enrichissement (VHF, places visiteurs, tirant, tél) est-il **lu** sur une p
 
 ### 4.6 Écart code
 
-`GOLD_KINDS` contient déjà `marina`. `is_pre_gold_marina` = source OSM → **tout le dump est pré-Gold**. C’est un interrupteur trop large : le contrat proposé exige un **clic** (identité + GPS vus), pas « OSM ⇒ Gold ».
+`GOLD_KINDS` contient `marina`. `gold_pressed` ignore le pré-Gold (Gold = override allumé). `is_pre_gold_marina` range encore **tout le dump OSM avec GPS** dans le filtre « pré-Gold » de la file : ça reste un **interrupteur de file trop large**, pas un certificat. Le contrat exige un **clic** (identité + GPS vus). Ne pas relire « pré-Gold » comme « déjà certifié ».
+
+### 4.7 Ce qu’on calque de Formalités (pas encore implémenté)
+
+**Dernière** file pour un juge automatique. L’objet est un point OSM, pas une page d’État.
+
+- **Pas de lot mondial** sur tout le dump OSM (coût, bruit, geste différent).
+- **Oui** : un petit juge de **champs sourcés** (VHF, places, tirant, tél) — garder le tag / la page, écarter l’hallucination. Liste fermée de champs déjà affichés.
+- **« Pas une marina »** = l’équivalent UNCLOS (`dry stack`, resto, club à terre) : décision, pas un Gold silencieux.
+- **Blacklist** : OTA / Tripadvisor **par chemin**, pas « tout `google.com` » à cause d’un `/maps/place/` utile.
+- Vision : peu utile pour l’identité OSM. Inutile de copier le picker Formalités tel quel.
 
 ---
 
 ## 5. Capitaineries — contrat de Review proposé
 
-Mode produit (README, CONTRATS_MODES). **Absent** du CDC Review v1.1 (trois modes). L’UI a déjà `CapitainerieFiche` ; Gold **n’est pas** dans `GOLD_KINDS`.
+Mode produit (README, CONTRATS_MODES). **Absent** du CDC Review v1.1 (trois modes). L’UI a déjà `CapitainerieFiche`. `GOLD_KINDS` contient désormais `capitainerie` ; Gold reste un **clic**.
 
 ### 5.1 Objet
 
@@ -194,19 +261,28 @@ Une fiche = **un bureau** (le bâtiment), pas le plan d’eau, pas la marina. Id
 
 **Actif si** : identité bâtiment + GPS acceptés. Tél / VHF optionnels, mais s’ils sont affichés ils doivent être **gardés** (sourcés).
 
-**Le clic** : Gold kind `capitainerie` (à ajouter) ; fiche dans le **run certifié**. Map Capitaineries continue d’afficher le run unique.
+**Le clic** : Gold kind `capitainerie` ; fiche dans le **run certifié**. Map Capitaineries continue d’afficher le run unique.
 
 **Ne fait pas** : fusionner avec une marina ; réutiliser `same_site` 500 m ; goldiser sans GPS de bâtiment.
 
 ### 5.6 Écart code
 
-La file pose aujourd’hui `pre_gold: true` / `gold_on: true` pour **toutes** les capitaineries. Ça viole le méta-contrat : Gold sans geste. `is_pre_gold_entity(..., capitainerie)` retourne `True` inconditionnel.
+`gold_pressed` n’allume plus Gold tout seul. `is_pre_gold_capitainerie` = bâtiment + GPS : **filtre de file**, pas certificat. Vérifier qu’aucune UI / API ne repose encore `gold_on: true` par défaut (ancien écart : toutes les capitaineries certifiées sans geste).
+
+### 5.7 Ce qu’on calque de Formalités (pas encore implémenté)
+
+Même priorité que les marinas (§4.7) : pas un lot mondial.
+
+- Juge de **champs** (tél / VHF) : sourcé (tag, page officielle) vs inventé / TripAdvisor.
+- Overlay : accepter ou **détacher** (deux bâtiments). Ne pas élargir `merge_km` parce que le juge « a fusionné ».
+- « Pas un bureau » (plan d’eau, ponton, marina) = décision `none`.
+- Aucun rattachement marina ↔ capitainerie comme preuve.
 
 ---
 
 ## 6. AMP — contrat de Review proposé
 
-Mode produit. Fiche UI déjà là (`AmpFiche`). **Pas** dans `GOLD_KINDS`. Pas de `review_choices`.
+Mode produit. Fiche UI déjà là (`AmpFiche`) : `visit_candidates`, keep/drop visite, case « pas de visite ». `GOLD_KINDS` contient `amp`. **Pas** encore de Proposer ni de `review_lessons` kind `amp`.
 
 ### 6.1 Objet
 
@@ -234,7 +310,7 @@ Même esprit que les TD Formalités : **montrer tout, choisir**. Le pipeline pro
 
 | Cible | Actions | Règle |
 |-------|---------|-------|
-| `visit_url` | garder une parmi les candidates / écarter les homepages | Blacklist domaine blog mouillage générique |
+| `visit_url` | garder une parmi les candidates / écarter les homepages | Blacklist **chemin** blog / mouillage générique — pas le domaine entier d’une autorité |
 | « Pas de visite » | assumer `not_found` / `none` | Fiche Gold **incomplète** ou Gold « sans visite » explicite |
 | `manager_url` | corriger si ProtectedSeas a collé un pipe d’URLs | Ne jamais écrire manager dans visit |
 
@@ -248,7 +324,18 @@ Même esprit que les TD Formalités : **montrer tout, choisir**. Le pipeline pro
 
 ### 6.6 Écart code
 
-`GOLD_KINDS` ignore `amp`. La file expose `visit_url` unique, pas la **liste de candidats**. Commentaire possible, pas de choix persistés.
+La fiche montre les candidats et persiste `review_choices.visit` / `no_visit`. L’écart restant : **pas de Proposer**, pas de leçons kind `amp`, le rapport n’a pas encore « Proposer s’est trompé ici » hors Formalités. Si un run n’écrit pas `visit_candidates`, l’UI retombe sur une seule `visit_url` — le pipeline doit **toujours** exposer la liste.
+
+### 6.7 Ce qu’on calque de Formalités (première file à doter)
+
+Geste le plus proche : « parmi ces URLs, laquelle est *la* visite de **ce** `site_id` ? »
+
+- **Liste fermée.** Candidats Search / Fetch seulement. Jamais `visit_url == manager_url`. Jamais une URL hors liste (`ask_yes_no` anti-hallucination).
+- **`no_visit`** = UNCLOS Formalités : Gold possible sans page.
+- **Proposer + HITL.** Même job `TaskState` / `GET …/status` ; clés `amp:{site_id}` ; few-shot par façade / pays ; score de chemin homepage vs permis / mouillage / plaisance (liste **AMP**).
+- **Vision.** Utile (page permis vs home gestionnaire).
+- **Après Gold.** Snapshot `{manager_url, visit_url}` seulement. Pas de redraw du polygone. Pas de SearXNG depuis Review.
+- LFP / désignation = contexte, **pas** critère Gold.
 
 ---
 
@@ -259,7 +346,10 @@ Même esprit que les TD Formalités : **montrer tout, choisir**. Le pipeline pro
 | Commenter | oui | oui | oui | oui | oui |
 | Choisir des URLs | TD + BU | pages projet | website / Maps | page contact | candidats visite |
 | Tranche l’objet | pages / PDF d’État (pas chaque port) | sites keep/drop/édit GPS→Gold | marina vs non | bureau vs plan d’eau | visite vs manager |
-| Blacklist → règles | polygone / souverain | chemins listing | OTA | OTA / réseaux | homepages visite |
+| « Aucune preuve » goldisable | UNCLOS / `none` | non (`unlocated` reste en file) | « pas une marina » | « pas un bureau » | `no_visit` |
+| Blacklist → règles | chemin / `mrgid` (pas le domaine entier) | chemins listing | OTA (chemin) | OTA / réseaux | homepages visite (chemin) |
+| Proposer (juge) | **oui** (lot, ne Gold pas) | à faire (après AMP) | juge de champs, pas un lot OSM | juge de champs, pas un lot | **première copie** |
+| Leçons HITL / rapport écarts | **oui** (`eez`) | à faire (`project:`) | plus tard | plus tard | à faire (`amp:`) |
 | Relancer un crawl | non | non | non | non | non |
 | Inventer un GPS / une URL | non | non | non | non | non |
 | Écrire la live sans Gold | non | non | non | non | non |
@@ -303,20 +393,24 @@ Pas de régime « publication exclusive Formalités ». Pas de « filtre skipper
 - Relance de crawl depuis Review.
 - SearXNG sur marina / capitainerie / AMP.
 - Review / Gold des modes **Science** et **Climatologie** (C8).
+- Copier le picker Formalités (jetons, prompt, filtre EN·FR·ES) tel quel sur un autre mode.
+- QA LLM / crowd qui **rejoue** Proposer au lieu d’auditer le geste humain.
+- Lot Proposer mondial sur le dump OSM marinas / capitaineries.
 
 ---
 
 ## 10. Recette minimale (quand on implémente)
 
 1. Cinq files, une par mode actif. **Zéro** onglet « Ports d’Entrée » à côté de « Polygones ».
-2. Commentaire persisté ; collections live **inchangées**.
-3. Formalités : déjà le CDC Review (toutes TD, Gold → run certifié).
-4. Projets : Gold d’un projet snapped **refusé** tant que le site n’est pas accepté ; Gold d’un projet `site_ok` → fiche dans le run certifié ; le run unique reste sur Map.
-5. Marinas / Capitaineries / AMP : Gold → run certifié ; le run unique reste la carte par défaut.
-6. Capitaineries : plus de `gold_on: true` par défaut ; Gold après acceptation bâtiment.
-7. AMP : plusieurs candidats visite ; Gold refuse `visit_url == manager_url`.
-8. Map : « Afficher la review » coché = run certifié ; décoché = couche du §8. Gold seul ne change pas Map.
-9. Phrase de test du §0 verte pour **chaque** kind.
+2. Commentaire persisté ; collections live **inchangées**. Proposer non plus n’écrit le live ni Gold.
+3. Formalités : déjà le CDC Review (toutes TD, Gold documents, extract ensuite, lot Proposer, leçons). **Référence**, pas un module à dupliquer.
+4. **Avant tout nouveau Proposer** : cette page à jour (§0.1). Ordre : AMP → Projets → juge de champs marinas / capitaineries. Clés `kind:`.
+5. Projets : Gold d’un projet snapped **refusé** tant que le site n’est pas accepté ; Gold d’un projet `site_ok` → fiche dans le run certifié ; le run unique reste sur Map.
+6. Marinas / Capitaineries / AMP : Gold → run certifié ; le run unique reste la carte par défaut. Pré-Gold = filtre de file.
+7. Capitaineries : plus de `gold_on: true` par défaut ; Gold après acceptation bâtiment.
+8. AMP : plusieurs candidats visite ; Gold refuse `visit_url == manager_url` ; `no_visit` goldise.
+9. Map : « Afficher la review » coché = run certifié ; décoché = couche du §8. Gold seul ne change pas Map.
+10. Phrase de test du §0 verte pour **chaque** kind — y compris « Proposer n’allume pas Gold ».
 
 ---
 
@@ -330,21 +424,24 @@ Pas de régime « publication exclusive Formalités ». Pas de « filtre skipper
 | `docs/CONTRATS_MODES.md` | Cinq contrats **pipeline** (pas Review). |
 | `docs/REGLES_PARAMETRES.md` | Règles que les choix Review doivent pouvoir **écrire**. |
 | `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` | Review / Gold = filière **contrôle** ; pas un fond de carte. |
+| Ce document §0.1 / §3.7 / §4.7 / §5.7 / §6.7 | Ce qu’on calque de Formalités **avant** d’écrire un Proposer ailleurs. |
 
 ## 12. Rapport de review
 
-La base garde déjà tout : `review_comments` (clé `{mode}:{entity_id}`), `review_choices`, `review_gold`. Le rapport (`GET /api/review/report`, bouton **Rapport** de l'onglet Review, export JSON ou Markdown) agrège ces trois collections **en lecture seule** pour préparer les améliorations du pipeline :
+La base garde déjà tout : `review_comments` (clé `{mode}:{entity_id}`), `review_choices`, `review_gold`, et côté Formalités `review_suggest` / `review_lessons`. Le rapport (`GET /api/review/report`, bouton **Rapport** de l'onglet Review, export JSON ou Markdown) agrège ces collections **en lecture seule** pour préparer les améliorations du pipeline :
 
 - **URLs proposées** : toute URL collée dans un commentaire (ex. liste PoE d'un polygone ZEE trouvée à la main via Gemini) ressort en tête de rapport — candidate à lecture / récupération par le pipeline au run suivant.
-- **Écartés** : TD, URLs, ports, sites et champs enrichis écartés — candidats blacklist / correctifs moteur (avec la liste des domaines écartés).
+- **Écartés** : TD, URLs, sites et champs enrichis écartés — candidats blacklist de **chemin** / correctifs moteur (pas un hostname entier par réflexe).
 - **Gold** : fiches certifiées, avec la date.
+- **« Proposer s’est trompé ici »** (Formalités aujourd’hui ; même section par `kind` quand on copiera) : écarts keep/drop, accords, indices pour le code. Matière à few-shot / jetons — **pas** une écriture automatique de `_JUNK_PATH_TOKENS`.
 
 Le rapport n'écrit rien : ni règle, ni collection live, ni Gold. C'est la matière première d'une décision humaine.
 
 ---
 
 En cas de conflit sur **eez vs poe** : une fiche Formalités.  
-En cas de conflit sur **écriture live** : pas de live sans Gold, pas de Gold silencieux.  
-En cas de conflit sur **ce que Map affiche** : couche par défaut du §8 ; le run certifié seulement si **Afficher la review** est coché.
+En cas de conflit sur **écriture live** : pas de live sans Gold, pas de Gold silencieux, **pas de Gold par Proposer**.  
+En cas de conflit sur **ce que Map affiche** : couche par défaut du §8 ; le run certifié seulement si **Afficher la review** est coché.  
+En cas de conflit sur **quoi copier de Formalités** : le geste du §0.1, pas le prompt ni les jetons.
 
 *Toute évolution de règle Review se fait d’abord dans le CDC Formalités (`CAHIER_DES_CHARGES_REVIEW.md`) pour les PoE, et ici pour les autres modes, puis dans le code.*
