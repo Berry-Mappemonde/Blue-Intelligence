@@ -38,7 +38,7 @@ def has_snapshot(month: int | None = None) -> bool:
 
 
 @lru_cache(maxsize=12)
-def _load_month(month: int):
+def _load_month(month: int, mtime: float):
     if np is None:
         return None
     path = wave_npz_path(month)
@@ -46,6 +46,15 @@ def _load_month(month: int):
         return None
     data = np.load(path, allow_pickle=False)
     return {k: data[k] for k in data.files}
+
+
+def _bundle(month: int):
+    if np is None:
+        return None
+    path = wave_npz_path(month)
+    if not path.is_file():
+        return None
+    return _load_month(month, path.stat().st_mtime)
 
 
 def _nearest_index(arr, value) -> int:
@@ -56,7 +65,7 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     month = parse_month(month)
     if is_land(lat, lon):
         return None
-    bundle = _load_month(month)
+    bundle = _bundle(month)
     if bundle is None:
         return None
     lats, lons = bundle["lats"], bundle["lons"]
@@ -114,6 +123,15 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     }
 
 
+def _val_cell(arr, i: int, j: int):
+    if arr is None:
+        return None
+    v = float(arr[i, j])
+    if np is not None and np.isnan(v):
+        return None
+    return v
+
+
 def _round(v):
     return None if v is None else round(float(v), 1)
 
@@ -136,7 +154,7 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
     features: list[dict] = []
     snapshot_stat = None
     if np is not None and has_snapshot(month):
-        bundle = _load_month(month)
+        bundle = _bundle(month)
         if bundle is not None:
             snapshot_stat = str(bundle["stat"][0]) if "stat" in bundle else None
             lats, lons = bundle["lats"], bundle["lons"]
@@ -159,6 +177,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                         v = float(arr[i, j])
                         if np.isnan(v) or v <= 0:
                             continue
+                        period_s = _round(_val_cell(bundle.get("period"), i, j))
+                        dir_deg = _round(_val_cell(bundle.get("dir"), i, j))
                         features.append({
                             "type": "Feature",
                             "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
@@ -167,6 +187,8 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                                 "month": month,
                                 "stat": want if want != "p90" or snapshot_stat != "mean" else "mean",
                                 "hs_m": round(v, 2),
+                                "period_s": period_s,
+                                "dir_deg": dir_deg,
                             },
                         })
     return {

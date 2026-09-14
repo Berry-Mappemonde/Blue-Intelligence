@@ -38,9 +38,15 @@ pip install copernicusmarine xarray netCDF4 numpy python-dotenv
 bash scripts/climatology/gen_wind_atlas_mac.sh
 ```
 
-Les 12 mois prennent souvent **plusieurs heures**. `caffeinate` empêche
-le Mac de s'endormir. Si ça s'arrête, relance **la même commande** : le
-mois en cours reprend à l'année suivante. Un mois déjà en rose est sauté.
+Les 12 mois de vent prennent souvent **plusieurs heures**. `caffeinate`
+empêche le Mac de s'endormir. Si ça s'arrête, relance **la même
+commande** : le mois en cours reprend à l'année suivante. Un mois déjà
+en rose est sauté.
+
+La houle P50/P90 (`gen_wave_pct_mac.sh`) est **plus lourde** : 3 h ×
+1993–2019, un mois calendaire à la fois, histogrammes Hs (jamais le
+cube en RAM). Relancer la même commande reprend l'année suivante. Un
+mois déjà en `p50_p90` est sauté — une moyenne P1M ne l'est pas.
 
 Le vent horaire CMEMS est en deux jeux du même produit : 0,25° jusqu'en
 octobre 2009, puis 0,125° jusqu'en 2020. Le script les enchaîne et
@@ -67,4 +73,8 @@ python3 scripts/climatology/gen_wind_atlas.py --month 3
 # Houle : moyenne P1M d'abord (V0, ne pas l'étiqueter P90), puis percentiles
 python3 scripts/climatology/gen_wave_mean.py --month 7
 python3 scripts/climatology/gen_wave_pct.py --month 7
+
+# Houle P50/P90 — 12 mois, sur le Mac (pas le VPS)
+# Empêche la veille, reprend si le réseau coupe. Plus long que les roses.
+bash scripts/climatology/gen_wave_pct_mac.sh
 ```
