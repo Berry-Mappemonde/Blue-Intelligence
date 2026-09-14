@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Installation idempotente de SearXNG (venv /opt/searxng) SANS lancer le serveur.
+# Idempotent SearXNG install (venv /opt/searxng) WITHOUT starting the server.
 # Doc : https://docs.searxng.org/admin/installation-searxng.html
-# Appelé par .cursor/install.sh (snapshot) et par .cursor/start.sh si le venv manque.
+# Called by .cursor/install.sh (snapshot) and by .cursor/start.sh if the venv is missing.
 set -euo pipefail
 
 SEARXNG_HOME="${SEARXNG_HOME:-/opt/searxng}"
@@ -51,7 +51,7 @@ install_searxng_venv() {
 }
 
 ensure_searxng_url() {
-  # SEARXNG_URL n'est pas un secret : URL de NOTRE process local.
+  # SEARXNG_URL is not a secret: URL of OUR local process.
   local envf="${1:?backend .env path}"
   local url="http://127.0.0.1:8888"
   mkdir -p "$(dirname "$envf")"

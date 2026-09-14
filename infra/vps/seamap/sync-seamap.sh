@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
-# Miroir auto-hébergé de la carte marine Open Waters: Seamap (CC-BY 4.0).
+# Self-hosted Open Waters: Seamap sea-chart mirror (CC-BY 4.0).
 #
-# Inspiration seamap : chaque build planétaire est une archive PMTiles datée et
-# IMMUABLE (`<AAAA-MM-JJ>.pmtiles`). Ce script découvre la version courante,
-# télécharge l'archive une seule fois (reprise possible), bascule le pointeur
-# `current.pmtiles` de façon atomique, réécrit `style.json` pour pointer sur le
-# miroir, et ne garde que les N dernières archives.
+# Inspired by seamap: each planetary build is a dated, IMMUTABLE PMTiles
+# archive (`<YYYY-MM-DD>.pmtiles`). This script discovers the current version,
+# downloads the archive once (resume possible), atomically switches the
+# `current.pmtiles` pointer, rewrites `style.json` to point at the
+# mirror, and keeps only the last N archives.
 #
-# Ce qui est auto-hébergé : l'archive seamark PMTiles (~26 Go), le style et les
-# sprites — la partie que seamap construit. Les fonds VersaTiles, la bathymétrie
-# Seascape et les polices restent sur leurs CDN d'origine (plusieurs dizaines de
-# Go supplémentaires, hors budget disque du VPS 75 Go).
+# What is self-hosted: the seamark PMTiles archive (~26 GB), the style and the
+# sprites — the part seamap builds. VersaTiles basemaps, Seascape
+# bathymetry and fonts stay on their origin CDNs (tens of extra
+# GB, outside the 75 GB VPS disk budget).
 #
-# Usage :
-#   sync-seamap.sh --check        # affiche la version amont + l'état local, ne télécharge rien
-#   sync-seamap.sh --assets-only  # style + sprites seulement (test rapide, quelques Ko)
-#   sync-seamap.sh                # synchronisation complète (archive datée + assets + pointeur)
+# Usage:
+#   sync-seamap.sh --check        # show upstream version + local state, download nothing
+#   sync-seamap.sh --assets-only  # style + sprites only (quick test, a few KB)
+#   sync-seamap.sh                # full sync (dated archive + assets + pointer)
 set -euo pipefail
 
 # --------------------------------------------------------------- configuration
 TILES_BASE="${TILES_BASE:-https://tiles.openwaters.io}"
-DEST="${DEST:-/srv/tiles/seamap}"                 # archive/ (immuable) + public/ (servi par nginx)
+DEST="${DEST:-/srv/tiles/seamap}"                 # archive/ (immutable) + public/ (served by nginx)
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://blueintelligence.online/tiles/seamap}"
-KEEP="${KEEP:-2}"                                 # nombre d'archives datées conservées
+KEEP="${KEEP:-2}"                                 # number of dated archives to keep
 CURL="curl -fsSL --retry 4 --retry-delay 5"
 
 log() { printf '[seamap-sync] %s\n' "$*"; }
 
-# ------------------------------------------------------- découverte de version
-# L'ETag de tiles.json est la date du build courant (ex. "2026-09-07") — c'est
-# le même mécanisme de découverte que le worker de seamap.
+# ------------------------------------------------------- version discovery
+# The tiles.json ETag is the current build date (e.g. "2026-09-07") — the
+# same discovery mechanism as the seamap worker.
 discover_version() {
   local etag
   etag=$($CURL -I "$TILES_BASE/seamap/tiles.json" \
@@ -41,11 +41,11 @@ discover_version() {
   printf '%s' "$etag"
 }
 
-remote_size() { # octets annoncés par HEAD
+remote_size() { # bytes advertised by HEAD
   $CURL -I "$1" | tr -d '\r' | awk 'tolower($1) ~ /^content-length:/ { print $2 }'
 }
 
-# ------------------------------------------------------------- assets (légers)
+# ------------------------------------------------------------- assets (light)
 sync_assets() {
   local version="$1"
   mkdir -p "$DEST/public/sprites"
@@ -55,10 +55,10 @@ sync_assets() {
     $CURL "$TILES_BASE/seamap/sprites/$f" -o "$DEST/public/sprites/$f"
   done
 
-  # style.json réécrit : la source seamark lit l'archive miroir via pmtiles://
-  # (lecture par plages d'octets d'un fichier statique — nginx suffit) et le
-  # sprite nautique vient du miroir. Le reste (VersaTiles, Seascape, fonts)
-  # reste sur les CDN d'origine.
+  # Rewritten style.json: the seamark source reads the mirror archive via pmtiles://
+  # (byte-range reads of a static file — nginx is enough) and the
+  # nautical sprite comes from the mirror. The rest (VersaTiles, Seascape, fonts)
+  # stays on the origin CDNs.
   $CURL "$TILES_BASE/seamap/style.json" -o "$DEST/public/style.upstream.json"
   python3 - "$DEST/public/style.upstream.json" "$DEST/public/style.json" \
            "$PUBLIC_BASE_URL" <<'PYEOF'
@@ -80,7 +80,7 @@ PYEOF
   log "assets synchronisés (style + sprites) pour la version $version"
 }
 
-# ----------------------------------------------------- archive datée immuable
+# ----------------------------------------------------- dated immutable archive
 sync_archive() {
   local version="$1"
   local url="$TILES_BASE/seamap/$version.pmtiles"
@@ -113,13 +113,13 @@ sync_archive() {
     log "archive $version.pmtiles téléchargée et scellée"
   fi
 
-  # bascule atomique du pointeur servi par nginx
+  # atomic switch of the nginx-served pointer
   ln -sfn "$archive" "$DEST/public/current.pmtiles"
   printf '%s\n' "$version" > "$DEST/public/VERSION"
   log "current.pmtiles → $version.pmtiles"
 
-  # élagage : on garde les $KEEP dernières archives datées
-  # shellcheck disable=SC2012 # noms contrôlés (AAAA-MM-JJ.pmtiles), tri lexical = tri chronologique
+  # prune: keep the last $KEEP dated archives
+  # shellcheck disable=SC2012 # controlled names (YYYY-MM-DD.pmtiles), lexical sort = chronological sort
   ls -1 "$DEST/archive"/*.pmtiles 2>/dev/null | sort | head -n -"$KEEP" | while read -r old; do
     log "élagage de $(basename "$old")"
     rm -f -- "$old"
@@ -138,7 +138,7 @@ main() {
       local local_v="(aucune)"
       [ -f "$DEST/public/VERSION" ] && local_v=$(cat "$DEST/public/VERSION")
       log "version locale : $local_v"
-      # shellcheck disable=SC2012 # affichage informatif, noms contrôlés
+      # shellcheck disable=SC2012 # informational listing, controlled names
       log "archives locales : $(ls -1 "$DEST/archive" 2>/dev/null | tr '\n' ' ' || true)"
       ;;
     --assets-only)
