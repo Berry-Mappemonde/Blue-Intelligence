@@ -1,8 +1,8 @@
-"""Juge de champs Review marinas / capitaineries.
+"""Marina / harbormaster Review field judge.
 
-Une fiche à la fois — pas de lot mondial sur le dump OSM.
-Identité + GPS si le point existe. Champs : garder le tag OSM / page
-officielle, écarter OTA et valeurs sans source. N'écrit pas le live ni Gold.
+One card at a time — no world batch on the OSM dump.
+Identity + GPS if the point exists. Fields: keep the OSM tag / official
+page, drop OTAs and unsourced values. Does not write live or Gold.
 """
 from __future__ import annotations
 

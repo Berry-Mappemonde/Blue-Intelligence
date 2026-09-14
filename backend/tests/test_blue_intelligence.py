@@ -34,7 +34,7 @@ def test_swarm_status_shape(s):
         assert k in d, f"missing {k}"
     assert isinstance(d["agents"], list)
     assert isinstance(d["logs"], list)
-    # Indicateurs de capacité — dépendent des clés configurées, on ne teste que la forme
+    # Capability indicators — depend on configured keys, test shape only
     assert isinstance(d["tinyfish"], bool)
     assert isinstance(d["llm"], bool)
     assert d["engine"] == "openrouter"

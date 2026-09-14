@@ -1,42 +1,42 @@
-"""Adaptateur NVIDIA NIM hosted (OpenAI-compatible).
+"""NVIDIA NIM hosted adapter (OpenAI-compatible).
 
-Complétions JSON — jamais la recherche web (:online reste OpenRouter).
+JSON completions — never web search (:online stays OpenRouter).
 
-Le catalogue Build (https://build.nvidia.com/models, ~143 fiches) mélange
-ASR, bio, CFD, image, OCR et LLM. GET /v1/models est un index OpenAI périmé
-(ids 404 : yi-large, dbrx, granite…). IDs chat : docs.api.nvidia.com/nim/
-reference/llm-apis + URL canonique /{publisher}/{title}.
+The Build catalog (https://build.nvidia.com/models, ~143 cards) mixes
+ASR, bio, CFD, image, OCR and LLM. GET /v1/models is a stale OpenAI index
+(404 ids: yi-large, dbrx, granite…). Chat IDs: docs.api.nvidia.com/nim/
+reference/llm-apis + canonical URL /{publisher}/{title}.
 
-Beaucoup de fiches restent en ligne alors que le hosted trial répond 410 Gone
-(EOL, successeur daté : deepseek-v4-flash → flash-0731). D'autres (Muse,
-Laguna, Gemma 4) sont live mais « Structured Output: Not supported » :
-json_object les fait pendre — on omet response_format.
+Many cards stay online while the hosted trial returns 410 Gone
+(EOL, dated successor: deepseek-v4-flash → flash-0731). Others (Muse,
+Laguna, Gemma 4) are live but "Structured Output: Not supported":
+json_object hangs them — we omit response_format.
 
-Fallbacks **à l'intérieur de NIM** (échec HTTP / timeout / JSON vide → suivant).
-Source unique : `CHAINS`. Hors NIM : OpenRouter, puis Claude (prix). Pas de web NIM.
+Fallbacks **inside NIM** (HTTP failure / timeout / empty JSON → next).
+Single source: `CHAINS`. Outside NIM: OpenRouter, then Claude (price). No NIM web.
 
-  judge   gpt-oss → Muse → Flash           # ask_yes_no PoE ; Flash last (529)
-  extract gpt-oss → Muse                   # Kimi seulement si décret (`legal`)
+  judge   gpt-oss → Muse → Flash           # ask_yes_no PoE; Flash last (529)
+  extract gpt-oss → Muse                   # Kimi only if decree (`legal`)
   legal   Kimi → Muse
-  json    gpt-oss → Muse                   # ask_yes_no (gatekeeper, AMP), projet, géocode
-  page    gpt-oss → Muse                   # marina + capitainerie (même chaîne)
+  json    gpt-oss → Muse                   # ask_yes_no (gatekeeper, AMP), project, geocode
+  page    gpt-oss → Muse                   # marina + harbormaster (same chain)
   text    gpt-oss → Muse                   # ask_text, json_object=false
-  review  gpt-oss → Muse                   # juge de documents Review (vision si le modèle suit)
-  Pro (deepseek-v4-pro-0813) est EOL 410 : jamais appelé.
+  review  gpt-oss → Muse                   # Review document judge (vision if the model follows)
+  Pro (deepseek-v4-pro-0813) is EOL 410: never called.
 
-Paramètres JSON — contrat hosted = fiche infer (docs.api.nvidia.com/nim/…-infer),
-pas le playground ni la carte locale (temp/top_k hors schéma hosted) :
+JSON parameters — hosted contract = infer card (docs.api.nvidia.com/nim/…-infer),
+not the playground nor the local card (temp/top_k outside hosted schema):
 
-  Pro    effort none (défaut infer) ; kwargs {thinking:false} (prototype Build)
-  Flash  effort none (défaut infer = **high**) ; kwargs thinking=false
-  Muse   pas de json_object ; 0.95 / 1.0 ; effort low (défaut high)
-  gpt-oss effort low (défaut medium ; enum sans none) ; 0.6 / 0.7
-  Kimi   temp 1.0 ; pas de top_p (non exposé) ; effort low (défaut max)
-  Laguna 1 / 0.95 ; pas de thinking/effort sur l'API infer
+  Pro    effort none (infer default); kwargs {thinking:false} (Build prototype)
+  Flash  effort none (infer default = **high**); kwargs thinking=false
+  Muse   no json_object; 0.95 / 1.0; effort low (default high)
+  gpt-oss effort low (default medium; enum without none); 0.6 / 0.7
+  Kimi   temp 1.0; no top_p (not exposed); effort low (default max)
+  Laguna 1 / 0.95; no thinking/effort on the infer API
 
 
-Clé : NVIDIA_API_KEY (env) ou settings["nvidia_api_key"] (UI).
-Provider : LLM_PROVIDER=nvidia|openrouter|auto (auto = NVIDIA si clé présente).
+Key: NVIDIA_API_KEY (env) or settings["nvidia_api_key"] (UI).
+Provider: LLM_PROVIDER=nvidia|openrouter|auto (auto = NVIDIA if a key is present).
 """
 from __future__ import annotations
 
@@ -49,18 +49,18 @@ import httpx
 
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 FLASH_MODEL = "deepseek-ai/deepseek-v4-flash-0731"
-PRO_MODEL = "deepseek-ai/deepseek-v4-pro-0813"  # EOL 410 — ne plus appeler
+PRO_MODEL = "deepseek-ai/deepseek-v4-pro-0813"  # EOL 410 — do not call
 GPT_OSS_MODEL = "openai/gpt-oss-20b"
 PRIMARY_MODEL = GPT_OSS_MODEL
 SECONDARY_MODEL = "meta/muse-glimmer-30b"
 LEGAL_MODEL = "moonshotai/kimi-k3"
-# Hosted trial parti (410 Gone). _usable_nim les réécrit vers gpt-oss.
+# Hosted trial gone (410 Gone). _usable_nim rewrites them to gpt-oss.
 _EOL_MODELS = frozenset({
     PRO_MODEL,
     "deepseek-ai/deepseek-v4-pro",
 })
 
-# Fiches Build : Capabilities → Structured Output: Not supported.
+# Build cards: Capabilities → Structured Output: Not supported.
 _NO_JSON_OBJECT = (
     "muse-glimmer",
     "laguna",
@@ -68,22 +68,22 @@ _NO_JSON_OBJECT = (
     "diffusiongemma",
 )
 
-# IDs docs / aliases EOL → successeur hosted encore servi.
+# Docs IDs / EOL aliases → hosted successor still served.
 _ALIASES = {
     "deepseek-ai/deepseek-v4-flash": FLASH_MODEL,
     "deepseek-ai/deepseek-v4-pro": PRO_MODEL,
     "poolside/laguna-xs-2-1": "poolside/laguna-xs-2.1",
 }
 
-# Ordre = canari 2026-09-09 (qualité puis latence, 529/429 en queue).
-# Muse n'est plus 2ᵉ par héritage : gpt-oss a été plus rapide à qualité égale.
-# File globale juge + extraction. 6 extracteurs + 2 juges sur le même Pro = 429.
+# Order = 2026-09-09 canary (quality then latency, 529/429 queued).
+# Muse is no longer 2nd by inheritance: gpt-oss was faster at equal quality.
+# Global judge + extraction queue. 6 extractors + 2 judges on the same Pro = 429.
 _nvidia_limit = 2
 _nvidia_gate: asyncio.Semaphore | None = None
 
 
 def configure_concurrency(n=None) -> int:
-    """1–4 appels NIM en parallèle (juge et extraction partagent la file)."""
+    """1–4 parallel NIM calls (judge and extraction share the queue)."""
     global _nvidia_limit, _nvidia_gate
     raw = n if n is not None else os.environ.get("NVIDIA_MAX_CONCURRENCY", _nvidia_limit)
     try:
@@ -150,13 +150,13 @@ def nvidia_enabled(settings: dict | None = None) -> bool:
 
 
 def _alias(model: str) -> str:
-    """Corrige les slugs docs / EOL. Muse et Laguna restent appelables."""
+    """Fix docs / EOL slugs. Muse and Laguna stay callable."""
     raw = (model or "").strip()
     return _ALIASES.get(raw, raw)
 
 
 def _usable_nim(model: str) -> str:
-    """ID hosted encore servi. Les slugs Pro 410 deviennent gpt-oss."""
+    """Hosted ID still served. Pro 410 slugs become gpt-oss."""
     used = _alias(model or "")
     if used in _EOL_MODELS or (model or "").strip() in _EOL_MODELS:
         return GPT_OSS_MODEL
@@ -193,11 +193,11 @@ def _dedupe(models: list[str]) -> tuple[str, ...]:
 
 
 def models_for(role: str, preferred: str | None = None) -> tuple[str, ...]:
-    """Ordre NIM du rôle. `CHAINS` est la source ; pas de pin Muse implicite.
+    """NIM order for the role. `CHAINS` is the source; no implicit Muse pin.
 
-    Surcharges : `NVIDIA_MODEL_CHAIN_{ROLE}` (liste complète), sinon
-    `NVIDIA_MODEL` / `NVIDIA_MODEL_LEGAL` en tête seulement s'ils sont posés.
-    `preferred` : un appel ponctuel (2ᵉ lecteur extract, etc.).
+    Overrides: `NVIDIA_MODEL_CHAIN_{ROLE}` (full list), else
+    `NVIDIA_MODEL` / `NVIDIA_MODEL_LEGAL` at the head only if they are set.
+    `preferred`: a one-off call (2nd extract reader, etc.).
     """
     key = role if role in CHAINS else "json"
     extra = _env(f"NVIDIA_MODEL_CHAIN_{key.upper()}")
@@ -225,7 +225,7 @@ def models_for(role: str, preferred: str | None = None) -> tuple[str, ...]:
 
 
 def engine_label(model: str | None = None) -> str:
-    """Étiquette persistée (judge_engine / extraction_engine)."""
+    """Persisted label (judge_engine / extraction_engine)."""
     m = (model or primary_model()).lower()
     if "deepseek" in m:
         return "nvidia-deepseek"
@@ -249,36 +249,36 @@ def engine_label(model: str | None = None) -> str:
 
 
 def muse_generation_extras(model: str | None = None) -> dict:
-    """Paramètres NIM documentés (fiches infer) pour JSON PoE."""
+    """Documented NIM parameters (infer cards) for PoE JSON."""
     return generation_extras(model)
 
 
 def sampling_params(model: str | None = None) -> dict:
-    """Échantillonnage des fiches NVIDIA infer, pas le greedy générique."""
+    """NVIDIA infer-card sampling, not generic greedy."""
     m = (model or primary_model()).lower()
     if "muse" in m:
-        # infer : greedy dégrade ; couple recommandé 0.95 / 1.0.
-        # (carte locale : 1.0 / 0.95 / top_k 64 — top_k absent du schéma hosted)
+        # infer: greedy degrades; recommended pair 0.95 / 1.0.
+        # (local card: 1.0 / 0.95 / top_k 64 — top_k absent from hosted schema)
         return {"temperature": 0.95, "top_p": 1.0}
     if "kimi-k3" in m:
-        # kimi-k3-infer : « Recommended for Kimi-K3: 1.0 » ; top_p non exposé.
+        # kimi-k3-infer: "Recommended for Kimi-K3: 1.0"; top_p not exposed.
         return {"temperature": 1.0}
     if "gpt-oss" in m:
-        # openai-gpt-oss-20b-infer : défauts 0.6 / 0.7.
+        # openai-gpt-oss-20b-infer: defaults 0.6 / 0.7.
         return {"temperature": 0.6, "top_p": 0.7}
     if "laguna" in m:
-        # poolside-laguna-xs-2-1-infer : défauts 1 / 0.95.
+        # poolside-laguna-xs-2-1-infer: defaults 1 / 0.95.
         return {"temperature": 1.0, "top_p": 0.95}
-    # DeepSeek V4 infer : défaut 1 / 0.95. JSON PoE : temperature 0 seule
-    # (la fiche déconseille de toucher temperature et top_p ensemble).
+    # DeepSeek V4 infer: default 1 / 0.95. PoE JSON: temperature 0 only
+    # (the card advises against touching temperature and top_p together).
     return {"temperature": 0}
 
 
 def generation_extras(model: str | None = None, role: str = "json") -> dict:
-    """reasoning_effort / chat_template_kwargs selon la fiche infer et l'usage."""
+    """reasoning_effort / chat_template_kwargs per infer card and usage."""
     m = (model or primary_model()).lower()
-    # legal : Kimi thinking always on ; défaut infer = max. JSON PoE / page :
-    # low pour ne pas manger max_tokens (trial 429 si max).
+    # legal: Kimi thinking always on; infer default = max. PoE / page JSON:
+    # low so we do not eat max_tokens (trial 429 if max).
     if "muse" in m:
         return {
             "reasoning_effort": "low",
@@ -306,7 +306,7 @@ def generation_extras(model: str | None = None, role: str = "json") -> dict:
 
 
 def looks_like_legal_text(text: str | None) -> bool:
-    """True si l'extrait ressemble à un décret / gazette (Kimi, pas le juge courant)."""
+    """True if the excerpt looks like a decree / gazette (Kimi, not the current judge)."""
     blob = (text or "").strip()
     if len(blob) < 80:
         return False
@@ -314,7 +314,7 @@ def looks_like_legal_text(text: str | None) -> bool:
 
 
 def second_extract_choice(context: str | None) -> tuple[str, str] | None:
-    """Second lecteur : Kimi sur décret ; sinon le suivant de la chaîne extract."""
+    """Second reader: Kimi on a decree; else the next in the extract chain."""
     prim = primary_model()
     if looks_like_legal_text(context):
         chain = models_for("legal")
@@ -327,7 +327,7 @@ def second_extract_choice(context: str | None) -> tuple[str, str] | None:
 
 
 def parse_json_strict(txt: str | None):
-    """JSON uniquement. Refuse le chain-of-thought (exemple du prompt inclus)."""
+    """JSON only. Reject chain-of-thought (prompt example included)."""
     if not isinstance(txt, str) or not txt.strip():
         return None
     s = _FENCE_RE.sub("", txt.strip()).strip()
@@ -342,7 +342,7 @@ def parse_json_strict(txt: str | None):
 
 
 def _extract_json_object(txt: str | None):
-    """Premier objet JSON équilibré (filet pour reasoning_content)."""
+    """First balanced JSON object (net for reasoning_content)."""
     if not isinstance(txt, str):
         return None
     start = txt.find("{")
@@ -417,7 +417,7 @@ def _retry_wait(response: httpx.Response, fallback: float) -> float:
 def chat_payload(model: str, system: str, user: str, max_tokens: int,
                  *, json_object: bool | None = None, role: str = "json",
                  images: list[bytes] | None = None) -> dict:
-    """Corps chat/completions. json_object=None → selon la fiche Build."""
+    """chat/completions body. json_object=None → per the Build card."""
     from app.core.vision_msg import openai_user_content
 
     used = _usable_nim(model)
@@ -440,7 +440,7 @@ def chat_payload(model: str, system: str, user: str, max_tokens: int,
 
 async def _complete_one(key: str, payload: dict, *,
                         max_tokens: int, log=None) -> dict:
-    """Un modèle. 410/404 lèvent tout de suite ; 400 json_object → retry sans format."""
+    """One model. 410/404 raise immediately; 400 json_object → retry without format."""
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -455,8 +455,8 @@ async def _complete_one(key: str, payload: dict, *,
             async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.post(NVIDIA_URL, headers=headers, json=used)
         except httpx.TimeoutException as e:
-            # Pas 3×120 s : le modèle suivant de la chaîne doit partir
-            # (Gemma 4 pend même sans json_object).
+            # Not 3×120 s: the next model in the chain must start
+            # (Gemma 4 hangs even without json_object).
             raise RuntimeError(f"nvidia timeout: {type(e).__name__}")
         if r.status_code == 400 and used.get("response_format"):
             used = {k: v for k, v in used.items() if k != "response_format"}
@@ -465,8 +465,8 @@ async def _complete_one(key: str, payload: dict, *,
                 log(f"nvidia {used['model']}: json_object rejeté, retry sans format")
             continue
         if r.status_code == 429:
-            # Quota Pro : 3 retries 5/12/25 s sur le même modèle = tempête.
-            # La chaîne (gpt-oss / Muse) part tout de suite.
+            # Pro quota: 3 retries 5/12/25 s on the same model = a storm.
+            # The chain (gpt-oss / Muse) starts immediately.
             raise RuntimeError(f"nvidia HTTP 429: {(r.text or '')[:160]}")
         if r.status_code in (500, 502, 503) and delay is not None:
             wait = _retry_wait(r, delay)
@@ -504,7 +504,7 @@ async def complete_json_nvidia_tracked(
         max_tokens: int = 800,
         log=None,
         images: list[bytes] | None = None) -> tuple[dict, str]:
-    """Comme complete_json_nvidia, plus l'id réellement servi."""
+    """Like complete_json_nvidia, plus the id actually served."""
     key = get_nvidia_key(settings)
     if not key:
         raise RuntimeError("NVIDIA_API_KEY missing")
@@ -539,7 +539,7 @@ async def complete_json_nvidia(system: str, prompt: str,
                                max_tokens: int = 800,
                                log=None,
                                images: list[bytes] | None = None) -> dict:
-    """Complétion JSON. fallback=True : chaîne du rôle si le modèle échoue."""
+    """JSON completion. fallback=True: role chain if the model fails."""
     data, _used = await complete_json_nvidia_tracked(
         system, prompt, settings, model=model, role=role,
         fallback=fallback, max_tokens=max_tokens, log=log, images=images)
@@ -553,7 +553,7 @@ async def complete_text_nvidia(system: str, prompt: str,
                                fallback: bool = True,
                                max_tokens: int = 800,
                                log=None) -> str:
-    """Complétion texte (pas de json_object). Chaîne `text` par défaut."""
+    """Text completion (no json_object). `text` chain by default."""
     key = get_nvidia_key(settings)
     if not key:
         raise RuntimeError("NVIDIA_API_KEY missing")
@@ -605,8 +605,8 @@ async def extract_ports_nvidia(context: str, zone: dict,
                                fallback: bool | None = None) -> list[dict]:
     from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports
 
-    # Lecteur principal : chaîne extract (Pro → gpt-oss → Muse).
-    # Kimi n'est second lecteur que via second_extract_choice (décret).
+    # Primary reader: extract chain (Pro → gpt-oss → Muse).
+    # Kimi is second reader only via second_extract_choice (decree).
     role = "extract"
     do_fb = True if fallback is None and model is None else bool(fallback)
     prompt = POE_EXTRACT_PROMPT.format(

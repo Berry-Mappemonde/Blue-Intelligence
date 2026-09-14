@@ -1,14 +1,14 @@
 /**
- * Registre des fonds de carte.
+ * Basemap registry.
  *
- * `raster` = L.tileLayer classique (Esri Canvas) ; `gl` = carte marine
- * vectorielle Open Waters: Seamap rendue par MapLibre GL (chargé à la
- * demande via maplibre-gl-leaflet — licence ISC, maplibre-gl BSD-3-Clause,
- * pmtiles BSD-3-Clause ; on ne dépend PAS du package npm @openwaters/seamap,
- * GPL-3.0 — on consomme le style servi, licencié CC-BY 4.0).
+ * `raster` = classic L.tileLayer (Esri Canvas); `gl` = Open Waters: Seamap
+ * vector sea chart rendered by MapLibre GL (loaded on demand via
+ * maplibre-gl-leaflet — ISC licence, maplibre-gl BSD-3-Clause,
+ * pmtiles BSD-3-Clause; we do NOT depend on the @openwaters/seamap npm
+ * package, GPL-3.0 — we consume the served style, licensed CC-BY 4.0).
  *
- * `REACT_APP_SEAMAP_STYLE_URL` pointe vers le miroir auto-hébergé en
- * production (voir infra/vps/seamap/) ; par défaut, le style public.
+ * `REACT_APP_SEAMAP_STYLE_URL` points at the self-hosted mirror in
+ * production (see infra/vps/seamap/); default is the public style.
  */
 import { TILE_URLS } from "./constants";
 
@@ -45,9 +45,9 @@ export function nextBasemap(current) {
 }
 
 /**
- * Le style Seamap référence une source `elevation` (hillshade Versatiles)
- * souvent absente : chaque tuile 404 pollue la console sans rien dessiner.
- * On retire source + couches, le reste du style est inchangé.
+ * The Seamap style references an `elevation` source (Versatiles hillshade)
+ * that is often missing: each 404 tile pollutes the console and draws nothing.
+ * We drop source + layers; the rest of the style is unchanged.
  */
 export const SEAMAP_OPTIONAL_SOURCES = ["elevation"];
 

@@ -9,8 +9,8 @@ const esc = (value) => String(value ?? "")
 const cache = new Map();
 
 /**
- * Ligne « profondeur d'approche » (DTM EMODnet) injectée dans les popups
- * marinas / mouillages. Le fetch se fait au `popupopen` via attachDepthOnPopup.
+ * "Approach depth" row (EMODnet DTM) injected into marina / anchorage
+ * popups. Fetch happens on `popupopen` via attachDepthOnPopup.
  */
 export function depthRowHtml(lat, lon, t) {
   return `<div class="bi-depth-row" data-testid="popup-depth" data-lat="${Number(lat)}" data-lon="${Number(lon)}" style="font-size:11px;margin-top:6px;">

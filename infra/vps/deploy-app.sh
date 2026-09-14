@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# (Re)déploiement de l'application sur le VPS : dépendances backend (Python 3.12
-# via uv), Playwright Chromium, build frontend, service systemd, cron de
-# sauvegarde. Suppose le code présent dans ~/blue-intelligence-map et
-# install-mongodb.sh déjà exécuté.
+# (Re)deploy the application on the VPS: backend dependencies (Python 3.12
+# via uv), Playwright Chromium, frontend build, systemd service, backup
+# cron. Assumes the code is in ~/blue-intelligence-map and
+# install-mongodb.sh already ran.
 set -euo pipefail
 
 APP="$HOME/blue-intelligence-map"
@@ -50,15 +50,15 @@ fi
 cd "$APP/frontend"
 if [ "$SKIP_FRONTEND_BUILD" = "1" ]; then
   if [ ! -f build/index.html ]; then
-    echo "SKIP_FRONTEND_BUILD=1 mais frontend/build/index.html est absent." >&2
+    echo "SKIP_FRONTEND_BUILD=1 but frontend/build/index.html is missing." >&2
     exit 1
   fi
-  echo "SKIP_FRONTEND_BUILD=1 — bundle GitHub réutilisé"
+  echo "SKIP_FRONTEND_BUILD=1 — reusing the GitHub bundle"
 else
   {
     printf 'REACT_APP_BACKEND_URL=\n'
-    # Miroir carte marine auto-hébergé (infra/vps/seamap) : si présent, le build
-    # pointe dessus au lieu du service communautaire tiles.openwaters.io.
+    # Self-hosted sea-chart mirror (infra/vps/seamap): if present, the build
+    # points at it instead of the community tiles.openwaters.io service.
     if [ -f /srv/tiles/seamap/public/style.json ]; then
       printf 'REACT_APP_SEAMAP_STYLE_URL=https://blueintelligence.online/tiles/seamap/style.json\n'
     fi

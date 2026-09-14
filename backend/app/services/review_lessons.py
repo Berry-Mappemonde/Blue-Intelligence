@@ -1,10 +1,10 @@
-"""Leçons HITL : Proposer vs Gold humain, par kind.
+"""HITL lessons: Suggest vs human Gold, by kind.
 
-Le lot / la fiche Proposer écrit ``review_suggest``.
-Le clic Gold écrit ``review_lessons`` (vérité + écarts).
-Le prochain lot relit ces leçons (few-shot + score de chemin).
-Le rapport affiche « Proposer s'est trompé ici ».
-N'écrit jamais les collections live.
+The Suggest batch / card writes ``review_suggest``.
+The Gold click writes ``review_lessons`` (truth + gaps).
+The next batch rereads these lessons (few-shot + path score).
+The report shows “Suggest was wrong here”.
+Never writes live collections.
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def path_tokens(url: str | None) -> list[str]:
 
 def human_keep_drop(kind: str, fiche: dict | None, choices: dict | None,
                     comment: str = "") -> tuple[list[str], list[str]]:
-    """Vérité Gold en listes comparables (URLs ou jetons identity/site:/field:)."""
+    """Gold truth as comparable lists (URLs or identity/site:/field: tokens)."""
     fiche = fiche or {}
     ch = choices or {}
     k = _kind(kind)
@@ -133,7 +133,7 @@ def human_keep_drop(kind: str, fiche: dict | None, choices: dict | None,
 
 def compare_verdicts(human_keep: list[str], human_drop: list[str],
                      prop_keep: list[str], prop_drop: list[str]) -> dict:
-    """Écarts keep/drop. ``omit`` = le juge n'a pas tranché cette URL."""
+    """keep/drop gaps. ``omit`` = the judge did not decide this URL."""
     human: dict[str, str] = {}
     for url in human_keep or []:
         if url:
@@ -229,7 +229,7 @@ async def get_proposal(db, entity_id: str, kind: str = "eez") -> dict | None:
             {"_id": proposal_key(entity_id, kind)})
         if doc:
             return doc
-        # Formalités avant le préfixe kind: (clé = mrgid seul).
+        # Formalities before the kind: prefix (key = mrgid alone).
         if _kind(kind) == "eez":
             return await db.review_suggest.find_one({"_id": _sid(entity_id)})
         return None
@@ -239,7 +239,7 @@ async def get_proposal(db, entity_id: str, kind: str = "eez") -> dict | None:
 
 async def record_gold_lesson(db, fiche: dict, choices: dict, comment: str = "",
                              *, kind: str = "eez") -> dict:
-    """Vérité Gold + écart vs dernière proposition. Pas de Gold silencieux."""
+    """Gold truth + gap vs last suggestion. No silent Gold."""
     fiche = fiche or {}
     k = _kind(kind)
     eid = fiche_entity_id(fiche, k)
@@ -380,7 +380,7 @@ def url_lesson_delta(url: str, token_scores: dict[str, float] | None) -> float:
 
 
 def code_hints_from_lessons(lessons: list[dict]) -> list[dict]:
-    """Jetons de chemin à ajouter au code (list vs junk)."""
+    """Path tokens to add to the code (list vs junk)."""
     keep_n: dict[str, int] = {}
     drop_n: dict[str, int] = {}
     for les in lessons or []:

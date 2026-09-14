@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import api from "../../api";
 
-// Console → Clés API. Section déplacée depuis Settings (2026-09) : les clés
-// ne sont visibles / modifiables que par l'admin, comme le reste de la
-// Console. Chaque champ s'enregistre au blur ; vide = clé actuelle conservée.
+// Console → API keys. Section moved from Settings (2026-09): keys are
+// visible / editable by admin only, like the rest of the Console.
+// Each field saves on blur; empty = keep the current key.
 
 const KEY_FIELDS = [
   { field: "nvidia_api_key", labelKey: "nvidiaKey", setFlag: "nvidia_api_key_set", testid: "nvidia-key-input", hintKey: "nvidiaKeyHint" },

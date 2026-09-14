@@ -1,10 +1,9 @@
-"""
-Signal « fiche Google » sans API Places et sans scrape Maps.
+"""“Google place card” signal without the Places API and without scraping Maps.
 
-On ne pilote pas Maps nous-mêmes. TinyFish Search peut renvoyer une URL
-déjà en /maps/place/. Sinon TinyFish Fetch ouvre le lien de recherche
-déterministe : après le rendu JS (le laps de temps observé), la fiche
-expose un lien /place/ — ou « Impossible de trouver » / can't find.
+We do not drive Maps ourselves. TinyFish Search may return a URL
+already on /maps/place/. Else TinyFish Fetch opens the deterministic
+search link: after JS render (the observed settle time), the card
+exposes a /place/ link — or “Impossible de trouver” / can't find.
 """
 from __future__ import annotations
 
@@ -43,7 +42,7 @@ STOPWORDS = frozenset({
     "bassin", "plaisance", "the", "and", "des", "les", "une", "aux",
     "sur", "mer", "sea", "bay", "du", "de", "la", "le",
 })
-# Un bassin nommé à côté d'une grande marina ne doit pas hériter de sa fiche.
+# A named basin next to a large marina must not inherit its card.
 MAX_PLACE_DISTANCE_M = 8_000
 
 MAPS_PLACE_PURPOSE = (
@@ -56,7 +55,7 @@ FetchFn = Callable[[dict], Awaitable[dict]]
 FetchManyFn = Callable[[list[dict]], Awaitable[dict[Any, dict]]]
 FETCH_BATCH = 10
 CURSOR_BATCH = 50
-# Champs utiles au Fetch / tag OSM — pas le GeoJSON complet.
+# Fields useful for Fetch / OSM tag — not the full GeoJSON.
 _PLACE_PROJ = {
     "_id": 1,
     "name": 1,
@@ -82,11 +81,11 @@ def is_google_place_url(url: str | None) -> bool:
 
 
 def canonicalize_place_url(url: str) -> str:
-    """Garde le chemin /place/…, coupe les query tracking trop longues."""
+    """Keep the /place/… path, cut overly long tracking queries."""
     raw = unquote(url.strip())
     parsed = urlparse(raw)
     path = parsed.path or ""
-    # /maps/place/Name/@lat,lon,z  → on garde jusqu'au nom + @coords si présent
+    # /maps/place/Name/@lat,lon,z  → keep up to the name + @coords if present
     cut = path
     if len(cut) > 240:
         cut = cut[:240]
@@ -164,7 +163,7 @@ def place_hit_matches(
     if slug_norm and PLACE_KIND_BAD_RE.search(slug_norm):
         return False
     if slug_norm and not PLACE_KIND_OK_RE.search(slug_norm):
-        # « La Faute-sur-Mer » / « Soubise » = la commune, pas le port.
+        # “La Faute-sur-Mer” / “Soubise” = the town, not the port.
         return False
     phrase = _norm_phrase(name)
     name_ok = bool(phrase and phrase in blob)
@@ -240,7 +239,7 @@ def _link_url(raw) -> str:
 
 
 def place_hits_from_fetch(rec: dict | None) -> list[dict]:
-    """Liens /maps/place/ exposés par la page Maps une fois le JS rendu."""
+    """/maps/place/ links exposed by the Maps page once JS has rendered."""
     rec = rec or {}
     urls: list[str] = []
     seen: set[str] = set()
@@ -279,7 +278,7 @@ async def default_fetch(marina: dict) -> dict:
 
 
 async def default_fetch_many(marinas: list[dict]) -> dict[Any, dict]:
-    """Un POST Fetch pour jusqu'à 10 liens Maps — cadence 150 URL/min."""
+    """One Fetch POST for up to 10 Maps links — 150 URL/min cadence."""
     from app.core.tinyfish import tf_api_key, tf_fetch
     key = tf_api_key()
     if not key:
@@ -306,9 +305,8 @@ async def resolve_google_place(
     fetch_fn: FetchFn | None = None,
     now_iso: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Retourne le patch à $set. N'invente pas d'URL /search/.
-    unnamed → skipped. Search/Fetch sans /place/ → none.
+    """Return the $set patch. Do not invent a /search/ URL.
+    unnamed → skipped. Search/Fetch without /place/ → none.
     """
     checked = now_iso or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     empty = {
@@ -338,7 +336,7 @@ async def resolve_google_place(
             "maps_place_source": "tinyfish_search",
             "maps_place_checked_at": checked,
         }
-    # Tests : search_fn sans fetch_fn → pas d'appel réseau.
+    # Tests: search_fn without fetch_fn → no network call.
     if fetch_fn is None and search_fn is not None:
         return empty
     rec = await (fetch_fn or default_fetch)(marina)
@@ -450,7 +448,7 @@ def _page_query(q: dict, last_id: Any) -> dict:
 
 
 async def _next_page(coll, q: dict, last_id: Any, page: int) -> list[dict]:
-    """Page courte : le curseur Atlas est fermé avant TinyFish (évite CursorNotFound)."""
+    """Short page: the Atlas cursor is closed before TinyFish (avoids CursorNotFound)."""
     qq = _page_query(q, last_id)
     try:
         cur = coll.find(qq, _PLACE_PROJ)
@@ -477,7 +475,7 @@ async def _next_page(coll, q: dict, last_id: Any, page: int) -> list[dict]:
 
 
 async def _iter_todo(coll, q: dict, fetch_n: int) -> AsyncIterator[dict]:
-    """Pages de CURSOR_BATCH docs. Jamais to_list() sur toute la collection."""
+    """Pages of CURSOR_BATCH docs. Never to_list() the whole collection."""
     last_id: Any = None
     n = 0
     while n < fetch_n:
@@ -510,9 +508,8 @@ async def resolve_maps_places(
     run_id: str | None = None,
     dest_db=None,
 ) -> dict:
-    """
-    Reprenable (ignore les fiches déjà statusées). Monde : skip Search
-    (n'indexe pas /place/) et Fetch par lots de 10 (quota 150 URL/min).
+    """Resumable (ignore already-statused cards). World: skip Search
+    (does not index /place/) and Fetch in batches of 10 (150 URL/min quota).
     """
     state.running = True
     state.started_at = time.time()

@@ -1,4 +1,4 @@
-"""Helpers du sonde NVIDIA — aucun réseau."""
+"""NVIDIA probe helpers — no network."""
 import sys
 from pathlib import Path
 

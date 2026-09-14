@@ -1,5 +1,6 @@
-"""Garde admin — ADMIN_KEY exigée sur les écritures /api/* et les lectures
-sensibles (review, admin). Sans ADMIN_KEY (dev), tout reste ouvert."""
+"""Admin gate — ADMIN_KEY required on /api/* writes and sensitive
+reads (review, admin). Without ADMIN_KEY (dev), everything stays open.
+"""
 from __future__ import annotations
 
 import sys
@@ -11,8 +12,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-# Pas de context manager : les événements startup (index Mongo) ne sont pas
-# déclenchés, le middleware se teste sans base de données.
+# No context manager: startup events (Mongo indexes) are not
+# triggered; the middleware is tested without a database.
 client = TestClient(app)
 
 
@@ -42,7 +43,7 @@ def test_correct_key_unlocks(monkeypatch):
 
 def test_public_report_stays_open(monkeypatch):
     monkeypatch.setenv("ADMIN_KEY", "sesame")
-    # Le signalement public de projets ne doit jamais être bloqué par la
-    # garde admin (422 de validation attendu ici, pas 401).
+    # Public project reporting must never be blocked by the
+    # admin gate (422 validation expected here, not 401).
     r = client.post("/api/report-project", json={})
     assert r.status_code != 401

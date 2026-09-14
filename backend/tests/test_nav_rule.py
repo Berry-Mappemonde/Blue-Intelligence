@@ -1,4 +1,4 @@
-"""C15–C16 : juge « est-ce une règle de navigation ? » — pas de réseau."""
+"""C15–C16: judge “is this a navigation rule?” — no network."""
 from __future__ import annotations
 
 import sys

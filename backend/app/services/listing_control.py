@@ -1,8 +1,7 @@
-"""
-listing_control — Compare un run (ou v1) au listing_ref, sans annoter les ports.
+"""listing_control — Compare a run (or v1) to listing_ref, without annotating ports.
 
-Le listing est le référentiel du diff « comme si » Gold : il ne s'écrit pas
-dans poe_ports / poe_run_ports. Les écarts vont dans une file de revue
+The listing is the "as-if" Gold diff reference: it is not written
+into poe_ports / poe_run_ports. Gaps go into a review queue
 (poe_listing_review).
 """
 from __future__ import annotations
@@ -90,7 +89,7 @@ def _slim_listing(p: dict) -> dict:
 def compare_to_listing(run_ports: list[dict], listing_ports: list[dict],
                        run_mrgids: set[int] | None = None,
                        restrict_to_run_zones: bool = True) -> dict:
-    """Classe chaque port du run / du listing. Aucune mutation des dicts d'entrée."""
+    """Classify each port of the run / listing. No mutation of input dicts."""
     if restrict_to_run_zones:
         if run_mrgids is None:
             run_mrgids = {int(p["mrgid"]) for p in run_ports if p.get("mrgid") is not None}
@@ -188,7 +187,7 @@ def compare_to_listing(run_ports: list[dict], listing_ports: list[dict],
 
 
 def review_items(report: dict, run_id: str, variant: str | None = None) -> list[dict]:
-    """Aplatit la file de revue (pas les matches confiants)."""
+    """Flatten the review queue (not confident matches)."""
     now = now_iso()
     items = []
     for reason in REVIEW_REASONS:
@@ -254,7 +253,7 @@ async def build_listing_control_report(db, run_id: str,
 
 
 async def persist_review(db, report: dict) -> dict:
-    """Remplace la file de revue de ce run. Ne touche pas poe_ports / poe_run_ports."""
+    """Replace this run's review queue. Do not touch poe_ports / poe_run_ports."""
     run_id = (report.get("run") or {}).get("run_id")
     if not run_id:
         raise ValueError("rapport sans run_id")
@@ -321,10 +320,10 @@ def _unclos_skip(name: str | None) -> str | None:
 
 async def suggest_canary_zones(db, run_ids: list[str] | None = None,
                                include_v1: bool = True, limit: int = 25) -> dict:
-    """ZEE canari : trous listing (v1) ∪ zones en erreur des runs donnés.
+    """Canary EEZ: listing holes (v1) ∪ error zones of the given runs.
 
-    Ne lance aucun crawl. Sans poe_ports / runs, la liste est vide.
-    Les ZEE uninhabited / antarctic (UNCLOS) sont écartées : Claude n'y sert à rien.
+    Launch no crawl. Without poe_ports / runs, the list is empty.
+    Uninhabited / antarctic EEZs (UNCLOS) are dropped: Claude is useless there.
     """
     reasons: dict[int, list[str]] = {}
     names: dict[int, str] = {}

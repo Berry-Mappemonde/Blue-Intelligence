@@ -1,4 +1,4 @@
-"""Enrichissement bottom-up des graines — aucun réseau, aucun Mongo réel."""
+"""Bottom-up seed enrichment — no network, no real Mongo."""
 import asyncio
 import sys
 from pathlib import Path
@@ -19,7 +19,7 @@ def _keep_unit_tests_off_nvidia(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_cascade_network(monkeypatch):
-    """complete_with_cascade ne doit pas ouvrir le réseau dans ces tests."""
+    """complete_with_cascade must not open the network in these tests."""
     async def _empty(url, *a, **k):
         return {
             "url": url, "text": "", "md5": None, "level": "failed",

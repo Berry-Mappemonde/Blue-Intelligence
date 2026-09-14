@@ -1,7 +1,6 @@
-"""
-Tests itération 14 — Classifieur SERP (ml_core/ml_routes), rank_candidates_ml (poe.py)
-et régressions PoE (zones/ports). La reprise auto (poe_routes.schedule_job_resume)
-est testée séparément en E2E (restart backend requis) — voir script /app/tests/.
+"""Iteration 14 tests — SERP classifier (ml_core/ml_routes), rank_candidates_ml (poe.py)
+and PoE regressions (zones/ports). Auto-resume (poe_routes.schedule_job_resume)
+is tested separately in E2E (backend restart required) — see /app/tests/ script.
 """
 from pathlib import Path
 import os
@@ -28,7 +27,7 @@ def api():
     return s
 
 
-# --- Module ml_routes : statut des modèles ---------------------------------
+# --- ml_routes module: model status ----------------------------------------
 class TestMlStatus:
     def test_serp_classifier_present(self, api):
         r = api.get(f"{BASE_URL}/api/ml/status", timeout=60)
@@ -36,7 +35,7 @@ class TestMlStatus:
         models = r.json()["models"]
         assert "serp_classifier" in models
         m = models["serp_classifier"]
-        assert m["n_pos"] >= 150, m  # dépend du nb de zones sourcées en base
+        assert m["n_pos"] >= 150, m  # depends on the number of sourced zones in the database
         assert m["accuracy"] >= 0.9, m
         assert m["f1"] >= 0.9, m
         assert m["n_neg"] >= 195
@@ -90,7 +89,7 @@ class TestSerpPredict:
         assert metrics["accuracy"] >= 0.9
 
 
-# --- Module ml_routes : POST /train/serp (re-entraînement) ------------------
+# --- ml_routes module: POST /train/serp (retrain) ---------------------------
 class TestSerpTraining:
     def test_retrain_completes(self, api):
         r = api.post(f"{BASE_URL}/api/ml/train/serp", timeout=60)
@@ -112,13 +111,13 @@ class TestSerpTraining:
         assert any("weak supervision" in line for line in st.get("logs_tail", [])), st.get("logs_tail")
 
     def test_conflict_when_already_running(self, api):
-        # relance immédiate: soit 202 (précédent terminé), soit 409
+        # immediate rerun: either 202 (previous finished) or 409
         r = api.post(f"{BASE_URL}/api/ml/train/serp", timeout=60)
         assert r.status_code in (202, 409)
         if r.status_code == 202:
             r2 = api.post(f"{BASE_URL}/api/ml/train/serp", timeout=10)
             assert r2.status_code in (202, 409)
-        # attendre la fin pour ne pas polluer les tests suivants
+        # wait for the end so later tests are not polluted
         deadline = time.time() + 180
         while time.time() < deadline:
             if not api.get(f"{BASE_URL}/api/ml/train/serp/status", timeout=30).json().get("running"):
@@ -169,7 +168,7 @@ class TestRankCandidatesMl:
         assert ranked[0]["domain"].endswith(".gov") or ".gouv" in ranked[0]["domain"]
 
 
-# --- RÉGRESSION PoE --------------------------------------------------------
+# --- PoE REGRESSION --------------------------------------------------------
 class TestPoeRegression:
     def test_zones_count(self, api):
         r = api.get(f"{BASE_URL}/api/poe/zones", timeout=120)

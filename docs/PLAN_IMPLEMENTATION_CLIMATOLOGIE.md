@@ -1,441 +1,441 @@
-# Plan d’implémentation — Mode Climatologie (7ᵉ mode Blue Intelligence)
+# Implementation plan — Climatology mode (7th Blue Intelligence mode)
 
-Document de cadrage et de chantier. Il consigne les décisions de septembre 2026 :
-simulation de traversées par **climatologie historique**, pas par prévision GFS/IFS ;
-inspiration du plugin OpenCPN `climatology_pi` (esprit et API, pas le code GPL) ;
-**septième mode** sur Blue Intelligence ; données **invisibles mais partout** dans
-NAVIGUIDE, avec fusion des cartes déjà existantes.
+Framing and workshop document. It records the September 2026 decisions:
+passage simulation by **historical climatology**, not by GFS/IFS forecast;
+inspiration from the OpenCPN plugin `climatology_pi` (spirit and API, not the GPL code);
+**seventh mode** on Blue Intelligence; data **invisible but everywhere** in
+NAVIGUIDE, with fusion of the maps already in place.
 
-Écrit en langage simple : c’est le contrat de ce que l’on cherche, et de ce que
-l’on refuse.
+Written in plain language: this is the contract of what we seek, and of what
+we refuse.
 
-Version **1.0** — 13 septembre 2026.
+Version **1.0** — 13 September 2026.
 
-**Sommaire**
+**Contents**
 
-1. En une phrase
-2. Pourquoi ce travail existe
-3. Ce que l’on veut obtenir
-4. Ce que l’on ne veut pas
-5. Vocabulaire
-6. Partage Blue Intelligence / NAVIGUIDE
-7. Inspiration OpenCPN (ce qu’on copie, ce qu’on refuse)
-8. État actuel et écarts
-9. Coquille commune (7ᵉ mode + API + panes)
-10. Produit 1 — Vent 10 m et roses
-11. Produit 2 — Houle P50 / P90
-12. Produit 3 — Courant de surface
-13. Produit 4 — Risque cyclone (IBTrACS)
-14. Règles (`run_rules`)
-15. Contrats JSON
-16. Ordre de chantier
-17. Fichiers touchés
-18. Licences et attributions
-19. Recette
-20. Risques
-21. Hors périmètre
-22. Documents et conversations dont ce plan hérite
-
----
-
-## 1. En une phrase
-
-Donner au skipper un **atlas mensuel sourcé** (vent en roses, houle P50/P90,
-courant, pistes cycloniques) pour **simuler des traversées** de la circumnavigation
-Berry-Mappemonde, l’afficher comme **septième mode** de Blue Intelligence, et
-s’en servir **sans le peindre** dans NAVIGUIDE.
+1. In one sentence
+2. Why this work exists
+3. What we want to achieve
+4. What we do not want
+5. Vocabulary
+6. Blue Intelligence / NAVIGUIDE split
+7. OpenCPN inspiration (what we copy, what we refuse)
+8. Current state and gaps
+9. Shared shell (7th mode + API + panes)
+10. Product 1 — 10 m wind and roses
+11. Product 2 — Swell P50 / P90
+12. Product 3 — Surface current
+13. Product 4 — Cyclone risk (IBTrACS)
+14. Rules (`run_rules`)
+15. JSON contracts
+16. Build order
+17. Files touched
+18. Licences and attributions
+19. Recipe
+20. Risks
+21. Out of scope
+22. Documents and conversations this plan inherits
 
 ---
 
-## 2. Pourquoi ce travail existe
+## 1. In one sentence
 
-NAVIGUIDE est un SADP (système d’aide à la décision plaisancière), pas un ECDIS.
-Une jambe de l’expédition dure souvent **plus longtemps que la prévisibilité**
-d’un modèle (7 à 10 jours utiles, 15–16 jours en dégradé). Brancher un isochrone
-sur le run GFS/IFS de 00 UTC, c’est donner l’illusion d’une arrivée au jour près.
-
-La climatologie historique (moyennes, roses, percentiles, pistes) est l’outil
-honnête pour « quel mois, quelle route, quelle durée plausible ». La prévision
-reste un complément **tactique** (fenêtre de départ 0–10 jours), pas le moteur
-de la simulation.
-
-Le code actuel inverse déjà un peu les rôles, et mal :
-
-- `getWind.py` lit un vent **L4 NRT** Copernicus avec ~48 h de retard (observation
-  assimilée, pas une prévision) ;
-- `getWave.py` / `getCurrent.py` interrogent des produits **analyse + 10 jours
-  de prévision**, mais tronquent à `time=-1` d’hier ;
-- le routage isochrone (port 3010, non déployé) appelle `climatology.py` : un
-  **atlas dessiné à la main** (zones rectangulaires, un seul couple kn / °), pas
-  une grille historique ;
-- la simulation carte est encore **géométrique** (polaire + distance), sans vent ;
-- Blue Intelligence n’a **aucune** couche météo.
+Give the skipper a **sourced monthly atlas** (wind as roses, swell P50/P90,
+current, cyclone tracks) to **simulate passages** of the Berry-Mappemonde
+circumnavigation, display it as Blue Intelligence’s **seventh mode**, and
+**use it without painting it** in NAVIGUIDE.
 
 ---
 
-## 3. Ce que l’on veut obtenir
+## 2. Why this work exists
 
-Deux livrables, **même snapshot de données**, deux façons de le montrer.
+NAVIGUIDE is an SADP (pleasure-craft decision-support system), not an ECDIS.
+An expedition leg often **lasts longer than the predictability** of a model
+(7 to 10 useful days, 15–16 days degraded). Wiring an isochrone to the
+00 UTC GFS/IFS run gives the illusion of an arrival to the nearest day.
 
-### Blue Intelligence — 7ᵉ mode `climatology`
+Historical climatology (means, roses, percentiles, tracks) is the honest
+tool for “which month, which route, which plausible duration”. Forecast
+remains a **tactical** complement (0–10 day departure window), not the
+simulation engine.
 
-Un mode du même rang que Projets, Marinas, Capitaineries, Formalités, AMP,
-Science : bouton d’en-tête, couleur propre, panneau, carte dédiée.
+The current code already inverts the roles a little, and badly:
 
-À l’intérieur du mode (filtres, comme Sextant / Argo en Science) :
+- `getWind.py` reads a Copernicus **L4 NRT** wind with ~48 h lag (assimilated
+  observation, not a forecast);
+- `getWave.py` / `getCurrent.py` query **analysis + 10-day forecast**
+  products, but truncate to yesterday’s `time=-1`;
+- isochrone routing (port 3010, not deployed) calls `climatology.py`: a
+  **hand-drawn atlas** (rectangular zones, a single kn / ° pair), not a
+  historical grid;
+- map simulation is still **geometric** (polar + distance), without wind;
+- Blue Intelligence has **no** weather layer.
 
-| Filtre | Contenu |
+---
+
+## 3. What we want to achieve
+
+Two deliverables, **the same data snapshot**, two ways to show it.
+
+### Blue Intelligence — 7th mode `climatology`
+
+A mode of the same rank as Projects, Marinas, Harbour offices, Formalities,
+MPAs, Science: header button, own colour, panel, dedicated map.
+
+Inside the mode (filters, like Sextant / Argo in Science):
+
+| Filter | Content |
 |--------|---------|
-| Vent | Roses 8 secteurs, % du temps, kn moyen, % calme, % gale, résumés MOST_LIKELY et AVERAGE |
-| Houle | Hs P50 et Hs P90, période, direction ; overlay raster |
-| Courant | Flèches vers où ça porte (moyenne mensuelle de surface) |
-| Cyclones | Pistes IBTrACS du mois affiché |
+| Wind | 8-sector roses, % of time, mean kn, % calm, % gale, MOST_LIKELY and AVERAGE summaries |
+| Swell | Hs P50 and Hs P90, period, direction; raster overlay |
+| Current | Arrows toward where it sets (monthly surface mean) |
+| Cyclones | IBTrACS tracks for the displayed month |
 
-Curseur **janvier–décembre**. Popups avec provenance (modèle / produit, période,
-licence, `sample_count`). Bandeau « ne convient pas à la navigation ».
+**January–December** slider. Popups with provenance (model / product, period,
+licence, `sample_count`). Banner “not suitable for navigation”.
 
-### NAVIGUIDE — invisibles mais partout
+### NAVIGUIDE — invisible but everywhere
 
-Les **mêmes** grilles alimentent isochrones, simulation, agent météo. Elles ne
-sont **pas** une couche carte obligatoire. On fusionne les cartes déjà là
-(route, simulation, clic Copernicus, pastilles BI, polar) en **une** MapLibre.
-Climatologie, ZEE et WPI restent dans le moteur (requêtes, crossings, briefing)
-et **n’ont pas besoin d’être allumés** sur la carte — on peut les retirer du
-panneau de pastilles.
-
----
-
-## 4. Ce que l’on ne veut pas
-
-- Un overlay climatologie **sur tous les modes** BI (ce n’est pas un fond EMODnet).
-- Un 8ᵉ interrupteur « Climatologie » dans NAVIGUIDE.
-- Présenter une moyenne 1991–2020 comme « le vent de demain ».
-- Fondre plusieurs modèles (`best_match`) **sans** écrire le nom du produit.
-- Inventer un champ : `null` sur terre, sur pixel `NaN`, si l’échantillon est trop pauvre.
-- Un LLM qui produit un vent, une Hs ou une « saison cyclone » sans chiffre.
-- Recopier le C++ GPL d’OpenCPN (`climatology_pi`) ni le binaire `0xfeff`.
-- Télécharger des cubes GRIB/NetCDF horaires mondiaux **sur le VPS** (4 vCores,
-  8 Go RAM, ~35 Go libres après seamap).
-- StormGlass, Windy, PredictWind, Meteomatics, OpenWeather comme source du mode.
-- Remplacer `getWind` / `getWave` / `getCurrent` (NRT / forecast de départ) par
-  la climatologie : **deux `kind` distincts**.
+The **same** grids feed isochrones, simulation, weather agent. They are
+**not** a mandatory map layer. We merge the maps already there
+(route, simulation, Copernicus click, BI pills, polar) into **one** MapLibre.
+Climatology, EEZ and WPI stay in the engine (queries, crossings, briefing)
+and **do not need to be turned on** on the map — we can remove them from
+the pill panel.
 
 ---
 
-## 5. Vocabulaire
+## 4. What we do not want
 
-| Mot | Sens ici |
+- A climatology overlay **on every** BI mode (it is not an EMODnet basemap).
+- An 8th “Climatology” switch in NAVIGUIDE.
+- Presenting a 1991–2020 mean as “tomorrow’s wind”.
+- Blending several models (`best_match`) **without** writing the product name.
+- Inventing a field: `null` on land, on a `NaN` pixel, if the sample is too thin.
+- An LLM that produces a wind, an Hs or a “cyclone season” without a number.
+- Copying OpenCPN’s GPL C++ (`climatology_pi`) or the `0xfeff` binary.
+- Downloading hourly worldwide GRIB/NetCDF cubes **onto the VPS** (4 vCores,
+  8 GB RAM, ~35 GB free after seamap).
+- StormGlass, Windy, PredictWind, Meteomatics, OpenWeather as the mode’s source.
+- Replacing `getWind` / `getWave` / `getCurrent` (NRT / departure forecast) with
+  climatology: **two distinct `kind`s**.
+
+---
+
+## 5. Vocabulary
+
+| Word | Meaning here |
 |-----|----------|
-| **Climatologie** | Statistiques mensuelles sur une période nommée (ex. 1993–2019). `kind: "climatology"`. |
-| **Prévision (NWP / IA)** | GFS, IFS, ICON, AIFS… horizon 7–16 jours. Hors livrable V1 du mode. |
-| **Analyse / NRT** | Produit Copernicus L4 vent actuel de NAVIGUIDE. Observation récente, pas l’atlas. |
-| **Réanalyse** | ERA5, WAVERYS, GLORYS12 : passé homogène, source des grilles. |
-| **Rose / atlas** | 8 secteurs : % du temps, kn moyen, % ≤ 3 kn (calme), % ≥ 34 kn (gale). |
-| **MOST_LIKELY** | Secteur dominant de la rose (recommandé OpenCPN pour le routage). |
-| **AVERAGE** | Moyenne vectorielle u/v (souvent plus faible que le kn scalaire). |
-| **P50 / P90** | Percentiles de Hs : « typique » vs « 1 année sur 10 au-dessus ». Le no-go utilise le P90. |
-| **Snapshot** | Fichiers précalculés **hors VPS**, versionnés (`metadata` + sha256), seulement **servis** en prod. |
+| **Climatology** | Monthly statistics over a named period (e.g. 1993–2019). `kind: "climatology"`. |
+| **Forecast (NWP / AI)** | GFS, IFS, ICON, AIFS… 7–16 day horizon. Outside V1 of the mode. |
+| **Analysis / NRT** | Copernicus L4 current-wind product used by NAVIGUIDE. Recent observation, not the atlas. |
+| **Reanalysis** | ERA5, WAVERYS, GLORYS12: homogeneous past, source of the grids. |
+| **Rose / atlas** | 8 sectors: % of time, mean kn, % ≤ 3 kn (calm), % ≥ 34 kn (gale). |
+| **MOST_LIKELY** | Dominant rose sector (recommended by OpenCPN for routing). |
+| **AVERAGE** | Vector mean u/v (often weaker than the scalar kn). |
+| **P50 / P90** | Hs percentiles: “typical” vs “1 year in 10 above”. The no-go uses P90. |
+| **Snapshot** | Files precomputed **off the VPS**, versioned (`metadata` + sha256), only **served** in prod. |
 
 ---
 
-## 6. Partage Blue Intelligence / NAVIGUIDE
+## 6. Blue Intelligence / NAVIGUIDE split
 
 ```
-                    snapshot climatologie (hors ligne)
-                    vent-roses · houle P50/P90 · courant · IBTrACS
+                    climatology snapshot (offline)
+                    wind-roses · swell P50/P90 · current · IBTrACS
                                     │
                  ┌──────────────────┴──────────────────┐
                  ▼                                     ▼
      Blue Intelligence                          NAVIGUIDE
-     7ᵉ mode `climatology`                      moteur, pas la peinture
-     Header + panneau + carte                   isochrones, simulation,
-     roses / raster / flèches / pistes          agent météo, crossings
+     7th mode `climatology`                     engine, not the paint
+     Header + panel + map                       isochrones, simulation,
+     roses / raster / arrows / tracks           weather agent, crossings
                  │                                     │
-                 │                          carte unique fusionnée
-                 │                          (route, simu, clic Copernicus,
-                 │                           pastilles BI utiles)
-                 │                          ZEE / WPI / atlas : dans le
-                 │                          code, pas forcément à l’écran
+                 │                          single merged map
+                 │                          (route, sim, Copernicus click,
+                 │                           useful BI pills)
+                 │                          EEZ / WPI / atlas: in the
+                 │                          code, not necessarily on screen
 ```
 
-Phrase de partage : **BI montre l’atlas. NAVIGUIDE s’en sert.**
+Split sentence: **BI shows the atlas. NAVIGUIDE uses it.**
 
 ---
 
-## 7. Inspiration OpenCPN (ce qu’on copie, ce qu’on refuse)
+## 7. OpenCPN inspiration (what we copy, what we refuse)
 
-Dépôts : [rgleason/climatology_pi](https://github.com/rgleason/climatology_pi)
+Repos: [rgleason/climatology_pi](https://github.com/rgleason/climatology_pi)
 (maintenance), [seandepagnier/climatology_pi](https://github.com/seandepagnier/climatology_pi),
-données [climatology_pi_data](https://github.com/seandepagnier/climatology_pi_data).
-Manuel : [opencpn-manuals…/climatology](https://opencpn-manuals.github.io/plugins/climatology/index.html).
-Licence **GPL v3** — on relit pour comprendre, on **réécrit**.
+data [climatology_pi_data](https://github.com/seandepagnier/climatology_pi_data).
+Manual: [opencpn-manuals…/climatology](https://opencpn-manuals.github.io/plugins/climatology/index.html).
+Licence **GPL v3** — we re-read to understand, we **rewrite**.
 
-OpenCPN fait déjà le produit vent / courant / cyclone : moyennes ~30 ans
-compressées (~7 Mo), curseur de mois, roses (barbules = 5 kn, centre bleu =
-calme, rouge = gale), flèches de courant, pistes par bassin, et trois callbacks
-pour `weather_routing_pi` (`ClimatologyData`, `ClimatologyWindAtlasData`,
-`CycloneTrackCrossings`). Modes AVERAGE / MOST_LIKELY / CUMULATIVE_MAP.
-**La houle n’est pas livrée** (« swell and seastate not yet implemented »).
+OpenCPN already ships the wind / current / cyclone product: ~30-year
+means compressed (~7 MB), month slider, roses (barbs = 5 kn, blue centre =
+calm, red = gale), current arrows, tracks by basin, and three callbacks
+for `weather_routing_pi` (`ClimatologyData`, `ClimatologyWindAtlasData`,
+`CycloneTrackCrossings`). AVERAGE / MOST_LIKELY / CUMULATIVE_MAP modes.
+**Swell is not shipped** (“swell and seastate not yet implemented”).
 
-| On copie | On refuse |
+| We copy | We refuse |
 |----------|-----------|
-| Rose plutôt qu’une flèche unique | Format binaire `wind01.gz` / magic `0xfeff` |
-| Calme ≤ 3 kn, gale ≥ 34 kn | Code C++ GPL |
-| MOST_LIKELY vs AVERAGE | Pistes Unisys (on prend IBTrACS) |
-| `CycloneTrackCrossings` | Jeter les courants &lt; 0,2 sans le nommer |
-| Snapshot compressé, pas un cube live | Traiter 180 Go sur le VPS |
-| Interpolation entre deux mois | Nuages, foudre, humidité, bathymétrie WOA (Science / EMODnet s’en chargent) |
-| Avertissement « grain of salt » | Moyenne El Niño silencieuse sans période écrite |
+| Rose rather than a single arrow | Binary format `wind01.gz` / magic `0xfeff` |
+| Calm ≤ 3 kn, gale ≥ 34 kn | GPL C++ code |
+| MOST_LIKELY vs AVERAGE | Unisys tracks (we take IBTrACS) |
+| `CycloneTrackCrossings` | Dropping currents &lt; 0.2 without naming it |
+| Compressed snapshot, not a live cube | Processing 180 GB on the VPS |
+| Interpolation between two months | Clouds, lightning, humidity, WOA bathymetry (Science / EMODnet handle those) |
+| “Grain of salt” warning | Silent El Niño mean with no period written |
 
 ---
 
-## 8. État actuel et écarts
+## 8. Current state and gaps
 
-| Endroit | Aujourd’hui | Cible |
+| Place | Today | Target |
 |---------|-------------|-------|
-| `frontend/src/App.js` + `Header.js` | 6 modes | 7ᵉ `climatology` |
-| `layerOrder.js` | `basemap-gl`, `route`, `amp`, `formalities-escales` | + panes raster/vector climatologie, **allumés seulement** si `mode === "climatology"` |
-| `getWind.py` | L4 NRT, `now-2j`, `time=-1` | Inchangé pour le clic « récemment observé » |
-| `getWave.py` / `getCurrent.py` | ANFC, dernier pas d’hier | Inchangé pour le départ 0–10 j ; simulation = snapshot climo |
-| `climatology.py` | Zones dessinées | Repli si la grille manque ; plus jamais la source |
-| `isochrone.py` | `wind_at(lat, lon, month)` unique | MOST_LIKELY + courant + no-go P90 + crossings |
-| `SimulationPanel.jsx` | Géométrie seule | Consomme le mois de la jambe, **sans** dessiner l’atlas |
-| `MaritimeLayers.jsx` | Pastilles ZEE, WPI, balisage, 5 exports BI | Une carte fusionnée ; ZEE / WPI / climo hors UI si inutile |
-| Agent `meteo_agent.py` | StormGlass optionnel + LLM | Compte IBTrACS du mois sur la jambe |
+| `frontend/src/App.js` + `Header.js` | 6 modes | 7th `climatology` |
+| `layerOrder.js` | `basemap-gl`, `route`, `amp`, `formalities-escales` | + climatology raster/vector panes, **lit only** if `mode === "climatology"` |
+| `getWind.py` | L4 NRT, `now-2j`, `time=-1` | Unchanged for the “recently observed” click |
+| `getWave.py` / `getCurrent.py` | ANFC, last step from yesterday | Unchanged for 0–10 d departure; simulation = climo snapshot |
+| `climatology.py` | Hand-drawn zones | Fallback if the grid is missing; never again the source |
+| `isochrone.py` | Single `wind_at(lat, lon, month)` | MOST_LIKELY + current + P90 no-go + crossings |
+| `SimulationPanel.jsx` | Geometry only | Consumes the leg’s month, **without** drawing the atlas |
+| `MaritimeLayers.jsx` | EEZ, WPI, marks, 5 BI export pills | One merged map; EEZ / WPI / climo off UI if unused |
+| Agent `meteo_agent.py` | Optional StormGlass + LLM | IBTrACS count for the month on the leg |
 
 ---
 
-## 9. Coquille commune (7ᵉ mode + API + panes)
+## 9. Shared shell (7th mode + API + panes)
 
-À poser **avant** les quatre produits. Sans elle, chaque produit réinvente
-l’en-tête et le metadata.
+To put in place **before** the four products. Without it, each product
+reinvents the header and the metadata.
 
-| Tâche | Fichiers | Détail |
+| Task | Files | Detail |
 |-------|----------|--------|
-| C0. Mode | `App.js`, `Header.js`, `i18n.js`, `README.md`, `CONTRATS_MODES.md` | `mode === "climatology"`. Couleur propre (ni violet Science, ni cyan Projets). `data-testid="mode-toggle-climatology"`. Commentaire header : plus « Six-mode switch ». |
-| C1. Panes | `layerOrder.js` + `layerOrder.test.js` | `climatology-raster@250`, `climatology-vector@260`, `pointer-events: none`. Le test fige la liste. Allumage seulement dans le 7ᵉ mode. |
-| C2. HTTP | `backend/app/routers/climatology.py` | `GET /api/climatology/meta` ; `GET /api/climatology/point?lat=&lon=&month=` ; `GET /api/climatology/{wind\|wave\|current\|cyclones}.geojson?month=`. Tout champ `kind: "climatology"`. `null` sur terre. |
+| C0. Mode | `App.js`, `Header.js`, `i18n.js`, `README.md`, `CONTRATS_MODES.md` | `mode === "climatology"`. Own colour (neither Science violet nor Projects cyan). `data-testid="mode-toggle-climatology"`. Header comment: no more “Six-mode switch”. |
+| C1. Panes | `layerOrder.js` + `layerOrder.test.js` | `climatology-raster@250`, `climatology-vector@260`, `pointer-events: none`. The test freezes the list. Lighting only in the 7th mode. |
+| C2. HTTP | `backend/app/routers/climatology.py` | `GET /api/climatology/meta` ; `GET /api/climatology/point?lat=&lon=&month=` ; `GET /api/climatology/{wind\|wave\|current\|cyclones}.geojson?month=`. Every field `kind: "climatology"`. `null` on land. |
 | C3. Metadata | `app/core/export_meta.py` | `version`, `content_sha256`, `license`, `disclaimer` / `disclaimer_fr`, plus `period`, `month`, `source_ids`, `doi`. |
-| C4. Panneau | `ClimatologyPanel.js` | Curseur 1–12, filtres Vent / Houle / Courant / Cyclones, légende, attribution. Éteints au premier affichage (sauf éventuellement le vent, à trancher à l’implémentation). |
-| C5. Carte | `useClimatologyLayer.js` + branche `MapView.js` | Comme `useScienceLayer` : uniquement si `mode === "climatology"`. |
-| C6. Règles | `run_rules.json` famille `climatology.*` | Voir §14. Loi = pas de prévision déguisée, pas de LLM. |
-| C7. Snapshot | `backend/data/climatology/` + export snapshot | Généré **hors VPS** (Mac). Le serveur sert les fichiers. |
-| C8. Review | — | **Pas** de Review / Gold / `RunSelector` en V1 (comme Science : moisson ou snapshot, pas un run Gold). |
+| C4. Panel | `ClimatologyPanel.js` | Slider 1–12, Wind / Swell / Current / Cyclones filters, legend, attribution. Off on first display (except possibly wind, to decide at implementation). |
+| C5. Map | `useClimatologyLayer.js` + `MapView.js` branch | Like `useScienceLayer`: only if `mode === "climatology"`. |
+| C6. Rules | `run_rules.json` family `climatology.*` | See §14. Law = no disguised forecast, no LLM. |
+| C7. Snapshot | `backend/data/climatology/` + snapshot export | Generated **off the VPS** (Mac). The server serves the files. |
+| C8. Review | — | **No** Review / Gold / `RunSelector` in V1 (like Science: harvest or snapshot, not a Gold run). |
 
-Critère de sortie C : le 7ᵉ bouton change la carte et le panneau ; `meta` + `point`
-renvoient `kind`, `month`, `period`, licence ; panes verts au test ; les six
-autres modes n’affichent aucune rose.
+Exit criterion C: the 7th button changes the map and the panel; `meta` + `point`
+return `kind`, `month`, `period`, licence; panes green in the test; the six
+other modes show no rose.
 
-### NAVIGUIDE — fusion de carte (même coquille)
+### NAVIGUIDE — map fusion (same shell)
 
-| Tâche | Fichiers | Détail |
+| Task | Files | Detail |
 |-------|----------|--------|
-| N1 | `climatology_query` côté `naviguide-api` ou lecture des snapshots BI | Point / crossings **sans** Source MapLibre climatologie |
-| N2 | `MaritimeLayers.jsx`, `Sidebar.jsx` | Une carte ; retirer de l’UI les pastilles ZEE, WPI, climatologie (données toujours fetchables) |
-| N3 | `isochrone.py`, `SimulationPanel` / `useLegContext` | Consomment le mois ; pas de calque atlas |
-| N4 | `meteo_agent.py` | Chiffre IBTrACS, pas un texte de saison inventé |
+| N1 | `climatology_query` on the `naviguide-api` side or reading BI snapshots | Point / crossings **without** a climatology MapLibre Source |
+| N2 | `MaritimeLayers.jsx`, `Sidebar.jsx` | One map; remove EEZ, WPI, climatology pills from the UI (data still fetchable) |
+| N3 | `isochrone.py`, `SimulationPanel` / `useLegContext` | Consume the month; no atlas layer |
+| N4 | `meteo_agent.py` | IBTrACS number, not an invented season text |
 
 ---
 
-## 10. Produit 1 — Vent 10 m et roses
+## 10. Product 1 — 10 m wind and roses
 
-### En une phrase
+### In one sentence
 
-Pour chaque mois, une **rose** (8 secteurs, % du temps, kn moyen, % calme,
-% gale) et deux résumés (MOST_LIKELY, AVERAGE).
+For each month, a **rose** (8 sectors, % of time, mean kn, % calm,
+% gale) and two summaries (MOST_LIKELY, AVERAGE).
 
 ### Source
 
-Une moyenne mensuelle (ERA5 monthly CDS, ou
-`WIND_GLO_PHY_CLIMATE_L4_MY_012_003`) ne donne **que des flèches**. OpenCPN
-construit l’atlas depuis SeaWinds **6 h**.
+A monthly mean (ERA5 monthly CDS, or
+`WIND_GLO_PHY_CLIMATE_L4_MY_012_003`) gives **arrows only**. OpenCPN
+builds the atlas from SeaWinds **6 h**.
 
-On reste sur Copernicus (compte déjà dans `COPERNICUS_USERNAME`) :
+We stay on Copernicus (account already in `COPERNICUS_USERNAME`):
 
-| Produit | Dataset | Rôle |
+| Product | Dataset | Role |
 |---------|---------|------|
-| NRT (code actuel) | `cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H` | Clic « récemment observé » — hors ce produit |
-| MY horaire | `cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H` | **Source des roses** (u/v 10 m, 1994 → mois-3) |
-| Climatologie mensuelle | `WIND_GLO_PHY_CLIMATE_L4_MY_012_003` | Filet flèches AVERAGE seulement (V0) |
+| NRT (current code) | `cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H` | “Recently observed” click — outside this product |
+| Hourly MY | `cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H` | **Source of the roses** (u/v 10 m, 1994 → month-3) |
+| Monthly climatology | `WIND_GLO_PHY_CLIMATE_L4_MY_012_003` | AVERAGE-arrows net only (V0) |
 
-PUM : [CMEMS-WIND-PUM-012-004-006](https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf).
+PUM: [CMEMS-WIND-PUM-012-004-006](https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf).
 
-Direction : `atan2(-u, -v)` (d’où vient le vent), déjà dans `getWind.py`.
-Maille stockée : 0,5°. Période cible : `1994-01..2020-12`.
+Direction: `atan2(-u, -v)` (where the wind comes from), already in `getWind.py`.
+Stored mesh: 0.5°. Target period: `1994-01..2020-12`.
 
 ### Phases
 
-**A — Pipeline hors ligne (Mac)**
+**A — Offline pipeline (Mac)**
 
-| Tâche | Fichiers | Détail |
+| Task | Files | Detail |
 |-------|----------|--------|
-| A1 | `scripts/climatology/gen_wind_atlas.py` | `copernicusmarine.subset` MY 0,25°, un mois calendaire × années 1994–2020, **sous-échantillon 6 h**. kn = m/s × 1,94384. |
-| A2 | même script | 8 secteurs, calme/gale, option bins 10 kn. Secteur &lt; 2,5 % → 0. Cellule trop peu échantillonnée → `null`. |
-| A3 | `backend/data/climatology/wind/wind-MM.npz` + `.atlas.json` | 12 fichiers documentés. Pas le binaire GPL. |
-| A4 | `gen_wind_mean.py` (optionnel) | Flèches AVERAGE depuis le produit climate — V0 visible, pas le livrable rose. |
+| A1 | `scripts/climatology/gen_wind_atlas.py` | `copernicusmarine.subset` MY 0.25°, one calendar month × years 1994–2020, **6 h subsample**. kn = m/s × 1.94384. |
+| A2 | same script | 8 sectors, calm/gale, optional 10 kn bins. Sector &lt; 2.5 % → 0. Cell too thinly sampled → `null`. |
+| A3 | `backend/data/climatology/wind/wind-MM.npz` + `.atlas.json` | 12 documented files. Not the GPL binary. |
+| A4 | `gen_wind_mean.py` (optional) | AVERAGE arrows from the climate product — visible V0, not the rose deliverable. |
 
-Critère A : 15°N, 25°W, mars : rose NE dominante ; calme/gale ∈ [0, 100] ;
-`sample_count` &gt; 0 en mer ; `null` sur le Sahara.
+Criterion A: 15°N, 25°W, March: dominant NE rose; calm/gale ∈ [0, 100];
+`sample_count` &gt; 0 at sea; `null` over the Sahara.
 
-**B — API** — `climatology_wind.py` : `atlas_at(lat, lon, month)`, interpolation
-bilinéaire + entre mois. `point` remplit `wind_atlas`. GeoJSON : 1° au large,
-0,5° si demandé.
+**B — API** — `climatology_wind.py`: `atlas_at(lat, lon, month)`, bilinear
+interpolation + between months. `point` fills `wind_atlas`. GeoJSON: 1° offshore,
+0.5° if requested.
 
-**C — Carte BI** — `useClimatologyWind.js` : roses sur le pane vectoriel
-(longueur = %, barbules = 5 kn, centre bleu/rouge). Popup : MOST_LIKELY **et**
-AVERAGE, période, `sample_count`. Jamais « vent prévu ».
+**C — BI map** — `useClimatologyWind.js`: roses on the vector pane
+(length = %, barbs = 5 kn, blue/red centre). Popup: MOST_LIKELY **and**
+AVERAGE, period, `sample_count`. Never “forecast wind”.
 
-**D — NAVIGUIDE** — `wind_at` lit l’atlas (`most_likely` par défaut). Lookup
-zones = repli. `isochrone.py` : `mode=most_likely\|average` consigné dans la route.
+**D — NAVIGUIDE** — `wind_at` reads the atlas (`most_likely` by default). Zone
+lookup = fallback. `isochrone.py`: `mode=most_likely\|average` recorded on the route.
 
 ---
 
-## 11. Produit 2 — Houle P50 / P90
+## 11. Product 2 — Swell P50 / P90
 
-### En une phrase
+### In one sentence
 
-Deux champs mensuels Hs P50 et Hs P90 + période et direction : overlay du
-mode, no-go des isochrones. OpenCPN ne l’a jamais livré.
+Two monthly Hs P50 and Hs P90 fields + period and direction: mode overlay,
+isochrone no-go. OpenCPN never shipped this.
 
 ### Source
 
 [GLOBAL_MULTIYEAR_WAV_001_032](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_WAV_001_032/description)
-(WAVERYS / MFWAM, 0,2°). PUM : [CMEMS-GLO-PUM-001-032](https://documentation.marine.copernicus.eu/PUM/CMEMS-GLO-PUM-001-032.pdf).
+(WAVERYS / MFWAM, 0.2°). PUM: [CMEMS-GLO-PUM-001-032](https://documentation.marine.copernicus.eu/PUM/CMEMS-GLO-PUM-001-032.pdf).
 
-| Dataset | Contenu | Suffit pour P90 ? |
+| Dataset | Content | Enough for P90? |
 |---------|---------|-------------------|
-| `cmems_mod_glo_wav_my_0.2deg-climatology_P1M-m` | **Moyenne** 1993–04/2019 de `VHM0`, `VTM02` | Non |
-| `cmems_mod_glo_wav_my_0.2deg_PT3H-i` | Instantané 3 h + partitions | **Oui** — percentiles hors ligne |
+| `cmems_mod_glo_wav_my_0.2deg-climatology_P1M-m` | **Mean** 1993–04/2019 of `VHM0`, `VTM02` | No |
+| `cmems_mod_glo_wav_my_0.2deg_PT3H-i` | 3 h instantaneous + partitions | **Yes** — percentiles offline |
 
-Variables : `VHM0`, `VTM02`, `VMDR`, `VHM0_SW1` / `VMDR_SW1` (mêmes noms que
-`getWave.py`, autre produit). Interdit d’étiqueter une moyenne « P90 ».
+Variables: `VHM0`, `VTM02`, `VMDR`, `VHM0_SW1` / `VMDR_SW1` (same names as
+`getWave.py`, different product). Forbidden to label a mean “P90”.
 
 ### Phases
 
-**A0** — `gen_wave_mean.py` : dataset climatology_P1M-m, overlay V0 `stat: mean`.
-**A1** — `gen_wave_pct.py` : pour chaque mois, PT3H toutes années, `nanpercentile`
-50 et 90, `circmedian` pour `VMDR`. Un mois à la fois, jamais le cube mondial en RAM.
-**A2** — `wave-MM.npz` : `hs_p50`, `hs_p90`, `period`, `dir`, masque mer.
+**A0** — `gen_wave_mean.py`: climatology_P1M-m dataset, V0 overlay `stat: mean`.
+**A1** — `gen_wave_pct.py`: for each month, PT3H all years, `nanpercentile`
+50 and 90, `circmedian` for `VMDR`. One month at a time, never the worldwide cube in RAM.
+**A2** — `wave-MM.npz`: `hs_p50`, `hs_p90`, `period`, `dir`, sea mask.
 
-Critère A : 40°S en juillet, `hs_p90` &gt; `hs_p50` &gt; 0 ; Andes = null.
+Criterion A: 40°S in July, `hs_p90` &gt; `hs_p50` &gt; 0; Andes = null.
 
-**B / C** — API + raster du mode (boutons P50 / P90). Popup : « 1 année sur 10,
-Hs &gt; X m ce mois-ci (période 1993–2019) ».
+**B / C** — API + mode raster (P50 / P90 buttons). Popup: “1 year in 10,
+Hs &gt; X m this month (period 1993–2019)”.
 
-**D** — `is_wave_hazard` si `hs_p90 > climatology.wave_nogo_m` (défaut 2,5 m,
-déjà dans `overWave`). `getWave.py` inchangé (forecast de départ).
+**D** — `is_wave_hazard` if `hs_p90 > climatology.wave_nogo_m` (default 2.5 m,
+already in `overWave`). `getWave.py` unchanged (departure forecast).
 
 ---
 
-## 12. Produit 3 — Courant de surface
+## 12. Product 3 — Surface current
 
-### En une phrase
+### In one sentence
 
-Douze champs mensuels u/v de surface (moyenne 1993–2016), flèches vers où
-ça porte, dérive au calme et correction d’isochrone.
+Twelve monthly surface u/v fields (1993–2016 mean), arrows toward where
+it sets, drift in a calm and isochrone correction.
 
-### Source (la plus simple)
+### Source (the simplest)
 
 [GLOBAL_MULTIYEAR_PHY_001_030](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030/description)
-(GLORYS12). PUM : [CMEMS-GLO-PUM-001-030](https://documentation.marine.copernicus.eu/PUM/CMEMS-GLO-PUM-001-030.pdf).
+(GLORYS12). PUM: [CMEMS-GLO-PUM-001-030](https://documentation.marine.copernicus.eu/PUM/CMEMS-GLO-PUM-001-030.pdf).
 
-Dataset déjà climatologique :
+Already-climatological dataset:
 `cmems_mod_glo_phy_my_0.083deg-climatology_P1M-m`
 
-12 moyennes 1993–2016, `uo` / `vo` / `thetao`, premier niveau `depth ≈ 0,494 m`
-(`minimum_depth=0.5`, `maximum_depth=1.0`, comme `getCurrent.py`).
+12 means 1993–2016, `uo` / `vo` / `thetao`, first level `depth ≈ 0.494 m`
+(`minimum_depth=0.5`, `maximum_depth=1.0`, like `getCurrent.py`).
 
-Ne pas confondre avec `cmems_mod_glo_phy_anfc_0.083deg_PT1H-m` (forecast clic).
+Do not confuse with `cmems_mod_glo_phy_anfc_0.083deg_PT1H-m` (click forecast).
 
-Convention : `atan2(u, v)` — **vers où** ça porte. Seuil bas documenté
-(`climatology.current_min_kn`) : en dessous, vecteur 0 **et** flag
-`below_threshold`, pas un null silencieux.
+Convention: `atan2(u, v)` — **toward where** it sets. Documented low threshold
+(`climatology.current_min_kn`): below it, vector 0 **and** flag
+`below_threshold`, not a silent null.
 
 ### Phases
 
-**A** — `gen_current.py` : un subset surface, 12 pas. Option : 0,25° pour la
-carte, 1/12° pour le point.
+**A** — `gen_current.py`: one surface subset, 12 steps. Option: 0.25° for the
+map, 1/12° for the point.
 
-Critère A : 26°N, 80°W (Gulf Stream, février) &gt; 1 kn vers le NE ; Sahara = null.
+Criterion A: 26°N, 80°W (Gulf Stream, February) &gt; 1 kn toward the NE; Sahara = null.
 
-**B / C** — flèches sur le pane vectoriel du **mode** BI, cumulables avec les roses.
+**B / C** — arrows on the vector pane of the BI **mode**, stackable with the roses.
 
-**D** — après `move_position` au vent, ajouter `current × time_step_h` dans
-`isochrone.py`. `getCurrent.py` inchangé.
+**D** — after `move_position` on wind, add `current × time_step_h` in
+`isochrone.py`. `getCurrent.py` unchanged.
 
 ---
 
-## 13. Produit 4 — Risque cyclone (IBTrACS)
+## 13. Product 4 — Cyclone risk (IBTrACS)
 
-### En une phrase
+### In one sentence
 
-Pistes historiques **since 1980**, filtrées par mois, plus `crossings` pour
-interdire une jambe d’isochrone. Saison **chiffrée**.
+Historical tracks **since 1980**, filtered by month, plus `crossings` to
+forbid an isochrone leg. Season **as a number**.
 
 ### Source
 
 [IBTrACS v04r01](https://www.ncei.noaa.gov/products/international-best-track-archive),
 CSV `ibtracs.since1980.list.v04r01.csv`.
-[Colonnes](https://www.ncei.noaa.gov/sites/default/files/2025-09/IBTrACS_v04r01_column_documentation.pdf).
-Licence : redistribution sans restriction (ERDDAP).
+[Columns](https://www.ncei.noaa.gov/sites/default/files/2025-09/IBTrACS_v04r01_column_documentation.pdf).
+Licence: unrestricted redistribution (ERDDAP).
 
-Colonnes : `SID`, `SEASON`, `BASIN` (NA, EP, WP, NI, SI, SP, SA), `ISO_TIME`,
+Columns: `SID`, `SEASON`, `BASIN` (NA, EP, WP, NI, SI, SP, SA), `ISO_TIME`,
 `LAT`, `LON`, `TRACK_TYPE`, `USA_STATUS`, `USA_WIND` (kn, 1 min), `USA_PRES`,
-`WMO_WIND` (10 min selon bassin — **documenter le mélange** : `USA_WIND` sinon
-`WMO_WIND`, champ `wind_source`).
+`WMO_WIND` (10 min depending on basin — **document the mix**: `USA_WIND` else
+`WMO_WIND`, field `wind_source`).
 
-Filtre : `TRACK_TYPE == main` (pas `spur`). Antiméridien : couper les LineString
-WP/SP qui franchissent 180°.
+Filter: `TRACK_TYPE == main` (not `spur`). Antimeridian: split LineStrings
+WP/SP that cross 180°.
 
-API routage (esprit OpenCPN) :
+Routing API (OpenCPN spirit):
 
 `crossings(lat1, lon1, lat2, lon2, month, dayrange) → { count, storms[] }`
 
 ### Phases
 
-**A** — `gen_cyclones.py` : un GeoJSON + index `{month: [sid…]}`.
-Critère A : septembre NA plein ; février NA vide ; SP janvier–mars plein.
+**A** — `gen_cyclones.py`: one GeoJSON + index `{month: [sid…]}`.
+Criterion A: September NA full; February NA empty; SP January–March full.
 
-**B / C** — traces dans le mode BI, couleur par `max_wind_kn`. Clic : SID, année,
-kn max, lien NCEI.
+**B / C** — traces in BI mode, colour by `max_wind_kn`. Click: SID, year,
+max kn, NCEI link.
 
-**D** — isochrone : si `climatology.avoid_cyclone_tracks`, jeter le pas si
-`crossings > 0`. Agent météo : entier du mois sur la jambe.
+**D** — isochrone: if `climatology.avoid_cyclone_tracks`, drop the step if
+`crossings > 0`. Weather agent: integer for the month on the leg.
 
 ---
 
-## 14. Règles (`run_rules`)
+## 14. Rules (`run_rules`)
 
-Un chiffre n’est pas une opinion (`docs/REGLES_PARAMETRES.md`). Famille
+A number is not an opinion (`docs/REGLES_PARAMETRES.md`). Family
 `climatology.*`.
 
-| Id | Famille | Défaut | Intervalle | Phénomène |
+| Id | Family | Default | Range | Phenomenon |
 |----|---------|--------|------------|-----------|
-| `climatology.wind_calm_kn` | géométrie | 3 | 2–4 | Calme Beaufort 0–1 (OpenCPN) |
-| `climatology.wind_gale_kn` | géométrie | 34 | 34–41 | Gale Beaufort 8 |
-| `climatology.wind_sectors` | loi | 8 | — | Rose 45° |
-| `climatology.wind_min_sector_pct` | géométrie | 2.5 | 1–5 | Bruit de secteur |
-| `climatology.wind_grid_deg` | budget | 0.5 | 0.25–1 | Maille atlas |
-| `climatology.wave_nogo_m` | géométrie | 2.5 | 2.0–4.0 | Seuil `overWave` |
-| `climatology.wave_stat` | loi | P90 = no-go, P50 = « typique » | — | Interdit de labeller une moyenne P90 |
-| `climatology.wave_period` | loi | `1993-2019` | — | Fenêtre WAVERYS climo ; A1 peut l’étendre si documenté |
-| `climatology.current_min_kn` | géométrie | 0.15 | 0.05–0.30 | Bruit vs dérive utile |
-| `climatology.current_depth_m` | loi | 0.5 | — | Premier niveau GLORYS |
-| `climatology.current_period` | loi | `1993-2016` | — | Dataset climatology PUM |
-| `climatology.cyclone_first_year` | loi | 1980 | — | Fichier since1980 |
-| `climatology.cyclone_dayrange` | géométrie | 21 | 7–45 | Fenêtre autour du jour de route |
-| `climatology.cyclone_radius_nm` | géométrie | 120 | 60–200 | Compteur popup « proche de la jambe » |
-| `climatology.cyclone_min_kn` | géométrie | 34 | 34–64 | Afficher au moins tempête tropicale |
-| `climatology.avoid_cyclone_tracks` | loi | true en simulation | — | Contrainte isochrone |
+| `climatology.wind_calm_kn` | geometry | 3 | 2–4 | Calm Beaufort 0–1 (OpenCPN) |
+| `climatology.wind_gale_kn` | geometry | 34 | 34–41 | Gale Beaufort 8 |
+| `climatology.wind_sectors` | law | 8 | — | 45° rose |
+| `climatology.wind_min_sector_pct` | geometry | 2.5 | 1–5 | Sector noise |
+| `climatology.wind_grid_deg` | budget | 0.5 | 0.25–1 | Atlas mesh |
+| `climatology.wave_nogo_m` | geometry | 2.5 | 2.0–4.0 | `overWave` threshold |
+| `climatology.wave_stat` | law | P90 = no-go, P50 = “typical” | — | Forbidden to label a mean P90 |
+| `climatology.wave_period` | law | `1993-2019` | — | WAVERYS climo window; A1 may extend it if documented |
+| `climatology.current_min_kn` | geometry | 0.15 | 0.05–0.30 | Noise vs useful drift |
+| `climatology.current_depth_m` | law | 0.5 | — | First GLORYS level |
+| `climatology.current_period` | law | `1993-2016` | — | PUM climatology dataset |
+| `climatology.cyclone_first_year` | law | 1980 | — | since1980 file |
+| `climatology.cyclone_dayrange` | geometry | 21 | 7–45 | Window around the route day |
+| `climatology.cyclone_radius_nm` | geometry | 120 | 60–200 | Popup counter “near the leg” |
+| `climatology.cyclone_min_kn` | geometry | 34 | 34–64 | Display at least tropical storm |
+| `climatology.avoid_cyclone_tracks` | law | true in simulation | — | Isochrone constraint |
 
-Loi non surchargeable : `kind` climatologie ≠ prévision ; pas de LLM pour un
-vent / une Hs / un compteur cyclone.
+Non-overridable law: climatology `kind` ≠ forecast; no LLM for a
+wind / an Hs / a cyclone counter.
 
 ---
 
-## 15. Contrats JSON
+## 15. JSON contracts
 
-### Point d’interrogation
+### Query point
 
 ```json
 {
@@ -478,51 +478,51 @@ vent / une Hs / un compteur cyclone.
 }
 ```
 
-Sur terre : `wind_atlas`, `wave`, `current` à `null` (structure conservée).
+On land: `wind_atlas`, `wave`, `current` set to `null` (structure kept).
 
-`most_likely` et `vector_mean` restent **tous les deux** visibles : la moyenne
-vectorielle est le piège des pilot charts.
+`most_likely` and `vector_mean` both stay **visible**: the vector
+mean is the pilot-chart trap.
 
-### GeoJSON vent (grille du mode)
+### Wind GeoJSON (mode grid)
 
-`FeatureCollection` + `metadata` (`export_meta`) : `model` / produit, `month`,
-`period`, `grid_spacing_deg`, licence. Points : `wind_speed_knots` du
-MOST_LIKELY, `wind_direction_from_deg`, `calm_pct`, `gale_pct`.
-
----
-
-## 16. Ordre de chantier
-
-```
-C0–C8  7ᵉ mode + API vide + panes + panneau
-   ├─ 4  Cyclones     (CSV, le plus court à voir sur la carte)
-   ├─ 3  Courant      (12 NetCDF surface)
-   ├─ 1  Vent roses   (subset 6 h × ~27 ans, Mac)
-   └─ 2  Houle P90    (3 h WAVERYS, le plus lourd ; V0 = moyenne P1M en parallèle)
-        └─ isochrones « OpenCPN-grade » quand 1+2+3+4 sont branchés
-N1–N4  fusion carte NAVIGUIDE (peut avancer en parallèle dès que l’API point répond)
-```
-
-Tant que le produit 1 n’est pas là, on ne prétend pas remplacer `climatology.py`.
-
-Prévision 0–10 j (déverrouiller l’échéance CMEMS ANFC, overlay GFS/IFS) :
-**hors V1** de ce mode. Autre chantier, autre `kind: "forecast"`.
+`FeatureCollection` + `metadata` (`export_meta`): `model` / product, `month`,
+`period`, `grid_spacing_deg`, licence. Points: MOST_LIKELY `wind_speed_knots`,
+`wind_direction_from_deg`, `calm_pct`, `gale_pct`.
 
 ---
 
-## 17. Fichiers touchés
+## 16. Build order
+
+```
+C0–C8  7th mode + empty API + panes + panel
+   ├─ 4  Cyclones     (CSV, shortest to see on the map)
+   ├─ 3  Current      (12 surface NetCDF)
+   ├─ 1  Wind roses   (6 h subset × ~27 years, Mac)
+   └─ 2  Swell P90    (3 h WAVERYS, the heaviest; V0 = P1M mean in parallel)
+        └─ “OpenCPN-grade” isochrones when 1+2+3+4 are wired
+N1–N4  NAVIGUIDE map fusion (can advance in parallel as soon as the point API responds)
+```
+
+Until product 1 is there, we do not claim to replace `climatology.py`.
+
+0–10 d forecast (unlock CMEMS ANFC validity, GFS/IFS overlay):
+**outside V1** of this mode. Another workshop, another `kind: "forecast"`.
+
+---
+
+## 17. Files touched
 
 ### Blue Intelligence
 
 - `frontend/src/App.js`, `Header.js`, `i18n.js`, `MapView.js`
-- `frontend/src/components/ClimatologyPanel.js` (nouveau)
-- `frontend/src/components/map/useClimatologyLayer.js` (nouveau, ou un hook par produit)
+- `frontend/src/components/ClimatologyPanel.js` (new)
+- `frontend/src/components/map/useClimatologyLayer.js` (new, or one hook per product)
 - `frontend/src/components/map/layerOrder.js` + `__tests__/layerOrder.test.js`
-- `backend/app/routers/climatology.py` (nouveau)
+- `backend/app/routers/climatology.py` (new)
 - `backend/app/services/climatology_wind.py`, `_wave.py`, `_current.py`, `_cyclones.py`
-- `backend/app/core/export_meta.py` (champs période / DOI)
+- `backend/app/core/export_meta.py` (period / DOI fields)
 - `backend/data/run_rules.json` + `docs/REGLES_PARAMETRES.md`
-- `backend/data/climatology/` (snapshots git-lfs ou release `data-`, à trancher)
+- `backend/data/climatology/` (git-lfs snapshots or `data-` release, to decide)
 - `scripts/climatology/gen_*.py`
 - `backend/tests/test_climatology_*.py`
 - `README.md`, `docs/CONTRATS_MODES.md`
@@ -534,102 +534,102 @@ Prévision 0–10 j (déverrouiller l’échéance CMEMS ANFC, overlay GFS/IFS) 
 - `naviguide/naviguide-api/agents/meteo_agent.py`
 - `naviguide/naviguide-app/src/components/MaritimeLayers.jsx`
 - `naviguide/naviguide-app/src/components/Sidebar.jsx`
-- `naviguide/naviguide-app/src/hooks/useLegContext.js` (mois de jambe)
-- `getWind.py` / `getWave.py` / `getCurrent.py` : **pas** fusionnés avec l’atlas
+- `naviguide/naviguide-app/src/hooks/useLegContext.js` (leg month)
+- `getWind.py` / `getWave.py` / `getCurrent.py`: **not** merged with the atlas
 
 ---
 
-## 18. Licences et attributions
+## 18. Licences and attributions
 
-| Source | Licence | Mention |
+| Source | Licence | Credit |
 |--------|---------|---------|
-| CMEMS vent / vague / courant | Licence de service Copernicus Marine | « Generated using E.U. Copernicus Marine Service Information » + DOI du produit |
-| IBTrACS | Redistribution sans restriction | « IBTrACS v04r01, NOAA NCEI » |
-| OpenCPN (idée seulement) | GPL v3 — on ne copie pas | Pas de fichier dérivé |
+| CMEMS wind / wave / current | Copernicus Marine service licence | “Generated using E.U. Copernicus Marine Service Information” + product DOI |
+| IBTrACS | Unrestricted redistribution | “IBTrACS v04r01, NOAA NCEI” |
+| OpenCPN (idea only) | GPL v3 — we do not copy | No derived file |
 
-Footer du 7ᵉ mode + `metadata.disclaimer_fr` : mêmes phrases que `export_meta.py`
-(ne convient pas à la navigation, pas un document SOLAS, veille METAREA / Navtex
-inchangée).
+7th-mode footer + `metadata.disclaimer_fr`: same phrases as `export_meta.py`
+(not suitable for navigation, not a SOLAS document, METAREA / Navtex watch
+unchanged).
 
 ---
 
-## 19. Recette
+## 19. Recipe
 
-### Blue Intelligence (mode Climatologie)
+### Blue Intelligence (Climatology mode)
 
-1. Le 7ᵉ bouton affiche le panneau et la carte atlas ; les six autres modes
-   n’ont aucune rose.
-2. Décembre, Atlantique 10–20°N : roses ENE/NE, pas l’unique 18 kn / 050° de
+1. The 7th button shows the panel and the atlas map; the six other modes
+   have no rose.
+2. December, Atlantic 10–20°N: ENE/NE roses, not the single 18 kn / 050° of
    `climatology.py`.
-3. P90 allumé, P50 éteint : quarantièmes plus sombres, Méditerranée d’été calme.
-4. Gulf Stream février : flèches &gt; 1 kn ; Sahara : pas de courant.
-5. Curseur septembre, Caraïbes : pelote de traces ; mars : presque vide.
-6. Clic terre : blocs vent / houle / courant à `null`.
-7. Attribution CMEMS + IBTrACS + bandeau navigation visibles.
+3. P90 on, P50 off: roaring forties darker, summer Mediterranean calm.
+4. Gulf Stream February: arrows &gt; 1 kn; Sahara: no current.
+5. September slider, Caribbean: tangle of traces; March: almost empty.
+6. Land click: wind / swell / current blocks at `null`.
+7. CMEMS + IBTrACS attribution + navigation banner visible.
 
 ### NAVIGUIDE
 
-1. Aucune couche « climatologie » / ZEE / WPI n’est requise à l’écran pour
-   qu’une simulation donne un ETA qui **bouge** selon le mois.
-2. Isochrone MOST_LIKELY ≠ AVERAGE sur un alizé.
-3. Isochrone juillet 50°S plus nord dès que le P90 est branché.
-4. `crossings` Martinique→Açores en septembre &gt; 0 ; en mars = 0.
-5. L’agent météo cite un **entier** IBTrACS, pas seulement « saison des ouragans ».
-6. Le clic Copernicus vent/vague/courant continue de parler NRT / ANFC
-   (`kind` différent, horodatage du produit).
+1. No “climatology” / EEZ / WPI layer is required on screen for
+   a simulation to give an ETA that **moves** with the month.
+2. MOST_LIKELY isochrone ≠ AVERAGE on a trade-wind.
+3. July 50°S isochrone more northerly as soon as P90 is wired.
+4. Martinique→Azores `crossings` in September &gt; 0; in March = 0.
+5. The weather agent cites an IBTrACS **integer**, not only “hurricane season”.
+6. The Copernicus wind/wave/current click still speaks NRT / ANFC
+   (different `kind`, product timestamp).
 
 ---
 
-## 20. Risques
+## 20. Risks
 
-| Risque | Parade |
+| Risk | Mitigation |
 |--------|--------|
-| Cube 3 h WAVERYS / vent MY sur le VPS 8 Go | Pipeline Mac uniquement ; VPS = fichiers finis |
-| Confondre moyenne P1M et P90 | Champ `stat` obligatoire ; test `p90 >= p50` |
-| Confondre NRT 48 h et atlas | Deux `kind`, deux endpoints |
-| Convention vent `from` vs courant `to` | Tests `atan2` séparés ; légende du popup |
-| Antiméridien (pistes WP, route) | Couper les LineString ; jamais interpoler à travers l’Afrique |
-| Header trop dense (7 boutons) | Libellés courts ; icône seule sous viewport étroit (à traiter en UI) |
-| GPL OpenCPN | Réécriture ; revue licence avant merge |
-| El Niño / changement climatique | Période écrite à l’écran ; pas de « vérité 2027 » |
-| `best_match` Open-Meteo | Hors V1 ; si un jour forecast, modèle **nommé** |
+| 3 h WAVERYS / MY wind cube on the 8 GB VPS | Mac pipeline only; VPS = finished files |
+| Confusing P1M mean and P90 | Mandatory `stat` field; test `p90 >= p50` |
+| Confusing 48 h NRT and atlas | Two `kind`s, two endpoints |
+| Wind `from` vs current `to` convention | Separate `atan2` tests; popup legend |
+| Antimeridian (WP tracks, route) | Split LineStrings; never interpolate across Africa |
+| Header too dense (7 buttons) | Short labels; icon only on a narrow viewport (to treat in UI) |
+| OpenCPN GPL | Rewrite; licence review before merge |
+| El Niño / climate change | Period written on screen; no “2027 truth” |
+| Open-Meteo `best_match` | Outside V1; if one day forecast, model **named** |
 
 ---
 
-## 21. Hors périmètre (V1)
+## 21. Out of scope (V1)
 
-- Prévision GFS / IFS / ICON / AIFS et overlay « cette semaine » **dans le
-  7ᵉ mode BI**. Le chantier forecast du **simulateur** est
+- GFS / IFS / ICON / AIFS forecast and “this week” overlay **in the
+  7th BI mode**. The **simulator** forecast workshop is
   [PLAN_IMPLEMENTATION_SIMULATION_B.md](./PLAN_IMPLEMENTATION_SIMULATION_B.md)
-  (après
+  (after
   [PLAN_IMPLEMENTATION_SIMULATION_A.md](./PLAN_IMPLEMENTATION_SIMULATION_A.md)).
-- Déverrouillage `valid_time` de `getWave.py` / `getCurrent.py` (chantier forecast
-  à part — B côté simulateur, pas le clic NRT).
-- Auto-hébergement Open-Meteo, ingestion GRIB NOMADS.
-- Review / Gold du mode Climatologie.
-- Rayons R34 IBTrACS, années analogues El Niño, bins vent 40+ kn.
-- Spectre directionnel complet, Stokes, courants de marée.
-- Nuages, foudre, humidité, précipitations (OpenCPN les a ; ce n’est pas le skipper
-  hauturier V1).
-- 8ᵉ pastille climatologie dans NAVIGUIDE.
+- Unlocking `valid_time` of `getWave.py` / `getCurrent.py` (separate forecast
+  workshop — B on the simulator side, not the NRT click).
+- Self-hosting Open-Meteo, NOMADS GRIB ingestion.
+- Review / Gold of Climatology mode.
+- IBTrACS R34 radii, El Niño analogue years, 40+ kn wind bins.
+- Full directional spectrum, Stokes, tidal currents.
+- Clouds, lightning, humidity, precipitation (OpenCPN has them; this is not the
+  V1 offshore skipper).
+- 8th climatology pill in NAVIGUIDE.
 
 ---
 
-## 22. Documents et conversations dont ce plan hérite
+## 22. Documents and conversations this plan inherits
 
-- Décisions produit (sept. 2026) : climatologie d’abord pour les traversées ;
-  7ᵉ mode BI ; NAVIGUIDE invisible + fusion de cartes ; quatre produits ouverts.
-- Plugin OpenCPN `climatology_pi` (manuel, `gendata/`, `ClimatologyOverlayFactory.h`)
-  et `weather_routing_pi` (MOST_LIKELY, crossings).
+- Product decisions (Sept. 2026): climatology first for passages;
+  7th BI mode; NAVIGUIDE invisible + map fusion; four products opened.
+- OpenCPN plugin `climatology_pi` (manual, `gendata/`, `ClimatologyOverlayFactory.h`)
+  and `weather_routing_pi` (MOST_LIKELY, crossings).
 - `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/PRD.md`.
 - `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
-  satellite : métiers distincts de l’atlas mensuel.
-- `docs/PLAN_IMPLEMENTATION_SIMULATION_A.md` — ETA du film simulateur
-  selon le mois, trait searoute fixe.
-- `docs/PLAN_IMPLEMENTATION_SIMULATION_B.md` — `kind: forecast` 0–10 j
-  + Suivre + isochrone d’une jambe, **dans** `naviguide-simulator/`.
-- Code : `getWind.py`, `getWave.py`, `getCurrent.py`, `climatology.py`,
+  satellite: jobs distinct from the monthly atlas.
+- `docs/PLAN_IMPLEMENTATION_SIMULATION_A.md` — simulator-film ETA
+  by month, fixed searoute line.
+- `docs/PLAN_IMPLEMENTATION_SIMULATION_B.md` — `kind: forecast` 0–10 d
+  + Follow + one-leg isochrone, **inside** `naviguide-simulator/`.
+- Code: `getWind.py`, `getWave.py`, `getCurrent.py`, `climatology.py`,
   `isochrone.py`, `useScienceWms.js`, `layerOrder.js`, `MaritimeLayers.jsx`,
   `export_meta.py`, `meteo_agent.py`.
-- PUM CMEMS vent 012-004-006, vagues 001-032, physique 001-030 ;
-  IBTrACS v04r01 ; ERA5 monthly (écarté comme source **seule** des roses).
+- CMEMS PUM wind 012-004-006, waves 001-032, physics 001-030;
+  IBTrACS v04r01; ERA5 monthly (rejected as the **sole** source of the roses).

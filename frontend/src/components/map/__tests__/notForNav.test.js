@@ -15,12 +15,12 @@ function memStore() {
 }
 
 describe("notForNav", () => {
-  test("sans acceptation, le site reste fermé", () => {
+  test("without acceptance, the site stays closed", () => {
     expect(siteEntryNeedsAccept(false)).toBe(true);
     expect(siteEntryNeedsAccept(true)).toBe(false);
   });
 
-  test("persiste version + empreinte ; un nouveau texte redemande", () => {
+  test("persists version + fingerprint; a new text asks again", () => {
     const store = memStore();
     writeNotForNavAccepted(store, "This map is not for navigating", "body v1");
     expect(readNotForNavAccepted(store, "This map is not for navigating", "body v1")).toBe(true);

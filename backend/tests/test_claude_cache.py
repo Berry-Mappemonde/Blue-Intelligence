@@ -1,4 +1,4 @@
-"""Tests unitaires de l'adaptateur Claude PoE — aucun appel réseau."""
+"""Unit tests of the Claude PoE adapter — no network calls."""
 import sys
 from pathlib import Path
 

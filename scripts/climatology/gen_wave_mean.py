@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""WAVERYS climatology_P1M-m → wave-MM.npz avec stat: mean.
+"""WAVERYS climatology_P1M-m → wave-MM.npz with stat: mean.
 
-Ce n'est PAS un P90. Overlay V0 seulement.
+This is NOT a P90. V0 overlay only.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ DOI = "10.48670/moi-00022"
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--month", type=int, default=None)
-    ap.add_argument("--spacing", type=float, default=0.4, help="maille stockée (°)")
+    ap.add_argument("--spacing", type=float, default=0.4, help="stored cell size (°)")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()
     try:
@@ -34,7 +34,7 @@ def main() -> int:
         raise SystemExit("Prérequis : copernicusmarine xarray netCDF4 numpy") from exc
 
     args.out.mkdir(parents=True, exist_ok=True)
-    # Le P1M climatologique n'a pas VMDR (direction) — on n'invente pas.
+    # The climatological P1M has no VMDR (direction) — we do not invent one.
     ds = open_dataset(
         dataset_id=DATASET,
         variables=["VHM0", "VTM02"],

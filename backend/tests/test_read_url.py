@@ -1,4 +1,4 @@
-"""Porte unique read_url / extract_cascade — aucun réseau."""
+"""Single door read_url / extract_cascade — no network."""
 from __future__ import annotations
 
 import asyncio
@@ -278,7 +278,7 @@ class TestReadUrls:
         assert page["blocked"] is False
 
     def test_short_html_at_pdf_url_still_mirrors(self, monkeypatch):
-        """205 chars de HTML (seuil N1) ne doivent pas empêcher TinyFish."""
+        """205 chars of HTML (N1 threshold) must not block TinyFish."""
         html = "<html><body>" + ("lorem ipsum " * 18) + "</body></html>"
         rendered = []
         mirrors = []

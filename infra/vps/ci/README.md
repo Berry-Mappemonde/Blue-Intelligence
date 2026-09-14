@@ -1,16 +1,16 @@
-# CI de déploiement VPS
+# VPS deploy CI
 
-Utilisé par `.github/workflows/deploy.yml`. À lancer sur le runner GitHub
-(`prepare-ssh.sh`, `rsync-to-vps.sh`) ou sur le VPS (`apply-site.sh`,
+Used by `.github/workflows/deploy.yml`. Run on the GitHub runner
+(`prepare-ssh.sh`, `rsync-to-vps.sh`) or on the VPS (`apply-site.sh`,
 `apply-pending.sh`, `prod_jobs_busy.py`).
 
 ```bash
-# Sur le VPS : y a-t-il un Complet / enrichissement en cours ?
+# On the VPS: is a Full / enrichment run in progress?
 python3 infra/vps/ci/prod_jobs_busy.py --base-url http://127.0.0.1:8001
-# 0 = idle, 10 = occupé, 1 = sonde en échec
+# 0 = idle, 10 = busy, 1 = probe failed
 ```
 
-La sonde envoie un `User-Agent` dédié : Cloudflare bloque `Python-urllib/3.x`.
-Un endpoint en 404/410 est ignoré (ex. `generate-batch` retiré).
-Le lot Review **Proposer** (`GET /api/review/suggest/status`) exige
-`ADMIN_KEY` (env ou `backend/.env` sur le VPS).
+The probe sends a dedicated `User-Agent`: Cloudflare blocks `Python-urllib/3.x`.
+A 404/410 endpoint is ignored (e.g. retired `generate-batch`).
+The Review **Propose** batch (`GET /api/review/suggest/status`) requires
+`ADMIN_KEY` (env or `backend/.env` on the VPS).

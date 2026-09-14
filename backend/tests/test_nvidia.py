@@ -1,4 +1,4 @@
-"""Adaptateur NVIDIA NIM — aucun réseau."""
+"""NVIDIA NIM adapter — no network."""
 import asyncio
 import sys
 from pathlib import Path
@@ -193,7 +193,7 @@ class TestProvider:
         kimi = nvidia.chat_payload("moonshotai/kimi-k3", "sys", "user", 32)
         assert kimi["temperature"] == 1.0
         assert kimi["reasoning_effort"] == "low"
-        assert "top_p" not in kimi  # non exposé sur kimi-k3-infer
+        assert "top_p" not in kimi  # not exposed on kimi-k3-infer
         kimi_legal = nvidia.chat_payload(
             "moonshotai/kimi-k3", "sys", "user", 32, role="legal")
         assert kimi_legal["reasoning_effort"] == "high"

@@ -1,4 +1,4 @@
-"""Histogrammes Hs P50/P90 — sans Copernicus, sans cube en RAM."""
+"""Hs P50/P90 histograms — no Copernicus, no cube in RAM."""
 from __future__ import annotations
 
 import json

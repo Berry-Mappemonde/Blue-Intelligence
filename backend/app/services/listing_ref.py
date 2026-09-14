@@ -1,9 +1,8 @@
-"""
-listing_ref — Projette le listing communautaire (all_countries.json) dans
-l'espace d'un run PoE : mrgid VLIZ + iso2 + nom + rôle (poe | other).
+"""listing_ref — Project the community listing (all_countries.json) into
+a PoE run space: VLIZ mrgid + iso2 + name + role (poe | other).
 
-Ne touche ni poe_ports ni poe_run_ports. Le listing n'est pas une source
-d'extraction : c'est un référentiel de contrôle.
+Touch neither poe_ports nor poe_run_ports. The listing is not an
+extraction source: it is a control reference.
 """
 from __future__ import annotations
 
@@ -23,7 +22,7 @@ EEZ_INDEX_FILE = LISTING_DIR / "eez_index.json"
 AUTO_THRESHOLD = 0.86
 _SLUG_TAIL = re.compile(r"-\d+$")
 
-# Groupe listing / nom → mrgid VLIZ (le 1er override n'est pas toujours le bon).
+# Listing group / name → VLIZ mrgid (the first override is not always the right one).
 _GROUP_MRGID = (
     ("usa", "alaska", 8463),
     ("usa", "hawaii", 8453),
@@ -41,7 +40,7 @@ _NAME_MRGID = (
     ("norway", ("longyearbyen",), 33181),
 )
 
-# Slugs listing → libellé comparable à eez_index.name
+# Listing slugs → label comparable to eez_index.name
 _ALIASES = {
     "france-2": "france",
     "georgia-3": "georgia",
@@ -104,7 +103,7 @@ def _best_score(queries: list[str], zone: dict) -> float:
 
 
 def _prefer_sovereign(zones: list[dict]) -> list[dict]:
-    """Écarte les régimes conjoints / revendications si un 200NM existe."""
+    """Drop joint / claim regimes if a 200NM exists."""
     nm = [z for z in zones if (z.get("pol_type") or "") == "200NM"]
     return nm or zones
 
@@ -152,7 +151,7 @@ def _resolution(slug: str, name: str, zones: list[dict], method: str) -> dict:
 
 def pick_listing_mrgid(res: dict, port: dict | str | None,
                        zones: list[dict] | None = None) -> int:
-    """Choisit le polygone VLIZ d'un port listing (groupe / nom, pas le 1er override)."""
+    """Pick the VLIZ polygon of a listing port (group / name, not the first override)."""
     mrgids = [int(x) for x in (res.get("mrgids") or [])]
     slug = (res.get("slug") or "").lower()
     if isinstance(port, dict):
@@ -201,7 +200,7 @@ def _emit_port(country: dict, res: dict, port: dict, role: str,
 
 def project_listing(listing: dict | None = None, zones: list[dict] | None = None,
                     overrides: dict[str, list[int]] | None = None) -> dict:
-    """Construit listing_ref : ports au format run + résolution des slugs."""
+    """Build listing_ref: ports in run format + slug resolution."""
     listing = listing if listing is not None else load_listing_doc()
     zones = zones if zones is not None else load_eez_index()
     overrides = overrides if overrides is not None else load_overrides()
@@ -243,13 +242,13 @@ def project_listing(listing: dict | None = None, zones: list[dict] | None = None
 
 
 def listing_ports_for_mrgid(ports: list[dict], mrgid: int) -> list[dict]:
-    """Ports listing applicables à une ZEE (slug → un ou plusieurs mrgid)."""
+    """Listing ports applicable to an EEZ (slug → one or more mrgid)."""
     mrgid = int(mrgid)
     out = []
     for p in ports:
         ids = p.get("mrgids") or ([p["mrgid"]] if p.get("mrgid") else [])
         if mrgid in {int(x) for x in ids}:
-            # copie avec le mrgid de la zone comparée (même espace qu'un run)
+            # copy with the compared zone's mrgid (same space as a run)
             out.append({**p, "mrgid": mrgid,
                         "dedup_key": f"{mrgid}:{normalize_name(p.get('name'))}"})
     return out

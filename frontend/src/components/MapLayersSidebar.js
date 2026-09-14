@@ -13,8 +13,8 @@ export const DEFAULT_SCIENCE_WMS = {
 };
 
 /**
- * Couches carte (Données BI, isobathe, EMODnet).
- * Affiché dans le panneau Réglages (roue dentée).
+ * Map layers (BI data, isobath, EMODnet).
+ * Shown in the Settings panel (gear icon).
  */
 export default function MapLayersSidebar({
   t,

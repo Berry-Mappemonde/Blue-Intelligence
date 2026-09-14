@@ -56,7 +56,7 @@ class TestZones:
             assert "_id" not in it, "MongoDB _id leaked"
 
     def test_some_zone_generated(self, zones):
-        """Au moins une zone générée avec des PoE (dynamique, robuste au seed)."""
+        """At least one generated zone with PoE (dynamic, seed-robust)."""
         gen = [z for z in zones["items"] if z.get("status") == "ia" and (z.get("poe_count") or 0) > 0]
         assert gen, "aucune zone au statut ia avec des PoE"
 
@@ -86,7 +86,7 @@ class TestPorts:
         assert gj["features"][0]["geometry"]["type"] == "Point"
 
     def test_ports_filter_by_mrgid(self, client):
-        """Le filtre mrgid ne renvoie que les ports de la zone (zone générée dynamique)."""
+        """The mrgid filter returns only ports of the zone (dynamically generated zone)."""
         zones = client.get(f"{BASE_URL}/api/poe/zones", timeout=120).json()["items"]
         gen = [z for z in zones if z.get("status") == "ia" and (z.get("poe_count") or 0) > 0]
         assert gen, "aucune zone générée avec des PoE"
@@ -103,7 +103,7 @@ class TestPorts:
         assert r.json()["features"] == []
 
 
-# --- Module: fiche ZEE (revue) ----------------------------------------------
+# --- Module: EEZ card (review) ----------------------------------------------
 class TestZoneFiche:
     def test_fiche_has_ports_and_td_bu(self, client, zones):
         gen = [z for z in zones["items"] if (z.get("poe_count") or 0) > 0]
@@ -142,7 +142,7 @@ class TestZoneFiche:
         assert r.json()["type"] == "FeatureCollection"
 
     def test_france_subzones_are_separate_fiches(self, client, zones):
-        """France hexagone ≠ Mayotte : deux mrgid, deux libellés, pas d'agrégat."""
+        """France hexagon ≠ Mayotte: two mrgids, two labels, no aggregate."""
         by_id = {z["mrgid"]: z for z in zones["items"]}
         hexagon = by_id[5677]
         mayotte = by_id[48944]

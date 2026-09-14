@@ -1,15 +1,15 @@
 """
-Adaptateur Anthropic — extraction PoE uniquement.
+Anthropic adapter — PoE extraction only.
 
-Périmètre strict :
-  - API Messages directe (pas Claude via OpenRouter) ;
-  - Haiku 4.5, sans thinking ni web search ;
-  - cache_control explicite sur le préfixe STATIQUE (≥ 4096 tokens, TTL 1 h) ;
-  - lock série sur tous les appels (le cache n'est lisible qu'après la 1re réponse) ;
-  - activé seulement si clé + plafond $ > 0 ; stop à 90 % du plafond ;
-  - ledger local (DATA_DIR/claude_usage.json) — Anthropic n'expose pas le solde.
+Strict scope:
+  - Direct Messages API (not Claude via OpenRouter);
+  - Haiku 4.5, no thinking and no web search;
+  - explicit cache_control on the STATIC prefix (≥ 4096 tokens, 1 h TTL);
+  - serial lock on all calls (the cache is readable only after the first reply);
+  - enabled only if key + $ cap > 0; stop at 90% of the cap;
+  - local ledger (DATA_DIR/claude_usage.json) — Anthropic does not expose the balance.
 
-Ne pas importer ce module depuis grounded_search, le swarm ou les marinas.
+Do not import this module from grounded_search, the swarm or marinas.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ _call_lock = asyncio.Lock()
 
 
 class ClaudeBudgetExhausted(RuntimeError):
-    """Plafond local atteint (90 %) ou refus billing Anthropic."""
+    """Local cap reached (90%) or Anthropic billing refusal."""
 
 
 def _env(name: str) -> str:
@@ -62,7 +62,7 @@ def _env(name: str) -> str:
 
 
 def estimate_tokens(text: str) -> int:
-    """Sous-estime volontairement (4 chars/token) pour garantir le seuil Haiku."""
+    """Deliberately underestimate (4 chars/token) to guarantee the Haiku threshold."""
     return max(1, (len(text or "") + 3) // 4)
 
 
@@ -74,7 +74,7 @@ def get_anthropic_key(settings: dict | None = None) -> str:
 
 
 def get_claude_budget_usd(settings: dict | None = None) -> float:
-    """UI si > 0, sinon CLAUDE_BUDGET_USD, sinon 0 (Claude éteint)."""
+    """UI if > 0, else CLAUDE_BUDGET_USD, else 0 (Claude off)."""
     s = settings or {}
     s_val = None
     raw = s.get("claude_budget_usd")
@@ -108,7 +108,7 @@ def _rates_for_model(model: str | None) -> tuple[float, float, float, float, flo
 
 
 def estimate_cost_usd(usage: dict | None, model: str | None = None) -> float:
-    """Coût à partir du bloc usage de l'API Messages (Haiku par défaut)."""
+    """Cost from the Messages API usage block (Haiku by default)."""
     u = usage or {}
     inp_r, out_r, read_r, w5, w1h = _rates_for_model(model)
     read = int(u.get("cache_read_input_tokens") or 0)
@@ -225,7 +225,7 @@ def _is_billing_error(status: int, body: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Préfixe statique (few-shots + lexique) — identique d'une ZEE à l'autre
+# Static prefix (few-shots + lexicon) — identical from one EEZ to the next
 # ---------------------------------------------------------------------------
 _RULES = """Tu es le moteur d'extraction Ports d'Entrée de Blue Intelligence.
 Tu réponds UNIQUEMENT avec un unique objet JSON valide, sans prose, sans fences markdown.
@@ -398,8 +398,8 @@ def _glossary() -> str:
     ]
     for lang, terms in _GLOSSARY_ROWS:
         lines.append(f"- {lang}: {terms}")
-    # Répéter des précisions stables pour atteindre le seuil de cache Haiku
-    # (4096 tokens) avec du contenu utile, pas du remplissage aléatoire.
+    # Repeat stable details to reach the Haiku cache threshold
+    # (4096 tokens) with useful content, not random padding.
     extras = [
         "Un terminal pétrolier ou minéralier n'est un PoE que s'il est nommé "
         "dans la liste officielle d'entrée des navires étrangers.",
@@ -418,8 +418,8 @@ def _glossary() -> str:
     lines.append("PRÉCISIONS STABLES :")
     for i, extra in enumerate(extras, 1):
         lines.append(f"{i}. {extra}")
-    # Ancrage long mais déterministe : motifs d'URL / de gazette à reconnaître
-    # (pas une liste de ports). Répété pour garantir ≥ 4096 tokens Haiku.
+    # Long but deterministic anchor: URL / gazette patterns to recognize
+    # (not a list of ports). Repeated to guarantee ≥ 4096 Haiku tokens.
     url_tokens = (
         "port-of-entry", "ports-of-entry", "puertos-habilitados",
         "puertos-de-entrada", "portos-de-entrada", "ports-entree",
@@ -439,8 +439,8 @@ def _glossary() -> str:
 
 def _build_static_prefix() -> str:
     text = f"{_RULES}\n{_FEW_SHOTS}\n{_glossary()}\n"
-    # Filet : si un refactor raccourcit le préfixe sous le seuil Haiku,
-    # on allonge avec des précisions déjà énoncées (contenu stable).
+    # Net: if a refactor shortens the prefix under the Haiku threshold,
+    # pad with details already stated (stable content).
     pad_n = 0
     while estimate_tokens(text) < MIN_CACHE_TOKENS + 80:
         pad_n += 1
@@ -458,7 +458,7 @@ STATIC_PREFIX = _build_static_prefix()
 
 
 def build_extract_payload(zone: dict, context: str) -> dict:
-    """Payload Messages : breakpoint sur le préfixe statique, jamais sur le user."""
+    """Messages payload: breakpoint on the static prefix, never on the user."""
     from app.services.poe_zone_label import search_polygon_name
     name = search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or "")
     sovereign = zone.get("sovereign") or ""
@@ -498,7 +498,7 @@ def _content_text(message: dict) -> str:
 
 async def extract_ports_claude(context: str, zone: dict,
                                settings: dict | None = None, log=None) -> list[dict]:
-    """Un appel Haiku sérialisé. Lève ClaudeBudgetExhausted ou RuntimeError."""
+    """One serialized Haiku call. Raises ClaudeBudgetExhausted or RuntimeError."""
     if not claude_enabled(settings):
         raise RuntimeError("Claude disabled (missing key or budget is 0)")
     if not budget_allows_call(settings):
@@ -548,7 +548,7 @@ async def complete_json_claude(system: str, user: str,
                                model: str | None = None,
                                max_tokens: int = 250, log=None,
                                images: list[bytes] | None = None) -> dict:
-    """Appel Messages JSON (juge). Haiku ou Sonnet. Lève si budget / HTTP."""
+    """JSON Messages call (judge). Haiku or Sonnet. Raises on budget / HTTP."""
     from app.core.vision_msg import claude_user_content
 
     if not claude_enabled(settings):
@@ -595,7 +595,7 @@ async def complete_json_claude(system: str, user: str,
 
 
 def _parse_tiebreak(parsed, items: list[dict]) -> dict:
-    """Mappe name → choice. Clés originales + casefold."""
+    """Map name → choice. Original keys + casefold."""
     allowed = {"nominatim", "geonames", "none"}
     names = {(it.get("name") or "").strip() for it in items if it.get("name")}
     out: dict[str, str] = {}
@@ -615,11 +615,11 @@ def _parse_tiebreak(parsed, items: list[dict]) -> dict:
 async def arbitrate_geocode_claude(zone: dict, items: list[dict],
                                    settings: dict | None = None,
                                    log=None) -> dict:
-    """Un appel Haiku par zone : Nominatim vs GeoNames, sans 3e GPS.
+    """One Haiku call per zone: Nominatim vs GeoNames, no 3rd GPS.
 
     items = [{name, nominatim: [lat, lon], geonames: [lat, lon]}, ...]
-    Retourne {name: 'nominatim'|'geonames'|'none'} (aussi en casefold).
-    Dict vide si Claude éteint, budget, ou parse KO (repli EEZ côté pipeline).
+    Return {name: 'nominatim'|'geonames'|'none'} (also casefold).
+    Empty dict if Claude is off, budget, or parse fails (EEZ fallback on the pipeline).
     """
     from app.core.geo import TIEBREAK_SYSTEM, tiebreak_user_prompt
 

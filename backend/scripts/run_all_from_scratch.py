@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Enchaîne un run Complet from scratch de chaque mode (sauf Science).
+"""Chain a Complet from-scratch run of each mode (except Science).
 
-N'écrit jamais dans Atlas. À lancer contre l'API locale du VPS
-(http://127.0.0.1:8001) dont MONGO_URL pointe vers Mongo local.
+Never writes Atlas. Run against the VPS local API
+(http://127.0.0.1:8001) whose MONGO_URL points at local Mongo.
 
-Usage :
+Usage:
   python scripts/run_all_from_scratch.py
   BASE_URL=http://127.0.0.1:8001 ADMIN_KEY=… python scripts/run_all_from_scratch.py
 """

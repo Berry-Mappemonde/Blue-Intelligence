@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Installation + sécurisation de MongoDB 8.0 Community sur le VPS (Ubuntu).
-# Idempotent : réexécutable sans danger. Détails : infra/vps/README.md.
+# Install + harden MongoDB 8.0 Community on the VPS (Ubuntu).
+# Idempotent: safe to rerun. Details: infra/vps/README.md.
 set -euo pipefail
 
 CONF_DIR="$HOME/.config/blue-intelligence"
 MONGO_ENV="$CONF_DIR/mongo.env"
 
-# DB_NAME : soit exporté, soit lu depuis atlas.env (MONGO_URL Atlas + DB_NAME).
+# DB_NAME: either exported, or read from atlas.env (Atlas MONGO_URL + DB_NAME).
 [ -f "$CONF_DIR/atlas.env" ] && . "$CONF_DIR/atlas.env"
 : "${DB_NAME:?DB_NAME requis (export DB_NAME=… ou renseigner $CONF_DIR/atlas.env)}"
 
@@ -16,7 +16,7 @@ if ! command -v mongod >/dev/null 2>&1; then
   sudo apt-get install -y gnupg curl
   curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc \
     | sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor --yes
-  # Canal "noble" (24.04) : fonctionne aussi sur les Ubuntu intermédiaires (25.x).
+  # "noble" channel (24.04): also works on intermediate Ubuntu releases (25.x).
   echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" \
     | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list >/dev/null
   sudo apt-get update

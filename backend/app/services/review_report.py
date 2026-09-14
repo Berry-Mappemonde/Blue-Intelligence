@@ -1,11 +1,11 @@
-"""Rapport de review — matière première des améliorations pipeline.
+"""Review report — raw material for pipeline improvements.
 
-Agrège en lecture seule `review_comments`, `review_choices` et
-`review_gold` (plus les collections live pour retrouver les titres).
-Les URLs collées dans un commentaire — ex. liste PoE d'un polygone ZEE
-trouvée à la main via Gemini — ressortent en « URLs proposées » :
-candidates à lecture / récupération par le pipeline au run suivant.
-Le rapport n'écrit rien : ni règle, ni collection live, ni Gold.
+Read-only aggregate of `review_comments`, `review_choices` and
+`review_gold` (plus live collections to recover titles).
+URLs pasted in a comment — e.g. a PoE list of an EEZ polygon
+found by hand via Gemini — come out as “proposed URLs”:
+candidates for the pipeline to read / fetch on the next run.
+The report writes nothing: no rule, no live collection, no Gold.
 """
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ async def _title_for(db, kind: str, eid: str) -> str:
 
 
 async def build_report(db, kind: str | None = None) -> dict:
-    """Rapport JSON : items par fiche + actions pipeline agrégées."""
+    """JSON report: items per card + aggregated pipeline actions."""
     kinds = list(REPORT_KINDS) if not kind or kind == "all" else [kind]
     filt = {"kind": {"$in": kinds}}
     comments = await db.review_comments.find(filt).to_list(50000)
@@ -104,7 +104,7 @@ async def build_report(db, kind: str | None = None) -> dict:
         if not text or k not in kinds or not eid:
             continue
         row = bucket(k, eid)
-        # Clés héritées {kind}:{run}:{id} possibles : on garde le plus récent.
+        # Legacy {kind}:{run}:{id} keys possible: keep the most recent.
         up = _sid(d.get("updated_at"))
         if not row["comment"] or up > _sid(row["comment_updated_at"]):
             row["comment"] = text
@@ -241,7 +241,7 @@ def _acts(m: dict | None, want: str) -> list[str]:
 
 
 def report_markdown(report: dict) -> str:
-    """Rapport lisible (Markdown, en français) prêt à partager."""
+    """Readable report (Markdown, in French) ready to share."""
     lines: list[str] = ["# Rapport de review", ""]
     kinds = report.get("kinds") or []
     lines.append(f"Généré le {report.get('generated_at')} — modes : "

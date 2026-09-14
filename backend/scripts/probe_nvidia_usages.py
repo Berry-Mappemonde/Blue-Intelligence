@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests dirigés par usage Blue Intelligence (NIM hosted).
+"""Usage-driven Blue Intelligence tests (hosted NIM).
 
-Usages : juge PoE, extract décret, JSON court, page marina/capitainerie.
-Aucun Mongo. Clé NVIDIA_API_KEY.
+Usages: PoE judge, decree extract, short JSON, marina/harbormaster page.
+No Mongo. Key NVIDIA_API_KEY.
 
   python scripts/probe_nvidia_usages.py
 """

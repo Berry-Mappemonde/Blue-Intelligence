@@ -3,7 +3,7 @@ import RunSelector from "./RunSelector";
 import { HELLOASSO_MEMBERSHIP_URL } from "../config/helloasso";
 import { nextBasemap } from "./map/basemaps";
 
-// Icône et libellé du PROCHAIN fond de carte (le bouton annonce sa destination).
+// Icon and label of the NEXT basemap (the button announces its destination).
 const BASEMAP_NEXT_UI = {
   dark: { Icon: Moon, titleKey: "darkMap" },
   light: { Icon: Sun, titleKey: "lightMap" },
@@ -133,9 +133,9 @@ export default function Header({
           >
             <MapIcon size={13} /> {t("map")}
           </button>
-          {/* "Runs ›" — sélecteur du run affiché sur la carte (par mode).
-              Masqué en mode Science : la moisson écrit directement la carte
-              live (pas de geojson par run). */}
+          {/* "Runs ›" — selector for the run shown on the map (per mode).
+              Hidden in Science mode: the harvest writes the live map
+              directly (no per-run geojson). */}
           {mode !== "science" && mode !== "climatology" && (
             <RunSelector
               mode={mode}
@@ -144,7 +144,7 @@ export default function Header({
               onSelect={(run) => { onSelectMapRun(run); setView("map"); }}
             />
           )}
-          {/* Console et Review : réservés à l'admin (?admin=<clé>) */}
+          {/* Console and Review: admin only (?admin=<key>) */}
           {isAdmin && (
             <button
               data-testid="view-toggle-audit"

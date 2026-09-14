@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Audit des tags observés dans les données vs catalogue documenté.
+Audit of tags observed in the data vs the documented catalogue.
 
-Inspiration Open Waters: Seamap (`bin/audit-tags.ts`) : comparer ce que les
-données contiennent réellement avec ce que nous documentons et exploitons
-(`backend/data/seamark_catalog.json`). Deux choses en sortent : les clés
-`seamark:*` jamais documentées (candidates au catalogue), et la couverture
-réelle de chaque clé exploitée.
+Inspired by Open Waters: Seamap (`bin/audit-tags.ts`): compare what the
+data actually contains with what we document and use
+(`backend/data/seamark_catalog.json`). Two outputs: `seamark:*` keys
+never documented (catalogue candidates), and the real coverage of each
+used key.
 
-C'est un RAPPORT, pas un contrôle : la liste bouge quand OSM bouge, un
-contributeur qui invente un tag ne doit jamais faire échouer une CI.
-Le script sort toujours avec le code 0 (sauf erreur de connexion).
+This is a REPORT, not a gate: the list moves when OSM moves; a
+contributor who invents a tag must never fail CI.
+The script always exits 0 (except on a connection error).
 
-Usage :
-  python scripts/audit_tags.py                              # audit Mongo (marinas + capitaineries)
-  python scripts/audit_tags.py --out docs/audits/tags.md    # écrit le rapport Markdown
-  python scripts/audit_tags.py --geojson export1.geojson …  # couverture des champs, sans Mongo (CI)
+Usage:
+  python scripts/audit_tags.py                              # Mongo audit (marinas + capitaineries)
+  python scripts/audit_tags.py --out docs/audits/tags.md    # write the Markdown report
+  python scripts/audit_tags.py --geojson export1.geojson …  # field coverage, no Mongo (CI)
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def load_catalog() -> dict:
 # ---------------------------------------------------------------- Mongo mode
 
 def collect_tag_stats(tag_dicts) -> dict:
-    """Compte clés, familles seamark et valeurs de seamark:type."""
+    """Count keys, seamark families, and seamark:type values."""
     key_counts: Counter = Counter()
     seamark_types: Counter = Counter()
     seamark_subkeys: dict[str, set] = {}
@@ -61,7 +61,7 @@ def collect_tag_stats(tag_dicts) -> dict:
                 typ = segs[0]
                 if typ.isdigit() or not segs:
                     continue
-                seamark_types[typ] += 0  # présence de la famille, sans double compte
+                seamark_types[typ] += 0  # family present, no double-count
                 sub = next((s for s in reversed(segs[1:]) if not s.isdigit()), None)
                 if sub:
                     seamark_subkeys.setdefault(sub, set()).add(typ)
@@ -151,7 +151,7 @@ def audit_geojson(paths: list[str]) -> list[str]:
         lines.append(f"\n## Export `{path.name}`")
         try:
             fc = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:  # fichier absent / invalide : on le dit, on continue
+        except Exception as e:  # missing / invalid file: report it and continue
             lines.append(f"\nIllisible : {e}")
             continue
         feats = fc.get("features") or []
@@ -183,8 +183,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mongo-url", default=os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017"))
     parser.add_argument("--db", default=os.environ.get("DB_NAME", "blue_intelligence"))
-    parser.add_argument("--geojson", nargs="+", help="Audite des exports GeoJSON au lieu de Mongo")
-    parser.add_argument("--out", help="Écrit le rapport Markdown dans ce fichier (défaut stdout)")
+    parser.add_argument("--geojson", nargs="+", help="Audit GeoJSON exports instead of Mongo")
+    parser.add_argument("--out", help="Write the Markdown report to this file (default stdout)")
     args = parser.parse_args()
 
     catalog = load_catalog()

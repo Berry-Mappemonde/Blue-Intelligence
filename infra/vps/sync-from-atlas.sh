@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Resynchronise la base LOCALE depuis Atlas — ÉCRASE les données locales.
-# ⚠️ OBSOLÈTE depuis la bascule DNS du 2026-09-10 : le VPS est la base
-# VIVANTE, Atlas est figé à l'état d'avant-bascule. Lancer ce script
-# écraserait les données récentes. Verrou ci-dessous.
+# Resync the LOCAL database from Atlas — OVERWRITES local data.
+# ⚠️ OBSOLETE since the DNS cutover of 2026-09-10: the VPS is the
+# LIVE database, Atlas is frozen at its pre-cutover state. Running this script
+# would overwrite recent data. Lock below.
 set -euo pipefail
 
 if [ "${FORCE_RESYNC:-}" != "oui-ecraser-la-base" ]; then

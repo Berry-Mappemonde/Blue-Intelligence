@@ -1,9 +1,8 @@
-"""
-Libellé d'affichage d'une ZEE : un polygone VLIZ = une fiche.
+"""Display label of an EEZ: one VLIZ polygon = one card.
 
-Un État (France, UK, US…) a souvent plusieurs polygones : hexagone / métropole,
-outre-mer, régime conjoint, revendication. On n'agrège jamais ces polygones.
-Le libellé distingue chaque `mrgid` : « France (hexagone) » ≠ « France (Mayotte) ».
+A state (France, UK, US…) often has several polygons: hexagon / mainland,
+overseas, joint regime, claim. Never aggregate these polygons.
+The label distinguishes each `mrgid`: “France (hexagon)” ≠ “France (Mayotte)”.
 """
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ def _fold(s: str | None) -> str:
 
 
 def geoname_tail(geoname: str | None) -> str:
-    """Retire le préfixe VLIZ, garde les partenaires / le lieu."""
+    """Strip the VLIZ prefix, keep the partners / place."""
     g = (geoname or "").strip()
     gl = g.casefold()
     for prefix in _GEO_PREFIXES:
@@ -120,7 +119,7 @@ def _apply_one(zone: dict, sibling_count: int) -> None:
 
 
 def _refine_collisions(zones: list[dict]) -> None:
-    """Deux polygones du même souverain ne doivent pas partager le même libellé."""
+    """Two polygons of the same sovereign must not share the same label."""
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for z in zones:
         if not z.get("disambiguated"):
@@ -148,7 +147,7 @@ def _refine_collisions(zones: list[dict]) -> None:
 
 
 def attach_zone_labels(zones: list[dict]) -> list[dict]:
-    """Pose `label` / `qualifier` / `qualifier_key` / `disambiguated` sur chaque dict."""
+    """Set `label` / `qualifier` / `qualifier_key` / `disambiguated` on each dict."""
     counts: Counter[str] = Counter()
     for z in zones:
         s = (z.get("sovereign") or "").strip()
@@ -162,7 +161,7 @@ def attach_zone_labels(zones: list[dict]) -> list[dict]:
 
 
 def zone_sort_key(zone: dict) -> tuple:
-    """Groupe par souverain, métropole/hexagone en tête du groupe."""
+    """Group by sovereign, mainland/hexagon first in the group."""
     sov = (zone.get("sovereign") or zone.get("name") or "").strip().casefold()
     label = (zone.get("label") or zone.get("name") or "").strip().casefold()
     primary = 0 if zone.get("qualifier_key") in ("hexagone", "metropole") else 1
@@ -170,7 +169,7 @@ def zone_sort_key(zone: dict) -> tuple:
 
 
 def sovereign_polygon_count(sovereign: str, zones: list[dict] | None = None) -> int:
-    """Combien de polygones VLIZ pour ce souverain (eez_index si zones omis)."""
+    """How many VLIZ polygons for this sovereign (eez_index if zones omitted)."""
     sov = (sovereign or "").strip()
     if not sov:
         return 0
@@ -182,10 +181,10 @@ def sovereign_polygon_count(sovereign: str, zones: list[dict] | None = None) -> 
 
 
 def search_polygon_name(zone: dict, zones: list[dict] | None = None) -> str:
-    """Nom SERP / extraction = ce polygone VLIZ, pas l'agrégat pays.
+    """SERP / extraction name = this VLIZ polygon, not the country aggregate.
 
-    Mayotte → « Mayotte ». France hexagone (23 polygones) → « France hexagone ».
-    Belgique (un seul polygone) → « Belgium ». Jamais un nom de port.
+    Mayotte → “Mayotte”. France hexagon (23 polygons) → “France hexagone”.
+    Belgium (a single polygon) → “Belgium”. Never a port name.
     """
     name = (zone.get("name") or zone.get("geoname") or "").strip()
     sov = (zone.get("sovereign") or "").strip()
@@ -201,9 +200,9 @@ def search_polygon_name(zone: dict, zones: list[dict] | None = None) -> str:
 
 
 def serp_place_name(zone: dict, zones: list[dict] | None = None) -> str:
-    """Nom envoyé au moteur : vocabulaire d'État, pas le qualifiant VLIZ.
+    """Name sent to the engine: state vocabulary, not the VLIZ qualifier.
 
-    « France hexagone » n'apparaît sur aucune page douane. Mayotte reste Mayotte.
+    “France hexagone” appears on no customs page. Mayotte stays Mayotte.
     """
     key, _ = zone_qualifier(zone)
     if key in ("hexagone", "metropole"):
@@ -212,7 +211,7 @@ def serp_place_name(zone: dict, zones: list[dict] | None = None) -> str:
 
 
 def zone_search_lang_iso(zone: dict) -> str | None:
-    """ISO2 pour la langue des requêtes : polygone d'abord, sinon souverain."""
+    """ISO2 for query language: polygon first, else sovereign."""
     for cc in (zone.get("iso2"), zone.get("sov_iso2")):
         val = (cc or "").strip().upper()
         if val:
@@ -221,15 +220,15 @@ def zone_search_lang_iso(zone: dict) -> str | None:
 
 
 def zone_search_location(zone: dict) -> str | None:
-    """ISO2 TinyFish / géocode : le polygone (YT), pas le souverain (FR)."""
+    """ISO2 TinyFish / geocode: the polygon (YT), not the sovereign (FR)."""
     return zone_search_lang_iso(zone)
 
 
 def keep_extracted_in_zone(arbitration: str | None) -> bool:
-    """Un GPS hors de CE polygone n'est pas écrit sur cette fiche.
+    """A GPS outside THIS polygon is not written on this card.
 
-    ``spatial_rejected`` (annuaire ou coordonnées source) : on ne rattache
-    pas le nom — souvent un port d'un polygone frère. ``llm_spatial_rejected``
-    : le nom reste en file, sans GPS inventé hors de *ce* polygone.
+    ``spatial_rejected`` (gazetteer or source coordinates): do not attach
+    the name — often a port of a sibling polygon. ``llm_spatial_rejected``:
+    the name stays in queue, without an invented GPS outside *this* polygon.
     """
     return arbitration != "spatial_rejected"

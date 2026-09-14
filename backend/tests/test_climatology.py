@@ -39,7 +39,7 @@ def _client() -> TestClient:
 
 @pytest.fixture
 def no_cmems_snapshots(tmp_path, monkeypatch):
-    """Isole les tests « snapshot absent » des grilles CMEMS commitées."""
+    """Isolate “missing snapshot” tests from committed CMEMS grids."""
     root = tmp_path / "climatology"
     for name in ("wind", "wave", "current", "cyclones"):
         (root / name).mkdir(parents=True)
@@ -142,13 +142,13 @@ def test_crossings_martinique_azores():
 def test_land_mask_recipe():
     assert is_land(23.0, 5.0) is True          # Sahara
     assert is_land(-33.0, -70.0) is True       # Andes
-    assert is_land(15.0, -25.0) is False       # alizés Atlantique
+    assert is_land(15.0, -25.0) is False       # Atlantic trade winds
     assert is_land(26.0, -80.0) is False       # Gulf Stream
     assert is_land(-40.0, 10.0) is False       # 40°S mer
 
 
 def test_wind_from_uv_comes_from():
-    # u ouest→est, v sud→nord : vent d'où ? atan2(-u,-v)
+    # u west→east, v south→north: wind from where? atan2(-u,-v)
     kn, coming = wind_from_uv(5.0, 0.0)
     assert kn == pytest.approx(5.0 * 1.94384)
     assert coming == pytest.approx(270.0, abs=0.5)
@@ -176,7 +176,7 @@ def test_ibtracs_basin_recipe():
 
 
 # ---------------------------------------------------------------------------
-# Snapshots CMEMS honnêtes + fixtures locales
+# Honest CMEMS snapshots + local fixtures
 # ---------------------------------------------------------------------------
 
 def test_atlas_absent_returns_none(no_cmems_snapshots):
@@ -345,7 +345,7 @@ def test_wind_average_is_not_labelled_rose(tmp_path, monkeypatch):
     wind_dir.mkdir()
     lats = np.array([14.5, 15.0, 15.5])
     lons = np.array([-25.5, -25.0, -24.5])
-    # Alizé : u négatif (vers l'ouest), v négatif (vers le sud) → vient du NE
+    # Trade wind: negative u (westward), negative v (southward) → from the NE
     _write_grid(
         wind_dir / "wind-03.npz",
         lats=lats, lons=lons,
@@ -475,7 +475,7 @@ def test_naviguide_query_not_painted():
 
 
 def test_live_cmems_snapshots_are_honest():
-    """Recette A sur les grilles commitées — skip si la génération n'a pas tourné."""
+    """Recipe A on committed grids — skip if generation has not run."""
     if not (wind_mod.has_snapshot(3) and wave_mod.has_snapshot(7) and current_mod.has_snapshot(2)):
         pytest.skip("snapshots CMEMS absents")
     wind_mod._load_month.cache_clear()

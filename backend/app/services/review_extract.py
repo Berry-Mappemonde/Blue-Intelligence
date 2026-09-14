@@ -1,4 +1,4 @@
-"""Extraction des PoE depuis les documents Gold — jamais poe_ports."""
+"""Extract PoE from Gold documents — never poe_ports."""
 from __future__ import annotations
 
 from app.core.dedup import normalize_name
@@ -11,7 +11,7 @@ GEOCODE_CAP = 15
 
 
 async def extract_gold_ports(db, entity_id: str, log=None) -> dict:
-    """Relit uniquement les URLs gardées du snapshot Gold."""
+    """Reread only the kept URLs of the Gold snapshot."""
     log = log or (lambda m: None)
     eid = str(entity_id)
     override = await get_override(db, "eez", eid)
