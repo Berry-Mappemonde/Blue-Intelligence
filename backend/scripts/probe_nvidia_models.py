@@ -48,7 +48,7 @@ _SKIP_RE = re.compile(
 # + chat cards of the build.nvidia.com/models catalogue.
 # GET /v1/models is a stale OpenAI index (404 ids: yi-large, dbrx, …).
 # Many docs ids answer 410 Gone (hosted trial EOL) while the
-# fiche catalogue reste en ligne (playground / NIM self-host).
+# catalogue card stays online (playground / NIM self-host).
 OFFICIAL_CHAT_IDS = (
     "deepseek-ai/deepseek-v4-flash",
     "deepseek-ai/deepseek-v4-flash-0731",
