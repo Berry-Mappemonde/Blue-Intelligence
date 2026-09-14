@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Roses 8 secteurs depuis CMEMS wind MY L4 horaire, sous-échantillon 6 h.
+"""8-sector roses from hourly CMEMS wind MY L4, subsampled to 6 h.
 
-Un mois calendaire × années 1994–2020. Jamais le cube mondial en RAM.
-Reprise : si le Mac s'endort ou le réseau coupe, relancer la même commande
-reprend l'année suivante (fichier ``wind-MM.partial.npz``).
+One calendar month × years 1994–2020. Never the worldwide cube in RAM.
+Resume: if the Mac sleeps or the network drops, rerun the same command
+to continue at the next year (``wind-MM.partial.npz``).
 
-À lancer sur le Mac (ou une grosse machine), **pas** sur le VPS 8 Go.
+Run on the Mac (or a large machine), **not** on the 8 GB VPS.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "backend" / "data" / "climatology" / "wind"
 
 PRODUCT = "WIND_GLO_PHY_L4_MY_012_006"
-# Même produit, deux jeux : 0,25° s'arrête en oct. 2009 ; 0,125° prend la suite.
+# Same product, two datasets: 0.25° stops in Oct 2009; 0.125° takes over.
 DATASET_025 = "cmems_obs-wind_glo_phy_my_l4_0.25deg_PT1H"
 DATASET_0125 = "cmems_obs-wind_glo_phy_my_l4_0.125deg_PT1H"
 PERIOD = "1994-2020"
@@ -39,7 +39,7 @@ YEAR_TIMEOUT_S = 40 * 60
 
 
 def pick_dataset(year: int, month: int) -> tuple[str, float] | None:
-    """None = mois hors archive (ex. janv.–mai 1994)."""
+    """None = month outside the archive (e.g. Jan–May 1994)."""
     if (year, month) < (1994, 6):
         return None
     if (year, month) <= (2009, 10):
@@ -321,12 +321,12 @@ def generate_month(
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Roses CMEMS 8 secteurs — un mois ou les 12. Pas sur le VPS."
+        description="CMEMS 8-sector roses — one month or all 12. Not on the VPS."
     )
-    ap.add_argument("--month", type=int, default=None, help="1–12 ; omit avec --all")
-    ap.add_argument("--all", action="store_true", help="les 12 mois, dans l'ordre")
+    ap.add_argument("--month", type=int, default=None, help="1–12 ; omit with --all")
+    ap.add_argument("--all", action="store_true", help="all 12 months, in order")
     ap.add_argument("--skip-existing", action="store_true",
-                    help="saute un mois déjà en rose (pas une moyenne AVERAGE)")
+                    help="skip a month already stored as a rose (not an AVERAGE mean)")
     ap.add_argument("--year-start", type=int, default=1994)
     ap.add_argument("--year-end", type=int, default=2020)
     ap.add_argument("--year", type=int, default=None, help=argparse.SUPPRESS)

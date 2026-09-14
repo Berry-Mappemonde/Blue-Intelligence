@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dump le catalogue Taginfo/wiki (pas d'Overpass mondial)."""
+"""Dump the Taginfo/wiki catalogue (no world Overpass)."""
 from __future__ import annotations
 
 import json

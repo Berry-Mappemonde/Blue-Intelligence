@@ -1,4 +1,4 @@
-"""MasterSeeds élargis (CDC C5) + Follow the Money (plafond = nouveautés seulement)."""
+"""Expanded MasterSeeds (CDC C5) + Follow the Money (cap = newcomers only)."""
 import asyncio
 import json
 import os
@@ -225,14 +225,14 @@ def test_loaded_catalog_has_v1_scale():
     assert TEST_SEED_COUNT == 3
     assert len(CURATED_SEEDS) == 21
     assert CURATED_SEEDS[0]["name"] == "The Ocean Foundation"
-    # Sans JSON : repli 21. Avec JSON généré : ~861.
+    # Without JSON: fallback 21. With generated JSON: ~861.
     assert len(MASTER_SEEDS) >= 800
     assert all("priority" not in s for s in MASTER_SEEDS)
     assert all("priority" not in s for s in CURATED_SEEDS)
     queues = {s.get("queue") for s in MASTER_SEEDS}
     assert "crawl" in queues and "resolve" in queues
     crawl = [s for s in MASTER_SEEDS if s.get("queue") == "crawl"]
-    # Virgules composées + sièges trop larges sortent de Complet, pas un cap artificiel.
+    # Compound commas + overly broad HQs leave Complet, not an artificial cap.
     assert len(crawl) >= 450
     assert not any((s.get("home_status") or "") == "borrowed_hub" for s in crawl)
     sey = next(s for s in MASTER_SEEDS if "SeyCCAT" in (s.get("name") or ""))

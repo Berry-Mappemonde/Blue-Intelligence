@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Génère les 12 roses de vent CMEMS sur le Mac.
-# Ne pas lancer sur le VPS (8 Go).
+# Generate the 12 CMEMS wind roses on the Mac.
+# Do not run on the VPS (8 GB).
 #
-# Usage, depuis n'importe où :
+# Usage, from anywhere:
 #   bash scripts/climatology/gen_wind_atlas_mac.sh
 #
-# Reprendre après une coupure (même commande) :
+# Resume after an interruption (same command):
 #   bash scripts/climatology/gen_wind_atlas_mac.sh
 set -euo pipefail
 

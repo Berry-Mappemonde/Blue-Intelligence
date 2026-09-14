@@ -1,18 +1,18 @@
 """
-events_core — Journal d'événements structurés du pipeline PoE.
+events_core — Structured event journal of the PoE pipeline.
 
-Chaque micro-étape du pipeline émet un événement persistant
-{run_id, seq, ts, mrgid, zone, step, payload} qui consigne les DÉCISIONS et
-les CANDIDATS REJETÉS (requêtes émises, URLs écartées et pourquoi, verdicts du
-gatekeeper, niveaux de cascade, sorties LLM/NER, candidats de géocodage des
-deux fournisseurs, arbitrages…).
+Each micro-step of the pipeline emits a persistent event
+{run_id, seq, ts, mrgid, zone, step, payload} that records DECISIONS and
+REJECTED CANDIDATES (queries issued, URLs dropped and why, gatekeeper
+verdicts, cascade levels, LLM/NER outputs, geocoding candidates from
+both providers, arbitrations…).
 
-Double sortie :
-  - collection Mongo `poe_run_events` (requêtable — alimente le rapport de run) ;
-  - fichier JSONL `backend/data/runs/<run_id>.jsonl` (lecture directe, artefact).
+Dual output:
+  - Mongo collection `poe_run_events` (queryable — feeds the run report);
+  - JSONL file `backend/data/runs/<run_id>.jsonl` (direct read, artifact).
 
-Ces traces servent l'audit, le diff entre runs, le rapport quantitatif et les
-futurs jeux d'entraînement ML (weak supervision).
+These traces serve audit, inter-run diff, the quantitative report and
+future ML training sets (weak supervision).
 """
 import asyncio
 import json
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 RUNS_DIR = DATA_DIR / "runs"
 HEARTBEAT_S = 60.0
 
-_MAX_STR = 4000          # troncature des chaînes longues (sorties LLM…)
-_MAX_LIST = 60           # troncature des listes longues (SERP…)
+_MAX_STR = 4000          # truncation of long strings (LLM outputs…)
+_MAX_LIST = 60           # truncation of long lists (SERP…)
 
 
 def _clip(value):
-    """Tronque récursivement le payload (les événements restent bornés)."""
+    """Recursively clip the payload (events stay bounded)."""
     if isinstance(value, str):
         return value if len(value) <= _MAX_STR else value[:_MAX_STR] + "…[tronqué]"
     if isinstance(value, dict):
@@ -47,7 +47,7 @@ def _clip(value):
 
 
 class RunRecorder:
-    """Journal d'un run : écrit chaque événement dans Mongo + JSONL."""
+    """Run journal: write each event to Mongo + JSONL."""
 
     def __init__(self, run_id: str, db=None, to_file: bool = True,
                  events_coll: str = "poe_run_events"):
@@ -101,7 +101,7 @@ class RunRecorder:
             f.write(line + "\n")
 
     async def resume_seq(self):
-        """Reprend le seq Mongo pour ne pas réémettre un `run_done` en seq=1."""
+        """Resume the Mongo seq so a `run_done` is not re-emitted at seq=1."""
         if self.db is None:
             return
         try:
@@ -118,7 +118,7 @@ class RunRecorder:
 
 
 class ZoneRecorder:
-    """Recorder lié à une zone : mrgid/zone renseignés automatiquement."""
+    """Recorder bound to a zone: mrgid/zone filled automatically."""
 
     def __init__(self, recorder: RunRecorder, mrgid: int, zone: str | None):
         self._rec = recorder
@@ -130,13 +130,13 @@ class ZoneRecorder:
 
 
 async def emit(rec, step: str, **payload):
-    """Émission tolérante : no-op si aucun recorder n'est branché."""
+    """Tolerant emit: no-op if no recorder is attached."""
     if rec is not None:
         await rec.event(step, **payload)
 
 
 class HeartbeatWatch:
-    """Émet `heartbeat` toutes les ~60 s sans progrès (lent vs pendu)."""
+    """Emit `heartbeat` every ~60 s without progress (slow vs hung)."""
 
     def __init__(self, recorder, interval_s: float = HEARTBEAT_S):
         self.recorder = recorder
@@ -210,10 +210,10 @@ class HeartbeatWatch:
 
 @dataclass
 class RunContext:
-    """Contexte d'un run versionné : identifiant, journal et collections cibles.
-    Quand un RunContext est passé au pipeline, l'écriture se fait dans l'espace
-    du run (poe_run_ports / poe_run_zones) — les collections v1 (poe_ports,
-    eez_zones) ne sont JAMAIS touchées (contrainte « trésor » du PRD)."""
+    """Versioned-run context: identifier, journal and target collections.
+    When a RunContext is passed to the pipeline, writes go in the run
+    space (poe_run_ports / poe_run_zones) — v1 collections (poe_ports,
+    eez_zones) are NEVER touched (PRD "treasure" constraint)."""
     run_id: str
     recorder: RunRecorder
     ports_coll: str = "poe_run_ports"

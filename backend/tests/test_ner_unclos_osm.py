@@ -1,5 +1,5 @@
-"""Iteration 13 — NER spaCy, qualification UNCLOS, badges OSM sur /poe/ports.
-NON-DESTRUCTIF : aucune génération, aucun purge. Ne touche pas la tâche Overpass en cours.
+"""Iteration 13 — spaCy NER, UNCLOS qualification, OSM badges on /poe/ports.
+NON-DESTRUCTIVE: no generation, no purge. Does not touch the in-flight Overpass job.
 """
 from pathlib import Path
 import os
@@ -14,7 +14,7 @@ from pymongo import MongoClient
 frontend_env = dotenv_values(Path(__file__).resolve().parent.parent.parent / "frontend" / ".env")
 base_url = os.environ.get("REACT_APP_BACKEND_URL") or frontend_env.get("REACT_APP_BACKEND_URL")
 if not base_url:
-    raise RuntimeError("REACT_APP_BACKEND_URL manquant")
+    raise RuntimeError("REACT_APP_BACKEND_URL missing")
 BASE_URL = base_url.rstrip("/")
 
 backend_env = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
@@ -187,10 +187,10 @@ class TestOsmBadges:
         assert c2 >= c1
 
 
-# ---------------------------------------------------------------- non-destructivité
+# ---------------------------------------------------------------- non-destructiveness
 class TestNonDestructive:
     def test_counts_unchanged(self, db):
-        # Baselines = seed/ (les suites d'import nettoient leurs fixtures)
+        # Baselines = seed/ (import suites clean their fixtures)
         assert db.projects.count_documents({}) >= 4463
         assert db.poe_ports.count_documents({}) >= 1169
         assert db.eez_zones.count_documents({}) == 285

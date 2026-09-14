@@ -303,7 +303,7 @@ def test_build_resumable_and_shom_overlay():
 
 
 def test_all_docs_ignores_motor_subcollection():
-    """Motor expose .docs comme sous-collection : ne pas faire list(coll.docs)."""
+    """Motor exposes .docs as a sub-collection: do not list(coll.docs)."""
 
     class _Cursor:
         def __init__(self, docs):
@@ -616,7 +616,7 @@ def test_enrich_nvidia_page_chain_not_muse_pin(monkeypatch):
     ))
     assert called["role"] == "page"
     assert called["model"] is None
-    assert result["enrichment_source"] == "nvidia-deepseek"
+    assert result["enrichment_source"] == "nvidia-gpt-oss"
     assert result["canal_vhf"] == "9"
 
 
@@ -655,7 +655,7 @@ def test_enrich_openrouter_after_empty_nvidia(monkeypatch):
 
 
 def test_isolated_unique_indexes_are_partial_not_sparse():
-    """Plusieurs OSM sans shom_id dans le même run : pas d'E11000 sur null."""
+    """Several OSM without shom_id in the same run: no E11000 on null."""
     coll = _FakeColl()
     asyncio.run(cw.ensure_indexes(coll, isolated=True))
     by_name = {kw.get("name"): kw for _args, kw in coll.indexes if kw.get("name")}

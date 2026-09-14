@@ -7,13 +7,13 @@ import {
 } from "../overlaySpec";
 
 describe("overlaySpec", () => {
-  test("URL : env ou copie nginx locale", () => {
+  test("URL: env or local nginx copy", () => {
     expect(overlayUrlFromEnv({})).toBe("/tiles/bi-overlay/current.pmtiles");
     expect(overlayUrlFromEnv({ REACT_APP_BI_OVERLAY_URL: "https://example.test/w.pmtiles" }))
       .toBe("https://example.test/w.pmtiles");
   });
 
-  test("pmtiles:// sur URL absolue", () => {
+  test("pmtiles:// on an absolute URL", () => {
     expect(absoluteOverlayUrl("/tiles/x.pmtiles", "https://bi.test")).toBe(
       "https://bi.test/tiles/x.pmtiles",
     );
@@ -22,7 +22,7 @@ describe("overlaySpec", () => {
     );
   });
 
-  test("style MapLibre : une source, couches tippecanoe", () => {
+  test("MapLibre style: one source, tippecanoe layers", () => {
     const style = overlayStyle("pmtiles://https://bi.test/o.pmtiles");
     expect(style.version).toBe(8);
     expect(style.sources[BI_OVERLAY_SOURCE_ID].url).toMatch(/^pmtiles:\/\//);

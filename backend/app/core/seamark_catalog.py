@@ -1,4 +1,4 @@
-"""Lecture du catalogue OSM → champs BI (cible d'export OpenSeaMap)."""
+"""Read the OSM catalogue → BI fields (OpenSeaMap export target)."""
 from __future__ import annotations
 
 import json

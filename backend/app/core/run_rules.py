@@ -1,13 +1,13 @@
-"""Catalogue des règles modulables — résolution, snapshot, lecture.
+"""Catalog of tunable rules — resolution, snapshot, read.
 
-Un chiffre n'est pas une opinion. Il est soit une loi (contrat), soit une
-mesure (phénomène physique), soit une calibration (jeu étiqueté), soit un
-budget (quota opérateur). Le catalogue (`data/run_rules.json`) porte le
-défaut, l'intervalle et le principe. Un run peut déplacer une règle
-*dans* l'intervalle ; le snapshot fige ce qui a vraiment été utilisé.
+A number is not an opinion. It is either a law (contract), a
+measurement (physical phenomenon), a calibration (labeled set), or a
+budget (operator quota). The catalog (`data/run_rules.json`) carries the
+default, the interval and the principle. A run may move a rule
+*within* the interval; the snapshot freezes what was actually used.
 
-Ordre de résolution : override de run > profil > settings Mongo > défaut.
-Les règles `kind=loi` sont consignées mais refusent toute surcharge.
+Resolution order: run override > profile > Mongo settings > default.
+`kind=loi` rules are recorded but refuse any override.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ PROFILE_ORDER = ("cdc_default", "strict", "recall")
 
 
 class RuleError(ValueError):
-    """Surcharge hors intervalle, loi touchée, ou identifiant inconnu."""
+    """Override outside the interval, law touched, or unknown identifier."""
 
 
 def catalog_path() -> Path:
@@ -98,7 +98,7 @@ def catalog_default(rule_id: str, fallback: Any = None) -> Any:
 
 
 def rules_for_mode(mode: str | None = None, *, include_shared: bool = True) -> list[dict]:
-    """Règles d'un mode (+ shared). `mode=None` → tout le catalogue."""
+    """Rules for a mode (+ shared). `mode=None` → the whole catalog."""
     if mode and mode not in ("projects", "formalities", "marinas", "capitaineries", "amp", "science", "climatology"):
         raise RuleError(f"mode inconnu: {mode}")
     out = []
@@ -113,7 +113,7 @@ def profiles() -> dict:
 
 
 def _loc_pair(raw) -> dict:
-    """Normalise un libellé bilingue {fr, en} (string héritée → les deux langues)."""
+    """Normalize a bilingual {fr, en} label (legacy string → both languages)."""
     if isinstance(raw, dict):
         fr = str(raw.get("fr") or raw.get("en") or "").strip()
         en = str(raw.get("en") or raw.get("fr") or "").strip()
@@ -179,7 +179,7 @@ def _source_and_value(rule: dict, settings: dict, profile_vals: dict, overrides:
 def resolve_rules(*, mode: str | None = None, settings: dict | None = None,
                   overrides: dict | None = None, profile: str | None = None,
                   include_shared: bool = True) -> dict:
-    """Résout les valeurs effectives pour un mode (ou tout le catalogue)."""
+    """Resolve effective values for a mode (or the whole catalog)."""
     cat = load_catalog()
     settings = settings or {}
     overrides = dict(overrides or {})
@@ -216,7 +216,7 @@ def resolve_rules(*, mode: str | None = None, settings: dict | None = None,
 
 
 def rules_hash(chosen: dict) -> str:
-    """Empreinte stable des valeurs (sans principes ni secrets)."""
+    """Stable fingerprint of the values (no principles or secrets)."""
     payload = {k: chosen[k]["value"] for k in sorted(chosen)}
     blob = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
@@ -224,7 +224,7 @@ def rules_hash(chosen: dict) -> str:
 
 def snapshot_for_run(*, mode: str | None, settings: dict | None = None,
                      overrides: dict | None = None, profile: str | None = None) -> dict:
-    """Snapshot consignable dans `params.rules` — aucun secret."""
+    """Snapshot recordable in `params.rules` — no secrets."""
     resolved = resolve_rules(mode=mode, settings=settings,
                              overrides=overrides, profile=profile)
     chosen = resolved["chosen"]
@@ -240,7 +240,7 @@ def snapshot_for_run(*, mode: str | None, settings: dict | None = None,
 
 
 def public_catalog(mode: str | None = None) -> dict:
-    """Vue API : principe + profils + règles (sans secrets)."""
+    """API view: principle + profiles + rules (no secrets)."""
     cat = load_catalog()
     known = profiles()
     ordered = [name for name in PROFILE_ORDER if name in known]
@@ -286,7 +286,7 @@ def public_catalog(mode: str | None = None) -> dict:
 
 
 def bind_rules(snapshot: dict | None):
-    """Active le snapshot pour le thread/async context courant."""
+    """Activate the snapshot for the current thread/async context."""
     return _current.set(snapshot)
 
 
@@ -299,7 +299,7 @@ def current_snapshot() -> dict | None:
 
 
 def get_rule(rule_id: str, fallback: Any = None) -> Any:
-    """Valeur effective : snapshot du run s'il existe, sinon défaut catalogue."""
+    """Effective value: run snapshot if it exists, otherwise catalog default."""
     snap = _current.get()
     if snap:
         chosen = snap.get("chosen") or {}
@@ -309,14 +309,14 @@ def get_rule(rule_id: str, fallback: Any = None) -> Any:
 
 
 def attach_rules(params: dict, snapshot: dict) -> dict:
-    """Pose le snapshot sous `params.rules` sans écraser `code` / variant."""
+    """Put the snapshot under `params.rules` without overwriting `code` / variant."""
     out = dict(params)
     out["rules"] = snapshot
     return out
 
 
 def snapshot_list_fields(params: dict | None) -> dict:
-    """Champs maigres pour une liste de runs : profil, hash, counts."""
+    """Lean fields for a run list: profile, hash, counts."""
     rules = (params or {}).get("rules") or {}
     if not isinstance(rules, dict):
         rules = {}

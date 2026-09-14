@@ -1,7 +1,7 @@
 /**
- * Cache la liste des runs par mode — un fetch, réutilisé à chaque ouverture
- * du sélecteur. Invalidé quand un run est lancé depuis la Console, et
- * rafraîchi tout seul au bout de MAX_AGE_MS (les états done/failed suivent).
+ * Cache the run list per mode — one fetch, reused each time the selector
+ * opens. Invalidated when a run is launched from the Console, and
+ * refreshed on its own after MAX_AGE_MS (done/failed states catch up).
  */
 
 const MAX_AGE_MS = 5 * 60 * 1000;

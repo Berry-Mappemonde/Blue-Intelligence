@@ -1,8 +1,8 @@
 """
-app.config — Chemins, variables d'environnement et réglages par défaut.
+app.config — Paths, environment variables and default settings.
 
-Chargé en premier par tous les modules : le .env du backend est lu ici,
-avant toute lecture de os.environ (Mongo, clés API…).
+Loaded first by every module: the backend .env is read here,
+before any os.environ access (Mongo, API keys…).
 """
 import os
 from pathlib import Path
@@ -19,9 +19,9 @@ ROUTE_FILE = DATA_DIR / "route.geojson"
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-# Complétions : NVIDIA NIM si NVIDIA_API_KEY (chaînes par usage, voir nvidia.CHAINS).
-# OpenRouter reste pour la recherche web (:online) et le fallback.
-# load_dotenv n'écrase pas un MONGO_URL déjà présent dans le process.
+# Completions: NVIDIA NIM if NVIDIA_API_KEY (per-usage chains, see nvidia.CHAINS).
+# OpenRouter stays for web search (:online) and fallback.
+# load_dotenv does not overwrite a MONGO_URL already in the process.
 DEFAULT_SETTINGS = {
     "_id": "global",
     "nvidia_api_key": "",

@@ -1,4 +1,4 @@
-"""Houle mensuelle P50 / P90 (WAVERYS). Interdit de labeller une moyenne P90."""
+"""Monthly swell P50 / P90 (WAVERYS). Do not label a mean as P90."""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -92,7 +92,7 @@ def wave_at(lat: float, lon: float, month: int) -> dict | None:
     hs_p50 = _val(p50)
     hs_p90 = _val(p90)
     hs_mean = _val(mean)
-    # Un snapshot V0 (P1M mean) n'a pas le droit de s'appeler P90.
+    # A V0 snapshot (P1M mean) must not call itself P90.
     stat = str(bundle["stat"][0]) if "stat" in bundle else (
         "p50_p90" if hs_p90 is not None else "mean"
     )
@@ -137,7 +137,7 @@ def _round(v):
 
 
 def is_wave_hazard(lat: float, lon: float, month: int) -> bool | None:
-    """True si Hs P90 > seuil. ``None`` si le P90 n'est pas disponible (pas un mean déguisé)."""
+    """True if Hs P90 > threshold. ``None`` if P90 is unavailable (not a disguised mean)."""
     w = wave_at(lat, lon, month)
     if not w or w.get("stat") != "p50_p90" or w.get("hs_p90_m") is None:
         return None
@@ -164,7 +164,7 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
                 "p90": "hs_p90",
                 "mean": "hs_mean",
             }[want]
-            # Jamais servir une moyenne sous le nom P90.
+            # Never serve a mean under the name P90.
             if want == "p90" and (field_name not in bundle or snapshot_stat == "mean"):
                 field_name = None
             arr = bundle.get(field_name) if field_name else None

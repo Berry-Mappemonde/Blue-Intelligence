@@ -1,13 +1,13 @@
 """
-geo_core.py — Module géospatial unifié (Core mutualisé PoE / Projets).
+geo_core.py — Unified geospatial module (shared PoE / Projects core).
 
-Regroupe : géocodage double Nominatim ∥ GeoNames (rate-limit + cache),
-masque terrestre, snap_to_ocean, distance côtière, validation point-in-EEZ,
-variantes de noms de ports, re-ranking des candidats, anomalies spatiales.
+Bundles: dual Nominatim ∥ GeoNames geocoding (rate-limit + cache),
+land mask, snap_to_ocean, coastal distance, point-in-EEZ validation,
+port-name variants, candidate re-ranking, spatial anomalies.
 
-Porte d'entrée : ``geocode_name`` / ``geocode_dual``. Même question partout
-(« où est ce nom ? »). Les tests d'espace restent propres à chaque mode :
-havre Projet (``site_publishable``) vs polygone VLIZ (``classify_poe_point``).
+Entry point: ``geocode_name`` / ``geocode_dual``. Same question everywhere
+("where is this name?"). Space tests stay mode-specific:
+Project haven (``site_publishable``) vs VLIZ polygon (``classify_poe_point``).
 """
 import asyncio
 import hashlib
@@ -25,8 +25,8 @@ UA = "BerryMappemonde-BlueIntelligence/1.0 (+https://berrymappemonde.org; contac
 _nominatim_lock = asyncio.Lock()
 _last_nominatim = 0.0
 
-# Cache L2 Mongo (partagé entre workers) + L1 process. Les hits ne consomment
-# pas le quota Nominatim/GeoNames — condition pour tenir un run mondial.
+# L2 Mongo cache (shared across workers) + L1 process. Hits do not consume
+# Nominatim/GeoNames quota — required to sustain a world run.
 NOMINATIM_INTERVAL_S = 1.1
 GEONAMES_INTERVAL_S = 1.0
 GEOCODE_TTL_HIT_S = 180 * 86400
@@ -37,7 +37,7 @@ _THROTTLE_ATTEMPTS = 40
 
 
 # ---------------------------------------------------------------------------
-# Géométrie de base
+# Base geometry
 # ---------------------------------------------------------------------------
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
     r = 6371.0
@@ -60,7 +60,7 @@ def destination_point(lat, lon, bearing_deg, dist_km):
 
 
 # ---------------------------------------------------------------------------
-# Masque terrestre / océan
+# Land / ocean mask
 # ---------------------------------------------------------------------------
 def is_ocean(lat: float, lon: float) -> bool:
     lat = max(-89.9, min(89.9, lat))
@@ -69,7 +69,7 @@ def is_ocean(lat: float, lon: float) -> bool:
 
 
 def snap_to_ocean(lat: float, lon: float, max_km: float = 500.0):
-    """Point océanique le plus proche → (lat, lon, snapped_bool)."""
+    """Nearest ocean point → (lat, lon, snapped_bool)."""
     if is_ocean(lat, lon):
         return lat, lon, False
     for radius in [10, 25, 50, 75, 100, 150, 200, 300, 400, int(max_km)]:
@@ -110,10 +110,10 @@ def ocean_fallback_coords(title: str):
 
 
 # ---------------------------------------------------------------------------
-# Cache géocode + rate limiter partagé (Mongo)
+# Geocode cache + shared rate limiter (Mongo)
 # ---------------------------------------------------------------------------
 def _geodb():
-    """Hookable depuis les tests (base dédiée). Défaut : app.db.db."""
+    """Hookable from tests (dedicated DB). Default: app.db.db."""
     from app.db import db
     return db
 
@@ -207,10 +207,10 @@ async def _geocode_cache_set(provider: str, query: str, country_code: str | None
 
 
 async def _mongo_claim_slot(provider: str, interval: float) -> None:
-    """Réserve un créneau global (1 req / interval) via Mongo.
+    """Reserve a global slot (1 req / interval) via Mongo.
 
-    Dégradation silencieuse si Mongo est injoignable : le lock process-local
-    reste le filet. Après trop de collisions on cède (mieux un 429 qu'un hang).
+    Silent degradation if Mongo is unreachable: the process-local lock
+    remains the net. After too many collisions we yield (better a 429 than a hang).
     """
     if interval <= 0:
         return
@@ -248,7 +248,7 @@ async def _mongo_claim_slot(provider: str, interval: float) -> None:
 
 
 async def _throttle(provider: str, interval: float, last_attr: str) -> None:
-    """Filet local (même process) puis créneau Mongo (tous les workers)."""
+    """Local net (same process) then Mongo slot (all workers)."""
     last = float(globals()[last_attr])
     wait = interval - (time.time() - last)
     if wait > 0:
@@ -264,7 +264,7 @@ async def ensure_geo_indexes(db=None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Géocodage multi-source : Nominatim ∥ GeoNames (pas de test d'espace)
+# Multi-source geocoding: Nominatim ∥ GeoNames (no space test)
 # ---------------------------------------------------------------------------
 GEOCODE_AGREE_KM = 2.0
 
@@ -300,7 +300,7 @@ _geonames_disabled_reason: str | None = None
 
 
 def geonames_status() -> str:
-    """'ok' | 'no_account' | raison de désactivation (401, quota, compte non activé)."""
+    """'ok' | 'no_account' | deactivation reason (401, quota, account not enabled)."""
     if not (os.environ.get("GEONAMES_USERNAME") or "").strip():
         return "no_account"
     return _geonames_disabled_reason or "ok"
@@ -327,9 +327,9 @@ async def _geonames_rows(query: str, country_code: str | None = None, limit: int
                 r = await client.get("http://api.geonames.org/searchJSON", params=params)
                 body = r.json() if "json" in (r.headers.get("content-type") or "") else {}
                 status = (body or {}).get("status") or {}
-                # 10 = authorization exception (compte absent / webservice non activé),
-                # 18/19/20 = quotas — on désactive pour la suite du process (évite
-                # des centaines d'appels voués à l'échec).
+                # 10 = authorization exception (missing account / webservice not enabled),
+                # 18/19/20 = quotas — disable for the rest of the process (avoids
+                # hundreds of doomed calls).
                 if r.status_code in (401, 403) or status.get("value") in (10, 18, 19, 20):
                     _geonames_disabled_reason = (status.get("message")
                                                  or f"http {r.status_code}")[:120]
@@ -352,7 +352,7 @@ TIEBREAK_SYSTEM = (
 
 
 def tiebreak_user_prompt(zone: dict | None, items: list[dict]) -> str:
-    """Prompt de départage Nominatim vs GeoNames. Pas un test d'espace."""
+    """Nominatim vs GeoNames tie-break prompt. Not a space test."""
     zone = zone or {}
     name = zone.get("name") or zone.get("geoname") or zone.get("title") or ""
     sovereign = zone.get("sovereign") or ""
@@ -442,9 +442,9 @@ def pack_geocode_dual(
 
 
 def choose_from_dual(dual: dict | None, choice: str | None = None) -> dict:
-    """Choisit un point parmi les deux annuaires. Pas de test d'espace.
+    """Pick a point from the two directories. No space test.
 
-    ``choice`` : nominatim | geonames | none | None (accord / un seul / désaccord).
+    ``choice``: nominatim | geonames | none | None (agree / one only / disagree).
     """
     dual = dual or {}
     nomi = dual.get("nominatim")
@@ -509,7 +509,7 @@ def _hit_from_choice(query: str, dual: dict, chosen: dict) -> dict:
 
 async def geocode_dual(query: str, country_code: str | None = None,
                        *, limit: int = 1, log=None) -> dict:
-    """Nominatim ∥ GeoNames pour un nom. Pas de havre, pas de polygone VLIZ."""
+    """Nominatim ∥ GeoNames for a name. No haven, no VLIZ polygon."""
     log = log or (lambda m: None)
     q = (query or "").strip()
     if not q:
@@ -535,11 +535,11 @@ async def geocode_name(query: str, country_code: str | None = None, *,
                        settings: dict | None = None,
                        log=None,
                        limit: int = 1) -> dict:
-    """Demande aux deux annuaires, départage s'il le faut. Pas de test d'espace.
+    """Query both directories, tie-break if needed. No space test.
 
-    Un accord ou un seul hit suffit. Un désaccord appelle ``arbitrate_geocode``
-    (un des deux points, ou none) — jamais une troisième coordonnée. Le havre
-    Projet et le polygone VLIZ restent chez l'appelant.
+    Agreement or a single hit is enough. Disagreement calls ``arbitrate_geocode``
+    (one of the two points, or none) — never a third coordinate. The Project
+    haven and VLIZ polygon stay with the caller.
     """
     log = log or (lambda m: None)
     q = (query or "").strip()
@@ -584,10 +584,10 @@ async def geocode_name(query: str, country_code: str | None = None, *,
 
 
 async def geocode(query: str, country_code: str | None = None):
-    """Compat (lat, lon) | None via l'appel parallèle. Pas de test d'espace.
+    """Compat (lat, lon) | None via the parallel call. No space test.
 
-    Accord ou un seul annuaire → ce point. Désaccord → None
-    (utiliser ``geocode_name`` pour départager).
+    Agreement or a single directory → that point. Disagreement → None
+    (use ``geocode_name`` to tie-break).
     """
     hit = await geocode_name(query, country_code)
     if hit.get("lat") is None:
@@ -596,11 +596,11 @@ async def geocode(query: str, country_code: str | None = None):
 
 
 # ---------------------------------------------------------------------------
-# Géocodage de PoE (variantes de noms + score d'homonymes)
+# PoE geocoding (name variants + homonym score)
 # ---------------------------------------------------------------------------
-# Filet Nominatim/GeoNames : jusqu'à 10 hits (habitude search). N n'est pas
-# le système — parenthèses, listing_group, pairs côtiers et le registre
-# docs/data/poe-gps-arbitrated.json arbitrent. Ne pas s'arrêter au 1er village.
+# Nominatim/GeoNames net: up to 10 hits (search habit). N is not
+# the system — parentheses, listing_group, coastal pairs and the
+# docs/data/poe-gps-arbitrated.json registry arbitrate. Do not stop at the first village.
 GEOCODE_CANDIDATE_LIMIT = 10
 BASIN_SPLIT_KM = 1500.0
 PEER_NEAR_KM = 300.0
@@ -631,7 +631,7 @@ _PAREN_HINT_STOP = {
 
 
 def paren_hint_tokens(*names: str) -> list[str]:
-    """Tokens entre parenthèses (Bintan Island, Georgia) — contrainte, pas un strip."""
+    """Tokens in parentheses (Bintan Island, Georgia) — a constraint, not a strip."""
     tokens: list[str] = []
     for raw in names:
         if not raw:
@@ -658,7 +658,7 @@ def paren_hint_tokens(*names: str) -> list[str]:
 
 
 def port_name_variants(name: str) -> list[str]:
-    """Nom complet d'abord (parenthèses conservées), puis alias sans parenthèses."""
+    """Full name first (parentheses kept), then alias without parentheses."""
     variants: list[str] = []
     seen: set[str] = set()
 
@@ -690,7 +690,7 @@ def port_name_variants(name: str) -> list[str]:
 
 
 def _rerank_rows(query_ctx: str, rows: list[dict], name_key: str) -> dict:
-    """Re-ranking des candidats de géocodage par similarité sémantique (rag_core)."""
+    """Re-rank geocoding candidates by semantic similarity (rag_core)."""
     if len(rows) <= 1:
         return rows[0]
     try:
@@ -703,7 +703,7 @@ def _rerank_rows(query_ctx: str, rows: list[dict], name_key: str) -> dict:
 
 
 def _port_queries(port: dict, zone: dict) -> tuple[list[str], str]:
-    """Échelle de requêtes de géocodage d'un port + contexte de re-ranking."""
+    """Geocoding query ladder for a port + re-ranking context."""
     name = port["name"]
     territory = zone.get("name") or ""
     listing_name = (port.get("listing_name") or "").strip()
@@ -724,7 +724,7 @@ def _port_queries(port: dict, zone: dict) -> tuple[list[str], str]:
         queries.append(f"{port['city']}, {territory}")
     queries.append(f"{name} port, {zone.get('sovereign') or territory}")
     ctx = f"{name} port harbour marina customs, {territory}"
-    # Déduplique en gardant l'ordre (parenthèses / groupe listing d'abord).
+    # Dedup while keeping order (parentheses / listing group first).
     seen: set[str] = set()
     uniq: list[str] = []
     for q in queries:
@@ -750,7 +750,7 @@ def _zone_geom(zone: dict | None):
 
 
 def listing_group_penalty(group: str, lat: float, lon: float) -> float:
-    """Pénalité si le GPS contredit le bassin du listing (pas un centroïde)."""
+    """Penalty if GPS contradicts the listing basin (not a centroid)."""
     g = (group or "").lower()
     if not g:
         return 0.0
@@ -790,7 +790,7 @@ def _has_decisive_hint(cand: dict, port: dict) -> bool:
     if (cand.get("group_penalty") or 0) == 0 and (port.get("listing_group") or ""):
         if listing_group_penalty(
                 port.get("listing_group") or "", cand["lat"], cand["lon"]) == 0:
-            # Un groupe ouest/est USA qui ne pénalise pas EST un hint.
+            # A US west/east group that does not penalize IS a hint.
             g = (port.get("listing_group") or "").lower()
             if "west coast" in g or "east coast" in g or (
                     "atlantic" in g and "france" in g) or "north of rio" in g:
@@ -801,11 +801,11 @@ def _has_decisive_hint(cand: dict, port: dict) -> bool:
 def score_geocode_candidate(
     cand: dict, port: dict, zone: dict | None, geom=None, prepared=None,
 ) -> dict:
-    """Score un candidat Nominatim/GeoNames. Ne copie jamais le GPS d'un pair."""
+    """Score a Nominatim/GeoNames candidate. Never copy a pair's GPS."""
     lat, lon = float(cand["lat"]), float(cand["lon"])
     label = str(cand.get("label") or "")
     meta = _cand_harbour_meta(cand)
-    # Pas listing_role=poe → exception rivière 400 km (Safi inland).
+    # Not listing_role=poe → 400 km river exception (Safi inland).
     port_for_inland = {k: v for k, v in (port or {}).items() if k != "listing_role"}
     inland = inland_exception_flags(port_for_inland, zone or {}, meta)
     spatial = {"kind": "unknown", "validated": False, "dist_km": None}
@@ -880,7 +880,7 @@ def select_geocode_candidate(
     cands: list[dict], port: dict, zone: dict | None = None,
     geom=None, prepared=None,
 ) -> dict:
-    """Choisit un candidat ou déclare ambiguous (deux bassins, pas de hint)."""
+    """Pick a candidate or declare ambiguous (two basins, no hint)."""
     if not cands:
         return {"status": "miss", "chosen": None, "ranked": []}
     ranked = [
@@ -898,8 +898,8 @@ def select_geocode_candidate(
         lab = (c.get("label") or "").lower().replace(" ", "")
         return core in lab
 
-    # Port fluvial légitime (Sevilla) : ne pas sauter vers un quai lointain
-    # dont le libellé n'est pas le toponyme.
+    # Legitimate river port (Sevilla): do not jump to a distant quay
+    # whose label is not the toponym.
     inland_named = []
     if core:
         for c in ranked:
@@ -919,7 +919,7 @@ def select_geocode_candidate(
         if jump > _peer_near_km() and not _label_has_core(best):
             best = inland_named[0]
 
-    # Pair listing trop loin : homonyme dans une ZEE immense (Kingston ON vs NL).
+    # Listing pair too far: homonym in a huge EEZ (Kingston ON vs NL).
     if (best.get("peer_km") is not None and best["peer_km"] >= _basin_split_km()
             and not best.get("paren_hit")):
         status = "spatial_rejected"
@@ -1051,7 +1051,7 @@ async def _collect_geonames_candidates(port: dict, zone: dict) -> list[dict]:
 
 
 async def _geocode_port_nominatim(port: dict, zone: dict) -> dict | None:
-    """Meilleur Nominatim après score ; None si aucun hit."""
+    """Best Nominatim after scoring; None if no hit."""
     pool = await _collect_nominatim_candidates(port, zone)
     if not pool:
         return None
@@ -1089,10 +1089,10 @@ async def _geocode_port_geonames(port: dict, zone: dict) -> dict | None:
 
 
 async def geocode_port_dual(port: dict, zone: dict, log=None) -> dict:
-    """Nominatim ∥ GeoNames, puis score d'homonymes (ZEE, parenthèses, listing).
+    """Nominatim ∥ GeoNames, then homonym score (EEZ, parentheses, listing).
 
-    L'appel parallèle est le même ``pack_geocode_dual`` que ``geocode_name``.
-    Le score ZEE reste ici : un projet n'entre pas dans ce polygone.
+    The parallel call is the same ``pack_geocode_dual`` as ``geocode_name``.
+    The EEZ score stays here: a project does not enter this polygon.
     """
     log = log or (lambda m: None)
     nomi, geon = await asyncio.gather(
@@ -1124,10 +1124,10 @@ async def geocode_port_dual(port: dict, zone: dict, log=None) -> dict:
 # Validation spatiale point-in-EEZ (shapely)
 # ---------------------------------------------------------------------------
 def point_in_eez(lat: float, lon: float, geom, prepared=None, tol_deg: float = 0.5):
-    """Retourne (validated: bool, dist_km: float|None). tol_deg ≈ 55 km côtiers.
+    """Return (validated: bool, dist_km: float|None). tol_deg ≈ 55 coastal km.
 
-    Conservé pour les appels historiques. Le pipeline PoE utilise
-    classify_poe_point (ZEE stricte ou bord terrestre, pas de tampon 55 km)."""
+    Kept for historical callers. The PoE pipeline uses
+    classify_poe_point (strict EEZ or land shore, no 55 km buffer)."""
     try:
         from shapely.geometry import Point
         pt = Point(lon, lat)
@@ -1141,9 +1141,9 @@ def point_in_eez(lat: float, lon: float, geom, prepared=None, tol_deg: float = 0
         return False, None
 
 
-# Le polygone VLIZ est en mer. Un quai est souvent juste à terre.
-# 0,02° ≈ 2,2 km : sliver « encore la ZEE » (pas le vieux tampon 0,5° / 55 km).
-# 15 km : bord terrestre côtier. Au-delà : seulement l'exception rivière.
+# The VLIZ polygon is at sea. A quay is often just inland.
+# 0.02° ≈ 2.2 km: "still the EEZ" sliver (not the old 0.5° / 55 km buffer).
+# 15 km: coastal land shore. Beyond: river exception only.
 IN_EEZ_SLIVER_KM = 2.2
 COASTAL_LAND_KM = 15.0
 INLAND_RIVER_MAX_KM = 400.0
@@ -1161,7 +1161,7 @@ _HARBOUR_GN = {"HBR", "HBRX", "PRT", "MAR", "ANCH", "JTY", "WHF"}
 
 
 def harbour_evidence(port: dict | None = None, meta: dict | None = None) -> bool:
-    """Le point ressemble à un port / un quai, pas à une ville intérieure."""
+    """The point looks like a port / quay, not an inland town."""
     meta = meta or {}
     port = port or {}
     osm = f"{meta.get('osm_class') or ''} {meta.get('osm_type') or ''}".lower()
@@ -1183,8 +1183,8 @@ def harbour_evidence(port: dict | None = None, meta: dict | None = None) -> bool
 def inland_exception_flags(port: dict | None, zone: dict | None,
                            meta: dict | None = None, *,
                            official_list: bool = False) -> dict:
-    """Preuves pour l'exception rivière : CE pays (iso2 de la zone, pas le
-    souverain) et un vrai port — pas une ville intérieure à 100 km."""
+    """Evidence for the river exception: THIS country (zone iso2, not the
+    sovereign) and a real port — not an inland town 100 km away."""
     zone = zone or {}
     iso = (zone.get("iso2") or "").strip()
     return {
@@ -1194,7 +1194,7 @@ def inland_exception_flags(port: dict | None, zone: dict | None,
 
 
 def _dist_km_to_geom(lat: float, lon: float, geom) -> float | None:
-    """Distance haversine au bord du polygone (degrés shapely trop grossiers)."""
+    """Haversine distance to the polygon edge (shapely degrees are too coarse)."""
     try:
         from shapely.geometry import Point
         from shapely.ops import nearest_points
@@ -1216,17 +1216,17 @@ def classify_poe_point(lat: float, lon: float, geom, prepared=None,
                        inland: dict | None = None,
                        sliver_km: float | None = None,
                        river_km: float | None = None) -> dict:
-    """Classe un candidat PoE par rapport à CETTE ZEE (pas snap_to_ocean).
+    """Classify a PoE candidate against THIS EEZ (not snap_to_ocean).
 
-    - in_eez         : dans le polygone, ou sliver ≤ eez_sliver_km → accepté
-    - coastal_land   : à terre, ≤ coastal_land_km du trait de côte → accepté
-    - inland_river   : exception — à terre, dans CE pays, jusqu'à inland_river_max_km,
-                       seulement si c'est un port (pas une ville intérieure)
-    - other_water    : en mer hors de cette ZEE → rejeté
-    - inland         : trop loin / pas un port → rejeté
+    - in_eez         : in the polygon, or sliver ≤ eez_sliver_km → accepted
+    - coastal_land   : inland, ≤ coastal_land_km from the coastline → accepted
+    - inland_river   : exception — inland, in THIS country, up to inland_river_max_km,
+                       only if it is a port (not an inland town)
+    - other_water    : at sea outside this EEZ → rejected
+    - inland         : too far / not a port → rejected
 
-    `inland` = {country_ok, harbour_like}. Sans les deux, pas d'exception.
-    Les km viennent du catalogue / snapshot de run (get_rule), pas de magie locale.
+    `inland` = {country_ok, harbour_like}. Without both, no exception.
+    Kilometers come from the catalog / run snapshot (get_rule), not local magic.
     """
     from app.core.run_rules import get_rule
     inland = inland or {}
@@ -1264,15 +1264,15 @@ def classify_poe_point(lat: float, lon: float, geom, prepared=None,
 
 def spatial_class_for_point(lat: float, lon: float, geom, prepared=None,
                             inland: dict | None = None) -> dict:
-    """Nom public pour l'audit GPS confirmed — même contrat que classify_poe_point."""
+    """Public name for the confirmed GPS audit — same contract as classify_poe_point."""
     return classify_poe_point(lat, lon, geom, prepared=prepared, inland=inland)
 
 
 # ---------------------------------------------------------------------------
-# Détection d'anomalies spatiales (scikit-learn — bootstrappé sur la BDD)
+# Spatial anomaly detection (scikit-learn — bootstrapped on the DB)
 # ---------------------------------------------------------------------------
 def isolation_forest_scores(features: list[list[float]], contamination: float = 0.05):
-    """Retourne (labels[-1|1], scores). features = [[dx_km, dy_km, dist_km], ...]"""
+    """Return (labels[-1|1], scores). features = [[dx_km, dy_km, dist_km], ...]"""
     from sklearn.ensemble import IsolationForest
     import numpy as np
     X = np.array(features, dtype=float)
@@ -1283,7 +1283,7 @@ def isolation_forest_scores(features: list[list[float]], contamination: float = 
 
 
 def dbscan_noise_flags(coords: list[tuple[float, float]], eps_km: float = 150.0, min_samples: int = 2):
-    """DBSCAN haversine par zone : True = point isolé (bruit)."""
+    """Per-zone haversine DBSCAN: True = isolated point (noise)."""
     from sklearn.cluster import DBSCAN
     import numpy as np
     if len(coords) < min_samples + 1:

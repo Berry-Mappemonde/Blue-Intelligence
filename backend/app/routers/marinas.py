@@ -1,5 +1,5 @@
-"""app.routers.marinas — Marinas & mouillages : build (OSM/SHOM), imports/exports,
-enrichissement IA à l'unité et par lot."""
+"""app.routers.marinas — Marinas & anchorages: build (OSM/SHOM), imports/exports,
+unit and batch AI enrichment."""
 import asyncio
 import json
 import os
@@ -131,9 +131,9 @@ ANCHORAGE_BUILD_STATE = BuildState()
 
 
 async def _all_marinas(q: dict | None = None, projection: dict | None = None) -> list[dict]:
-    # Tri en Python (0.01 s) plutôt que Mongo : sur Atlas M0 le débit est le
-    # facteur limitant, et batch_size réduit borne la durée de chaque lecture
-    # socket (un batch 16 Mo par défaut peut dépasser le socketTimeoutMS).
+    # Sort in Python (0.01 s) rather than Mongo: on Atlas M0 throughput is the
+    # limiting factor, and a reduced batch_size bounds each socket
+    # read (a default 16 MB batch can exceed socketTimeoutMS).
     cur = db.marinas.find(q or {}, projection or SLIM_PROJECTION).batch_size(4000)
     docs = [doc async for doc in cur]
     docs.sort(key=lambda d: (d.get("name") or ""))
@@ -141,16 +141,16 @@ async def _all_marinas(q: dict | None = None, projection: dict | None = None) ->
 
 
 # ---------------------------------------------------------------------------
-# Cache du dump GeoJSON mondial (GET /api/marinas sans filtre).
-# Sur un Mongo distant (Atlas M0), reconstruire les ~32 000 features prend
-# plusieurs minutes : on sert le dernier GeoJSON construit et on reconstruit
-# en arrière-plan (stale-while-revalidate). Les exports et snapshots, eux,
-# relisent toujours la base (fraîcheur garantie pour les archives).
+# Cache of the world GeoJSON dump (GET /api/marinas without a filter).
+# On a remote Mongo (Atlas M0), rebuilding the ~32,000 features takes
+# several minutes: serve the last built GeoJSON and rebuild
+# in the background (stale-while-revalidate). Exports and snapshots
+# always re-read the DB (freshness guaranteed for archives).
 # ---------------------------------------------------------------------------
 _MARINAS_FC_CACHE: dict = {"fc": None, "built_at": 0.0}
 _MARINAS_FC_TTL_S = 300.0
-# Persistance locale : un redémarrage du process sert le dernier dump
-# (15 Mo) sans attendre Atlas. Reconstruit ensuite en arrière-plan.
+# Local persistence: a process restart serves the last dump
+# (15 MB) without waiting for Atlas. Then rebuilds in the background.
 _MARINAS_FC_DISK = Path(os.environ.get(
     "MARINAS_FC_CACHE_PATH",
     str(Path(__file__).resolve().parents[2] / "data" / ".marinas_fc_cache.json"),
@@ -199,11 +199,11 @@ def _log_marinas_fc_result(task: asyncio.Task) -> None:
 
 
 def _schedule_marinas_fc_refresh() -> asyncio.Task:
-    """Une seule reconstruction à la fois ; renvoie la tâche en cours."""
+    """One rebuild at a time; return the task in progress."""
     global _marinas_fc_task
     if _marinas_fc_task is None or _marinas_fc_task.done():
-        # Vérifie la boucle AVANT de créer la coroutine, sinon un appel hors
-        # asyncio laisse une coroutine jamais attendue (RuntimeWarning).
+        # Check the loop BEFORE creating the coroutine, otherwise an out-of-
+        # asyncio leaves a never-awaited coroutine (RuntimeWarning).
         asyncio.get_running_loop()
         _marinas_fc_task = asyncio.create_task(_rebuild_marinas_fc())
         _marinas_fc_task.add_done_callback(_log_marinas_fc_result)
@@ -211,26 +211,26 @@ def _schedule_marinas_fc_refresh() -> asyncio.Task:
 
 
 def mark_marinas_fc_stale() -> None:
-    """À appeler après toute écriture dans db.marinas : l'ancien cache reste
-    servi pendant qu'une reconstruction part en arrière-plan."""
+    """Call after any write to db.marinas: the old cache stays
+    served while a rebuild starts in the background."""
     _MARINAS_FC_CACHE["built_at"] = 0.0
     try:
         _schedule_marinas_fc_refresh()
     except RuntimeError:
-        pass  # pas de boucle asyncio (contexte de test)
+        pass  # no asyncio loop (test context)
 
 
 def start_marinas_fc_warmup() -> None:
-    """Préchauffage au démarrage du serveur (appelé par app.main).
+    """Warm-up at server start (called by app.main).
 
-    Charge d'abord le dernier dump écrit sur disque (réponse immédiate),
-    puis relit Mongo en arrière-plan.
+    First load the last dump written to disk (immediate response),
+    then re-read Mongo in the background.
     """
     if _MARINAS_FC_CACHE["fc"] is None:
         disk = _load_marinas_fc_disk()
         if disk is not None:
             _MARINAS_FC_CACHE["fc"] = disk
-            # 0 = considéré périmé : une reconstruction Mongo part tout de suite.
+            # 0 = considered stale: a Mongo rebuild starts immediately.
             _MARINAS_FC_CACHE["built_at"] = 0.0
             n = len(disk.get("features") or [])
             print(f"[marinas] cache disque chargé ({n} fiches)")
@@ -259,7 +259,7 @@ async def list_marinas(
             if time.monotonic() - _MARINAS_FC_CACHE["built_at"] > _MARINAS_FC_TTL_S:
                 _schedule_marinas_fc_refresh()
             return fc
-        # Cache froid : tous les clients attendent la même reconstruction.
+        # Cold cache: all clients wait for the same rebuild.
         return await _schedule_marinas_fc_refresh()
     docs = await _all_marinas(q)
     if visible:
@@ -282,7 +282,7 @@ class MarinasBuildBody(BaseModel):
     from_scratch: bool | None = None
     profile: str | None = None
     rules: dict | None = None
-    # Conservés pour ne pas casser les anciens clients / la carte Audit mouillages.
+    # Kept so old clients / the Anchorages Audit map are not broken.
     radius_nm: float | None = None
     include_corridor: bool | None = None
     corridor_step_nm: float | None = None
@@ -344,11 +344,11 @@ async def _persist_marina_run(kind: str, rules: dict, extra: dict, *,
 
 async def _chain_marinas_enrich_and_anchorages(
         scope: str, *, from_scratch: bool = False) -> None:
-    """Après le dump : enrichissement par priorité puis mouillages.
+    """After the dump: priority enrichment then anchorages.
 
-    Test : 10 fiches enrichies + la tuile golfe de Gascogne.
-    Full from scratch : tout (y compris déjà enrichi) + mouillages sans curseur.
-    Les mouillages écrivent la carte publique (`db.anchorages`, upsert).
+    Test: 10 enriched cards + the Bay of Biscay tile.
+    Full from scratch: everything (including already enriched) + cursor-free anchorages.
+    Anchorages write the public map (`db.anchorages`, upsert).
     """
     try:
         if not ENRICH_BATCH_STATE.running:
@@ -567,8 +567,8 @@ class AnchoragesBuildBody(BaseModel):
     corridor_radius_nm: float | None = None
     profile: str | None = None
     rules: dict | None = None
-    # "full" (défaut) = dump mondial en tuiles · "test" = tuile Gascogne ·
-    # "corridor" = legacy waypoints + bande route (run isolé).
+    # "full" (default) = tiled world dump · "test" = Biscay tile ·
+    # "corridor" = legacy waypoints + route band (isolated run).
     scope: str | None = None
 
 
@@ -602,8 +602,8 @@ async def anchorages_build_start(body: AnchoragesBuildBody | None = None):
     body = body or AnchoragesBuildBody()
     scope = (body.scope or "full").lower()
     if scope != "corridor":
-        # 2026-09 — dump mondial en tuiles : plus de corridor 25 NM.
-        # Écrit la carte publique (db.anchorages), upsert par dedup_key.
+        # 2026-09 — tiled world dump: no more 25 NM corridor.
+        # Write the public map (db.anchorages), upsert by dedup_key.
         if body.clear_before:
             raise HTTPException(400, "clear_before is forbidden (shared.no_purge)")
         ANCHORAGE_BUILD_STATE.run_id = None
@@ -749,7 +749,7 @@ MARINA_ENRICH_TASKS: dict[str, dict] = {}
 
 
 class MarinaEnrichBatchBody(BaseModel):
-    limit: int = 10   # 0 = toutes les marinas restantes (mode "Tout enchaîner")
+    limit: int = 10   # 0 = all remaining marinas ("Chain all" mode)
     priority: int | None = None
     include_enriched: bool = False   # if True, re-enrich already-enriched ones
     stale_only: bool = False   # if True, filter to stale-only (needs enriched_at)
@@ -799,7 +799,7 @@ async def _run_marina_enrich_one(marina: dict, min_credit_usd: float, log_fn,
     settings = await get_settings()
     tf_key = (settings.get("tinyfish_api_key") or os.environ.get("TINYFISH_API_KEY") or "").strip() or None
     or_key = get_llm_key(settings) or None
-    # Économie de crédits : après un échec TinyFish, on ne re-paye plus pour cette marina.
+    # Credit saving: after a TinyFish failure, do not pay again for this marina.
     skip_tf = skip_tinyfish or bool(marina.get("tinyfish_failed"))
     t0 = time.time()
     try:
@@ -932,8 +932,8 @@ async def marina_enrich_batch(body: MarinaEnrichBatchBody | None = None):
         q["$or"] = [{"enriched_at": {"$lt": cutoff}}, {"enriched": {"$ne": True}}]
     elif not body.include_enriched:
         q["$or"] = [{"enriched": {"$ne": True}}, {"enriched": False}]
-        # Économie de crédits : après 2 tentatives échouées, la marina sort des lots
-        # automatiques (toujours relançable à l'unité via son bouton Enrich).
+        # Credit saving: after 2 failed attempts, the marina leaves automatic
+        # batches (still re-runnable one-off via its Enrich button).
         q["enrich_attempts"] = {"$not": {"$gte": 2}}
 
     limit = int(body.limit or 0)
@@ -1185,10 +1185,10 @@ async def marinas_run_events(run_id: str, step: str | None = None,
 
 @router.get("/marinas/runs/{run_id}/geojson")
 async def marinas_run_geojson(run_id: str):
-    """FeatureCollection du run — sélecteur de run de la carte.
+    """Run FeatureCollection — map run selector.
 
-    Les dumps live historiques (`wrote_marinas=true`) n'ont pas d'items
-    isolés : on sert alors la collection live, qu'ils ont écrite.
+    Historical live dumps (`wrote_marinas=true`) have no isolated
+    items: then serve the live collection they wrote.
     """
     meta = await db.marina_runs.find_one({"_id": run_id})
     if not meta:

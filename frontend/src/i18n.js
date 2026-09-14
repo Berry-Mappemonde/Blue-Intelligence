@@ -802,7 +802,7 @@ export const DICT = {
     deployedMsg: "Swarm déployé",
     stoppedMsg: "Swarm arrêté",
     leavePlaceholder: "laisser vide pour conserver",
-    // Phase 5 — batch triggers déplacés vers Audit
+    // Phase 5 — batch triggers moved to Audit
     marinasBatchMovedToAudit: "Contrôles batch déplacés vers l'onglet Audit.",
     auditProjectsHint: "Lancez un run isolé ci-dessus (project_run_*). La carte live n'est pas écrite. Rafraîchissement par projet dispo via la popup carte.",
     auditMarinasBuild: "Scanner les marinas le long de la route",
@@ -914,7 +914,7 @@ export const DICT = {
     marinasApproachDry: "émergé / estran",
     marinasEnriched: "Enrichie",
     marinasFetchedAt: "Récupérée",
-    // Phase 8 — mouillages
+    // Phase 8 — anchorages
     anchoragesTitle: "Mouillages",
     anchoragesToggle: "Afficher les mouillages sur la carte",
     anchoragesCount: "mouillages",
@@ -954,7 +954,7 @@ export const DICT = {
     projectEnriching: "Rafraîchissement…",
     projectEnrichDone: "Rafraîchi",
     projectEnrichFailed: "Échec du rafraîchissement",
-    // Refactor 2026-06 — mode Formalités = carte mondiale [ZEE -> Ports d'Entrée]
+    // Refactor 2026-06 — Formalities mode = world map [EEZ -> Ports of Entry]
     modeFormalities: "Ports d’entrée",
     formalitiesDisclaimer: "Informations indicatives — à vérifier auprès des autorités.",
     poeTitle: "Ports d'Entrée",
@@ -1039,10 +1039,10 @@ export const DICT = {
     poeAutoUnchangedMd5: "inchangées (MD5)",
     poeAutoUpdated: "mises à jour",
     poeAutoErrRetried: "erreurs re-tentées",
-    // Phase 6 — Audit view — carte Projects (commandes swarm migrées ici)
+    // Phase 6 — Audit view — Projects card (swarm controls migrated here)
     auditProjectsCardTitle: "Projets — Swarm & extraction",
     auditExtractionSettingsTitle: "Réglages d'extraction",
-    // Phase 6 — indication d'export contextuel dans le panneau Settings
+    // Phase 6 — contextual export hint in the Settings panel
     settingsExportContextHint: "Exporte les données du mode actuellement actif.",
     reviewTitle: "Review",
     reviewKindProject: "Projets",
@@ -1074,7 +1074,7 @@ export const DICT = {
     ampDiscoverStop: "Arrêter",
     ampDiscoverNoKey: "Pas de clé TinyFish — seuls les liens extra ont été appliqués.",
     ampSubtitle: "Polygones ProtectedSeas + procédures de visite",
-    // Mode Science — catalogues océano ouverts + flotteurs Argo
+    // Science mode — open ocean catalogues + Argo floats
     modeScience: "Science",
     scienceCount: "fiches",
     scienceSubtitle: "Catalogues de données océano + flotteurs Argo + tracés de campagnes",

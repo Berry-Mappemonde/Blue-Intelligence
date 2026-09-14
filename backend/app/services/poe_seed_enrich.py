@@ -1,18 +1,18 @@
 """
-poe_seed_enrich — Géocode les name_only, juge les autres graines.
+poe_seed_enrich — Geocode name_only seeds, judge the others.
 
-Search paginé via ``search_named`` (TinyFish, ``serp_filter``, DuckDuckGo si
-pas de clé), Fetch de tous les hits whitelistés (cap 10),
-juge ``ask_yes_no`` (rôle ``judge`` : Pro → gpt-oss → Muse → Flash) si clé
-NIM, sinon OpenRouter, puis Claude Haiku → Sonnet en dernier.
-reuse_paid_sources=True : Fetch des judge_sources déjà payés, 0 Search.
-Agent TinyFish seulement si Fetch renvoie bot_blocked (1 / graine, lite puis
-stealth, 2 concurrents, cap crédits).
+Paged search via ``search_named`` (TinyFish, ``serp_filter``, DuckDuckGo if
+no key), Fetch of every whitelisted hit (cap 10),
+``ask_yes_no`` judge (``judge`` role: Pro → gpt-oss → Muse → Flash) if a
+NIM key, else OpenRouter, then Claude Haiku → Sonnet last.
+reuse_paid_sources=True: Fetch already-paid judge_sources, 0 Search.
+TinyFish Agent only if Fetch returns bot_blocked (1 / seed, lite then
+stealth, 2 concurrent, credit cap).
 
-N'écrit jamais dans poe_ports : seulement poe_run_ports / poe_seed_ports.
-Reprise : saute les ports déjà géocodés / déjà jugés.
-Double lecture : parseur catalogue → sources_bu + remember_seed_urls ;
-juge oui/non seulement le résidu (nom absent de la liste).
+Never writes poe_ports: only poe_run_ports / poe_seed_ports.
+Resume: skip already geocoded / already judged ports.
+Dual read: catalog parser → sources_bu + remember_seed_urls;
+yes/no judge only the residue (name absent from the list).
 """
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ WHITELIST_DOMAIN_CAP = 15
 CATALOG_FETCH_CHARS = 20000
 MINE_TASK_ID = "seed-mine"
 DEFAULT_MINE_FETCH_CAP = 200
-# Jetons de chemin : liste de ports, pas une annexe / gazette quelconque.
+# Path tokens: a port list, not some annex / gazette.
 _MINE_PATH_TOKENS = (
     "port-of-entry", "ports-of-entry", "ports-entree", "portos-de-entrada",
     "puertos-habilit", "habilitados", "designated-port", "designated_ports",
@@ -132,7 +132,7 @@ def parse_judge(data: dict | None) -> dict:
         status = "rejected"
     else:
         status = "inconclusive"
-    # Filet déterministe : cargo-only n'est jamais un PoE plaisance.
+    # Deterministic net: cargo-only is never a pleasure-craft PoE.
     if kind == "cargo" and status == "accepted":
         status = "rejected"
     conf = as_confidence(data.get("confidence"))
@@ -146,7 +146,7 @@ def parse_judge(data: dict | None) -> dict:
 
 
 def apply_judge_verdict(seed: dict, judge: dict) -> str:
-    """Met à jour verify_verdict après un jugement. Ne touche pas confirmed."""
+    """Update verify_verdict after a judgment. Does not touch confirmed."""
     current = seed.get("verify_verdict") or verdict_for_seed(seed)
     if current == "confirmed":
         return "confirmed"
@@ -155,7 +155,7 @@ def apply_judge_verdict(seed: dict, judge: dict) -> str:
     has_coords = bool(seed.get("has_coords") or (
         seed.get("lat") is not None and seed.get("lon") is not None))
     if status == "catalog":
-        # Faisceau D : nommé par la liste. Pas un oui plaisance (P vient après).
+        # Beam D: named by the list. Not a pleasure-craft yes (P comes after).
         if current == "name_only" and has_coords:
             return "unverified"
         return current
@@ -173,7 +173,7 @@ def apply_judge_verdict(seed: dict, judge: dict) -> str:
 
 
 def should_escalate_sonnet(judge: dict | None, doc: dict) -> bool:
-    """Sonnet si Haiku inconclusive, ou si la graine vient du listing."""
+    """Sonnet if Haiku is inconclusive, or if the seed comes from the listing."""
     status = (judge or {}).get("judge_status")
     if status == "inconclusive" or not judge:
         return True
@@ -182,7 +182,7 @@ def should_escalate_sonnet(judge: dict | None, doc: dict) -> bool:
 
 def select_fetch_urls(hits: list[dict], whitelist: list[str],
                       cap: int = FETCH_URL_CAP) -> list[str]:
-    """Tous les hits whitelistés, dans l'ordre Search, cap souple (~10)."""
+    """All whitelisted hits, in Search order, soft cap (~10)."""
     out, seen = [], set()
     for h in hits or []:
         u = (h.get("url") or "").strip()
@@ -219,7 +219,7 @@ def _legacy_geocode_cands(dual: dict) -> list[dict]:
 
 
 def pick_geocode(dual: dict, port: dict, zone: dict, geom, prepared) -> dict:
-    """Score les homonymes (ZEE, parenthèses, listing), puis filtre spatial."""
+    """Score homonyms (EEZ, parentheses, listing), then spatial filter."""
     dual = dual or {}
     pick = dual.get("pick") or {}
     raw_cands = list(dual.get("candidates") or []) or _legacy_geocode_cands(dual)
@@ -255,8 +255,8 @@ def pick_geocode(dual: dict, port: dict, zone: dict, geom, prepared) -> dict:
                     and abs(float(xy[1]) - float(chosen_scored["lon"])) < 1e-4):
                 continue
             sources.append({"source": source, "lat": xy[0], "lon": xy[1]})
-        # Un seul point à valider : le gagnant du score. Les autres restent
-        # dispo si le gagnant est rejeté spatialement.
+        # One point to validate: the score winner. The others stay
+        # available if the winner is spatially rejected.
         ordered = [chosen_scored] + [
             c for c in raw_cands
             if not (abs(float(c["lat"]) - float(chosen_scored["lat"])) < 1e-4
@@ -339,7 +339,7 @@ INLAND_FAR_KINDS = {"inland_river", "inland", "other_water"}
 
 
 def _needs_geocode(doc: dict) -> bool:
-    """name_only sans GPS, ou inland_far / ambiguous. Pas les confirmed ok."""
+    """name_only without GPS, or inland_far / ambiguous. Not confirmed-ok."""
     verdict = doc.get("verify_verdict") or ""
     audit = doc.get("gps_audit_status") or ""
     if verdict == "confirmed" and audit in GPS_AUDIT_KEEP:
@@ -417,7 +417,7 @@ def _listing_group_by_key() -> dict[str, str]:
 
 
 def attach_geocode_context(ports: list[dict]) -> None:
-    """listing_group + pairs côtiers (filtre, jamais un GPS à copier)."""
+    """listing_group + coastal pairs (filter, never a GPS to copy)."""
     groups = _listing_group_by_key()
     for p in ports:
         if not p.get("listing_group"):
@@ -463,7 +463,7 @@ def attach_geocode_context(ports: list[dict]) -> None:
 
 
 def _registry_geocode(doc: dict, zone: dict, log) -> dict | None:
-    """GPS déjà tranché (registre git) : pas Nominatim, pas Claude."""
+    """GPS already decided (git registry): no Nominatim, no Claude."""
     hit = accepted_by_key(str(doc.get("dedup_key") or ""))
     if not hit:
         return None
@@ -494,7 +494,7 @@ def _registry_geocode(doc: dict, zone: dict, log) -> dict | None:
 
 async def _llm_fill_mute_port(picked: dict, port: dict, zone: dict,
                               settings: dict | None, log) -> dict:
-    """Annuaires muets → GPS au jugé, puis polygone VLIZ. Pas le havre Projet."""
+    """Silent directories → guessed GPS, then VLIZ polygon. Not the Project haven."""
     from app.core.llm import llm_geocode_port
     xy = await llm_geocode_port(port, zone, settings=settings, log=log)
     if not xy:
@@ -566,7 +566,7 @@ async def geocode_one(doc: dict, zone: dict, log, settings: dict | None = None) 
         picked = await _llm_fill_mute_port(picked, port, zone, settings, log)
     if (not picked.get("has_coords") and doc.get("lat") is not None
             and doc.get("lon") is not None):
-        # Ne jamais écraser un GPS existant par un miss / ambiguous.
+        # Never overwrite an existing GPS with a miss / ambiguous.
         picked.pop("lat", None)
         picked.pop("lon", None)
         picked["has_coords"] = True
@@ -575,7 +575,7 @@ async def geocode_one(doc: dict, zone: dict, log, settings: dict | None = None) 
 
 
 def _judge_prompt(doc: dict, zone: dict, context: str) -> str:
-    """Nom + zone + extraits. Pas de jetons listing/OSM/WPI (ça biaiserait)."""
+    """Name + zone + excerpts. No listing/OSM/WPI tokens (that would bias)."""
     name = (doc.get("name") or "").strip()
     return (
         f"Candidat : {name}\n"
@@ -645,7 +645,7 @@ async def _search_hits(doc: dict, zone: dict, whitelist: list[str], key: str, lo
 
 
 def harvest_bu_catalog(fetched: dict, urls: list[str]) -> dict:
-    """Parseur catalogue sur les pages d'État déjà fetchées. 0 crawl."""
+    """Catalog parser on already-fetched state pages. 0 crawl."""
     blocks = []
     for u in urls or []:
         rec = (fetched or {}).get(u) or {}
@@ -679,7 +679,7 @@ def harvest_bu_catalog(fetched: dict, urls: list[str]) -> dict:
 
 
 def seed_on_catalog(doc: dict, ports: list[dict] | None) -> dict | None:
-    """True si le nom de la graine est déjà sur la liste officielle (dedup)."""
+    """True if the seed name is already on the official list (dedup)."""
     if not ports:
         return None
     return _match_seed(
@@ -707,7 +707,7 @@ def iter_judge_urls(doc: dict):
 
 
 def paid_fetch_urls(doc: dict, cap: int = 4) -> list[str]:
-    """Priorise les URL type liste déjà payées (MPI, douane, gazette)."""
+    """Prefer already-paid list-like URLs (MPI, customs, gazette)."""
     urls = list(dict.fromkeys(iter_judge_urls(doc)))
 
     def _score(u: str) -> float:
@@ -738,7 +738,7 @@ def mine_url_score(url: str, n: int = 1) -> float:
 
 
 def is_mine_candidate(url: str, n: int = 1) -> bool:
-    """URL officielle déjà payée qui ressemble à une liste — pas Search."""
+    """Already-paid official URL that looks like a list — not Search."""
     if not (url or "").startswith("http"):
         return False
     if url_is_excluded_search(url):
@@ -757,7 +757,7 @@ def is_mine_candidate(url: str, n: int = 1) -> bool:
 
 
 def collect_paid_source_urls(docs: list[dict]) -> list[dict]:
-    """Déduplique les judge_sources déjà payés (URL → n, mrgids)."""
+    """Dedup already-paid judge_sources (URL → n, mrgids)."""
     by: dict[str, dict] = {}
     for doc in docs or []:
         mid = doc.get("mrgid")
@@ -787,7 +787,7 @@ def select_mine_urls(items: list[dict], cap: int = DEFAULT_MINE_FETCH_CAP) -> li
 
 
 def merge_catalog_cache(cache: dict, harvest: dict) -> dict:
-    """Fusionne une moisson dans le cache ZEE (même lot, 0 re-fetch)."""
+    """Merge a harvest into the EEZ cache (same batch, 0 re-fetch)."""
     if not harvest or not harvest.get("sufficient"):
         return cache
     cache["sufficient"] = True
@@ -837,7 +837,7 @@ def _attach_bu(out: dict, harvest: dict | None, *, named: bool = False,
 
 
 def catalog_named_verdict(doc: dict, hit: dict, harvest: dict) -> dict:
-    """Nom déjà sur la liste : pas de juge oui/non (faisceau D)."""
+    """Name already on the list: no yes/no judge (beam D)."""
     out = {
         "judge_status": "catalog",
         "judge_engine": "catalog-bu",
@@ -853,7 +853,7 @@ def catalog_named_verdict(doc: dict, hit: dict, harvest: dict) -> dict:
 
 
 async def persist_bu_catalog(db, zone: dict, cache: dict) -> None:
-    """Écrit sources_bu + catalog_bu sur la fiche ZEE. Pas poe_ports."""
+    """Write sources_bu + catalog_bu on the EEZ card. Not poe_ports."""
     if db is None or not zone or zone.get("mrgid") is None:
         return
     if not cache.get("sufficient") or not (cache.get("urls") or cache.get("ports")):
@@ -904,7 +904,7 @@ async def judge_one(doc: dict, zone: dict, settings: dict, log,
         urls = select_fetch_urls(hits, whitelist, FETCH_URL_CAP)
         if key and urls:
             fetched = await tf_fetch(urls, key, log=log) or {}
-    # PDF / JS : Fetch vide → même cascade que le top-down. Maps : inchangé.
+    # PDF / JS: empty Fetch → same cascade as top-down. Maps: unchanged.
     fetched = await complete_with_cascade(urls, fetched, log=log)
     for u in urls:
         rec = fetched.get(u) or {}
@@ -995,9 +995,9 @@ async def execute_enrich(db, state, *, run_id: str = "",
                          persist_memory: bool = True,
                          only_mrgids=None,
                          residue_only: bool = False) -> dict:
-    """Géocode puis juge. Reprise. Pas de poe_ports.
+    """Geocode then judge. Resume. No poe_ports.
 
-    source=seeds lit/écrit poe_seed_ports. source=run utilise poe_run_ports.
+    source=seeds reads/writes poe_seed_ports. source=run uses poe_run_ports.
     """
     from app.db import get_settings
 
@@ -1039,12 +1039,12 @@ async def execute_enrich(db, state, *, run_id: str = "",
     if limit and limit > 0:
         geo_todo = geo_todo[:limit]
         if geo_todo:
-            # Lot name_only : on juge ce qu'on géocode, pas un 2e lot unverified.
+            # name_only batch: judge what we geocode, not a 2nd unverified batch.
             judge_pool = []
         else:
             judge_pool = judge_pool[:limit]
     else:
-        # Run complet : géocoder d'abord, ne pas juger deux fois la même graine.
+        # Full run: geocode first, do not judge the same seed twice.
         judge_pool = [p for p in judge_pool if not _needs_geocode(p)]
     state.total = len(geo_todo) + len(judge_pool)
     state.progress = 0
@@ -1157,12 +1157,12 @@ async def mine_paid_sources(db, state, *, fetch_cap: int = DEFAULT_MINE_FETCH_CA
                             include_runs: bool = True,
                             concurrency: int = 2,
                             use_agent: bool = True) -> dict:
-    """Re-lit les judge_sources déjà payés (Fetch, 0 Search).
+    """Re-read already-paid judge_sources (Fetch, 0 Search).
 
-    Si une page est un catalogue : sources_bu + catalog_bu sur la ZEE,
-    remember_seed_urls, judge_status=catalog pour les noms déjà sur la liste.
-    Le juge oui/non ne tourne que sur le résidu de CES ZEE.
-    N'écrit jamais poe_ports.
+    If a page is a catalog: sources_bu + catalog_bu on the EEZ,
+    remember_seed_urls, judge_status=catalog for names already on the list.
+    The yes/no judge only runs on the residue of THESE EEZs.
+    Never writes poe_ports.
     """
     from app.db import get_settings
 
@@ -1322,10 +1322,10 @@ async def apply_remembered_catalogs(db, state, *, persist_memory: bool = False,
                                     residue_limit: int = 25,
                                     concurrency: int = 2,
                                     use_agent: bool = False) -> dict:
-    """Fetch les seed_urls déjà mémorisées (0 Search) sur les ZEE 200 NM
-    encore sans catalogue, puis juge le résidu probable/unverified.
+    """Fetch already-remembered seed_urls (0 Search) on 200 NM EEZs
+    still without a catalog, then judge the probable/unverified residue.
 
-    Pas de régime conjoint. N'écrit jamais poe_ports. Pas de seeds/build.
+    No joint regime. Never writes poe_ports. No seeds/build.
     """
     from app.db import get_settings
 

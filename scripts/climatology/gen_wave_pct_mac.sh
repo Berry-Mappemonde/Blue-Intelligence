@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Génère les 12 mois Hs P50 / P90 WAVERYS PT3H sur le Mac.
-# Ne pas lancer sur le VPS (8 Go) : un mois à la fois, mais 27 ans de 3 h.
+# Generate the 12 Hs P50 / P90 WAVERYS PT3H months on the Mac.
+# Do not run on the VPS (8 GB): one month at a time, but 27 years of 3 h.
 #
-# Usage, depuis n'importe où :
+# Usage, from anywhere:
 #   bash scripts/climatology/gen_wave_pct_mac.sh
 #
-# Un seul mois (ex. juillet, recette 40°S) :
+# A single month (e.g. July, 40°S check):
 #   bash scripts/climatology/gen_wave_pct_mac.sh --month 7
 #
-# Reprendre après une coupure (même commande) :
+# Resume after an interruption (same command):
 #   bash scripts/climatology/gen_wave_pct_mac.sh
 set -euo pipefail
 

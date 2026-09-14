@@ -1,14 +1,14 @@
-"""Mode AMP — Aires Marines Protégées (ProtectedSeas Navigator).
+"""AMP mode — Marine Protected Areas (ProtectedSeas Navigator).
 
-Deux URL distinctes par site :
+Two distinct URLs per site:
 
-* ``manager_url`` — champ ProtectedSeas ``url`` (alias Website), page
-  institutionnelle / gestionnaire.
-* ``visit_url`` — procédures de visite ou d'entrée (permis, mouillage,
-  formalités). **Jamais** une copie du site gestionnaire.
+* ``manager_url`` — ProtectedSeas ``url`` field (Website alias),
+  institutional / manager page.
+* ``visit_url`` — visit or entry procedures (permits, anchoring,
+  formalities). **Never** a copy of the manager site.
 
-La couche polygones est servie par bbox ; l'enrichissement visite est
-stocké dans ``amp_sites`` (pas l'ancienne ``mpa_cache``).
+The polygon layer is served by bbox; visit enrichment is
+stored in ``amp_sites`` (not the old ``mpa_cache``).
 """
 from __future__ import annotations
 
@@ -99,8 +99,9 @@ def now_iso() -> str:
 
 def parse_bbox(raw: str, *, max_w: float = 180.0,
                max_h: float = 90.0) -> tuple[float, float, float, float]:
-    """Caps par défaut adaptés au rafraîchissement ProtectedSeas ; la lecture
-    du cache (GET /amp) passe des caps monde entier (360×180)."""
+    """Default caps suited to ProtectedSeas refresh; cache
+    reads (GET /amp) pass world-wide caps (360×180).
+    """
     parts = [p.strip() for p in (raw or "").split(",")]
     if len(parts) != 4:
         raise ValueError("bbox must be minx,miny,maxx,maxy")
@@ -117,7 +118,7 @@ def bbox_span_deg(bbox: tuple[float, float, float, float]) -> float:
 
 
 def iter_world_bboxes(step: float | None = None):
-    """Découpe WORLD_TILES en bbox AMP (minx, miny, maxx, maxy)."""
+    """Split WORLD_TILES into AMP bboxes (minx, miny, maxx, maxy)."""
     from app.services.osm_seeds import WORLD_TILES
     step = float(step if step is not None else catalog_default("amp.bbox_max_deg", 8))
     step = max(1.0, min(step, 8.0))
@@ -134,7 +135,7 @@ def iter_world_bboxes(step: float | None = None):
 
 
 async def harvest_world_polygons(db, *, state=None, force: bool = True) -> dict:
-    """Rafraîchit les polygones ProtectedSeas tuile par tuile (from scratch)."""
+    """Refresh ProtectedSeas polygons tile by tile (from scratch)."""
     tiles = list(iter_world_bboxes())
     fetched = 0
     errors = 0
@@ -214,7 +215,7 @@ def url_host(url: str | None) -> str | None:
 
 
 def is_manager_suburl(url: str | None, manager_url: str | None) -> bool:
-    """Même hôte que le gestionnaire, chemin distinct — cas le plus fréquent."""
+    """Same host as the manager, distinct path — most common case."""
     if urls_equivalent(url, manager_url):
         return False
     hu, hm = url_host(url), url_host(manager_url)
@@ -234,7 +235,7 @@ def name_tokens(name: str | None) -> set[str]:
 
 
 def name_matches(name: str | None, blob: str | None) -> bool:
-    """Le nom du site doit apparaître dans l'URL / le titre (recherche hors hôte)."""
+    """The site name must appear in the URL / title (search off-host)."""
     toks = name_tokens(name)
     if not toks:
         return False
@@ -256,7 +257,7 @@ def split_protectedseas_website(raw: str | None) -> tuple[str | None, list[str]]
 
 
 def protectedseas_visit_blobs(doc: dict) -> list[str]:
-    """Textes PS où une sous-URL de visite est souvent déjà écrite."""
+    """PS texts where a visit sub-URL is often already written."""
     return [
         doc.get("other_helpful_links") or "",
         doc.get("ps_website_raw") or "",
@@ -298,7 +299,7 @@ def rank_visit_candidate(
     if curated and not same and (hint_path or hint_blob):
         score += 2
     if curated and not same and not hint_path and not hint_blob:
-        # Lien extra PS hors hôte, sans mot-clé : brochure / dive-map souvent utile.
+        # Extra PS link off-host, no keyword: brochure / dive-map often useful.
         score += 2
     if not same and name_matches(name, blob):
         score += 2
@@ -311,11 +312,11 @@ def pick_visit_url(
     discovered: str | None = None,
     extra_blobs: list[str] | None = None,
 ) -> tuple[str | None, str]:
-    """Choisit une URL de visite distincte du gestionnaire.
+    """Pick a visit URL distinct from the manager.
 
-    Privilegie une sous-URL du même hôte si elle existe, mais accepte
-    un autre domaine déjà présent dans ProtectedSeas ou découvert.
-    Retourne ``(url, status)``. ``status`` ∈ VISIT_STATUSES.
+    Prefer a same-host sub-URL if it exists, but accept
+    another domain already present in ProtectedSeas or discovered.
+    Return ``(url, status)``. ``status`` ∈ VISIT_STATUSES.
     """
     if discovered:
         if urls_equivalent(discovered, manager_url):
@@ -350,7 +351,7 @@ def pick_visit_url(
         _consider(raw, curated=True, count_manager_copy=True)
     for blob in extra_blobs or []:
         for raw in extract_urls(blob):
-            # Tout lien distinct déjà écrit par ProtectedSeas compte, même hors hôte.
+            # Any distinct link already written by ProtectedSeas counts, even off-host.
             _consider(raw, curated=True, count_manager_copy=False)
 
     if ranked:
@@ -364,7 +365,7 @@ def pick_visit_url(
 
 def apply_visit_choice(doc: dict, *, discovered: str | None = None,
                        source: str | None = None) -> dict:
-    """Écrit visit_url / status. N'écrase jamais visit_url avec manager_url."""
+    """Write visit_url / status. Never overwrite visit_url with manager_url."""
     raw_web = doc.get("ps_website_raw") or ""
     if not raw_web and "|" in str(doc.get("manager_url") or ""):
         raw_web = doc.get("manager_url") or ""
@@ -409,7 +410,7 @@ def _as_lfp(value: Any) -> int:
 
 
 def _ring_ok(ring) -> bool:
-    """Mongo 2dsphere exige ≥ 3 sommets distincts (anneau fermé ≥ 4 positions)."""
+    """Mongo 2dsphere requires ≥ 3 distinct vertices (closed ring ≥ 4 positions)."""
     if not isinstance(ring, (list, tuple)) or len(ring) < 4:
         return False
     uniq: list[tuple[float, float]] = []
@@ -428,7 +429,7 @@ def _ring_ok(ring) -> bool:
 
 
 def sanitize_geometry(geom: dict | None) -> dict | None:
-    """Retire les anneaux dégénérés (simplification ArcGIS) avant index 2dsphere."""
+    """Drop degenerate rings (ArcGIS simplification) before the 2dsphere index."""
     if not geom or not isinstance(geom, dict):
         return None
     kind = geom.get("type")
@@ -495,7 +496,7 @@ def _ring_centroid(ring: list) -> tuple[float | None, float | None]:
 
 
 def _centroid(geom: dict | None) -> tuple[float | None, float | None]:
-    """Centroïde de l'anneau extérieur (ou du plus grand polygone)."""
+    """Centroid of the outer ring (or of the largest polygon)."""
     if not geom:
         return None, None
     kind = geom.get("type")
@@ -571,7 +572,7 @@ def attrs_from_feature(feat: dict) -> dict:
 
 
 def merge_cached(existing: dict | None, incoming: dict) -> dict:
-    """Garde l'URL de visite déjà validée ; ne la remplace pas par le gestionnaire."""
+    """Keep the already-validated visit URL; do not replace it with the manager."""
     if not existing:
         return incoming
     out = dict(incoming)
@@ -695,7 +696,7 @@ def _sql_site_ids(site_ids: list[str]) -> str:
 
 
 async def fetch_arcgis_attrs(site_ids: list[str]) -> dict[str, dict]:
-    """Attributs ProtectedSeas sans géométrie — extras Website / Other Helpful Links."""
+    """ProtectedSeas attributes without geometry — Website / Other Helpful Links extras."""
     out: dict[str, dict] = {}
     ids = [str(s).strip() for s in site_ids if str(s).strip()]
     if not ids:
@@ -721,7 +722,7 @@ async def fetch_arcgis_attrs(site_ids: list[str]) -> dict[str, dict]:
 
 
 def apply_protectedseas_attrs(doc: dict, attrs: dict | None) -> dict:
-    """Réécrit manager_url / extras depuis une fiche ArcGIS (sans polygone)."""
+    """Rewrite manager_url / extras from an ArcGIS record (no polygon)."""
     if not attrs:
         return doc
     website_raw = attrs.get("url") or ""
@@ -742,7 +743,7 @@ def apply_protectedseas_attrs(doc: dict, attrs: dict | None) -> dict:
 async def refresh_protectedseas_attrs(
     db, docs: list[dict], *, fetch_fn=None, log=None,
 ) -> int:
-    """Recharge les extras ProtectedSeas du cache (comme les tags OSM Capitaineries)."""
+    """Reload ProtectedSeas extras from cache (like OSM Harbormaster tags)."""
     ids = [str(d.get("site_id") or d.get("_id") or "").strip() for d in docs]
     ids = [i for i in ids if i]
     if not ids:
@@ -805,7 +806,7 @@ def tile_key(bbox: tuple[float, float, float, float]) -> str:
 
 def cache_covers_tile(cached: list[dict], tile_doc: dict | None,
                       ttl_days: int, *, force: bool) -> bool:
-    """Un site isolé d'un upsert raté ne compte pas pour une tuile."""
+    """An isolated site from a failed upsert does not count for a tile."""
     if force or not cached or not tile_doc:
         return False
     return _is_fresh(tile_doc, ttl_days)
@@ -909,7 +910,7 @@ async def sites_in_bbox(db, bbox: tuple[float, float, float, float], *,
 
 
 async def resolve_visit_urls(db, *, limit: int = 500) -> dict:
-    """Applique l'heuristique other_helpful_links sur le cache (sans TinyFish)."""
+    """Apply the other_helpful_links heuristic on the cache (no TinyFish)."""
     docs = await db.amp_sites.find({
         "$or": [
             {"visit_url": {"$in": [None, ""]}},
@@ -981,5 +982,5 @@ async def amp_stats(db) -> dict:
 
 
 def slim_export_feature(doc: dict) -> dict:
-    """Export léger : centroïde + les deux URL, pas le polygone."""
+    """Light export: centroid + both URLs, not the polygon."""
     return to_feature(doc, geometry=False)

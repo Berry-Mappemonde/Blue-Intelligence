@@ -1,11 +1,11 @@
-"""Même site d'action (Projets / ports d'entrée) — pas un calque de bâtiment.
+"""Same action site (Projects / ports of entry) — not a building overlay.
 
-Algorithme : Haversine < 500 m ET similarité ≥ 60 %, OU similarité ≥ 90 % seule.
-Non-destructif : ne supprime jamais — fusionne par enrichissement additif.
+Algorithm: Haversine < 500 m AND similarity ≥ 60%, OR similarity ≥ 90% alone.
+Non-destructive: never deletes — merges by additive enrichment.
 
-Ce n'est pas l'overlay capitainerie (SHOM / NOAA sur OSM, 250 m, distance
-seule). Voir ``app.core.identity.find_building``. On ne réutilise pas
-``is_duplicate`` pour coller deux cartes officielles du même bureau.
+This is not the harbormaster overlay (SHOM / NOAA on OSM, 250 m, distance
+only). See ``app.core.identity.find_building``. Do not reuse
+``is_duplicate`` to glue two official cards of the same office.
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ def normalize_name(s: str) -> str:
 
 
 def text_similarity(a: str, b: str) -> float:
-    """Max entre ratio brut, ratio normalisé et ratio à tokens triés
-    (détecte « Port de Papeete » vs « Papeete Port »)."""
+    """Max of raw ratio, normalized ratio and sorted-token ratio
+    (detects "Port de Papeete" vs "Papeete Port")."""
     if not a or not b:
         return 0.0
     a_low, b_low = a.lower().strip(), b.lower().strip()
@@ -64,7 +64,7 @@ def _xy(doc: dict, lat_key: str, lon_key: str):
 
 def is_duplicate(doc_a: dict, doc_b: dict, lat_key: str = "lat", lon_key: str = "lon",
                  title_key: str = "title") -> bool:
-    """True si c'est le même site d'action. Jamais un calque OSM↔SHOM."""
+    """True if it is the same action site. Never an OSM↔SHOM overlay."""
     dist_km, sim_low, sim_high = _dedup_thresholds()
     sim = text_similarity(str(doc_a.get(title_key) or ""), str(doc_b.get(title_key) or ""))
     if sim >= sim_high:
@@ -77,8 +77,8 @@ def is_duplicate(doc_a: dict, doc_b: dict, lat_key: str = "lat", lon_key: str = 
 
 
 def merge_docs(existing: dict, incoming: dict) -> dict:
-    """Fusion non-destructive : ne remplit QUE les champs manquants de l'existant.
-    Retourne un dict compatible $set MongoDB."""
+    """Non-destructive merge: fill ONLY missing fields of the existing doc.
+    Return a MongoDB $set-compatible dict."""
     updates = {}
     for key, value in incoming.items():
         if key.startswith("_"):
@@ -113,8 +113,8 @@ def deduplicate_list(docs: list[dict], lat_key: str = "lat", lon_key: str = "lon
 async def upsert_with_dedup(collection, candidate: dict, base_query: dict | None = None,
                             lat_key: str = "lat", lon_key: str = "lon",
                             title_key: str = "title", extra_set: dict | None = None) -> dict:
-    """Upsert non-destructif Mongo : fusionne dans un doublon existant
-    (fenêtre spatiale ±1° + fuzzy), sinon insère. Retourne {action, id}."""
+    """Non-destructive Mongo upsert: merge into an existing duplicate
+    (±1° spatial window + fuzzy), else insert. Return {action, id}."""
     lat, lon = candidate.get(lat_key), candidate.get(lon_key)
     query = dict(base_query or {})
     if lat is not None and lon is not None:

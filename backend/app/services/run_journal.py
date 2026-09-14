@@ -1,20 +1,20 @@
-"""Journal complet d'un run Projets.
+"""Full journal of a Projects run.
 
-Le tampon Console (`GET /api/swarm/status`) ne garde que les 200 dernières
-lignes en mémoire, et les cartes agent n'en montrent que 8. Ici, **toutes**
-les lignes (récit swarm + agents TinyFish) sont conservées sans plafond :
+The Console buffer (`GET /api/swarm/status`) keeps only the last 200
+lines in memory, and agent cards show only 8. Here, **all**
+lines (swarm narrative + TinyFish agents) are kept without a cap:
 
-  - fichier ``backend/data/runs/<run_id>.journal.jsonl`` (artefact disque) ;
-  - collection Mongo ``project_run_journal`` (sauvegardes quotidiennes VPS) ;
-  - rétrocompat : les lignes ``kind=log`` et ``kind=meta`` sont aussi
-    ajoutées à ``<run_id>.swarm.jsonl`` (déjà produit par les runs en cours).
+  - file ``backend/data/runs/<run_id>.journal.jsonl`` (disk artifact);
+  - Mongo collection ``project_run_journal`` (daily VPS backups);
+  - back-compat: ``kind=log`` and ``kind=meta`` lines are also
+    appended to ``<run_id>.swarm.jsonl`` (already produced by in-flight runs).
 
-La première ligne (``kind=meta``, seq=1) consigne les **paramètres et
-règles** du run (profil, hash, `chosen`, empreinte code — aucun secret).
-L'API JSON renvoie toujours ``params`` + ``header_text`` (même en
-``tail=true``). Les runs déjà finis sans ligne meta sont reconstruits
-depuis ``project_runs.params``. La carte live ``projects`` n'est jamais
-écrite.
+The first line (``kind=meta``, seq=1) records the run **parameters and
+rules** (profile, hash, `chosen`, code fingerprint — no secret).
+The JSON API always returns ``params`` + ``header_text`` (even with
+``tail=true``). Already-finished runs without a meta line are rebuilt
+from ``project_runs.params``. The live ``projects`` map is never
+written.
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ JOURNAL_LIMIT_DEFAULT = 2000
 JOURNAL_LIMIT_MAX = 10_000
 JOURNAL_DOWNLOAD_MAX = 100_000
 
-# Lignes agent conservées sur la carte live (le fichier n'est pas tronqué).
+# Agent lines kept on the live card (the file is not truncated).
 AGENT_LIVE_TAIL = 8
 
 
@@ -67,7 +67,7 @@ def swarm_log_path(run_id: str) -> Path:
 
 
 def _jsonl_paths(run_id: str) -> list[Path]:
-    """Fichier unifié d'abord, sinon l'ancien .swarm.jsonl (runs déjà lancés)."""
+    """Unified file first, else the old .swarm.jsonl (already-started runs)."""
     rid = safe_run_id(run_id)
     primary = RUNS_DIR / f"{rid}.journal.jsonl"
     legacy = RUNS_DIR / f"{rid}.swarm.jsonl"
@@ -79,7 +79,7 @@ def _jsonl_paths(run_id: str) -> list[Path]:
 
 
 def _strip_secrets(obj):
-    """Retire les clés type api_key / secret. Aucun secret dans le journal."""
+    """Drop api_key / secret-like keys. No secret in the journal."""
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
@@ -93,7 +93,7 @@ def _strip_secrets(obj):
 
 
 def _chosen_rules(p: dict) -> tuple[dict, str | None, str | None, dict | None]:
-    """Accepte le snapshot Mongo (``rules.chosen``) ou la forme déjà publique."""
+    """Accept the Mongo snapshot (``rules.chosen``) or the already-public form."""
     rules = p.get("rules") if isinstance(p.get("rules"), dict) else {}
     if isinstance(rules.get("chosen"), dict):
         return (
@@ -115,7 +115,7 @@ def _chosen_rules(p: dict) -> tuple[dict, str | None, str | None, dict | None]:
 
 
 def public_run_params(params: dict | None) -> dict:
-    """Paramètres + règles du run, sans secrets. wrote_projects reste false."""
+    """Run parameters + rules, no secrets. wrote_projects stays false."""
     p = params if isinstance(params, dict) else {}
     chosen, profile, digest, counts = _chosen_rules(p)
     code = p.get("code") if isinstance(p.get("code"), dict) else {}
@@ -165,7 +165,7 @@ def _rule_title(rule_id: str) -> str:
 
 
 def journal_header_to_text(params: dict | None) -> str:
-    """Bloc lisible : paramètres + chaque règle utilisée."""
+    """Readable block: parameters + each rule used."""
     pub = public_run_params(params) if params else {}
     if not pub.get("profile") and not pub.get("rules") and not pub.get("mode"):
         return ""
@@ -214,7 +214,7 @@ def params_from_items(items: list[dict] | None) -> dict | None:
 
 
 def params_from_journal(run_id: str) -> dict | None:
-    """Première ligne ``kind=meta`` du fichier (les runs anciens n'en ont pas)."""
+    """First ``kind=meta`` line of the file (old runs do not have one)."""
     try:
         for e in iter_journal_file(run_id):
             if e.get("kind") == JOURNAL_KIND_META and isinstance(e.get("params"), dict):
@@ -226,7 +226,7 @@ def params_from_journal(run_id: str) -> dict | None:
 
 
 def enrich_journal_payload(packed: dict, params: dict | None = None) -> dict:
-    """Ajoute ``params`` + ``header_text`` même si ``tail=true`` saute seq=1."""
+    """Add ``params`` + ``header_text`` even if ``tail=true`` skips seq=1."""
     raw = params
     if not raw:
         raw = params_from_items(packed.get("items") or [])
@@ -253,7 +253,7 @@ def _public_entry(entry: dict) -> dict:
 
 
 def append_journal(run_id: str, entry: dict, seq: int | None = None) -> dict:
-    """Ajoute une ligne au journal disque. Ne touche pas ``projects``."""
+    """Append a line to the disk journal. Do not touch ``projects``."""
     rid = safe_run_id(run_id)
     rec = _public_entry(entry)
     rec["run_id"] = rid
@@ -268,14 +268,14 @@ def append_journal(run_id: str, entry: dict, seq: int | None = None) -> dict:
         with primary.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
         if rec.get("kind") in (JOURNAL_KIND_LOG, JOURNAL_KIND_META):
-            # Même récit que les runs déjà en cours (fichier .swarm.jsonl).
+            # Same narrative as in-flight runs (.swarm.jsonl file).
             with swarm_log_path(rid).open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
     return rec
 
 
 def iter_journal_file(run_id: str, kind: str | None = None):
-    """Lit le fichier journal (ou le .swarm.jsonl de repli)."""
+    """Read the journal file (or the fallback .swarm.jsonl)."""
     want = (kind or "").strip().lower() or None
     if want == "all":
         want = None
@@ -307,7 +307,7 @@ def count_journal_file(run_id: str, kind: str | None = None) -> int:
 
 def read_journal_file(run_id: str, *, skip: int = 0, limit: int = JOURNAL_LIMIT_DEFAULT,
                       kind: str | None = None, tail: bool = False) -> dict:
-    """Page le fichier journal. ``tail=true`` = les *limit* dernières lignes."""
+    """Page the journal file. ``tail=true`` = the last *limit* lines."""
     items = list(iter_journal_file(run_id, kind=kind))
     total = len(items)
     skip = max(0, int(skip or 0))
@@ -329,7 +329,7 @@ def read_journal_file(run_id: str, *, skip: int = 0, limit: int = JOURNAL_LIMIT_
 
 def journal_to_text(run_id: str, items: list[dict] | None = None,
                     params: dict | None = None) -> str:
-    """Récit lisible : paramètres + règles, puis le flux horodaté."""
+    """Readable narrative: parameters + rules, then the timestamped stream."""
     if items is None:
         items = list(iter_journal_file(run_id))
     raw = params or params_from_items(items)
@@ -392,7 +392,7 @@ async def mongo_insert_journal(db, rec: dict) -> None:
 async def read_journal_mongo(db, run_id: str, *, skip: int = 0,
                               limit: int = JOURNAL_LIMIT_DEFAULT,
                               kind: str | None = None, tail: bool = False) -> dict:
-    """Repli si le fichier a disparu : collection ``project_run_journal``."""
+    """Fallback if the file is gone: ``project_run_journal`` collection."""
     rid = safe_run_id(run_id)
     q: dict = {"run_id": rid}
     want = (kind or "").strip().lower() or None
@@ -425,7 +425,7 @@ async def read_journal_mongo(db, run_id: str, *, skip: int = 0,
 async def load_journal(db, run_id: str, *, skip: int = 0,
                        limit: int = JOURNAL_LIMIT_DEFAULT,
                        kind: str | None = None, tail: bool = False) -> dict:
-    """Fichier d'abord, Mongo ensuite. N'écrit jamais ``projects``."""
+    """File first, Mongo next. Never write ``projects``."""
     if _jsonl_paths(run_id):
         return read_journal_file(
             run_id, skip=skip, limit=limit, kind=kind, tail=tail)
