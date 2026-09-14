@@ -1,4 +1,4 @@
-"""app.routers.amp — 4e mode : Aires Marines Protégées (ProtectedSeas)."""
+"""app.routers.amp — 4th mode: Marine Protected Areas (ProtectedSeas)."""
 import asyncio
 
 from fastapi import APIRouter, HTTPException
@@ -47,18 +47,18 @@ def _parse_bbox(raw: str, **caps):
 @router.get("/amp")
 async def list_amp(bbox: str = "", force: bool = False, visible: bool = False,
                    review: bool = False):
-    """Polygones AMP dans la bbox (minx,miny,maxx,maxy, WGS84)."""
+    """MPA polygons in the bbox (minx,miny,maxx,maxy, WGS84)."""
     if not bbox:
         raise HTTPException(400, "bbox required (minx,miny,maxx,maxy)")
-    # Caps monde entier : la vue dézoomée est servie depuis le cache local,
-    # seul le rafraîchissement ProtectedSeas garde la limite stricte.
+    # Worldwide caps: the zoomed-out view is served from the local cache;
+    # only the ProtectedSeas refresh keeps the strict limit.
     box = _parse_bbox(bbox, max_w=360.0, max_h=180.0)
     max_span = float(catalog_default("amp.bbox_max_deg", 8))
     span = amp_svc.bbox_span_deg(box)
     if span > max_span:
-        # Vue dézoomée : on sert les sites déjà en cache local (aucun appel
-        # ProtectedSeas). Au-delà de 60° un polygone bbox dépasse l'hémisphère
-        # que Mongo accepte pour $geoIntersects → on liste tout le cache.
+        # Zoomed-out view: serve sites already in the local cache (no
+        # ProtectedSeas call). Beyond 60° a bbox polygon exceeds the hemisphere
+        # Mongo accepts for $geoIntersects → list the whole cache.
         if span >= 60:
             docs = await db.amp_sites.find({}).limit(8000).to_list(8000)
         else:
@@ -147,7 +147,7 @@ async def amp_resolve_visit_urls(limit: int = 500):
 
 @router.post("/amp/discover-visit-urls")
 async def amp_discover_visit_start(body: DiscoverBody | None = None):
-    """Job de fond : extras ProtectedSeas → Fetch → Search → juge NIM (chaîne json)."""
+    """Background job: ProtectedSeas extras → Fetch → Search → NIM judge (json chain)."""
     if VISIT_DISCOVER_STATE.running:
         raise HTTPException(409, "A visit-URL discover is already running")
     body = body or DiscoverBody()
@@ -288,7 +288,7 @@ async def amp_run_events(run_id: str, step: str | None = None,
 
 @router.get("/amp/runs/{run_id}/geojson")
 async def amp_run_geojson(run_id: str):
-    """FeatureCollection du run (polygones) — sélecteur de run de la carte."""
+    """Run FeatureCollection (polygons) — map run selector."""
     meta = await db.amp_runs.find_one({"_id": run_id})
     if not meta:
         raise HTTPException(404, f"Run {run_id} unknown")

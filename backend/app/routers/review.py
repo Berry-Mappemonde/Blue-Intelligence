@@ -1,7 +1,7 @@
-"""API de l'onglet Review — file de fiches + commentaire + interrupteur Gold.
+"""Review tab API — card queue + comment + Gold switch.
 
-Lecture des runs / v1. Écrit `review_comments`, `review_gold`, `review_choices`,
-`review_suggest`. N'écrit jamais `projects` / `poe_ports` / `eez_zones` /
+Reads runs / v1. Writes `review_comments`, `review_gold`, `review_choices`,
+`review_suggest`. Never writes `projects` / `poe_ports` / `eez_zones` /
 `marinas` / `capitaineries` / `amp_sites`.
 """
 import asyncio

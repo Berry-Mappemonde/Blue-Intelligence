@@ -1,41 +1,41 @@
 """
-app.routers.runs — Runs versionnés du pipeline PoE (plusieurs en parallèle).
+app.routers.runs — Versioned PoE pipeline runs (several in parallel).
 
-POST /api/poe/runs                     démarre (ou reprend) un run
-POST /api/poe/runs/multi               lance v1 + v2 + tinyfish en parallèle
-GET  /api/poe/runs                     liste des runs
-GET  /api/poe/runs/searxng             santé du moteur de recherche
-GET  /api/poe/runs/compare             comparaison à N runs (+ v1)
-POST /api/poe/runs/best-of             synthèse dans un nouveau run (jamais v1)
+POST /api/poe/runs                     start (or resume) a run
+POST /api/poe/runs/multi               launch v1 + v2 + tinyfish in parallel
+GET  /api/poe/runs                     list of runs
+GET  /api/poe/runs/searxng             search-engine health
+GET  /api/poe/runs/compare             N-run comparison (+ v1)
+POST /api/poe/runs/best-of             synthesis into a new run (never v1)
 GET  /api/poe/runs/{id}/status
 POST /api/poe/runs/{id}/cancel
 GET  /api/poe/runs/{id}/ports
 GET  /api/poe/runs/{id}/events
 GET  /api/poe/runs/{id}/diff
 GET  /api/poe/runs/{id}/report
-GET  /api/poe/runs/{id}/listing-control   rapport de contrôle vs listing_ref
-POST /api/poe/runs/{id}/listing-control   calcule + persist la file de revue
+GET  /api/poe/runs/{id}/listing-control   control report vs listing_ref
+POST /api/poe/runs/{id}/listing-control   compute + persist the review queue
 GET  /api/poe/listing-control/v1
 POST /api/poe/listing-control/v1
 GET  /api/poe/listing-control/compare
 GET  /api/poe/listing-control/review
 GET  /api/poe/listing-control/ref
 GET  /api/poe/listing-control/canary
-GET  /api/poe/seeds/union              union bottom-up v1+runs+OSM+listing (aucun crawl)
-POST /api/poe/seeds/build              reconstruit poe_seed_ports (pas poe_ports)
-GET  /api/poe/seeds                    lecture poe_seed_ports
-GET  /api/poe/seeds/gps-audit          audit GPS confirmed (dry-run, pas persist)
-GET  /api/poe/seeds/gps-arbitrated     registre git des GPS tranchés (pas persist)
-GET  /api/poe/seeds/line               requête TinyFish + résumé inventaire
-POST /api/poe/seeds/verify             classe les graines + run versionné (pas poe_ports)
-POST /api/poe/seeds/enrich             géocode + juge (lots, pas poe_ports)
+GET  /api/poe/seeds/union              bottom-up union v1+runs+OSM+listing (no crawl)
+POST /api/poe/seeds/build              rebuild poe_seed_ports (not poe_ports)
+GET  /api/poe/seeds                    read poe_seed_ports
+GET  /api/poe/seeds/gps-audit          confirmed GPS audit (dry-run, no persist)
+GET  /api/poe/seeds/gps-arbitrated     git registry of decided GPS (no persist)
+GET  /api/poe/seeds/line               TinyFish query + inventory summary
+POST /api/poe/seeds/verify             classify seeds + versioned run (not poe_ports)
+POST /api/poe/seeds/enrich             geocode + judge (batches, not poe_ports)
 GET  /api/poe/seeds/enrich/status
 POST /api/poe/seeds/enrich/cancel
-POST /api/poe/seeds/mine-sources       Fetch des judge_sources déjà payés (0 Search)
+POST /api/poe/seeds/mine-sources       Fetch already-paid judge_sources (0 Search)
 GET  /api/poe/seeds/mine-sources/status
 POST /api/poe/seeds/mine-sources/cancel
-GET  /api/poe/seeds/osm                Taginfo + cache OSM (pas d'Overpass)
-POST /api/poe/seeds/osm/refresh        recharge Overpass → osm_port_seeds
+GET  /api/poe/seeds/osm                Taginfo + OSM cache (no Overpass)
+POST /api/poe/seeds/osm/refresh        reload Overpass → osm_port_seeds
 GET  /api/poe/runs/code-fingerprint
 """
 import asyncio
@@ -218,7 +218,7 @@ async def poe_run_start(body: RunBody | None = None):
 
 @router.post("/poe/runs/multi", status_code=202)
 async def poe_run_multi(body: MultiRunBody | None = None):
-    """Lance les variants demandés en parallèle. Chaque run a son run_id."""
+    """Launch the requested variants in parallel. Each run has its run_id."""
     body = body or MultiRunBody()
     started = []
     errors = []
@@ -247,7 +247,7 @@ async def poe_run_multi(body: MultiRunBody | None = None):
 
 @router.get("/poe/runs/code-fingerprint")
 async def poe_runs_code_fingerprint():
-    """Empreinte qui serait écrite dans params.code au prochain POST /runs."""
+    """Fingerprint that would be written in params.code on the next POST /runs."""
     from app.db import get_settings
     settings = await get_settings()
     rules = snapshot_for_run(mode="formalities", settings=settings)
@@ -303,7 +303,7 @@ async def poe_runs_list():
 
 @router.get("/poe/listing-control/ref")
 async def listing_control_ref():
-    """Projection slug → mrgid (pas les ports détaillés)."""
+    """slug → mrgid projection (not the detailed ports)."""
     proj = project_listing()
     return {
         "listing_ref_id": proj["listing_ref_id"],
@@ -348,7 +348,7 @@ async def listing_control_compare(run_ids: str = "", include_v1: bool = True,
 @router.get("/poe/listing-control/canary")
 async def listing_control_canary(run_ids: str = "", include_v1: bool = True,
                                  limit: int = 25):
-    """ZEE à passer en canari (listing_only ∪ erreur) — aucun crawl."""
+    """EEZs to run as canary (listing_only ∪ error) — no crawl."""
     ids = [x.strip() for x in run_ids.split(",") if x.strip()]
     return await suggest_canary_zones(
         _db, ids, include_v1=include_v1, limit=limit)
@@ -356,14 +356,14 @@ async def listing_control_canary(run_ids: str = "", include_v1: bool = True,
 
 @router.get("/poe/seeds/osm")
 async def poe_seeds_osm():
-    """Comptages Taginfo mondiaux + état du cache osm_port_seeds. Pas d'Overpass."""
+    """Worldwide Taginfo counts + osm_port_seeds cache state. No Overpass."""
     from app.services.osm_seeds import osm_inventory
     return await osm_inventory(_db)
 
 
 @router.post("/poe/seeds/osm/refresh")
 async def poe_seeds_osm_refresh():
-    """Recharge Overpass (lent, 2–10 min). N'écrit pas dans poe_ports."""
+    """Reload Overpass (slow, 2–10 min). Does not write poe_ports."""
     from app.services.osm_seeds import refresh_osm_cache
     return await refresh_osm_cache(_db)
 
@@ -387,7 +387,7 @@ async def poe_seeds_build(body: SeedBuildBody | None = None):
 @router.get("/poe/seeds")
 async def poe_seeds_list(mrgid: int | None = None, verdict: str | None = None,
                          limit: int = 50):
-    """Lecture de poe_seed_ports. Pas d'écriture poe_ports."""
+    """Read poe_seed_ports. No poe_ports write."""
     q: dict = {}
     if mrgid is not None:
         q["mrgid"] = int(mrgid)
@@ -412,7 +412,7 @@ async def poe_seeds_gps_audit():
 
 @router.get("/poe/seeds/gps-arbitrated")
 async def poe_seeds_gps_arbitrated():
-    """Registre git des GPS tranchés. Pas de persist, pas poe_ports, pas build."""
+    """Git registry of decided GPS. No persist, no poe_ports, no build."""
     return gps_registry_view()
 
 
@@ -445,11 +445,11 @@ async def poe_seeds_union(run_ids: str = "", include_v1: bool = True,
                           include_listing: bool = True,
                           include_osm: bool = True,
                           use_default_mondials: bool = False):
-    """Union bottom-up des graines (v1, runs, OSM, listing). Aucun crawl, pas d'écriture poe_ports.
+    """Bottom-up seed union (v1, runs, OSM, listing). No crawl, no poe_ports write.
 
-    `use_default_mondials=true` ajoute les 5 runs 285 ZEE déjà en base si
-    `run_ids` est vide. OSM vient du cache `osm_port_seeds` (pas d'Overpass ici).
-    Le résidu = noms listing à géocoder, pas à re-scraper.
+    `use_default_mondials=true` adds the 5 already-in-DB 285-EEZ runs if
+    `run_ids` is empty. OSM comes from the `osm_port_seeds` cache (no Overpass here).
+    Residue = listing names to geocode, not to re-scrape.
     """
     ids = [x.strip() for x in run_ids.split(",") if x.strip()]
     return await build_seed_union(
@@ -459,10 +459,10 @@ async def poe_seeds_union(run_ids: str = "", include_v1: bool = True,
 
 @router.post("/poe/seeds/verify")
 async def poe_seeds_verify(body: SeedVerifyBody | None = None):
-    """Inventaire + verdict PoE. Optionnellement persisté en run `verify`.
+    """Inventory + PoE verdict. Optionally persisted as a `verify` run.
 
-    Aucun crawl SERP. Aucune écriture dans poe_ports. Le crawl (géocode /
-    OSM / Claude juge) ne vise que `name_only` et `unverified`, plus tard.
+    No SERP crawl. No write to poe_ports. The crawl (geocode /
+    OSM / Claude judge) only targets `name_only` and `unverified`, later.
     """
     body = body or SeedVerifyBody()
     ids = [x.strip() for x in body.run_ids if str(x).strip()]
@@ -481,11 +481,11 @@ async def poe_seeds_verify(body: SeedVerifyBody | None = None):
 
 @router.post("/poe/seeds/enrich", status_code=202)
 async def poe_seeds_enrich(body: SeedEnrichBody | None = None):
-    """Géocode / juge un lot. N'écrit pas dans poe_ports.
+    """Geocode / judge a batch. Does not write poe_ports.
 
-    Défaut : collection `poe_seed_ports` (source=seeds). TinyFish cherche
-    le nom de la graine ; noonsite.com est exclu. Claude juge les extraits.
-    `source=run` + `run_id` relit un run verify versionné.
+    Default: `poe_seed_ports` collection (source=seeds). TinyFish searches
+    the seed name; noonsite.com is excluded. Claude judges the excerpts.
+    `source=run` + `run_id` re-reads a versioned verify run.
     """
     from app.services.poe_seed_enrich import execute_enrich
 
@@ -571,7 +571,7 @@ async def poe_seeds_enrich_cancel(run_id: str = "seed-enrich"):
 
 @router.post("/poe/seeds/mine-sources", status_code=202)
 async def poe_seeds_mine_sources(body: SeedMineBody | None = None):
-    """Fetch les judge_sources déjà payés. 0 Search. Pas de poe_ports."""
+    """Fetch already-paid judge_sources. 0 Search. No poe_ports."""
     from app.services.poe_seed_enrich import MINE_TASK_ID, mine_paid_sources
 
     body = body or SeedMineBody()
