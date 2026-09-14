@@ -1,4 +1,4 @@
-/** Card shell — enveloppe commune des cartes du Swarm Intelligence Hub. */
+/** Card shell — shared wrapper for Swarm Intelligence Hub cards. */
 export default function CardShell({ title, icon, borderCls, children }) {
   // Header row only when a title is provided — the mode name is already
   // visible in the top nav + left sidebar, no need to repeat it here.

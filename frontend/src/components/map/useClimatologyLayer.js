@@ -92,8 +92,8 @@ function popupHtml(kind, p, t) {
 }
 
 /**
- * Couches du 7ᵉ mode uniquement. pointer-events none sur les panes :
- * le clic carte interroge /point (pas un overlay sur les autres modes).
+ * 7th-mode layers only. pointer-events none on the panes:
+ * a map click queries /point (not an overlay on other modes).
  */
 export default function useClimatologyLayer({
   mapObj, mode, month, filters, waveStat, tRef, onPoint,

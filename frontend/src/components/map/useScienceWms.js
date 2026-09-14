@@ -2,12 +2,12 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 
 /**
- * Trois étages WMS distincts (du bas vers le haut) :
- *   1. bathymétrie  — aplat de profondeur
- *   2. nature des fonds
- *   3. câbles sous-marins
- * Chaque couche a son propre pane Leaflet : elles ne peuvent plus
- * s'écraser l'une l'autre.
+ * Three distinct WMS stacks (bottom to top):
+ *   1. bathymetry  — depth fill
+ *   2. seabed substrate
+ *   3. submarine cables
+ * Each layer has its own Leaflet pane so they can no longer
+ * overwrite one another.
  */
 export const SCIENCE_WMS_LAYERS = [
   {
@@ -36,7 +36,7 @@ export const SCIENCE_WMS_LAYERS = [
   },
 ];
 
-/** z-index : plus le chiffre est haut, plus la couche est devant. */
+/** z-index: the higher the number, the closer the layer is to the front. */
 export const SCIENCE_WMS_PANES = {
   "science-wms-bathy": 240,
   "science-wms-substrate": 310,

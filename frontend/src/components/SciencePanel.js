@@ -16,9 +16,9 @@ const SOURCE_FILTERS = [
 ];
 
 /**
- * SciencePanel — liste latérale du mode Science : jeux de données océano
- * (Sextant/ODATIS/EDMED) + flotteurs Argo + tracés CSR, filtres par source.
- * Les couches WMS EMODnet sont dans MapLayersSidebar (barre droite).
+ * SciencePanel — Science-mode side list: ocean datasets
+ * (Sextant/ODATIS/EDMED) + Argo floats + CSR tracks, filtered by source.
+ * EMODnet WMS layers live in MapLayersSidebar (right bar).
  */
 export default function SciencePanel({
   t, science, onFlyTo, onRefresh,
@@ -28,7 +28,7 @@ export default function SciencePanel({
   const setSourceFilter = onSourceFilter || (() => {});
   const features = science?.features || [];
 
-  // Quand une moisson se termine, rafraîchir la carte + la liste.
+  // When a harvest finishes, refresh the map + the list.
   useEffect(() => {
     let live = true;
     let wasRunning = false;
