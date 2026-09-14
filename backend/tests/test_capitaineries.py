@@ -616,7 +616,7 @@ def test_enrich_nvidia_page_chain_not_muse_pin(monkeypatch):
     ))
     assert called["role"] == "page"
     assert called["model"] is None
-    assert result["enrichment_source"] == "nvidia-deepseek"
+    assert result["enrichment_source"] == "nvidia-gpt-oss"
     assert result["canal_vhf"] == "9"
 
 

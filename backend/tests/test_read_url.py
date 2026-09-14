@@ -482,3 +482,108 @@ class TestKeepIfLinks:
             [url], prefer_fetch=True, fetch_key="k", keep_if_links=True, min_chars=200))
         assert called == []
         assert pages[url]["links"] == ["https://parc.fr/visite"]
+
+
+class TestRetiredHostsAndDownloads:
+    def test_sct_mexico_is_retired(self):
+        assert ext.host_is_retired(
+            "https://www.sct.gob.mx/JURE/doc/ley.pdf") is True
+        assert ext.host_is_retired(
+            "https://elmirador.sct.gob.mx/los-puertos") is True
+        assert ext.host_is_retired("https://www.sict.gob.mx/x") is False
+        assert ext.host_is_retired("https://douane.gouv.fr/") is False
+
+    def test_file_download_and_pdf_look_like_download(self):
+        assert ext.url_looks_like_download(
+            "https://www.budget.gouv.fr/documentation/file-download/18633") is True
+        assert ext.url_looks_like_download(
+            "https://example.gov/loi.pdf") is True
+        assert ext.url_looks_like_download(
+            "https://example.gov/page", "attachment; filename=a.bin") is True
+        assert ext.url_looks_like_download("https://example.gov/ports") is False
+
+    def test_skip_screenshot_reasons(self):
+        url = "https://www.sct.gob.mx/x"
+        assert "DNS" in (ext.should_skip_screenshot(url) or "")
+        assert ext.should_skip_screenshot(
+            "https://ok.gov/a", {"fetch_failed": True}) == (
+            "URL déjà morte / fetch N1 échoué")
+        assert ext.should_skip_screenshot(
+            "https://ok.gov/a", {"download": True}) == "téléchargement / PDF"
+        assert ext.should_skip_screenshot("https://ok.gov/ports") is None
+
+    def test_n1_failure_skips_chromium(self, monkeypatch):
+        async def fail(url, timeout=25):
+            raise RuntimeError("down")
+
+        rendered = []
+
+        async def boom_render(url, log=None, **k):
+            rendered.append(url)
+            return None
+
+        async def no_mirror(*a, **k):
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fail)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", no_mirror)
+        page = _run(ext.extract_cascade("https://down.example.gov/ports"))
+        assert page.get("fetch_failed") is True
+        assert rendered == []
+
+    def test_extract_cascade_skips_retired_host(self, monkeypatch):
+        async def boom(*a, **k):
+            raise AssertionError("retired host must not be fetched")
+
+        monkeypatch.setattr(ext, "fetch_raw", boom)
+        page = _run(ext.extract_cascade(
+            "https://www.sct.gob.mx/JURE/doc/ley-navegac-comercio-maritimos.pdf"))
+        assert page["error"] == "dead_host"
+        assert page["text"] == ""
+
+
+class TestJina422AndWaybackPause:
+    def test_jina_422_is_not_retried(self, monkeypatch):
+        calls = []
+
+        async def once(url, headers, timeout):
+            calls.append(url)
+            req = __import__("httpx").Request("GET", url)
+            resp = __import__("httpx").Response(422, request=req)
+            raise __import__("httpx").HTTPStatusError(
+                "422", request=req, response=resp)
+
+        async def no_sleep(_):
+            raise AssertionError("422 must not sleep/retry")
+
+        monkeypatch.setattr(ext, "_fetch_bytes", once)
+        monkeypatch.setattr(ext.asyncio, "sleep", no_sleep)
+        logs = []
+        out = _run(ext._jina_mirror_text("https://example.gov/x", logs.append))
+        assert out is None
+        assert len(calls) == 1
+        assert any("422" in m for m in logs)
+
+    def test_wayback_pauses_after_three_503(self, monkeypatch):
+        ext.reset_wayback_circuit()
+        snaps = []
+
+        async def snap(url):
+            snaps.append(url)
+            req = __import__("httpx").Request("GET", "https://web.archive.org/cdx")
+            resp = __import__("httpx").Response(503, request=req)
+            raise __import__("httpx").HTTPStatusError(
+                "503", request=req, response=resp)
+
+        monkeypatch.setattr(ext, "_wayback_snapshot_url", snap)
+        logs = []
+        for _ in range(3):
+            assert _run(ext._wayback_mirror_text("https://example.gov/x", logs.append)) is None
+        assert len(snaps) == 3
+        assert ext.wayback_circuit_open() is True
+        assert _run(ext._wayback_mirror_text("https://example.gov/y", logs.append)) is None
+        assert len(snaps) == 3
+        assert any("en pause" in m for m in logs)
+        ext.reset_wayback_circuit()
+        assert ext.wayback_circuit_open() is False

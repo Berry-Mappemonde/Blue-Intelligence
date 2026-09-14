@@ -15,13 +15,14 @@ json_object hangs them — we omit response_format.
 Fallbacks **inside NIM** (HTTP failure / timeout / empty JSON → next).
 Single source: `CHAINS`. Outside NIM: OpenRouter, then Claude (price). No NIM web.
 
-  judge   Pro → gpt-oss → Muse → Flash     # ask_yes_no PoE; Flash last (529)
-  extract Pro → gpt-oss → Muse             # Kimi only if decree (`legal`)
-  legal   Kimi → Pro → Muse
-  json    Pro → gpt-oss → Muse             # ask_yes_no (gatekeeper, AMP), project, geocode
-  page    Pro → gpt-oss → Muse             # marina + harbormaster (same chain)
-  text    Pro → gpt-oss → Muse             # ask_text, json_object=false
-  review  Pro → gpt-oss → Muse             # Review document judge (vision if the model follows)
+  judge   gpt-oss → Muse → Flash           # ask_yes_no PoE; Flash last (529)
+  extract gpt-oss → Muse                   # Kimi only if decree (`legal`)
+  legal   Kimi → Muse
+  json    gpt-oss → Muse                   # ask_yes_no (gatekeeper, AMP), project, geocode
+  page    gpt-oss → Muse                   # marina + harbormaster (same chain)
+  text    gpt-oss → Muse                   # ask_text, json_object=false
+  review  gpt-oss → Muse                   # Review document judge (vision if the model follows)
+  Pro (deepseek-v4-pro-0813) is EOL 410: never called.
 
 JSON parameters — hosted contract = infer card (docs.api.nvidia.com/nim/…-infer),
 not the playground nor the local card (temp/top_k outside hosted schema):
@@ -48,13 +49,18 @@ import httpx
 
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 FLASH_MODEL = "deepseek-ai/deepseek-v4-flash-0731"
-PRO_MODEL = "deepseek-ai/deepseek-v4-pro-0813"
-PRIMARY_MODEL = PRO_MODEL
+PRO_MODEL = "deepseek-ai/deepseek-v4-pro-0813"  # EOL 410 — do not call
+GPT_OSS_MODEL = "openai/gpt-oss-20b"
+PRIMARY_MODEL = GPT_OSS_MODEL
 SECONDARY_MODEL = "meta/muse-glimmer-30b"
 LEGAL_MODEL = "moonshotai/kimi-k3"
-GPT_OSS_MODEL = "openai/gpt-oss-20b"
+# Hosted trial gone (410 Gone). _usable_nim rewrites them to gpt-oss.
+_EOL_MODELS = frozenset({
+    PRO_MODEL,
+    "deepseek-ai/deepseek-v4-pro",
+})
 
-# Fiches Build : Capabilities → Structured Output: Not supported.
+# Build cards: Capabilities → Structured Output: Not supported.
 _NO_JSON_OBJECT = (
     "muse-glimmer",
     "laguna",
@@ -96,13 +102,13 @@ def _nvidia_sem() -> asyncio.Semaphore:
 
 
 CHAINS = {
-    "judge": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL, FLASH_MODEL),
-    "extract": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL),
-    "legal": (LEGAL_MODEL, PRO_MODEL, SECONDARY_MODEL),
-    "json": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL),
-    "page": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL),
-    "text": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL),
-    "review": (PRO_MODEL, GPT_OSS_MODEL, SECONDARY_MODEL),
+    "judge": (GPT_OSS_MODEL, SECONDARY_MODEL, FLASH_MODEL),
+    "extract": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "legal": (LEGAL_MODEL, SECONDARY_MODEL),
+    "json": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "page": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "text": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "review": (GPT_OSS_MODEL, SECONDARY_MODEL),
 }
 
 _THINKING_RE = re.compile(r"^\s*here's a thinking process", re.I)
@@ -150,7 +156,11 @@ def _alias(model: str) -> str:
 
 
 def _usable_nim(model: str) -> str:
-    return _alias(model or "")
+    """Hosted ID still served. Pro 410 slugs become gpt-oss."""
+    used = _alias(model or "")
+    if used in _EOL_MODELS or (model or "").strip() in _EOL_MODELS:
+        return GPT_OSS_MODEL
+    return used
 
 
 def supports_json_object(model: str | None) -> bool:
