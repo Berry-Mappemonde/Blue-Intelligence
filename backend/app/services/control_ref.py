@@ -1,9 +1,9 @@
-"""Référentiel de contrôle 250 m (SHOM SMCFAC / NOAA) — pas une fusion."""
+"""250 m control reference (SHOM SMCFAC / NOAA) — not a merge."""
 from __future__ import annotations
 
 from app.core.identity import OVERLAY_RADIUS_KM, find_building
 
-# ~400 m de préfiltre Mongo (un peu plus large que 250 m).
+# ~400 m Mongo prefilter (a bit wider than 250 m).
 _DELTA_DEG = 0.004
 
 
@@ -13,7 +13,7 @@ def control_ref_from_candidates(
     candidates: list[dict] | None,
     radius_km: float = OVERLAY_RADIUS_KM,
 ) -> dict:
-    """Colle le voisin officiel le plus proche. Distance seule. Pas d'identité."""
+    """Attach the nearest official neighbor. Distance only. No identity."""
     if lat is None or lon is None:
         return {"status": "osm_only", "ref": None}
     hit = find_building(lat, lon, candidates or [], radius_km=radius_km)

@@ -1,12 +1,12 @@
-"""Découverte des URL de visite AMP — cascade Capitaineries / PoE.
+"""AMP visit-URL discovery — Harbormaster / PoE cascade.
 
-1. Refresh attributs ProtectedSeas (ArcGIS, sans géométrie) — extras gratuits.
-2. Heuristique extras / labels Website.
-3. TinyFish Fetch sur ``manager_url`` ; cascade locale (PDF / JS) si Fetch est vide.
-4. ``search_named`` (``site:`` puis web ouvert ; DuckDuckGo si pas de clé).
-5. Juge ``ask_yes_no`` (chaîne ``json`` : Pro → gpt-oss → Muse), filet OpenRouter / Claude.
+1. Refresh ProtectedSeas attributes (ArcGIS, no geometry) — free extras.
+2. Extras / Website-label heuristic.
+3. TinyFish Fetch on ``manager_url``; local cascade (PDF / JS) if Fetch is empty.
+4. ``search_named`` (``site:`` then open web; DuckDuckGo if no key).
+5. ``ask_yes_no`` judge (``json`` chain: Pro → gpt-oss → Muse), OpenRouter / Claude net.
 
-``visit_url`` n'est jamais la homepage gestionnaire.
+``visit_url`` is never the manager homepage.
 """
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def urls_from_fetch_record(rec: dict | None) -> list[str]:
 
 
 def search_query(doc: dict) -> tuple[str, str | None]:
-    """Requête ouverte : la page visite n'est pas toujours sur l'hôte gestionnaire."""
+    """Open query: the visit page is not always on the manager host."""
     name = (doc.get("name") or "").strip()
     country = (doc.get("country") or "").strip()
     q = f'"{name}" {country} visit permit anchoring mooring plaisance réglementation'.strip()
@@ -137,7 +137,7 @@ def parse_visit_judge(
     candidates: list[dict],
     manager_url: str | None,
 ) -> str | None:
-    """Retient une URL déjà proposée. Refuse manager et URL hors liste."""
+    """Keep an already proposed URL. Refuse the manager and URLs not in the list."""
     from app.core.judge import parse_yes_no
     yes = parse_yes_no(
         data,
@@ -155,7 +155,7 @@ async def llm_judge_visit(
     settings: dict | None = None,
     log=None,
 ) -> str | None:
-    """NVIDIA (chaîne json) → OpenRouter → Claude. URL parmi les candidates."""
+    """NVIDIA (json chain) → OpenRouter → Claude. URL among the candidates."""
     if not candidates:
         return None
     from app.core.judge import ask_yes_no
@@ -184,7 +184,7 @@ def search_candidates(
     *,
     require_name: bool = True,
 ) -> list[dict]:
-    """Préfiltre SERP : score > 0, jamais la homepage gestionnaire."""
+    """SERP prefilter: score > 0, never the manager homepage."""
     out: list[dict] = []
     seen: set[str] = set()
     manager = doc.get("manager_url")
@@ -209,7 +209,7 @@ def search_candidates(
 
 
 def search_queries(doc: dict) -> list[tuple[str, str | None]]:
-    """site:hôte d'abord (bonus), puis recherche ouverte si besoin."""
+    """site:host first (bonus), then open search if needed."""
     name = (doc.get("name") or "").strip()
     country = (doc.get("country") or "").strip()
     host = manager_host(doc.get("manager_url"))
@@ -356,10 +356,10 @@ async def pending_sites(db, limit: int, *, bbox=None, run_id=None,
 
 
 async def copy_visit_to_live(db, run_id: str) -> int:
-    """Recopie les visit_url trouvées du run vers ``amp_sites``.
+    """Copy visit_urls found in the run onto ``amp_sites``.
 
-    N'écrase pas une URL live par un vide : si le from-scratch n'a rien
-    trouvé, on garde l'ancienne.
+    Do not overwrite a live URL with an empty one: if from-scratch found
+    nothing, keep the old one.
     """
     if not run_id:
         return 0
@@ -394,7 +394,7 @@ async def copy_visit_to_live(db, run_id: str) -> int:
 
 
 async def default_fetch_many(urls: list[str], *, key: str, log=None) -> dict[str, dict]:
-    """Fetch TinyFish, puis cascade locale si pas de texte ni de liens."""
+    """TinyFish Fetch, then local cascade if there is no text and no links."""
     from app.core.extract import as_fetch_record, read_urls
     pages = await read_urls(
         urls, min_chars=80, prefer_fetch=True, fetch_purpose=AMP_VISIT_PURPOSE,
@@ -446,7 +446,7 @@ async def discover_visit_urls(
     from_scratch: bool = False,
     harvest_polygons: bool = False,
 ) -> dict:
-    """Refresh PS → extras → Fetch → Search → juge Muse / OpenRouter."""
+    """Refresh PS → extras → Fetch → Search → Muse / OpenRouter judge."""
     from app.services.isolated_runs import bind_run, reset_run, write_item
 
     token = bind_run(run_id) if run_id else None
