@@ -13,7 +13,7 @@ from app.services.review_doc_picker import (
     _evidence_for, local_pick, merge_picks, suggest_eez_documents,
 )
 from app.services.review_extract import extract_gold_ports
-from app.services import review_gold
+from app.services import review_gold, review_queue
 from test_review_queue import _db, _prepare_france_gold
 
 
@@ -175,6 +175,8 @@ def test_suggest_writes_choices_not_gold(monkeypatch):
     assert out["gold_ready"] is True
     assert out["wrote_poe_ports"] is False
     assert db.review_gold.docs == []
+    assert db.review_suggest.docs
+    assert db.review_suggest.docs[0]["keep"] == [list_url]
 
 
 def test_suggest_falls_back_to_local_when_llm_fails(monkeypatch):
@@ -298,3 +300,158 @@ def test_extract_gold_fills_snapshot_not_poe_ports(monkeypatch):
     visible = asyncio.run(review_gold.visible_poe_port_docs(db, mrgid=5677))
     assert visible
     assert all(str(d["_id"]).startswith("gold:5677:") for d in visible)
+
+
+def test_compare_and_fewshot_lessons():
+    from app.services.review_lessons import (
+        compare_verdicts, format_lessons_for_prompt, pick_fewshot,
+        token_scores_from_lessons, url_lesson_delta,
+    )
+
+    cmp = compare_verdicts(
+        ["https://gob.mx/habilitados.pdf"],
+        ["https://gob.mx/news"],
+        ["https://gob.mx/habilitados.pdf", "https://gob.mx/news"],
+        [],
+    )
+    assert cmp["error_count"] == 1
+    assert cmp["errors"][0]["url"] == "https://gob.mx/news"
+    assert cmp["errors"][0]["proposer"] == "keep"
+    assert cmp["errors"][0]["human"] == "drop"
+
+    lessons = [{
+        "entity_id": "8313", "label": "Mexico", "iso2": "MX",
+        "sovereign": "Mexico", "had_proposal": True, "error_count": 1,
+        "human_keep": ["https://gob.mx/cms/habilitados.pdf"],
+        "human_drop": ["https://gob.mx/prensa/news"],
+        "errors": [{
+            "url": "https://gob.mx/prensa/news",
+            "proposer": "keep", "human": "drop",
+        }],
+        "golded_at": "2026-09-14T00:00:00Z",
+    }]
+    few = pick_fewshot(lessons, {"mrgid": 5677, "iso2": "MX",
+                                 "sovereign": "Mexico"})
+    assert few and few[0]["entity_id"] == "8313"
+    blob = format_lessons_for_prompt(few)
+    assert "habilitados.pdf" in blob
+    assert "Écarts" in blob
+    scores = token_scores_from_lessons(lessons)
+    assert url_lesson_delta("https://other.gob.mx/cms/habilitados-2024.pdf",
+                            scores) > 0
+    assert url_lesson_delta("https://other.gob.mx/prensa/news", scores) < 0
+
+
+def test_gold_records_proposer_miss_and_report():
+    from app.services.review_choices import save_choice
+    from app.services.review_lessons import save_proposal
+    from app.services.review_report import build_report, report_markdown
+
+    review_gold.reset_eez_pre_gold_cache()
+    db = _db()
+    packed = asyncio.run(review_queue.get_fiche(db, "eez", "published", "5677"))
+    td0 = packed["fiche"]["sources_td"][0]["url"]
+    noise = "https://bad.example/annuaire-news"
+    asyncio.run(save_proposal(db, "5677", {
+        "keep": [td0, noise],
+        "drop": [],
+        "local_keep": [td0],
+        "engine": "nvidia-deepseek",
+        "comment": "J'ai tout gardé.",
+        "list_kind": "mixed_designated",
+    }, packed["fiche"]))
+    asyncio.run(save_choice(db, "eez", "5677", "td", "keep", url=td0))
+    asyncio.run(save_choice(db, "eez", "5677", "td", "drop", url=noise))
+    ready = asyncio.run(review_queue.get_fiche(db, "eez", "published", "5677"))
+    asyncio.run(review_gold.toggle_gold(
+        db, "eez", "5677",
+        fiche=ready["fiche"],
+        comment=ready.get("comment") or "",
+        choices=ready["choices"],
+    ))
+    lessons = db.review_lessons.docs
+    assert lessons
+    assert lessons[0]["had_proposal"] is True
+    urls = {e["url"] for e in lessons[0]["errors"]}
+    assert noise in urls
+    assert any(e["proposer"] == "keep" and e["human"] == "drop"
+               for e in lessons[0]["errors"] if e["url"] == noise)
+
+    rep = asyncio.run(build_report(db, "eez"))
+    misses = rep["pipeline_actions"]["proposer_errors"]
+    assert any(m["url"] == noise for m in misses)
+    assert rep["summary"]["eez"]["proposer_errors"] >= 1
+    md = report_markdown(rep)
+    assert "Proposer s'est trompé ici" in md
+    assert "annuaire-news" in md
+
+
+def test_batch_proposer_runs_all_fiches(monkeypatch):
+    from app.core.tasks import TaskState
+    from app.services.review_doc_picker import run_suggest_batch
+
+    db = _db()
+    called = []
+
+    async def fake_suggest(db, eid, **_k):
+        called.append(str(eid))
+        return {"id": eid, "engine": "local", "choices": {"td": {}}}
+
+    monkeypatch.setattr(
+        "app.services.review_doc_picker.suggest_eez_documents", fake_suggest)
+    state = TaskState()
+    out = asyncio.run(run_suggest_batch(db, state, settings={}))
+    assert "5677" in called
+    assert "48944" in called
+    assert out["ok"] == len(called)
+    assert state.progress == len(called)
+    assert state.summary["ok"] == len(called)
+
+
+def test_llm_prompt_includes_gold_lessons(monkeypatch):
+    db = _db()
+    list_url = "https://gob.mx/list.pdf"
+    fiche = {
+        "mrgid": 8429, "name": "Mexico", "iso2": "MX", "sovereign": "Mexico",
+        "sources_td": [{"url": list_url, "official": True}],
+        "ports": [],
+    }
+    lessons = [{
+        "entity_id": "8313", "label": "Mexico Pacific", "iso2": "MX",
+        "sovereign": "Mexico", "had_proposal": True, "error_count": 1,
+        "human_keep": ["https://gob.mx/cms/habilitados.pdf"],
+        "human_drop": ["https://gob.mx/prensa/news"],
+        "errors": [],
+        "golded_at": "2026-09-14T00:00:00Z",
+    }]
+
+    async def fake_get_fiche(*_a, **_k):
+        return {"fiche": fiche, "comment": "", "choices": {}, "gold_on": False}
+
+    async def fake_evidence(url, _log):
+        return {
+            "url": url, "text": "lista", "excerpt": "lista",
+            "images": [b"\xff\xd8\xff"], "is_pdf": True, "catalog_n": 4,
+            "looks_catalog": True, "sufficient": True, "bonus": 0.5,
+        }
+
+    seen = {}
+
+    async def fake_llm(system, prompt, settings, **k):
+        seen["prompt"] = prompt
+        return {
+            "keep": [list_url], "drop": [],
+            "list_kind": "mixed_designated",
+            "comment": "Liste officielle.",
+        }, "nvidia-deepseek"
+
+    monkeypatch.setattr(
+        "app.services.review_doc_picker.get_fiche", fake_get_fiche)
+    monkeypatch.setattr(
+        "app.services.review_doc_picker._evidence_for", fake_evidence)
+    monkeypatch.setattr(
+        "app.services.review_doc_picker.complete_json_cascade", fake_llm)
+    asyncio.run(suggest_eez_documents(
+        db, "8429", settings={}, lessons=lessons))
+    assert "habilitados.pdf" in seen["prompt"]
+    assert "Leçons Gold" in seen["prompt"]

@@ -344,6 +344,10 @@ def dropped_official_urls(fiche: dict | None, choices: dict | None) -> list[str]
         if url and td_map.get(url) == "drop" and url not in seen:
             seen.add(url)
             out.append(url)
+    for url, act in td_map.items():
+        if act == "drop" and url and url not in seen:
+            seen.add(url)
+            out.append(url)
     return out
 
 
