@@ -1,18 +1,18 @@
-"""import_v1_runs — écrit les runs « v1 » en base (Atlas).
+"""import_v1_runs — write “v1” runs into the database (Atlas).
 
-- Projets : importe un GeoJSON (export carte) comme run isolé `v1` dans
-  `project_runs` / `project_run_projects` (la collection live `projects`
-  n'est pas touchée).
-- AMP : copie la collection live `amp_sites` comme run isolé `v1` dans
-  `amp_runs` / `amp_run_sites` (la collection live n'est pas touchée).
+- Projects: import a GeoJSON (map export) as isolated run `v1` into
+  `project_runs` / `project_run_projects` (the live `projects` collection
+  is not touched).
+- AMP: copy the live `amp_sites` collection as isolated run `v1` into
+  `amp_runs` / `amp_run_sites` (the live collection is not touched).
 
-Idempotent : relancer le script met à jour le même run `v1`.
+Idempotent: rerunning the script updates the same `v1` run.
 
-Usage :
+Usage:
     python scripts/import_v1_runs.py --projects-geojson /path/to/projects.geojson --amp
 
-Garde-fou : refuse un MONGO_URL localhost (base éphémère d'un pod Cloud
-Agent) sauf si --allow-local est passé explicitement.
+Guardrail: refuse a localhost MONGO_URL (ephemeral Cloud Agent
+pod database) unless --allow-local is passed explicitly.
 """
 from __future__ import annotations
 
@@ -162,11 +162,11 @@ async def import_amp(db) -> dict:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--projects-geojson", type=Path,
-                        help="GeoJSON des projets à importer comme run v1")
+                        help="GeoJSON of projects to import as v1 run")
     parser.add_argument("--amp", action="store_true",
-                        help="copie amp_sites (live) comme run v1")
+                        help="copy amp_sites (live) as v1 run")
     parser.add_argument("--allow-local", action="store_true",
-                        help="autorise un MONGO_URL localhost (éphémère)")
+                        help="allow a localhost MONGO_URL (ephemeral)")
     args = parser.parse_args()
     if not args.projects_geojson and not args.amp:
         parser.error("rien à faire — passer --projects-geojson et/ou --amp")

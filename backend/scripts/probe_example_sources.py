@@ -1,8 +1,8 @@
-"""Run ciblé : FR hexagone, MX, VE, NU, NZ, NC, Sint Maarten.
+"""Targeted run: FR hexagon, MX, VE, NU, NZ, NC, Sint Maarten.
 
-1) collecte les graines / pages d'entrée + pièces jointes (preuve découverte)
-2) option --run : upsert les ZEE depuis eez_world_map.geojson puis
-   execute_run isolé (poe_run_* uniquement).
+1) collect seeds / landing pages + attachments (discovery evidence)
+2) --run option: upsert EEZs from eez_world_map.geojson then
+   isolated execute_run (poe_run_* only).
 """
 from __future__ import annotations
 
@@ -174,7 +174,7 @@ async def run_isolated(db, label: str, variant: str) -> dict:
 async def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--run", action="store_true",
-                   help="upsert les 6 ZEE et lancer un run isolé")
+                   help="upsert the 6 EEZs and launch an isolated run")
     p.add_argument("--variant", default="v2")
     p.add_argument("--label", default="example-official-sources")
     args = p.parse_args(argv)

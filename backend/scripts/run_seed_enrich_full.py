@@ -1,6 +1,6 @@
-"""Enchaîne l'enrichissement seed : name_only puis unverified.
+"""Chain seed enrichment: name_only then unverified.
 
-Aucun écriture poe_ports. Reprend si déjà jugé / déjà géocodé.
+No poe_ports writes. Resume if already judged / already geocoded.
 """
 from __future__ import annotations
 
