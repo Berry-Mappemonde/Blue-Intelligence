@@ -1,18 +1,18 @@
 """
-llm_core.py — Adaptateur LLM.
+llm_core.py — LLM adapter.
 
-Complétions JSON : NVIDIA (chaîne du rôle) → OpenRouter → Claude en dernier.
-grounded_search reste OpenRouter (:online) — NIM n'a pas de recherche web.
+JSON completions: NVIDIA (role chain) → OpenRouter → Claude last.
+grounded_search stays OpenRouter (:online) — NIM has no web search.
 
-  - ask_json / ask_text        : complétions (JSON strict ou texte libre)
-  - gatekeeper_check           : filtre marin (ML local puis ask_yes_no)
-  - extract_project            : extraction structurée d'un projet marin
-  - extract_ports              : extraction stricte des Ports d'Entrée
-  - llm_geocode                : géocodage intelligent (site Projet)
-  - llm_geocode_port           : GPS au jugé d'un port d'entrée (annuaires muets)
-  - grounded_search            : recherche web groundée (suffixe :online)
+  - ask_json / ask_text        : completions (strict JSON or free text)
+  - gatekeeper_check           : marine filter (local ML then ask_yes_no)
+  - extract_project            : structured marine-project extraction
+  - extract_ports              : strict Ports of Entry extraction
+  - llm_geocode                : intelligent geocoding (Project site)
+  - llm_geocode_port           : guessed GPS for a port of entry (silent directories)
+  - grounded_search            : grounded web search (:online suffix)
 
-Clés : NVIDIA_API_KEY / OPENROUTER_API_KEY (env) ou settings UI.
+Keys: NVIDIA_API_KEY / OPENROUTER_API_KEY (env) or UI settings.
 """
 import asyncio
 import json
@@ -48,7 +48,7 @@ def openrouter_model() -> str:
 
 
 def get_llm_key(settings: dict | None = None) -> str:
-    """Clé OpenRouter : settings (UI) prioritaire, sinon variable d'environnement."""
+    """OpenRouter key: settings (UI) first, otherwise environment variable."""
     s = settings or {}
     return (s.get("openrouter_api_key") or _env("OPENROUTER_API_KEY")).strip()
 
@@ -62,7 +62,7 @@ def has_llm(settings: dict | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Parsing JSON robuste
+# Robust JSON parsing
 # ---------------------------------------------------------------------------
 def parse_json_flexible(txt: str):
     txt = re.sub(r"^```(json)?|```$", "", (txt or "").strip(), flags=re.M).strip()
@@ -86,7 +86,7 @@ def parse_json_flexible(txt: str):
 
 
 # ---------------------------------------------------------------------------
-# Backend unique : OpenRouter
+# Single backend: OpenRouter
 # ---------------------------------------------------------------------------
 async def _call_openrouter(prompt: str, system: str, key: str, model: str | None = None,
                            json_mode: bool = True, max_tokens: int = 2000,
@@ -122,10 +122,10 @@ async def _call_openrouter(prompt: str, system: str, key: str, model: str | None
 
 
 # ---------------------------------------------------------------------------
-# API publique
+# Public API
 # ---------------------------------------------------------------------------
 def _public_engine(engine: str, kind: str) -> str:
-    """Libellé persisté (gatekeeper / extracteur projet)."""
+    """Persisted label (gatekeeper / project extractor)."""
     if (engine or "").startswith("nvidia"):
         return f"NVIDIA {kind}"
     if (engine or "").startswith("claude"):
@@ -137,10 +137,10 @@ async def ask_json_tracked(prompt: str, system: str = JSON_SYSTEM,
                            settings: dict | None = None,
                            max_tokens: int = 2000, log=None,
                            role: str = "json") -> tuple[dict, str]:
-    """JSON strict : NVIDIA (chaîne du rôle) → OpenRouter → Claude en dernier.
+    """Strict JSON: NVIDIA (role chain) → OpenRouter → Claude last.
 
-    Retourne (objet, engine) — engine = nvidia-* | openrouter | claude.
-    Même câble que ``ask_yes_no`` (jumeau n°4).
+    Return (object, engine) — engine = nvidia-* | openrouter | claude.
+    Same cable as ``ask_yes_no`` (twin #4).
     """
     from app.core.judge import complete_json_cascade
     data, engine = await complete_json_cascade(
@@ -160,7 +160,7 @@ async def ask_json(prompt: str, system: str = JSON_SYSTEM, settings: dict | None
 
 async def ask_text(prompt: str, system: str = "You are a helpful assistant.",
                    settings: dict | None = None, max_tokens: int = 2000) -> str:
-    """Texte : NVIDIA (chaîne text) puis OpenRouter. Pas de Claude (adaptateur JSON)."""
+    """Text: NVIDIA (text chain) then OpenRouter. No Claude (JSON adapter)."""
     from app.core import nvidia
     if nvidia.nvidia_enabled(settings):
         try:
@@ -175,7 +175,7 @@ async def ask_text(prompt: str, system: str = "You are a helpful assistant.",
 
 
 # ---------------------------------------------------------------------------
-# Gatekeeper marin + pré-filtre ML local (weak supervision)
+# Marine gatekeeper + local ML pre-filter (weak supervision)
 # ---------------------------------------------------------------------------
 def heuristic_gatekeeper(text: str, settings: dict) -> dict:
     low = text.lower()
@@ -190,7 +190,7 @@ def heuristic_gatekeeper(text: str, settings: dict) -> dict:
 
 
 def s_ocean_meets_min(s_ocean, settings: dict | None = None) -> bool:
-    """CDC §10 : le seuil coupe le faisceau S_ocean, après extract aussi."""
+    """CDC §10: the threshold cuts the S_ocean beam, after extract too."""
     try:
         score = float(s_ocean)
     except (TypeError, ValueError):
@@ -200,8 +200,8 @@ def s_ocean_meets_min(s_ocean, settings: dict | None = None) -> bool:
 
 
 async def gatekeeper_check(title: str, text: str, settings: dict) -> dict:
-    # 1. Classifieur local (bootstrappé sur les projets existants) : si très
-    # confiant, décision sans appel LLM (économie de crédits).
+    # 1. Local classifier (bootstrapped on existing projects): if very
+    # confident, decide without an LLM call (save credits).
     try:
         from app.core.ml import predict_relevance
         ml = predict_relevance(f"{title} {text[:2500]}")
@@ -218,7 +218,7 @@ async def gatekeeper_check(title: str, text: str, settings: dict) -> dict:
             return {"accepted": False, "score": round(ml["score"], 3),
                     "reason": "ML gatekeeper: high-confidence non-marine (local model, no LLM call)",
                     "engine": "ML Gatekeeper (local)"}
-    # 2. LLM (NIM → OpenRouter → Claude) ou heuristique
+    # 2. LLM (NIM → OpenRouter → Claude) or heuristic
     if not has_llm(settings):
         return heuristic_gatekeeper(f"{title} {text}", settings)
     prompt = f"""Gatekeeper Protocol: decide if this project is a MARINE/OCEAN/COASTAL conservation, restoration or protection project.
@@ -244,7 +244,7 @@ Return JSON: {{"marine": true/false, "score": 0.0-1.0, "reason": "<short reason>
 
 
 # ---------------------------------------------------------------------------
-# Extraction structurée d'un projet marin (ex ai.extract_project)
+# Structured extraction of a marine project (ex ai.extract_project)
 # ---------------------------------------------------------------------------
 def heuristic_extract(title: str, text: str, meta_desc: str, settings: dict) -> dict:
     desc = (meta_desc or text[:400]).strip().replace("\n", " ")
@@ -298,7 +298,7 @@ Return JSON:
 
 
 # ---------------------------------------------------------------------------
-# Extraction stricte des Ports d'Entrée
+# Strict Ports of Entry extraction
 # ---------------------------------------------------------------------------
 POE_EXTRACT_PROMPT = """Tu extrais les ports officiellement désignés pour l'entrée des navires étrangers dans : {name} ({sovereign}).
 
@@ -347,7 +347,7 @@ def _parse_coord(value):
 
 
 def _number_in_text(value: float, text: str) -> bool:
-    """Le nombre (ou un arrondi cohérent) figure dans l'extrait source."""
+    """The number (or a coherent rounding) appears in the source excerpt."""
     if not text:
         return False
     raw = f"{value:.10f}".rstrip("0").rstrip(".")
@@ -371,7 +371,7 @@ def _number_in_text(value: float, text: str) -> bool:
 
 
 def coords_appear_in_text(lat: float, lon: float, text: str) -> bool:
-    """True seulement si lat et lon sont recopiés depuis l'extrait (pas inventés)."""
+    """True only if lat and lon are copied from the excerpt (not invented)."""
     return _number_in_text(lat, text) and _number_in_text(lon, text)
 
 
@@ -436,7 +436,7 @@ async def _json_openrouter(prompt: str, system: str, settings: dict | None,
 
 async def extract_ports_openrouter(context: str, zone: dict,
                                    settings: dict | None = None, log=None) -> list[dict]:
-    """Lecteur OpenRouter seul (pas de reboucle NIM)."""
+    """OpenRouter reader only (no NIM loop-back)."""
     from app.services.poe_zone_label import search_polygon_name
     prompt = POE_EXTRACT_PROMPT.format(
         name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
@@ -454,8 +454,8 @@ async def extract_ports_openrouter(context: str, zone: dict,
 
 
 async def extract_ports(context: str, zone: dict, settings: dict | None = None, log=None) -> list[dict]:
-    """Lecteur principal. Le second lecteur (gpt-oss / Kimi) est
-    orchestré dans poe_pipeline.extract_ports_llm."""
+    """Primary reader. The second reader (gpt-oss / Kimi) is
+    orchestrated in poe_pipeline.extract_ports_llm."""
     s = settings
     if s is None:
         try:
@@ -482,10 +482,10 @@ async def extract_ports(context: str, zone: dict, settings: dict | None = None, 
 
 
 # ---------------------------------------------------------------------------
-# Géocodage intelligent par LLM
+# Intelligent LLM geocoding
 # ---------------------------------------------------------------------------
 async def llm_geocode(location: str, title: str, settings: dict):
-    """GPS au jugé d'un *site de conservation* (récif, baie, AMP). Pas un port d'entrée."""
+    """Guessed GPS of a *conservation site* (reef, bay, MPA). Not a port of entry."""
     if not has_llm(settings):
         return None
     prompt = f"""You are a maritime geocoding expert. Give the best-estimate GPS coordinates for this marine conservation project site.
@@ -499,10 +499,10 @@ Return JSON: {{"latitude": <decimal>, "longitude": <decimal>, "confidence": <0.0
 
 async def llm_geocode_port(port: dict, zone: dict | None = None,
                            settings: dict | None = None, log=None):
-    """GPS au jugé d'un *port d'entrée*, si Nominatim et GeoNames sont muets.
+    """Guessed GPS of a *port of entry*, if Nominatim and GeoNames are silent.
 
-    Ce n'est pas ``llm_geocode`` (site Projet). Le caller doit encore exiger
-    que le point tombe dans CE polygone VLIZ — pas « en France ».
+    This is not ``llm_geocode`` (Project site). The caller must still require
+    the point to fall in THIS VLIZ polygon — not "in France".
     """
     log = log or (lambda m: None)
     if not has_llm(settings):
@@ -547,7 +547,7 @@ async def _parse_llm_gps(prompt: str, settings: dict | None) -> tuple[float, flo
 
 
 # ---------------------------------------------------------------------------
-# Recherche groundée : OpenRouter web search (suffixe :online)
+# Grounded search: OpenRouter web search (:online suffix)
 # ---------------------------------------------------------------------------
 def _fallback_domain(url: str) -> str:
     try:
@@ -558,7 +558,7 @@ def _fallback_domain(url: str) -> str:
 
 
 async def grounded_search(prompt: str, log=None, domain_fn=None) -> tuple[list[dict], str | None]:
-    """Retourne (candidats [{url, domain}], synthèse texte) via OpenRouter :online."""
+    """Return (candidates [{url, domain}], text synthesis) via OpenRouter :online."""
     log = log or (lambda m: None)
     dom = domain_fn or _fallback_domain
     key = _env("OPENROUTER_API_KEY")
@@ -587,7 +587,7 @@ async def grounded_search(prompt: str, log=None, domain_fn=None) -> tuple[list[d
         u = cit.get("url") or a.get("url")
         if u and u.startswith("http"):
             urls.append(u)
-    # URLs citées inline dans la synthèse en complément
+    # URLs cited inline in the synthesis as a complement
     urls += re.findall(r"https?://[^\s\)\]\"']+", synthesis)
     seen, out = set(), []
     for u in urls:
@@ -601,7 +601,7 @@ async def grounded_search(prompt: str, log=None, domain_fn=None) -> tuple[list[d
 
 
 # ---------------------------------------------------------------------------
-# Départage Nominatim vs GeoNames (un appel JSON par zone / lieu)
+# Nominatim vs GeoNames tie-break (one JSON call per zone / place)
 # ---------------------------------------------------------------------------
 def _tiebreak_user(zone: dict, items: list[dict]) -> str:
     from app.core.geo import tiebreak_user_prompt
@@ -616,7 +616,7 @@ def _tiebreak_system() -> str:
 async def arbitrate_geocode(zone: dict, items: list[dict],
                             settings: dict | None = None,
                             log=None) -> dict:
-    """NVIDIA → OpenRouter → Claude. Dict vide = repli EEZ côté pipeline."""
+    """NVIDIA → OpenRouter → Claude. Empty dict = EEZ fallback on the pipeline side."""
     from app.core import claude, nvidia
     if not items:
         return {}
