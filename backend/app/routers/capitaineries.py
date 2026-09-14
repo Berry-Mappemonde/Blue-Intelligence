@@ -136,6 +136,36 @@ async def list_capitaineries(source: str | None = None, visible: bool = False,
     return to_slim_geojson(docs)
 
 
+@router.get("/noaa/aids")
+async def noaa_aids(bbox: str = ""):
+    """Feux / bouées ENC Direct. Bbox hors eaux US → collection vide."""
+    from app.services import noaa_enc
+    parsed = noaa_enc.parse_bbox(bbox)
+    if not parsed or not noaa_enc.bbox_intersects_us(parsed):
+        return noaa_enc.aids_geojson([])
+    import httpx
+    async with httpx.AsyncClient() as client:
+        docs = await noaa_enc.fetch_aids(client, parsed)
+    return noaa_enc.aids_geojson(docs)
+
+
+@router.get("/export/noaa-aids.geojson")
+async def export_noaa_aids(bbox: str = "-80,24,-66,45"):
+    from app.core.export_meta import export_response
+    from app.services import noaa_enc
+    parsed = noaa_enc.parse_bbox(bbox) or (-80.0, 24.0, -66.0, 45.0)
+    if not noaa_enc.bbox_intersects_us(parsed):
+        fc = noaa_enc.aids_geojson([])
+        return export_response(fc, "noaa-aids", "noaa-aids.geojson",
+                               license_note=noaa_enc.LICENSE)
+    import httpx
+    async with httpx.AsyncClient() as client:
+        docs = await noaa_enc.fetch_aids(client, parsed)
+    fc = noaa_enc.aids_geojson(docs)
+    return export_response(fc, "noaa-aids", "noaa-aids.geojson",
+                           license_note=noaa_enc.LICENSE)
+
+
 @router.get("/export/capitaineries.geojson")
 async def export_capitaineries():
     from app.core.export_meta import export_response
