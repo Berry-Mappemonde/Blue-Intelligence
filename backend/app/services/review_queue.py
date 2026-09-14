@@ -3,7 +3,8 @@ File de revue humaine — une fiche à la fois, commentaire persisté.
 
 Ne lit que les collections de run / v1. N'écrit JAMAIS dans `projects`,
 `poe_ports`, `eez_zones`, `marinas`, `capitaineries` ni `amp_sites`. Mutées :
-`review_comments`, `review_gold`, `review_choices`.
+`review_comments`, `review_gold`, `review_choices`,
+`review_suggest`, `review_lessons`.
 """
 from __future__ import annotations
 
@@ -99,6 +100,8 @@ async def ensure_review_indexes(db) -> None:
         await db.capitaineries.create_index("name")
         await review_gold.ensure_gold_indexes(db)
         await ensure_choice_indexes(db)
+        from app.services.review_lessons import ensure_lesson_indexes
+        await ensure_lesson_indexes(db)
     except Exception:
         pass
 

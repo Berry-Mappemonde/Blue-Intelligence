@@ -564,6 +564,11 @@ async def _toggle_eez_gold(db, eid: str, *, run_id: str | None,
         )
     except Exception:
         pass
+    try:
+        from app.services.review_lessons import record_gold_lesson
+        await record_gold_lesson(db, fiche, ch, comment)
+    except Exception:
+        pass
     payload = {
         "_id": cid, "kind": "eez", "entity_id": eid,
         "on": True, "run_id": run_id, "updated_at": now_iso(),
