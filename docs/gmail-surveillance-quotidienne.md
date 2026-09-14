@@ -11,8 +11,9 @@ Ce document est la **méthode unique** de classement. Un agent Cursor la rejoue 
 2. Il pose les mêmes libellés qu’au grand rangement : **correspondant + thème + pertinence**.
 3. Il **archive** le bruit (newsletters, notifications GitHub de PR/CI, codes déjà périmés).
 4. Il **laisse dans la boîte** les mails humains, les factures, la sécurité, les invitations, les tickets ouverts.
-5. S’il trouve au moins un mail **important**, il vous envoie un mail d’alerte à vous-même, sujet commençant par `[Alerte Gmail]`.
-6. S’il n’y a rien d’important : **aucun mail**. Silence = journée calme.
+5. S’il trouve au moins un mail **important nouveau**, il vous envoie un mail d’alerte à vous-même, sujet commençant par `[Alerte Gmail]`.
+6. Un fil déjà cité dans une alerte des **48 dernières heures** n’est pas renvoyé (sauf s’il a reçu un **nouveau** message important).
+7. S’il n’y a rien d’important de nouveau : **aucun mail**. Silence = journée calme.
 
 Rien n’est mis à la corbeille. L’agent **ne répond jamais** à un tiers (ProtectedSeas, LangChain, Dileep, etc.) sauf si vous le demandez clairement.
 
