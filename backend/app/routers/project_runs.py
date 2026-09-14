@@ -1,4 +1,4 @@
-"""API des runs isolés Projets — n'écrit jamais dans `projects`."""
+"""Isolated Projects runs API — never writes `projects`."""
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -143,7 +143,7 @@ async def project_run_projects(run_id: str, verdict: str | None = None, limit: i
 
 @router.get("/projects/runs/{run_id}/geojson")
 async def project_run_geojson(run_id: str):
-    """FeatureCollection du run — pour l'affichage carte (sélecteur de run)."""
+    """Run FeatureCollection — for the map display (run selector)."""
     if not await db.project_runs.find_one({"_id": run_id}):
         raise HTTPException(404, f"Run {run_id} unknown")
     docs = await db.project_run_projects.find({"run_id": run_id}).to_list(20000)
@@ -166,7 +166,7 @@ async def project_run_events(run_id: str, step: str | None = None,
 async def project_run_journal(run_id: str, skip: int = 0, limit: int = 2000,
                               kind: str | None = None, tail: bool = False,
                               format: str = "json"):
-    """Journal complet du run (récit swarm + agents). Pas la carte live."""
+    """Full run journal (swarm narrative + agents). Not the live map."""
     from app.services.run_journal import (
         JOURNAL_DOWNLOAD_MAX,
         JOURNAL_LIMIT_DEFAULT,

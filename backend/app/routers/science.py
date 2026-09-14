@@ -1,10 +1,10 @@
-"""app.routers.science — mode Science : jeux de données océanographiques
-(Sextant/SISMER, ODATIS, EDMED SeaDataNet) et flotteurs Argo (Coriolis).
+"""app.routers.science — Science mode: oceanographic datasets
+(Sextant/SISMER, ODATIS, EDMED SeaDataNet) and Argo floats (Coriolis).
 
-Moisson par API structurées uniquement (JSON GeoNetwork, SPARQL, ERDDAP) —
-pas de LLM, pas de scraping. Collection live ``science_items`` en upsert
-non destructif ; chaque moisson est consignée dans ``science_runs``
-(snapshot de règles compris) pour l'onglet Runs de la console.
+Harvest via structured APIs only (GeoNetwork JSON, SPARQL, ERDDAP) —
+no LLM, no scraping. Live collection ``science_items`` with non-destructive
+upsert; each harvest is recorded in ``science_runs``
+(rules snapshot included) for the console Runs tab.
 """
 import asyncio
 import time

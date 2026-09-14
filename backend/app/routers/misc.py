@@ -1,5 +1,5 @@
-"""app.routers.misc — Santé, réglages, manuel utilisateur, route officielle,
-traversées ZEE de la route."""
+"""app.routers.misc — Health, settings, user manual, official route,
+route EEZ crossings."""
 import asyncio
 import os
 import time
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api")
 @router.get("/")
 async def health():
     # `mongo` : cible de persistance ("atlas" = durable, "local" = pod
-    # éphémère — les runs y seraient perdus à l'arrêt de l'environnement).
+    # ephemeral — runs would be lost when the environment stops).
     import os
     url = (os.environ.get("MONGO_URL") or "").lower()
     if "mongodb+srv" in url or "mongodb.net" in url:
@@ -40,10 +40,10 @@ async def health():
 @router.get("/run-rules")
 async def read_run_rules(mode: str | None = None, profile: str | None = None,
                          from_settings: bool = True):
-    """Catalogue des règles modulables + snapshot qui serait pris pour un run.
+    """Tunable-rules catalog + snapshot that would be taken for a run.
 
-    `from_settings=false` : valeurs du profil (catalogue + overrides du profil),
-    sans merger les settings Mongo — pour remplir le formulaire Console.
+    `from_settings=false`: profile values (catalog + profile overrides),
+    without merging Mongo settings — to fill the Console form.
     """
     from app.core.run_rules import RuleError, public_catalog, snapshot_for_run
     try:
@@ -98,8 +98,8 @@ class SettingsBody(BaseModel):
 
 @router.get("/admin/check")
 async def admin_check():
-    """Valide la clé admin : le middleware `_admin_gate` renvoie 401 avant
-    d'arriver ici si ADMIN_KEY est définie et que le header est absent/faux."""
+    """Validate the admin key: the `_admin_gate` middleware returns 401 before
+    reaching here if ADMIN_KEY is set and the header is missing/wrong."""
     return {"ok": True,
             "admin_required": bool(os.environ.get("ADMIN_KEY", "").strip())}
 
@@ -108,7 +108,7 @@ async def admin_check():
 async def read_settings():
     s = await get_settings()
     s.pop("_id", None)
-    # Nettoyage des clés héritées d'anciennes versions (Gemini/Emergent/Cloudflare).
+    # Clean inherited keys from older versions (Gemini/Emergent/Cloudflare).
     for legacy in ("gemini_api_key", "cloudflare_model",
                    "gatekeeper_model", "extract_model", "extraction_engine"):
         s.pop(legacy, None)
@@ -352,9 +352,9 @@ ZEE_COMPUTE_STATE = TaskState(max_logs=600)
 @router.get("/zee/crossings")
 async def zee_get_crossings(french_only: bool = False):
     """
-    Traversées ZEE calculées pour la route Berry-Mappemonde (cache MongoDB).
-    404 si aucun calcul n'a encore été lancé (POST /api/zee/compute).
-    `french_only=true` ne garde que les ZEE françaises (territory_code non null).
+    EEZ crossings computed for the Berry-Mappemonde route (MongoDB cache).
+    404 if no computation has been launched yet (POST /api/zee/compute).
+    `french_only=true` keeps only French EEZs (non-null territory_code).
     """
     cached = await db.zee_crossings.find_one({"_id": "latest"})
     if not cached:
@@ -379,11 +379,11 @@ class ZeeComputeBody(BaseModel):
 @router.post("/zee/compute")
 async def zee_compute(body: ZeeComputeBody | None = None):
     """
-    Lance le calcul des traversées ZEE en tâche de fond :
-      1. charge les polygones EEZ (fichier local MarineRegions v12, sinon WFS),
-      2. intersecte les segments maritimes (shapely, thread),
-      3. persiste dans MongoDB (zee_crossings, _id="latest").
-    409 si un calcul est déjà en cours ; suivre via GET /api/zee/compute/status.
+    Launch EEZ-crossing computation as a background task:
+      1. load EEZ polygons (local MarineRegions v12 file, else WFS),
+      2. intersect maritime segments (shapely, thread),
+      3. persist in MongoDB (zee_crossings, _id="latest").
+    409 if a computation is already running; follow via GET /api/zee/compute/status.
     """
     if ZEE_COMPUTE_STATE.running:
         raise HTTPException(409, "A ZEE computation is already running")
