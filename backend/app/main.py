@@ -1,12 +1,12 @@
 """
-app.main — Application FastAPI Blue Intelligence.
+app.main — Blue Intelligence FastAPI application.
 
-Assemble les routers par domaine, les middlewares (gzip, CORS) et les
-événements de démarrage (index Mongo, rafraîchissement automatique des PoE).
-Point d'entrée : `uvicorn server:app` (shim) ou `uvicorn app.main:app`.
+Assembles domain routers, middlewares (gzip, CORS) and startup
+events (Mongo indexes, automatic PoE refresh).
+Entry point: `uvicorn server:app` (shim) or `uvicorn app.main:app`.
 
-Quand ``frontend/build/`` existe (ou ``SERVE_FRONTEND=1``), sert aussi le
-bundle React sur ``/`` pour un accès preview unifié (API + UI sur le port 8001).
+When ``frontend/build/`` exists (or ``SERVE_FRONTEND=1``), also serves the
+React bundle on ``/`` for a unified preview (API + UI on port 8001).
 """
 import os
 import secrets
@@ -43,11 +43,11 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# Garde admin — quand ADMIN_KEY est définie (production), toutes les écritures
-# /api/* et les lectures sensibles (review, admin) exigent le header
-# X-Admin-Key. Sans ADMIN_KEY (dev / tests), tout reste ouvert.
+# Admin gate — when ADMIN_KEY is set (production), all writes
+# /api/* and sensitive reads (review, admin) require the
+# X-Admin-Key header. Without ADMIN_KEY (dev / tests), everything stays open.
 # ---------------------------------------------------------------------------
-_PUBLIC_WRITE_PATHS = {"/api/report-project"}   # signalement public de projets
+_PUBLIC_WRITE_PATHS = {"/api/report-project"}   # public project reports
 _ADMIN_GET_PREFIXES = ("/api/review", "/api/admin")
 
 
@@ -75,7 +75,7 @@ for module in (project_runs, projects, swarm, marinas, capitaineries, formalitie
 
 
 if not _SERVE_FRONTEND:
-    # Ingress production : seules les routes /api/* sont exposées.
+    # Production ingress: only /api/* routes are exposed.
     @app.get("/api/openapi.json")
     async def openapi_under_api():
         return JSONResponse(app.openapi())
@@ -93,8 +93,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _startup():
-    """Index des collections eez_zones / poe_ports, purge des collections
-    héritées, puis démarrage des tâches de fond du mode Formalités."""
+    """Index eez_zones / poe_ports collections, drop inherited
+    collections, then start Formalities background tasks."""
     from app.db import db
     try:
         await db.eez_zones.create_index("mrgid", unique=True)
@@ -148,12 +148,12 @@ async def _startup():
         await db.depth_samples.create_index("fetched_at")
     except Exception as e:
         print(f"[startup] science index creation failed (non-fatal): {e}")
-    # Rafraîchissement automatique : zones périmées re-vérifiées (monitoring MD5)
-    # et erreurs re-tentées, sans action manuelle.
+    # Automatic refresh: stale zones re-checked (MD5 monitoring)
+    # and errors retried, without manual action.
     formalities.start_auto_refresh()
-    # Reprise automatique des tâches de fond interrompues (validation OSM)
+    # Automatic resume of interrupted background jobs (OSM validation)
     formalities.schedule_job_resume()
-    # Préchauffage du dump GeoJSON marinas (plusieurs minutes sur Mongo distant).
+    # Warm up the marinas GeoJSON dump (several minutes on remote Mongo).
     try:
         marinas.start_marinas_fc_warmup()
     except Exception as e:
@@ -171,8 +171,8 @@ if _SERVE_FRONTEND:
     _RESERVED_ROOT = {"api", "docs", "redoc", "openapi.json"}
 
     def _spa_index_response() -> FileResponse:
-        # no-cache : le navigateur revalide index.html à chaque déploiement,
-        # sinon il peut garder un vieux bundle qui référence des chunks disparus.
+        # no-cache: the browser revalidates index.html on every deploy,
+        # otherwise it may keep an old bundle that references missing chunks.
         return FileResponse(
             _FRONTEND_BUILD / "index.html",
             headers={"Cache-Control": "no-cache"},
@@ -196,7 +196,7 @@ if _SERVE_FRONTEND:
         if candidate.is_file():
             return FileResponse(candidate)
         if head == "static":
-            # Asset fingerprinté absent = bundle client périmé : un 404 franc
-            # vaut mieux qu'index.html servi à la place d'un fichier JS.
+            # Missing fingerprinted asset = stale client bundle: a frank 404
+            # is better than index.html served in place of a JS file.
             raise HTTPException(404, detail="Not Found")
         return _spa_index_response()

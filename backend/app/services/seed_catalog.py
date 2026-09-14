@@ -1,6 +1,6 @@
-"""Catalogue MasterSeeds : audit hors Complet + homes / listes / file.
+"""MasterSeeds catalog: audit outside Complet + homes / lists / queue.
 
-Ne touche pas `projects`. Enrichit seulement la liste d'entrée (CDC C5 / §18).
+Does not touch `projects`. Only enriches the input list (CDC C5 / §18).
 """
 from __future__ import annotations
 
@@ -206,7 +206,7 @@ def name_needs_official_search(name: str) -> bool:
 
 
 def is_wide_corporate_home(seed: dict | None) -> bool:
-    """Siège de groupe (axa.com) sans page océan / projets → hors Complet."""
+    """Group HQ (axa.com) without an ocean / projects page → outside Complet."""
     seed = seed or {}
     url = (
         (seed.get("listing_url") or "").strip()
@@ -224,7 +224,7 @@ def is_wide_corporate_home(seed: dict | None) -> bool:
 
 
 def partner_site_reachable(url: str, timeout: float = 5.0) -> bool:
-    """HTTPS/HTTP répond. Certificat cassé ou timeout → False (ne brûle pas le plafond)."""
+    """HTTPS/HTTP answers. Broken certificate or timeout → False (does not burn the cap)."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return False
@@ -256,7 +256,7 @@ def partner_site_reachable(url: str, timeout: float = 5.0) -> bool:
 
 
 def _best_own_domain(name: str, urls: list[str]) -> tuple[str, str]:
-    """(domaine propriétaire, raison) ou ('', '')."""
+    """(owner domain, reason) or ('', '')."""
     counts: Counter[str] = Counter()
     social = 0
     for u in urls or []:
@@ -290,7 +290,7 @@ def _best_own_domain(name: str, urls: list[str]) -> tuple[str, str]:
 
 
 def classify_home(name: str, urls: list[str]) -> dict:
-    """Classe la home sans écrire de catalogue emprunté."""
+    """Classify the home without writing a borrowed catalog."""
     own, status = _best_own_domain(name, urls)
     borrowed = ""
     hubs = [
@@ -311,7 +311,7 @@ def classify_home(name: str, urls: list[str]) -> dict:
 
 
 def infer_own_listing(name: str, urls: list[str], home_url: str | None) -> str | None:
-    """Préfixe commun des fiches *sur le domaine propriétaire*."""
+    """Common prefix of cards *on the owner domain*."""
     host = domain_of(home_url)
     if not host:
         return None
@@ -320,7 +320,7 @@ def infer_own_listing(name: str, urls: list[str], home_url: str | None) -> str |
     own = [u for u in (urls or []) if domain_of(u) == host]
     if len(own) < 2:
         return None
-    # La home est déjà officielle : on ne refiltre pas via les hubs fréquents
+    # The home is already official: do not re-filter via frequent hubs
     # (fondationdelamer.org porterait sinon trop de noms v1).
     inferred = infer_listing_from_project_urls(own, name, allow_shared_hub=True)
     if not inferred:
@@ -349,7 +349,7 @@ def enrich_v1_seed(name: str, urls: list[str], project_count: int) -> dict:
     if home["home_status"] == HOME_STATUS_OFFICIAL:
         listing = infer_own_listing(name, urls, home["home_url"])
         if not listing:
-            # Racine du domaine propriétaire (pas un hub).
+            # Owner-domain root (not a hub).
             listing = listing_url_from_project_urls(urls, name)
             if listing and domain_of(listing) != domain_of(home["home_url"]):
                 listing = None
@@ -407,7 +407,7 @@ def build_v1_catalog(projects: list[dict]) -> list[dict]:
 
 
 def merge_curated_catalog(v1_seeds: list[dict], curated: list[dict] | None = None) -> list[dict]:
-    """Union nom/alias seulement : un hébergé CORDIS n'est plus jeté."""
+    """Name/alias union only: a CORDIS-hosted org is no longer dropped."""
     if curated is None:
         from app.static_data.seeds import CURATED_SEEDS
         curated = CURATED_SEEDS
@@ -466,7 +466,7 @@ def build_enriched_master_seeds(projects: list[dict], curated: list[dict] | None
 
 
 def is_crawl_ready(seed: dict | None) -> bool:
-    """File Complet : home officielle ou page-liste. Pas de hub à résoudre."""
+    """Complet queue: official home or list page. No hub to resolve."""
     seed = seed or {}
     name = (seed.get("name") or "").strip()
     if not name:
@@ -553,7 +553,7 @@ def audit_rows(seeds: list[dict]) -> list[dict]:
 
 
 def _atomic_write_text(path: Path, text: str) -> Path:
-    """Écriture tmp + fsync + replace : un crash laisse l'ancien fichier intact."""
+    """tmp write + fsync + replace: a crash leaves the old file intact."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -588,7 +588,7 @@ def apply_official_site_result(seed: dict, site: str | None) -> dict:
 
 
 def append_search_journal(path: Path, record: dict) -> Path:
-    """Append + fsync : chaque résultat B est consigné avant le checkpoint."""
+    """Append + fsync: each B result is recorded before the checkpoint."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record, ensure_ascii=False) + "\n"
@@ -625,7 +625,7 @@ def journal_done_names(
     retry_unknown: bool = False,
     result_key: str | None = None,
 ) -> set[str]:
-    """Noms déjà Search-és. Les erreurs réseau ne sont pas « done » (reprise)."""
+    """Names already Searched. Network errors are not "done" (resume)."""
     done: set[str] = set()
     for name, rec in (records or {}).items():
         if result_key:
@@ -647,7 +647,7 @@ def search_candidates(
     done_names: set[str] | None = None,
     retry_unknown: bool = False,
 ) -> list[dict]:
-    """Graines B : nom ok, home empruntée/inconnue, pas déjà consignées Search."""
+    """B seeds: name ok, borrowed/unknown home, not already Search-recorded."""
     done = {norm_name(n) for n in (done_names or set()) if n}
     out = []
     for s in seeds:
@@ -682,7 +682,7 @@ def overlay_search_results(
     previous: list[dict] | None = None,
     journal: Path | dict | None = None,
 ) -> int:
-    """Réapplique les homes Search (catalogue précédent + journal). Le journal gagne."""
+    """Re-apply Search homes (previous catalog + journal). The journal wins."""
     by = {norm_name(s.get("name") or ""): s for s in seeds}
     touched: set[str] = set()
     for old in previous or []:
@@ -753,7 +753,7 @@ def listing_candidates(
     done_names: set[str] | None = None,
     retry_unknown: bool = False,
 ) -> list[dict]:
-    """Homes officielles sans page-liste déjà qualifiée."""
+    """Official homes without an already qualified list page."""
     done = {norm_name(n) for n in (done_names or set()) if n}
     out = []
     for s in seeds:
@@ -793,7 +793,7 @@ def overlay_listing_results(
     previous: list[dict] | None = None,
     journal: Path | dict | None = None,
 ) -> int:
-    """Réapplique les pages-listes (catalogue précédent + journal C)."""
+    """Re-apply list pages (previous catalog + journal C)."""
     by = {norm_name(s.get("name") or ""): s for s in seeds}
     touched: set[str] = set()
     for old in previous or []:
@@ -828,7 +828,7 @@ def overlay_listing_results(
 
 
 def infer_listings_onto_official_homes(seeds: list[dict], projects: list[dict] | None) -> int:
-    """C hors Search : préfixe commun des fiches v1 sur la home officielle."""
+    """C outside Search: common prefix of v1 cards on the official home."""
     buckets: dict[str, list[str]] = defaultdict(list)
     for doc in projects or []:
         url = (doc.get("url") or "").strip()
@@ -891,7 +891,7 @@ def apply_home_review(seed: dict, rec: dict) -> dict:
 
 
 def overlay_home_reviews(seeds: list[dict], reviews: list[dict] | Path | None) -> int:
-    """Réapplique la revue manuelle (gagne sur B/C)."""
+    """Re-apply the manual review (wins over B/C)."""
     if reviews is None:
         return 0
     if isinstance(reviews, Path):
@@ -914,7 +914,7 @@ def overlay_home_reviews(seeds: list[dict], reviews: list[dict] | Path | None) -
 
 
 def assign_queue(seed: dict) -> str:
-    """Étape E : file Complet = home officielle ou page-liste, nom simple."""
+    """Step E: Complet queue = official home or list page, simple name."""
     action = (seed.get("review_action") or "").strip()
     if action == REVIEW_REJECT:
         return QUEUE_RESOLVE
@@ -957,7 +957,7 @@ def refresh_catalog_queues(seeds: list[dict]) -> list[dict]:
 
 
 def refresh_catalog_classifications(seeds: list[dict]) -> list[dict]:
-    """Recalcule `name_status` (sauf curés) puis `queue`. Pas de splits D."""
+    """Recompute `name_status` (except curated) then `queue`. No D splits."""
     for seed in seeds:
         if (seed.get("source") or "") != "curated":
             seed["name_status"] = classify_name(seed.get("name") or "")
@@ -976,7 +976,7 @@ def _strip_partner(name: str) -> str:
 
 
 def _is_org_part(part: str, seeds: list[dict] | None = None) -> bool:
-    """Évite de scinder « Science, Technology and … » en faux organismes."""
+    """Avoid splitting "Science, Technology and …" into fake organizations."""
     part = _strip_partner(part)
     if not part or classify_name(part) != NAME_OK:
         return False
@@ -992,7 +992,7 @@ def _is_org_part(part: str, seeds: list[dict] | None = None) -> bool:
 
 
 def split_compound_parts(name: str, seeds: list[dict] | None = None) -> list[str] | None:
-    """Découpe un nom collé. None si un seul organisme ou parties trop vagues."""
+    """Split a glued name. None if a single organization or parts too vague."""
     if classify_name(name) != NAME_COMPOUND:
         return None
     raw = _strip_partner(name)
@@ -1013,7 +1013,7 @@ def _find_seed_by_name(seeds: list[dict], name: str) -> dict | None:
 
 
 def apply_compound_splits(seeds: list[dict]) -> dict:
-    """D : reclasse les faux composés, scinde les vrais, exclut la source scindée."""
+    """D: reclassify fake compounds, split real ones, exclude the split source."""
     report = {
         "reclassified_ok": [],
         "merged": [],
@@ -1138,7 +1138,7 @@ def find_catalog_seed(
     name: str,
     url: str | None = None,
 ) -> dict | None:
-    """Même organisme que le partenaire : nom/alias, sinon domaine unique."""
+    """Same organization as the partner: name/alias, else unique domain."""
     seeds = catalog or []
     found = _find_seed_by_name(seeds, name)
     if found:
@@ -1154,7 +1154,7 @@ def find_catalog_seed(
 
 
 def accept_partner_url(name: str, url: str | None) -> dict | None:
-    """Home officielle (ou page-liste) : pas un journal, pas un hub emprunté."""
+    """Official home (or list page): not a journal, not a borrowed hub."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return None
@@ -1190,7 +1190,7 @@ def accept_partner_url(name: str, url: str | None) -> dict | None:
 
 
 def catalog_partner_seed(seed: dict) -> dict | None:
-    """Graine Complet : listing ou home déjà classés, pas l'URL partenaire brute."""
+    """Complet seed: already classified listing or home, not the raw partner URL."""
     url = (
         (seed.get("listing_url") or "").strip()
         or (seed.get("url") or "").strip()
@@ -1229,10 +1229,10 @@ def decide_follow_the_money_partner(
     searched_home: str | None = None,
     did_search: bool = False,
 ) -> dict:
-    """Même barème que le catalogue A–E : nom simple, home officielle, pas de hub.
+    """Same scale as catalog A–E: simple name, official home, no hub.
 
-    `did_search` distingue « Search official site pas encore lancé » d'un
-    Search déjà tenté (vide ou rejeté).
+    `did_search` distinguishes "official-site Search not launched yet" from a
+    Search already tried (empty or rejected).
     """
     raw_name = (name or "").strip()
     raw_url = (url or "").strip() or None
@@ -1320,7 +1320,7 @@ def ftm_page_allows_collect(
     s_ocean=None,
     min_s_ocean: float = FTM_MIN_S_OCEAN,
 ) -> bool:
-    """FTM ne vote que depuis un site publié. S_ocean absent = tests / extraits nus."""
+    """FTM only votes from a published site. Missing S_ocean = tests / bare excerpts."""
     if not published:
         return False
     if s_ocean is None or s_ocean == "":
