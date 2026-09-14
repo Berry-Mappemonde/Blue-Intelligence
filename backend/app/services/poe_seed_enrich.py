@@ -107,7 +107,7 @@ WHITELIST_DOMAIN_CAP = 15
 CATALOG_FETCH_CHARS = 20000
 MINE_TASK_ID = "seed-mine"
 DEFAULT_MINE_FETCH_CAP = 200
-# Jetons de chemin : liste de ports, pas une annexe / gazette quelconque.
+# Path tokens: a port list, not some annex / gazette.
 _MINE_PATH_TOKENS = (
     "port-of-entry", "ports-of-entry", "ports-entree", "portos-de-entrada",
     "puertos-habilit", "habilitados", "designated-port", "designated_ports",
@@ -173,7 +173,7 @@ def apply_judge_verdict(seed: dict, judge: dict) -> str:
 
 
 def should_escalate_sonnet(judge: dict | None, doc: dict) -> bool:
-    """Sonnet si Haiku inconclusive, ou si la graine vient du listing."""
+    """Sonnet if Haiku is inconclusive, or if the seed comes from the listing."""
     status = (judge or {}).get("judge_status")
     if status == "inconclusive" or not judge:
         return True
@@ -339,7 +339,7 @@ INLAND_FAR_KINDS = {"inland_river", "inland", "other_water"}
 
 
 def _needs_geocode(doc: dict) -> bool:
-    """name_only sans GPS, ou inland_far / ambiguous. Pas les confirmed ok."""
+    """name_only without GPS, or inland_far / ambiguous. Not confirmed-ok."""
     verdict = doc.get("verify_verdict") or ""
     audit = doc.get("gps_audit_status") or ""
     if verdict == "confirmed" and audit in GPS_AUDIT_KEEP:

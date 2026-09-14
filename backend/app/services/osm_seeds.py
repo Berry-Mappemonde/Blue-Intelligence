@@ -80,7 +80,7 @@ WIKI = {
     "seamark_buildings": "https://wiki.openstreetmap.org/wiki/Seamarks/Buildings",
 }
 
-# CATHAF commerciaux (IHO / OpenSeaMap). marina* est volontairement absent.
+# Commercial CATHAF (IHO / OpenSeaMap). marina* is left out on purpose.
 COMMERCIAL_CATHAF = frozenset({
     "roro", "ferry", "fishing", "naval", "container", "cargo", "passenger",
     "tanker", "bulk", "shipyard", "service_repair", "offshore_support",
@@ -381,10 +381,10 @@ TAGINFO_CATALOG: tuple[dict[str, Any], ...] = (
     },
 )
 
-# Golfe de Gascogne — tuile Console Test (WORLD_TILES[0] est trop vaste).
+# Bay of Biscay — Console Test tile (WORLD_TILES[0] is too large).
 TEST_TILE: tuple[float, float, float, float] = (46.0, -2.0, 48.5, 0.5)
 
-# (south, west, north, east) — assez petits pour Overpass public ; split auto sinon.
+# (south, west, north, east) — small enough for public Overpass; auto-split otherwise.
 WORLD_TILES: tuple[tuple[float, float, float, float], ...] = (
     (-60.0, -180.0, -15.0, -90.0),
     (-60.0, -90.0, -15.0, 0.0),

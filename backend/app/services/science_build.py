@@ -33,7 +33,7 @@ from app.services.marina_build import USER_AGENT
 SCHEMA = "science_v1"
 
 GN_ES_PAGE_SIZE = 200
-GN_ES_HARD_CAP = 10_000  # au-delà, l'API Elasticsearch exige search_after
+GN_ES_HARD_CAP = 10_000  # beyond that, the Elasticsearch API requires search_after
 DEFAULT_CATALOG_MAX = 2000
 DEFAULT_ARGO_DAYS = 30
 DEFAULT_CSR_MAX = 500
@@ -96,7 +96,7 @@ CSR_QUERY = (
 )
 
 SOURCES = ("sextant", "odatis", "edmed", "argo", "csr")
-# Pilotes Sentinel : ingest manuel, jamais dans la moisson.
+# Sentinel pilots: manual ingest, never in the harvest.
 PILOT_SOURCE = "sentinel-pilot"
 DISPLAY_SOURCES = SOURCES + (PILOT_SOURCE,)
 
@@ -125,8 +125,8 @@ ARGO_INSTITUTIONS = {
 }
 ARGO_OCEANS = {"A": "Atlantic", "P": "Pacific", "I": "Indian"}
 
-# Emprise « globale » : la fiche couvre (presque) tout le globe — la poser
-# au centre (0, 0) n'aurait aucun sens de localisation.
+# “Global” extent: the card covers (almost) the whole globe — placing it
+# at the center (0, 0) would have no location meaning.
 GLOBAL_MIN_WIDTH_DEG = 350.0
 GLOBAL_MIN_HEIGHT_DEG = 160.0
 
@@ -222,7 +222,7 @@ def bbox_from_geom(geom: Any) -> tuple[float, float, float, float] | None:
 
 
 def bbox_from_wkt(wkt: str | None) -> tuple[float, float, float, float] | None:
-    """bbox d'un WKT EDMED (POLYGON / MULTIPOLYGON / POINT, ordre lon lat)."""
+    """bbox of an EDMED WKT (POLYGON / MULTIPOLYGON / POINT, lon lat order)."""
     if not wkt or not str(wkt).strip():
         return None
     pairs = [(float(a), float(b)) for a, b in _WKT_PAIR_RE.findall(str(wkt))]
@@ -248,7 +248,7 @@ def bbox_center(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
 
 
 def pairs_from_wkt(wkt: str | None) -> list[tuple[float, float]]:
-    """Paires (lon, lat) d'un WKT POINT / LINESTRING / POLYGON."""
+    """(lon, lat) pairs of a POINT / LINESTRING / POLYGON WKT."""
     if not wkt or not str(wkt).strip():
         return []
     out: list[tuple[float, float]] = []
@@ -346,7 +346,7 @@ def _gn_date(src: dict) -> str | None:
 
 
 def dataset_from_gn_hit(hit: dict, source: str) -> dict | None:
-    """Fiche Science depuis un hit de l'API de recherche GeoNetwork 4."""
+    """Science card from a GeoNetwork 4 search API hit."""
     src = hit.get("_source") or {}
     uuid = str(src.get("uuid") or hit.get("_id") or "").strip()
     title = _first_str(src.get("resourceTitleObject"))
@@ -477,7 +477,7 @@ def cruise_from_csr_binding(binding: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def wmo_from_file(path: str | None) -> tuple[str | None, str | None, int | None]:
-    """(wmo, dac, cycle) depuis un chemin d'index ``aoml/1901514/profiles/R1901514_538.nc``."""
+    """(wmo, dac, cycle) from an index path ``aoml/1901514/profiles/R1901514_538.nc``."""
     if not path:
         return None, None, None
     parts = str(path).split("/")
