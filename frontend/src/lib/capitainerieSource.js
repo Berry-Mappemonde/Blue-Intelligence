@@ -1,4 +1,4 @@
-/** Libellé de source OSM / SHOM / NOAA (éventuellement combinés). */
+/** OSM / SHOM / NOAA source label (possibly combined). */
 export function formatCapitainerieSource(source, t) {
   const raw = String(source || "openstreetmap");
   const parts = raw === "openstreetmap"

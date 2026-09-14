@@ -3,7 +3,7 @@ import { installPopupFitPolicy } from "./popupFit";
 
 installPopupFitPolicy();
 
-/** Rayon « pointe de Bic » : minuscule en vue monde, un peu plus lisible en zoom. */
+/** "Bic-tip" radius: tiny in world view, a bit more readable when zoomed in. */
 export function penRadius(zoom, bump = 0) {
   const z = Number(zoom) || 2;
   let r = 0.7;
@@ -23,10 +23,10 @@ export const POPUP_OPTS = {
   keepInView: false,
 };
 
-/** Groupe de points (plus de cluster) avec addLayers pour les hooks existants. */
+/** Point group (no clustering) with addLayers for existing hooks. */
 export function makePointGroup() {
-  // tolerance 8 : la pastille reste minuscule à l'écran mais la zone de
-  // clic/tap autour reste confortable (sinon les popups sont inatteignables).
+  // tolerance 8: the dot stays tiny on screen but the click/tap area
+  // around it stays comfortable (otherwise popups are unreachable).
   const renderer = L.canvas({ padding: 0.5, tolerance: 8 });
   const group = L.layerGroup();
   group._biRenderer = renderer;

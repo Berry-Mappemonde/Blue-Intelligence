@@ -1,4 +1,4 @@
-/** Catalogue Console — libellés depuis GET /api/run-rules, pas i18n. */
+/** Console catalogue — labels from GET /api/run-rules, not i18n. */
 
 export const GROUP_ORDER = [
   "identity", "space", "qualification", "geocode", "reading", "budget", "contracts",

@@ -4,7 +4,7 @@ import { depthRowHtml } from "./depthRow";
 import { circleOpts, POPUP_OPTS } from "./points";
 
 /**
- * Couche Mouillages : pastilles teal canvas, sans cluster.
+ * Anchorages layer: teal canvas dots, no clustering.
  */
 export default function useAnchoragesLayer({ mapObj, anchorClusterRef, anchorages, tRef }) {
   const anchorSigRef = useRef("");

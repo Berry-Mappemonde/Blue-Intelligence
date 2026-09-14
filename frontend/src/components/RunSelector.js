@@ -3,7 +3,7 @@ import { Check, ChevronRight } from "lucide-react";
 import api from "../api";
 import { fetchRunsOnce } from "../lib/runCache";
 
-// Endpoint « liste des runs » par mode. PoE = poe_runs, les autres = runs isolés.
+// Per-mode "list runs" endpoint. PoE = poe_runs; the others = isolated runs.
 const RUNS_ENDPOINT = {
   projects: "/projects/runs",
   marinas: "/marinas/runs",
@@ -18,18 +18,18 @@ const fmtDate = (iso) => {
 };
 
 /**
- * RunSelector — petit bouton " > " accolé à l'onglet Map.
+ * RunSelector — small ">" button attached to the Map tab.
  *
- * Ouvre la liste des runs disponibles pour le mode courant ; sélectionner un
- * run l'affiche sur la carte à la place des données live. « Carte live »
- * revient à l'affichage par défaut.
+ * Opens the list of runs available for the current mode; picking a run
+ * shows it on the map instead of the live data. "Live map" returns to
+ * the default display.
  */
 export default function RunSelector({ mode, mapRun, onSelect, t }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [runs, setRuns] = useState([]);
-  // Position fixe calculée depuis le bouton : le groupe d'onglets du Header
-  // est en overflow-hidden, un menu absolu y serait rogné.
+  // Fixed position computed from the button: the Header tab group is
+  // overflow-hidden, so an absolute menu would be clipped.
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const boxRef = useRef(null);
   const btnRef = useRef(null);
@@ -82,7 +82,7 @@ export default function RunSelector({ mode, mapRun, onSelect, t }) {
             : "text-slate-400 hover:text-slate-200 hover:bg-raised"
         }`}
       >
-        {/* Libellé visible (le chevron seul passait inaperçu) */}
+        {/* Visible label (the chevron alone was easy to miss) */}
         {!mapRun && <span>{t("runSelectorLabel")}</span>}
         <ChevronRight
           size={13}

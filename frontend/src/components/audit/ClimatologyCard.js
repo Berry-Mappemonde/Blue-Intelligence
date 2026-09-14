@@ -1,5 +1,5 @@
 /**
- * Console — mode Climatologie. Pas de moisson / Gold : statut des snapshots.
+ * Console — Climatology mode. No harvest / Gold: snapshot status only.
  */
 export default function ClimatologyCard({ t }) {
   return (

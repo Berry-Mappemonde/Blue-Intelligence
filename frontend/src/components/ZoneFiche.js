@@ -110,9 +110,9 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
 }
 
 /**
- * Fiche de revue d'un polygone VLIZ — même geste que ProjectList :
- * Review (variant=page) : toutes les TD + toutes les BU par port.
- * Carte (sidebar) : une URL TD + une BU par PoE. Pas de bouton Générer.
+ * Review sheet for a VLIZ polygon — same gesture as ProjectList:
+ * Review (variant=page): every TD + every BU per port.
+ * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
  */
 export default function ZoneFiche({
   t, fiche, loading, onFlyToPort, variant = "sidebar",

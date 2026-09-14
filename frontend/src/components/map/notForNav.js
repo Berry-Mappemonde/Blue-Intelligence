@@ -1,7 +1,7 @@
 /**
- * Acceptation « cette carte n’est pas faite pour naviguer ».
- * Le bandeau reste affiché ; cette clé dit seulement si l'utilisateur
- * a cliqué pour entrer. Si le texte change (version), on redemande.
+ * Acceptance of "this map is not for navigation".
+ * The banner stays visible; this key only records whether the user
+ * clicked to enter. If the text changes (version), we ask again.
  */
 export const NOT_FOR_NAV_STORAGE_KEY = "bi.notForNav.accepted";
 export const NOT_FOR_NAV_VERSION = "2026-09-14.v2";
@@ -36,11 +36,11 @@ export function writeNotForNavAccepted(storage, title, body) {
   };
   try {
     (storage || localStorage).setItem(NOT_FOR_NAV_STORAGE_KEY, JSON.stringify(rec));
-  } catch (_) { /* quota / privé */ }
+  } catch (_) { /* quota / private */ }
   return rec;
 }
 
-/** Tant que l'avertissement n'est pas accepté, le site reste fermé. */
+/** Until the warning is accepted, the site stays closed. */
 export function siteEntryNeedsAccept(accepted) {
   return !accepted;
 }
