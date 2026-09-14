@@ -2,7 +2,7 @@ import {
   NOT_FOR_NAV_STORAGE_KEY,
   disclaimerFingerprint,
   readNotForNavAccepted,
-  restrictedIntentNeedsAccept,
+  siteEntryNeedsAccept,
   writeNotForNavAccepted,
 } from "../notForNav";
 
@@ -15,20 +15,16 @@ function memStore() {
 }
 
 describe("notForNav", () => {
-  test("sans acceptation, mer / WMS / overlay / satellite demandent un clic", () => {
-    expect(restrictedIntentNeedsAccept(false, { basemap: "sea" })).toBe(true);
-    expect(restrictedIntentNeedsAccept(false, { overlay: true })).toBe(true);
-    expect(restrictedIntentNeedsAccept(false, { wms: { bathymetry: true } })).toBe(true);
-    expect(restrictedIntentNeedsAccept(false, { satellite: true })).toBe(true);
-    expect(restrictedIntentNeedsAccept(false, { basemap: "dark", overlay: false })).toBe(false);
-    expect(restrictedIntentNeedsAccept(true, { basemap: "sea" })).toBe(false);
+  test("sans acceptation, le site reste fermé", () => {
+    expect(siteEntryNeedsAccept(false)).toBe(true);
+    expect(siteEntryNeedsAccept(true)).toBe(false);
   });
 
   test("persiste version + empreinte ; un nouveau texte redemande", () => {
     const store = memStore();
-    writeNotForNavAccepted(store, "Not for navigation", "body v1");
-    expect(readNotForNavAccepted(store, "Not for navigation", "body v1")).toBe(true);
-    expect(readNotForNavAccepted(store, "Not for navigation", "body v2")).toBe(false);
+    writeNotForNavAccepted(store, "This map is not for navigating", "body v1");
+    expect(readNotForNavAccepted(store, "This map is not for navigating", "body v1")).toBe(true);
+    expect(readNotForNavAccepted(store, "This map is not for navigating", "body v2")).toBe(false);
     expect(store.getItem(NOT_FOR_NAV_STORAGE_KEY)).toContain("textKey");
     expect(disclaimerFingerprint("a", "b")).not.toBe(disclaimerFingerprint("a", "c"));
   });
