@@ -147,16 +147,26 @@ export function SimulationFilmBar({
             />
           ))}
         </button>
-        <div className="relative h-3.5 mb-1 text-[9px] text-white/40">
-          {ticks.map((tick) => (
-            <span
-              key={`${tick.filmNm}-${tick.label}`}
-              className="absolute top-0 -translate-x-1/2 whitespace-nowrap"
-              style={{ left: `${barTotal > 0 ? (tick.filmNm / barTotal) * 100 : 0}%` }}
-            >
-              {tick.label}
-            </span>
-          ))}
+        <div className="relative h-3.5 mb-1 text-[9px] text-white/50">
+          {ticks.map((tick, i) => {
+            const align = i === 0
+              ? "left-0"
+              : i === ticks.length - 1
+                ? "right-0"
+                : "-translate-x-1/2";
+            const left = i === ticks.length - 1
+              ? undefined
+              : `${barTotal > 0 ? (tick.filmNm / barTotal) * 100 : 0}%`;
+            return (
+              <span
+                key={`${tick.filmNm}-${tick.label}`}
+                className={`absolute top-0 whitespace-nowrap ${align}`}
+                style={left != null ? { left } : undefined}
+              >
+                {tick.label}
+              </span>
+            );
+          })}
         </div>
 
         <FilmSpeedProfile

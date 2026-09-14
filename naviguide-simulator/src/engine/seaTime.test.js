@@ -23,6 +23,7 @@ describe("seaTime", () => {
     assert.equal(formatSeaTime(4.2), "4.2 h");
     assert.equal(formatSeaTime(30), "1 j 6 h");
     assert.equal(formatSeaTime(48), "2 j");
+    assert.equal(formatSeaTime(47.7), "2 j");
   });
 
   it("repères J0 / milieu / J232 pour Berry", () => {

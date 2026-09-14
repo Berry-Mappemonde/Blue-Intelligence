@@ -33,8 +33,12 @@ export function formatSeaTime(hours, { compact = false } = {}) {
     const rounded = h < 10 ? Math.round(h * 10) / 10 : Math.round(h);
     return `${rounded} h`;
   }
-  const days = Math.floor(h / 24);
-  const rem = Math.round(h - days * 24);
+  let days = Math.floor(h / 24);
+  let rem = Math.round(h - days * 24);
+  if (rem >= 24) {
+    days += 1;
+    rem = 0;
+  }
   if (compact && days >= 10) return `${days} j`;
   if (rem <= 0) return `${days} j`;
   return `${days} j ${rem} h`;
@@ -63,8 +67,10 @@ export function clockTickLabels({ playheadTotal, sailTotalNm, knots, scale = "nm
   }
   return fractions.map((t) => ({
     filmNm: maxFilm * t,
-    label: t === 1
-      ? `${Math.round(sail).toLocaleString()} nm`
-      : `${Math.round(sail * t).toLocaleString()}`,
+    label: t === 0
+      ? "0"
+      : t === 1
+        ? `${Math.round(sail).toLocaleString()} nm`
+        : `${Math.round(sail * t).toLocaleString()}`,
   }));
 }

@@ -245,11 +245,15 @@ export default function App() {
   playheadNmRef.current = playback.nm;
 
   const handleSimNext = useCallback(() => {
+    lastArrivalKeyRef.current = "";
+    setArrivalBanner(null);
     playback.pause();
     playback.seek(nextEscaleNm(escaleMarks, playheadNmRef.current), { jump: true });
   }, [playback.pause, playback.seek, escaleMarks]);
 
   const handleSimPrev = useCallback(() => {
+    lastArrivalKeyRef.current = "";
+    setArrivalBanner(null);
     playback.pause();
     playback.seek(prevEscaleNm(escaleMarks, playheadNmRef.current), { jump: true });
   }, [playback.pause, playback.seek, escaleMarks]);
@@ -954,7 +958,12 @@ export default function App() {
           playing={playback.playing}
           onTogglePlay={playback.toggle}
           marks={escaleMarks}
-          onSeekNm={(nm) => { playback.pause(); playback.seek(nm); }}
+          onSeekNm={(nm) => {
+            lastArrivalKeyRef.current = "";
+            setArrivalBanner(null);
+            playback.pause();
+            playback.seek(nm, { jump: true });
+          }}
           onPrev={handleSimPrev}
           onNext={handleSimNext}
           canPrev={simulationMode && playback.nm > ((escaleMarks[0]?.filmNm ?? escaleMarks[0]?.nm) ?? 0) + 1}

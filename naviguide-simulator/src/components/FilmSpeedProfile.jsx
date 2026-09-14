@@ -63,8 +63,8 @@ export function FilmSpeedProfile({
             <polyline
               points={windPts}
               fill="none"
-              stroke="rgb(252 211 77)"
-              strokeWidth="1.4"
+              stroke="rgb(251 191 36)"
+              strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
@@ -74,8 +74,8 @@ export function FilmSpeedProfile({
             <polyline
               points={boatPts}
               fill="none"
-              stroke="rgb(103 232 249)"
-              strokeWidth="1.6"
+              stroke="rgb(34 211 238)"
+              strokeWidth="2.2"
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
@@ -87,8 +87,8 @@ export function FilmSpeedProfile({
             y1="0"
             y2={VB_H}
             stroke="white"
-            strokeOpacity="0.55"
-            strokeWidth="1"
+            strokeOpacity="0.75"
+            strokeWidth="1.2"
             vectorEffect="non-scaling-stroke"
           />
         </svg>
