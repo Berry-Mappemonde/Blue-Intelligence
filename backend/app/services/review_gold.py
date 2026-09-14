@@ -1,12 +1,11 @@
-"""
-Gold Dataset — run certifié Review.
+"""Gold Dataset — certified Review run.
 
-Les bases live (`projects`, `poe_ports`, `eez_zones`, `marinas`,
-`capitaineries`, `amp_sites`) ne sont jamais écrites. Seule `review_gold`
-porte les overrides (on / off + snapshot).
+Live databases (`projects`, `poe_ports`, `eez_zones`, `marinas`,
+`capitaineries`, `amp_sites`) are never written. Only `review_gold`
+holds the overrides (on / off + snapshot).
 
-Gold = clic explicite. Map ne montre le run certifié que si
-« Afficher la review » est coché. Pas de pré-Gold silencieux.
+Gold = explicit click. Map shows the certified run only if
+“Show review” is checked. No silent pre-Gold.
 """
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ from app.services.review_choices import (
 
 
 class GoldNotReady(ValueError):
-    """Gold Formalités cliqué trop tôt — aucune liste officielle gardée."""
+    """Formalities Gold clicked too early — no official list kept."""
 
 GOLD_KINDS = ("project", "eez", "marina", "capitainerie", "amp")
 FALLBACK_SOURCES = frozenset({
@@ -63,7 +62,7 @@ def gold_key(kind: str, entity_id: str) -> str:
 
 
 def is_test_run(doc: dict | None) -> bool:
-    """Canaris, smokes, seed-enrich — pas les runs mondiaux de prod."""
+    """Canaries, smokes, seed-enrich — not world prod runs."""
     if not doc:
         return False
     if str(doc.get("purpose") or "").strip().lower() == "test":
@@ -76,7 +75,7 @@ def is_test_run(doc: dict | None) -> bool:
 
 
 def is_pre_gold_project(doc: dict | None) -> bool:
-    """Ni snap_to_ocean, ni point océan hashé (`ocean_fallback_coords`)."""
+    """Neither snap_to_ocean nor a hashed ocean point (`ocean_fallback_coords`)."""
     if not doc:
         return False
     if doc.get("snapped") or doc.get("snapped_coastal"):
@@ -102,7 +101,7 @@ def is_pre_gold_project(doc: dict | None) -> bool:
 
 
 def is_pre_gold_marina(doc: dict | None) -> bool:
-    """File : identité OSM + GPS présents. Pas un Gold silencieux."""
+    """Queue: OSM identity + GPS present. Not a silent Gold."""
     if not doc:
         return False
     src = str(doc.get("source") or "").strip().lower()
@@ -112,7 +111,7 @@ def is_pre_gold_marina(doc: dict | None) -> bool:
 
 
 def is_pre_gold_capitainerie(doc: dict | None) -> bool:
-    """File : un bâtiment avec GPS. Gold reste un clic."""
+    """Queue: a building with GPS. Gold stays a click."""
     if not doc:
         return False
     if not (doc.get("osm_id") or doc.get("shom_id") or doc.get("noaa_id") or doc.get("name")):
@@ -121,7 +120,7 @@ def is_pre_gold_capitainerie(doc: dict | None) -> bool:
 
 
 def is_pre_gold_amp(doc: dict | None) -> bool:
-    """File : quelque chose à juger (manager ou candidats visite)."""
+    """Queue: something to judge (manager or visit candidates)."""
     if not doc:
         return False
     if doc.get("manager_url") or doc.get("visit_url") or doc.get("other_helpful_links"):
@@ -140,23 +139,23 @@ def _has_xy(doc: dict | None) -> bool:
 
 
 def gold_is_on(override: dict | None) -> bool:
-    """Gold = override allumé. Jamais un défaut pré-Gold."""
+    """Gold = override on. Never a pre-Gold default."""
     return bool(override and override.get("on"))
 
 
 def gold_pressed(is_pre_gold: bool, override: dict | None) -> bool:
-    """Compat : le pré-Gold ne pose plus l'interrupteur."""
+    """Compat: pre-Gold no longer flips the switch."""
     del is_pre_gold
     return gold_is_on(override)
 
 
 def eez_is_published(override: dict | None) -> bool:
-    """Gold Formalités = override allumé ET snapshot de fiche."""
+    """Formalities Gold = override on AND card snapshot."""
     return bool(override and override.get("on") and override.get("snapshot"))
 
 
 def eez_on_map(override: dict | None) -> bool:
-    """Couche « Afficher la review » Formalités = fiche Gold publiée."""
+    """Formalities “Show review” layer = published Gold card."""
     return eez_is_published(override)
 
 
@@ -195,7 +194,7 @@ def _mrgid_set(docs: list[dict]) -> set[int]:
 
 
 def eez_extraction_is_productive(doc: dict | None) -> bool:
-    """Au moins un port et une source officielle — v1 seul ne suffit pas."""
+    """At least one port and one official source — v1 alone is not enough."""
     if not doc:
         return False
     try:
@@ -217,12 +216,12 @@ def eez_extraction_is_productive(doc: dict | None) -> bool:
 
 
 async def pre_gold_eez_mrgids(db) -> set[int]:
-    """mrgid extraits de façon productive sur un run Formalités de prod.
+    """mrgids extracted productively on a prod Formalities run.
 
-    Productif = poe_count > 0 et au moins une source officielle.
-    La v1 et les canaris / smokes ne comptent pas : une ZEE seulement
-    présente sur la carte publiée (ex. Mayotte sans run) n'est pas pré-Gold.
-    Lecture des fiches zone seulement — pas le scan des ports.
+    Productive = poe_count > 0 and at least one official source.
+    v1 and canaries / smokes do not count: an EEZ only
+    present on the published map (e.g. Mayotte without a run) is not pre-Gold.
+    Read zone cards only — not a port scan.
     """
     global _eez_pre_gold_cache
     now = time.time()
@@ -255,9 +254,9 @@ async def pre_gold_eez_mrgids(db) -> set[int]:
 
 
 async def recommended_eez_run_id(db) -> str | None:
-    """Run prod qui couvre le plus des 11 de façon productive, puis le plus récent.
+    """Prod run that covers the most of the 11 productively, then the most recent.
 
-    Un rerun France (1 zone) ne doit pas masquer le run des 11 (FR+NZ+EG…).
+    A France rerun (1 zone) must not hide the run of the 11 (FR+NZ+EG…).
     """
     prod = await production_poe_runs(db)
     by_id = {_sid(d.get("_id")): d for d in prod if _sid(d.get("_id"))}
@@ -294,7 +293,7 @@ async def recommended_eez_run_id(db) -> str | None:
 
 
 async def best_productive_stable_zones(db) -> dict[int, dict]:
-    """Meilleure fiche productive de chaque polygone des 11 (max ports, puis run récent)."""
+    """Best productive card of each of the 11 polygons (max ports, then recent run)."""
     prod = await production_poe_runs(db)
     by_id = {_sid(d.get("_id")): d for d in prod if _sid(d.get("_id"))}
     if not by_id:
@@ -369,7 +368,7 @@ async def is_pre_gold_entity(db, kind: str, entity_id: str, doc: dict | None = N
 
 
 async def visible_eez_mrgids(db) -> set[int]:
-    """mrgid du run certifié Formalités (couche « Afficher la review »)."""
+    """mrgids of the certified Formalities run (“Show review” layer)."""
     return set(await published_snapshots(db))
 
 
@@ -391,7 +390,7 @@ async def published_snapshots(db) -> dict[int, dict]:
 
 async def visible_poe_port_docs(db, mrgid: int | None = None,
                                   country: str | None = None) -> list[dict]:
-    """Ports du run certifié Formalités — jamais `poe_ports` live."""
+    """Ports of the certified Formalities run — never live `poe_ports`."""
     snaps = await published_snapshots(db)
     if mrgid is not None:
         try:
@@ -412,7 +411,7 @@ async def visible_poe_port_docs(db, mrgid: int | None = None,
 
 
 async def filter_visible(db, kind: str, docs: list[dict], id_fn) -> list[dict]:
-    """Run certifié seulement : Gold explicite, jamais un pré-Gold silencieux."""
+    """Certified run only: explicit Gold, never a silent pre-Gold."""
     overrides = await overrides_map(db, kind)
     out: list[dict] = []
     for d in docs:

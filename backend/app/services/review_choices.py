@@ -1,9 +1,9 @@
-"""Choix keep/drop du réviseur — cinq files, même geste.
+"""Reviewer keep/drop choices — five queues, same gesture.
 
-Collection `review_choices` : ce que le réviseur coche sur la fiche union.
-N'écrit jamais `projects` / `poe_ports` / `eez_zones` / `marinas` /
-`capitaineries` / `amp_sites`. Les URLs sont stockées en listes
-(pas en clés Mongo — un `.` dans l'URL casserait un sous-document).
+Collection `review_choices`: what the reviewer ticks on the union card.
+Never writes `projects` / `poe_ports` / `eez_zones` / `marinas` /
+`capitaineries` / `amp_sites`. URLs are stored as lists
+(not as Mongo keys — a `.` in the URL would break a subdocument).
 """
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def empty_choices() -> dict:
 
 
 def public_choices(doc: dict | None) -> dict:
-    """Maps pour l'UI : td[url], ports[port_id], bu[port_id][url] → keep|drop."""
+    """Maps for the UI: td[url], ports[port_id], bu[port_id][url] → keep|drop."""
     if not doc:
         return empty_choices()
     td: dict[str, str] = {}
@@ -226,7 +226,7 @@ def _has_coords(doc: dict | None) -> bool:
 
 
 def site_ok(site: dict | None, *, title: str = "") -> bool:
-    """Lieu d'action visitable — pas snapped / fallback / HQ."""
+    """Visitable action place — not snapped / fallback / HQ."""
     if not site or not _has_coords(site):
         return False
     if site.get("snapped") or site.get("snapped_coastal") or site.get("hq_suspect"):
@@ -249,7 +249,7 @@ def site_ok(site: dict | None, *, title: str = "") -> bool:
 
 
 def project_sites(fiche: dict | None) -> list[dict]:
-    """sites[] du projet, ou un site synthétisé depuis le GPS de tête."""
+    """Project sites[], or a site synthesized from the head GPS."""
     fiche = fiche or {}
     sites = []
     for i, s in enumerate(fiche.get("sites") or []):
@@ -274,7 +274,7 @@ def project_sites(fiche: dict | None) -> list[dict]:
 
 
 def effective_site(site: dict, choices: dict | None) -> dict:
-    """GPS édité dans review_choices jusqu'au Gold."""
+    """GPS edited in review_choices until Gold."""
     out = dict(site or {})
     sid = _sid(out.get("site_id") or "main")
     xy = ((choices or {}).get("gps_edit") or {}).get(sid)
@@ -304,7 +304,7 @@ def project_urls(fiche: dict | None) -> list[str]:
 
 
 def comment_http_urls(comment: str | None) -> list[str]:
-    """URLs collées dans le commentaire reviewer (listes trouvées à la main)."""
+    """URLs pasted in the reviewer comment (lists found by hand)."""
     try:
         from app.services.amp import extract_urls
         return [u for u in extract_urls(comment) if str(u).startswith("http")]
@@ -314,7 +314,7 @@ def comment_http_urls(comment: str | None) -> list[str]:
 
 def kept_official_urls(fiche: dict | None, choices: dict | None,
                        comment: str | None = "") -> list[str]:
-    """TD cochées + URLs du commentaire — la vérité documentaire du polygone."""
+    """Ticked TD + comment URLs — the polygon's documentary truth."""
     fiche = fiche or {}
     td_map = (choices or {}).get("td") or {}
     seen: set[str] = set()
@@ -353,7 +353,7 @@ def dropped_official_urls(fiche: dict | None, choices: dict | None) -> list[str]
 
 def gold_ready(fiche: dict | None, choices: dict | None, kind: str | None = None,
                comment: str | None = "") -> bool:
-    """Gold s'allume seulement si le réviseur a tranché ce que le mode exige."""
+    """Gold lights only if the reviewer decided what the mode requires."""
     fiche = fiche or {}
     ch = choices or empty_choices()
     k = (kind or fiche.get("review_kind") or "").strip()
@@ -372,7 +372,7 @@ def gold_ready(fiche: dict | None, choices: dict | None, kind: str | None = None
 
 
 def _gold_ready_eez(fiche: dict, ch: dict, comment: str | None = "") -> bool:
-    """Au moins une liste officielle gardée (TD ou URL collée), ou UNCLOS / none."""
+    """At least one official list kept (TD or pasted URL), or UNCLOS / none."""
     if kept_official_urls(fiche, ch, comment):
         return True
     td_urls = [r.get("url") for r in (fiche.get("sources_td") or []) if r.get("url")]
@@ -412,7 +412,7 @@ def _gold_ready_capitainerie(fiche: dict, ch: dict) -> bool:
     for key in ("telephone", "canal_vhf"):
         if not fiche.get(key):
             continue
-        # Affiché → tranché (garder si sourcé, vider si inventé). Pas de Gold silencieux.
+        # Shown → decided (keep if sourced, clear if invented). No silent Gold.
         if fmap.get(key) not in ("keep", "drop"):
             return False
     return True
@@ -429,7 +429,7 @@ def _gold_ready_amp(fiche: dict, ch: dict) -> bool:
 
 
 def finalize_choices(fiche: dict, choices: dict) -> dict:
-    """Au Gold : TD non cochées → drop. Les ports ne sont plus un verdict Review."""
+    """At Gold: unticked TD → drop. Ports are no longer a Review verdict."""
     out = {
         "td": dict((choices or {}).get("td") or {}),
         "ports": dict((choices or {}).get("ports") or {}),
@@ -475,10 +475,10 @@ def build_gold_snapshot(fiche: dict, choices: dict, comment: str = "",
 
 
 def snapshot_ports_visible(snapshot: dict | None) -> bool:
-    """Points carte seulement après extraction depuis les docs gardés.
+    """Map points only after extraction from kept docs.
 
-    Ancien snapshot sans ``ports_status`` mais avec des ports : on les montre
-    (Gold d'avant le contrat documents).
+    Old snapshot without ``ports_status`` but with ports: show them
+    (Gold from before the documents contract).
     """
     if not snapshot:
         return False
@@ -632,7 +632,7 @@ def _snapshot_amp(fiche: dict, choices: dict, comment: str) -> dict:
 
 
 def snapshot_to_fiche(zone: dict, snapshot: dict) -> dict:
-    """Fiche carte / popup à partir du snapshot Gold (plus la v1)."""
+    """Map / popup card from the Gold snapshot (no longer v1)."""
     item = zone_to_item(zone)
     sources_td = list(snapshot.get("sources_td") or [])
     url_td = snapshot.get("url_td")
@@ -668,7 +668,7 @@ def snapshot_to_fiche(zone: dict, snapshot: dict) -> dict:
 
 
 def snapshot_port_docs(mrgid: int, snapshot: dict) -> list[dict]:
-    """Docs style poe_ports pour le GeoJSON carte — ids stables `gold:{mrgid}:{port_id}`."""
+    """poe_ports-style docs for the map GeoJSON — stable ids `gold:{mrgid}:{port_id}`."""
     docs: list[dict] = []
     iso2 = snapshot.get("iso2")
     zone_name = snapshot.get("zone_name") or snapshot.get("label")
@@ -696,7 +696,7 @@ def snapshot_port_docs(mrgid: int, snapshot: dict) -> list[dict]:
 
 
 def apply_snapshot_to_doc(kind: str, doc: dict, snapshot: dict | None) -> dict:
-    """Couche Map « Afficher la review » : le snapshot Gold recouvre le live."""
+    """Map “Show review” layer: the Gold snapshot overlays live."""
     if not snapshot or not isinstance(snapshot, dict):
         return doc
     out = dict(doc)
