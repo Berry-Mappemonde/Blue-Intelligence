@@ -2,7 +2,7 @@ import { useLang } from "../i18n/LangContext.jsx";
 import { parseDepartureUtc, splitDepartureUtc } from "../engine/voyageClock.js";
 
 export function DepartureField({ t0, startAt, onT0, onStartAt }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { date, time } = splitDepartureUtc(t0);
 
   const setDate = (nextDate) => onT0?.(parseDepartureUtc(nextDate, time));
@@ -18,6 +18,7 @@ export function DepartureField({ t0, startAt, onT0, onStartAt }) {
           <span className="text-[9px] text-slate-500">{t("departureDate")}</span>
           <input
             type="date"
+            lang={lang}
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="mt-0.5 w-full bg-slate-900/80 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white"
@@ -27,6 +28,7 @@ export function DepartureField({ t0, startAt, onT0, onStartAt }) {
           <span className="text-[9px] text-slate-500">{t("departureTimeUtc")}</span>
           <input
             type="time"
+            lang={lang}
             value={time}
             onChange={(e) => setTime(e.target.value)}
             className="mt-0.5 w-full bg-slate-900/80 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white"
