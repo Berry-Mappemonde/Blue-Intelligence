@@ -1,7 +1,7 @@
-"""Proposer Review AMP : quelle URL visite pour CE site_id.
+"""AMP Review Suggest: which visit URL for THIS site_id.
 
-Liste fermée (visit_candidates). Jamais manager_url. Jamais d'URL inventée.
-``no_visit`` = UNCLOS Formalités. N'écrit pas amp_sites ni Gold.
+Closed list (visit_candidates). Never manager_url. Never an invented URL.
+``no_visit`` = Formalities UNCLOS. Does not write amp_sites or Gold.
 """
 from __future__ import annotations
 

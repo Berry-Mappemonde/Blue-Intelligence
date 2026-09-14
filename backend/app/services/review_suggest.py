@@ -1,8 +1,8 @@
-"""Dispatch Proposer Review par kind.
+"""Dispatch Review Suggest by kind.
 
-Lot (scope=all) : eez, amp, project.
-Fiche seule : marina, capitainerie (interdit le lot OSM).
-N'écrit jamais Gold ni les collections live.
+Batch (scope=all): eez, amp, project.
+Single card: marina, harbormaster (OSM batch forbidden).
+Never writes Gold or live collections.
 """
 from __future__ import annotations
 

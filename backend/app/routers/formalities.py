@@ -1,5 +1,5 @@
 """
-app.routers.formalities — Endpoints FastAPI du mode Formalités [ZEE -> Ports d'Entrée].
+app.routers.formalities — Formalities mode FastAPI endpoints [EEZ -> Ports of Entry].
 """
 import asyncio
 import time
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api")
 REF_STATE = TaskState()
 GEN_LOCKS: set[int] = set()
 
-# Carte v1 : generate / generate-batch écrasaient poe_ports. 410, pas 404.
+# v1 map: generate / generate-batch used to overwrite poe_ports. 410, not 404.
 GENERATE_GONE = (
     "Retiré : Générer / generate-batch n'écrase plus poe_ports. "
     "Utiliser un run isolé (POST /api/poe/runs) ou l'enrichissement des graines."
@@ -28,11 +28,11 @@ GENERATE_GONE = (
 
 
 # ---------------------------------------------------------------------------
-# Rafraîchissement automatique (sans action manuelle)
-# - Zones générées re-vérifiées après REFRESH_AFTER_DAYS : les sources sont
-#   re-téléchargées et comparées par hash MD5 — la ré-extraction LLM+géocodage
-#   n'a lieu QUE si le contenu source a changé (géré dans poe.generate_zone_poe).
-# - Zones en erreur re-tentées (force) après ERROR_RETRY_DAYS.
+# Automatic refresh (no manual action)
+# - Generated zones re-checked after REFRESH_AFTER_DAYS: sources are
+#   re-downloaded and compared by MD5 hash — LLM+geocode re-extraction
+#   happens ONLY if the source content changed (handled in poe.generate_zone_poe).
+# - Error zones retried (force) after ERROR_RETRY_DAYS.
 # ---------------------------------------------------------------------------
 REFRESH_AFTER_DAYS = 30
 ERROR_RETRY_DAYS = 7
@@ -122,7 +122,7 @@ async def _auto_refresh_cycle():
 
 
 async def _auto_refresh_loop():
-    await asyncio.sleep(90)  # laisser l'app démarrer
+    await asyncio.sleep(90)  # let the app start
     while True:
         due = (AUTO_STATE["last_cycle_at"] or 0) + CYCLE_EVERY_H * 3600 <= time.time()
         busy = REF_STATE.running
@@ -164,7 +164,7 @@ async def poe_auto_refresh_status():
 
 
 # ---------------------------------------------------------------------------
-# Référentiel ZEE
+# EEZ referential
 # ---------------------------------------------------------------------------
 @router.post("/poe/referential/build", status_code=202)
 async def poe_referential_build():
@@ -267,7 +267,7 @@ async def poe_zones_geojson(visible: bool = False):
 
 @router.get("/poe/zones/{mrgid}")
 async def poe_zone_fiche(mrgid: int, visible: bool = False, review: bool = False):
-    """Fiche carte d'une ZEE : run unique par défaut ; Gold si Afficher la review."""
+    """Map card of an EEZ: unique run by default; Gold if Show review."""
     from app.services.poe_zone_fiche import build_map_zone_fiche, build_zone_fiche
 
     if visible or review:
@@ -282,7 +282,7 @@ async def poe_zone_fiche(mrgid: int, visible: bool = False, review: bool = False
 
 
 # ---------------------------------------------------------------------------
-# Génération PoE carte — retirée (ne plus upsert poe_ports)
+# Map PoE generation — removed (do not upsert poe_ports anymore)
 # ---------------------------------------------------------------------------
 @router.post("/poe/zones/{mrgid}/generate")
 async def poe_generate(mrgid: int, force: bool = False):
@@ -317,21 +317,21 @@ async def poe_claude_usage():
 
 
 # ---------------------------------------------------------------------------
-# Validation Bottom-Up des PoE existants via Overpass OSM (tâche de fond)
-# — enrichit osm_confidence / osm_tags SANS toucher nom, coordonnées ni texte.
+# Bottom-Up validation of existing PoEs via OSM Overpass (background task)
+# — enriches osm_confidence / osm_tags WITHOUT touching name, coordinates or text.
 # ---------------------------------------------------------------------------
 OSM_STATE = TaskState()
 
 
 class OsmValidateBody(BaseModel):
     only_unchecked: bool = True
-    limit: int = 0          # 0 = tous
+    limit: int = 0          # 0 = all
     radius_m: int = 3000
 
 
 def _start_osm_task(only_unchecked: bool, limit: int, radius_m: int, resumed: bool = False):
-    """Démarre la validation Overpass et persiste l'état du job dans db.jobs
-    (reprise automatique après kill/reload du serveur)."""
+    """Start Overpass validation and persist the job state in db.jobs
+    (automatic resume after server kill/reload)."""
     OSM_STATE.reset()
     OSM_STATE.running = True
     OSM_STATE.started_at = time.time()
@@ -352,7 +352,7 @@ def _start_osm_task(only_unchecked: bool, limit: int, radius_m: int, resumed: bo
                 "desired": False, "finished_at": poe.now_iso(),
                 "cancelled": OSM_STATE.cancel, "summary": OSM_STATE.summary}})
         except Exception as e:
-            # desired reste True en base → nouvelle tentative au prochain démarrage
+            # desired stays True in the DB → new attempt on next startup
             OSM_STATE.error = f"{type(e).__name__}: {e}"
             OSM_STATE.log(f"FATAL: {OSM_STATE.error} — reprise auto au prochain démarrage")
         finally:
@@ -363,8 +363,8 @@ def _start_osm_task(only_unchecked: bool, limit: int, radius_m: int, resumed: bo
 
 
 def schedule_job_resume(delay_s: float = 20.0):
-    """Reprise automatique des jobs de fond interrompus (appelé au startup).
-    Le délai évite de relancer pendant une rafale de hot-reloads."""
+    """Automatic resume of interrupted background jobs (called at startup).
+    The delay avoids restarting during a hot-reload burst."""
     async def _resume():
         await asyncio.sleep(delay_s)
         try:
@@ -420,7 +420,7 @@ async def poe_validate_osm_cancel():
 
 
 # ---------------------------------------------------------------------------
-# Qualification juridique UNCLOS des ZEE sans PoE (logique métier, instantané)
+# UNCLOS legal qualification of EEZs without a PoE (business logic, instant)
 # ---------------------------------------------------------------------------
 @router.post("/poe/qualify-unclos")
 async def poe_qualify_unclos():

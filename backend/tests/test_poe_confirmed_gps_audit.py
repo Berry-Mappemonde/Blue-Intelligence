@@ -1,4 +1,4 @@
-"""Audit GPS confirmed — Tanjung Pinang, St-Nazaire, Sidney ; pas de merge BBT."""
+"""Confirmed GPS audit — Tanjung Pinang, St-Nazaire, Sidney; no BBT merge."""
 from __future__ import annotations
 
 from shapely.geometry import box
@@ -37,7 +37,7 @@ def _france_atlantic_geom():
 
 
 def _usa_geom():
-    # ZEE USA : les deux côtes (Astoria OR in_eez, Astoria NY aussi).
+    # USA EEZ: both coasts (Astoria OR in_eez, Astoria NY too).
     west = box(-125.5, 32.0, -116.5, 49.0)
     east = box(-80.0, 32.0, -70.0, 45.0)
     return {8456: unary_union([west, east])}
@@ -179,7 +179,7 @@ def test_tanjung_pinang_flags_and_suggests_bintan_not_bbt():
     assert REASON_INLAND_FAR in pinang["reasons"] or REASON_NOMINATIM_INLAND in pinang["reasons"]
     assert pinang["suggested_lat"] is not None
     assert 1.0 <= pinang["suggested_lat"] <= 1.2
-    # Pas le GPS de Bandar Bintan Telani.
+    # Not the Bandar Bintan Telani GPS.
     assert abs(pinang["suggested_lat"] - 1.1605006) > 0.01
     assert abs(pinang["suggested_lon"] - 104.3201677) > 0.01
     assert pinang["will_correct"] is True
@@ -210,7 +210,7 @@ def test_tanjung_pinang_persist_corrects_lat_positive_no_merge():
     assert db.poe_audit_log.inserted
     assert db.poe_audit_log.inserted[0]["action"] == "gps_audit_correct"
     assert abs(pinang["lat"] - BINTAN_CLUSTER[0]) < 1e-6
-    # Relance : le GPS corrigé n'est plus flaggé, le statut corrected reste.
+    # Rerun: the corrected GPS is no longer flagged, corrected status stays.
     seeds2 = list(db.poe_seed_ports.docs.values())
     rep2 = audit_confirmed_seeds(seeds2, geoms=geoms, listing_ports=listing)
     assert TANJUNG_PINANG_KEY not in {s["key"] for s in rep2["flags"]}
@@ -235,7 +235,7 @@ def test_parnu_prefers_same_name_in_eez_over_port_of_variant():
             {"origin": "run:b", "name": "Port of Pärnu", "lat": 58.1412071, "lon": 24.0213604},
         ],
     }]
-    # Côte ouest estonienne (les deux obs y sont) ; le GPS v1 est inland est.
+    # Estonian west coast (both obs are there); the v1 GPS is inland east.
     geoms = {5675: box(23.5, 57.9, 24.8, 58.6)}
     rep = audit_confirmed_seeds(seeds, geoms=geoms, listing_ports=[])
     assert rep["n_flagged"] == 1
@@ -419,7 +419,7 @@ def test_melilla_keep_not_flagged():
         "lat": 35.2909189, "lon": -2.928011,
         "verify_verdict": "confirmed", "seed_sources": ["v1", "listing"],
     }]
-    # Polygone trop à l'ouest : le GPS du quai paraît inland (faux positif VLIZ).
+    # Polygon too far west: the quay GPS looks inland (VLIZ false positive).
     geoms = {5693: box(-5.2, 35.8, -5.0, 36.2)}
     rep = audit_confirmed_seeds(seeds, geoms=geoms, listing_ports=[])
     assert "5693:puertodemelilla" not in {s["key"] for s in rep["flags"]}
@@ -450,13 +450,13 @@ def test_reviewed_savannah_persists_georgia_not_cluster():
          "mrgid": 8456, "group": "East Coast (USA)"},
     ]
     geoms = _usa_geom()
-    # Finger Lakes hors du box east 32–45N / 80–70W → inland.
+    # Finger Lakes outside the east box 32–45N / 80–70W → inland.
     geoms = {8456: box(-81.5, 31.5, -70.0, 41.0)}
     rep = audit_confirmed_seeds(seeds, geoms=geoms, listing_ports=listing)
     sav = next(s for s in rep["flags"] if s["key"] == "8456:savannah")
     assert sav["will_correct"] is True
     assert abs(sav["correction"]["lat"] - 32.0809) < 1e-4
-    # Pas le centroïde Delaware du groupe.
+    # Not the group's Delaware centroid.
     assert sav["correction"]["lat"] < 35
     db = _DB(seeds, [], n_ports=1280)
     persist_gps_audit(db, rep, geoms=geoms, seeds=seeds)

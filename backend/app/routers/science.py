@@ -1,10 +1,10 @@
-"""app.routers.science — mode Science : jeux de données océanographiques
-(Sextant/SISMER, ODATIS, EDMED SeaDataNet) et flotteurs Argo (Coriolis).
+"""app.routers.science — Science mode: oceanographic datasets
+(Sextant/SISMER, ODATIS, EDMED SeaDataNet) and Argo floats (Coriolis).
 
-Moisson par API structurées uniquement (JSON GeoNetwork, SPARQL, ERDDAP) —
-pas de LLM, pas de scraping. Collection live ``science_items`` en upsert
-non destructif ; chaque moisson est consignée dans ``science_runs``
-(snapshot de règles compris) pour l'onglet Runs de la console.
+Harvest via structured APIs only (GeoNetwork JSON, SPARQL, ERDDAP) —
+no LLM, no scraping. Live collection ``science_items`` with non-destructive
+upsert; each harvest is recorded in ``science_runs``
+(rules snapshot included) for the console Runs tab.
 """
 import asyncio
 import time
@@ -64,7 +64,7 @@ async def science_count():
 
 @router.get("/depth")
 async def approach_depth(lat: float = Query(...), lon: float = Query(...)):
-    """Profondeur d'approche (DTM EMODnet) en un point, avec cache Mongo."""
+    """Approach depth (EMODnet DTM) at a point, with Mongo cache."""
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         raise HTTPException(400, "lat/lon out of range")
     from app.services.depth_sample import sample_depth

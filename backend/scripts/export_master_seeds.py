@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Construit backend/data/master_seeds.json (CDC Projets C5).
+"""Build backend/data/master_seeds.json (Projects CDC C5).
 
-Préférer `enrich_master_seeds.py` : il classe homes / listes / file Complet.
-Cet export appelle le même enrichissement (plus le vote « domaine le plus
-fréquent » qui collait les organismes sur Decade / Surfrider).
+Prefer `enrich_master_seeds.py`: it classifies homes / lists / Complet queue.
+This export calls the same enrichment (plus the “most frequent
+domain” vote that glued organizations onto Decade / Surfrider).
 
-Usage :
+Usage:
     python3 scripts/enrich_master_seeds.py --from-geojson ../seed/projects.geojson
     python3 scripts/export_master_seeds.py --from-geojson ../seed/projects.geojson
 """
@@ -38,7 +38,7 @@ def projects_from_mongo() -> list[dict]:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Export MasterSeeds (~861 financeurs v1 + 21 curés)")
+    p = argparse.ArgumentParser(description="Export MasterSeeds (~861 v1 funders + 21 curated)")
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--from-geojson", type=Path, help="GeoJSON v1 (seed/projects.geojson)")
     src.add_argument("--from-api", action="store_true", help="GET https://blueintelligence.online/api/projects")

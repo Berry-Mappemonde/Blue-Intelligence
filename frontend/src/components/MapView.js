@@ -23,7 +23,7 @@ import { attachDepthOnPopup } from "./map/depthRow";
 import { applyPenRadii, makePointGroup, POPUP_OPTS } from "./map/points";
 
 /**
- * MapView — carte Leaflet persistante, pastilles canvas, sans cluster.
+ * MapView — persistent Leaflet map, canvas dots, no clustering.
  */
 export default function MapView({
   mode = "projects",

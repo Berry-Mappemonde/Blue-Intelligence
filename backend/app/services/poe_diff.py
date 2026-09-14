@@ -1,16 +1,15 @@
-"""
-poe_diff — Comparaison port par port entre deux jeux de PoE (v1 ↔ run).
+"""poe_diff — Port-by-port comparison of two PoE sets (v1 ↔ run).
 
-Appariement par zone (mrgid) :
-  1. clé de dédup exacte (mrgid + nom normalisé) ;
-  2. sinon fuzzy spatio-textuel de dedup_core (similarité > 60 % + Haversine
-     < 500 m, ou similarité > 90 % seule).
+Matching by zone (mrgid):
+  1. exact dedupe key (mrgid + normalized name);
+  2. else dedup_core spatial-text fuzzy (similarity > 60% + Haversine
+     < 500 m, or similarity > 90% alone).
 
-Classification des ports appariés (flags cumulables) :
-  - renamed   : le nom affiché a changé (normalisation différente) ;
-  - moved     : les deux sont géocodés et distants de > moved_km ;
-  - resourced : l'ensemble des domaines sources a changé.
-Non appariés : added (dans le run seulement) / removed (dans la base seulement).
+Classification of matched ports (stackable flags):
+  - renamed   : displayed name changed (different normalization);
+  - moved     : both geocoded and more than moved_km apart;
+  - resourced : the set of source domains changed.
+Unmatched: added (in the run only) / removed (in the database only).
 """
 from app.core.dedup import find_duplicate_in_list, normalize_name
 from app.core.geo import haversine_km
@@ -44,8 +43,9 @@ def _domains(urls: list) -> set:
 
 def diff_ports(baseline: list[dict], candidate: list[dict],
                moved_km: float = MOVED_KM_DEFAULT) -> dict:
-    """Diff port par port. baseline = v1 (poe_ports), candidate = ports du run.
-    Retourne {summary, zones, matched, added, removed}."""
+    """Port-by-port diff. baseline = v1 (poe_ports), candidate = run ports.
+    Return {summary, zones, matched, added, removed}.
+    """
     base_by_zone: dict[int, list[dict]] = {}
     for p in baseline:
         base_by_zone.setdefault(int(p.get("mrgid") or 0), []).append(p)
@@ -125,9 +125,10 @@ def diff_ports(baseline: list[dict], candidate: list[dict],
 async def diff_run_vs_baseline(db, run_id: str, ports_coll: str = "poe_run_ports",
                                moved_km: float = MOVED_KM_DEFAULT,
                                restrict_to_run_zones: bool = True) -> dict:
-    """Diff de l'espace d'un run contre la base v1 (poe_ports).
-    restrict_to_run_zones : ne compare que les zones effectivement générées par
-    le run (équitable pour les runs partiels)."""
+    """Diff a run space against the v1 database (poe_ports).
+    restrict_to_run_zones: compare only zones the run actually generated
+    (fair for partial runs).
+    """
     candidate = await db[ports_coll].find({"run_id": run_id}).to_list(20000)
     run_mrgids = {z["mrgid"] async for z in db.poe_run_zones.find(
         {"run_id": run_id}, {"mrgid": 1})}

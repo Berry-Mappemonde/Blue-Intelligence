@@ -1,6 +1,6 @@
-"""Re-géocode inland_far / ambiguous. Pas les confirmed ok, pas seeds/build.
+"""Re-geocode inland_far / ambiguous. Not confirmed-ok, no seeds/build.
 
-  python3 scripts/regeocode_inland_far.py
+python3 scripts/regeocode_inland_far.py
 """
 from __future__ import annotations
 

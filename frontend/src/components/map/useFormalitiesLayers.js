@@ -5,7 +5,7 @@ import { escH, flagEmoji, zoneStyle } from "./constants";
 import { circleOpts, POPUP_OPTS } from "./points";
 
 /**
- * Couches Formalités : choroplèthe ZEE + pastilles Ports d'entrée (canvas).
+ * Formalities layers: EEZ choropleth + Ports of Entry dots (canvas).
  */
 export default function useFormalitiesLayers({
   mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,

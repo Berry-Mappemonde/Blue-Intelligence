@@ -53,8 +53,8 @@ function matchesLfp(feat, lfpFilter) {
 }
 
 /**
- * Couche AMP : polygones + pastilles pour les géométries Point.
- * Le filtre LFP s'applique à la carte, pas seulement à la liste.
+ * MPA layer: polygons + dots for Point geometries.
+ * The LFP filter applies to the map, not only to the list.
  */
 export default function useAmpLayer({
   mapObj, ampLayerRef, ampLayersById, mode, tRef, onSites, flyToAmp,

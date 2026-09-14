@@ -2,8 +2,8 @@ import { ZONE_COLORS, escH, flagEmoji } from "./constants";
 import { zoneDisplayName, zoneSubtitle } from "./zoneLabel";
 
 /**
- * Popup HTML d'une fiche polygone VLIZ : URLs TD gardées,
- * liste PoE, URL BU par port. Pas de bouton Générer.
+ * HTML popup for a VLIZ polygon sheet: kept TD URLs,
+ * PoE list, BU URL per port. No Generate button.
  */
 
 function _tdUrl(fiche, z) {

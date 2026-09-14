@@ -1,9 +1,8 @@
-"""
-Tests des jobs longs non-destructifs :
-- POST /api/ml/anomalies/scan  (flags spatial_anomaly uniquement)
-- POST /api/poe/validate-osm   (flags osm_* uniquement)
-Verifie qu'AUCUN champ name/lat/lon des poe_ports n'est modifie et que les
-comptes globaux (projects / poe_ports) ne diminuent jamais.
+"""Tests of long non-destructive jobs:
+- POST /api/ml/anomalies/scan  (spatial_anomaly flags only)
+- POST /api/poe/validate-osm   (osm_* flags only)
+Verify that NO poe_ports name/lat/lon field is modified and that
+global counts (projects / poe_ports) never decrease.
 """
 from pathlib import Path
 import os
@@ -72,7 +71,7 @@ class TestAnomalyScan:
         assert mongo.projects.count_documents({}) >= projects_before
         changed = {k: (before[k], after[k]) for k in before if k in after and before[k] != after[k]}
         assert not changed, f"name/lat/lon modified for {len(changed)} ports: {list(changed.items())[:3]}"
-        # les flags ont bien ete ajoutes
+        # flags were indeed added
         assert mongo.poe_ports.count_documents({"anomaly_checked_at": {"$exists": True}}) >= 1100
         assert mongo.poe_ports.count_documents({"spatial_anomaly": True}) > 0
 
@@ -101,8 +100,8 @@ class TestAnomalyScan:
 class TestOsmValidate:
     def test_validate_osm_non_destructive(self, api, mongo):
         before = snapshot(mongo)
-        # only_unchecked=False : robuste même quand la base a déjà été
-        # entièrement validée (revalide 3 ports — opération non destructive).
+        # only_unchecked=False: robust even when the database has already been
+        # fully validated (revalidates 3 ports — non-destructive).
         r = api.post(f"{BASE_URL}/api/poe/validate-osm",
                      json={"limit": 3, "only_unchecked": False}, timeout=60)
         assert r.status_code == 202, r.text[:300]

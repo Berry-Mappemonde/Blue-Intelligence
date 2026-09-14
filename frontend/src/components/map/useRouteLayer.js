@@ -8,9 +8,9 @@ import {
 import { POPUP_OPTS } from "./points";
 
 /**
- * Couche route Berry-Mappemonde (statique, officielle) : polylignes à double
- * trait (casing sombre + trait clair) dans le pane "route" (sous les clusters),
- * points intermédiaires muets et escales cliquables.
+ * Berry-Mappemonde route layer (static, official): double-stroke polylines
+ * (dark casing + light stroke) in the "route" pane (under clusters),
+ * silent intermediate points and clickable stopovers.
  */
 export default function useRouteLayer(mapObj, tRef, t) {
   const routeLayerRef = useRef(null);

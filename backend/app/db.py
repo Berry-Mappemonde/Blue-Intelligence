@@ -1,12 +1,12 @@
-"""app.db — Client MongoDB (Motor) et accès aux réglages persistés."""
+"""app.db — MongoDB client (Motor) and persisted settings access."""
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.config import DB_NAME, DEFAULT_SETTINGS, MONGO_URL
 
-# Timeouts explicites : sans socketTimeoutMS un upsert Atlas peut rester
-# bloqué indéfiniment et geler le dump mondial (event loop uvicorn unique).
-# 300 s (et non 60 s) : le débit Atlas M0 est throttlé — lire les ~32k
-# marinas live prend ~150 s, un batch peut dépasser 60 s.
+# Explicit timeouts: without socketTimeoutMS an Atlas upsert can stay
+# blocked indefinitely and freeze the world dump (single uvicorn event loop).
+# 300 s (not 60 s): Atlas M0 throughput is throttled — reading the ~32k
+# live marinas takes ~150 s, a batch can exceed 60 s.
 client = AsyncIOMotorClient(
     MONGO_URL,
     serverSelectionTimeoutMS=20_000,

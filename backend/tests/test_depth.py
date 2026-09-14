@@ -1,4 +1,4 @@
-"""Profondeur d'approche EMODnet — parseur + cache (aucun réseau)."""
+"""EMODnet approach depth — parser + cache (no network)."""
 from __future__ import annotations
 
 import asyncio

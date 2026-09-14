@@ -1,4 +1,4 @@
-"""Dump mondial mouillages — tuiles, reprise, upsert dedup_key, pas de purge."""
+"""World anchorage dump — tiles, resume, upsert dedup_key, no purge."""
 from __future__ import annotations
 
 import asyncio
@@ -59,7 +59,7 @@ def _elements_for(tile):
             "type": "node", "id": 21, "lat": -22.9, "lon": -43.1,
             "tags": {"natural": "bay", "name": "Baía de Guanabara"},
         },
-        # Baie anonyme = bruit, elle doit être écartée.
+        # Anonymous bay = noise, it must be dropped.
         {"type": "node", "id": 22, "lat": -23.0, "lon": -43.2, "tags": {"natural": "bay"}},
     ]
 
@@ -92,15 +92,15 @@ def test_world_anchorages_resumable_and_no_purge():
         fetch_tile=fetch,
     ))
     assert summary1["world"] is True
-    assert summary1["inserted"] == 2          # la baie anonyme est écartée
+    assert summary1["inserted"] == 2          # the anonymous bay is dropped
     assert summary1["tiles_skipped"] == 0
-    assert any(d.get("dedup_key") == "old-key" for d in coll.docs)  # pas de purge
+    assert any(d.get("dedup_key") == "old-key" for d in coll.docs)  # no purge
     named = [d for d in coll.docs if d.get("name") == "Baie de Papeete"]
     assert named and named[0]["anchorage_type"] == "anchorage"
-    assert named[0]["priority"] in (1, 2, 3)   # priorité route conservée
+    assert named[0]["priority"] in (1, 2, 3)   # route priority kept
     first_calls = calls["n"]
 
-    # Reprise : les tuiles faites sont sautées, rien n'est re-fetché.
+    # Resume: done tiles are skipped, nothing is re-fetched.
     state2 = BuildState()
     summary2 = asyncio.run(ab.build_world_anchorages(
         anchorages_coll=coll,

@@ -5,8 +5,8 @@ import { loadGl } from "./useNauticalBasemap";
 import { absoluteOverlayUrl, overlayPmtilesHref, overlayStyle, overlayUrlFromEnv } from "./overlaySpec";
 
 /**
- * Overlay tippecanoe hebdomadaire — second contexte GL sur le pane
- * `bi-overlay` (270), sous la route Leaflet.
+ * Weekly tippecanoe overlay — second GL context on the
+ * `bi-overlay` pane (270), under the Leaflet route.
  */
 export default function useBiOverlay({ mapObj, enabled, url }) {
   const glRef = useRef(null);
@@ -58,6 +58,6 @@ function dropOverlay(map, glRef) {
   if (!glRef.current) return;
   try {
     if (map && map.hasLayer(glRef.current)) map.removeLayer(glRef.current);
-  } catch (_) { /* déjà détruit */ }
+  } catch (_) { /* already destroyed */ }
   glRef.current = null;
 }

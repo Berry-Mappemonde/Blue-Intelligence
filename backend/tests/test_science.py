@@ -64,7 +64,7 @@ def test_bbox_from_geom_antimeridian():
                                                 [-170.0, 10.0], [170.0, 10.0], [170.0, -10.0]]]}
     w, s, e, n = sb.bbox_from_geom(geom)
     assert (s, n) == (-10.0, 10.0)
-    assert e - w == 20.0  # 20° de large, pas 340°
+    assert e - w == 20.0  # 20° wide, not 340°
 
 
 def test_bbox_from_geom_invalid():
@@ -277,11 +277,11 @@ def test_upsert_science_non_destructive():
 
 
 def test_upsert_merges_sextant_odatis_twins():
-    """Même uuid GeoNetwork via Sextant puis ODATIS → une seule fiche.
+    """Same GeoNetwork uuid via Sextant then ODATIS → one card.
 
-    ODATIS est un sous-portail de Sextant : la fiche commune garde l'identité
-    (_id, source, url) du portail moissonné en premier, mais son contenu est
-    bien rafraîchi.
+    ODATIS is a Sextant sub-portal: the shared card keeps the identity
+    (_id, source, url) of the first-harvested portal, but its content is
+    still refreshed.
     """
     async def run():
         coll = _FakeColl()
@@ -296,11 +296,11 @@ def test_upsert_merges_sextant_odatis_twins():
         kept = coll.docs[0]
         assert kept["_id"] == "sextant:abc-123"
         assert kept["source"] == "sextant"
-        assert kept["url"] == sx["url"]           # lien portail d'origine conservé
-        assert kept["name"] == "Titre ODATIS"     # contenu rafraîchi
+        assert kept["url"] == sx["url"]           # original portal link kept
+        assert kept["name"] == "Titre ODATIS"     # content refreshed
         assert kept["fetched_at"] == "2026-09-10T01:00:00Z"
 
-        # L'ordre inverse fonctionne aussi (base vide, ODATIS seul coché).
+        # Reverse order also works (empty db, ODATIS alone checked).
         coll2 = _FakeColl()
         assert await sb.upsert_science(coll2, od, "2026-09-10T00:00:00Z") == "inserted"
         assert await sb.upsert_science(coll2, sx, "2026-09-10T01:00:00Z") == "updated"
@@ -322,7 +322,7 @@ def test_to_slim_geojson_filters_unlocated():
 
 
 # ---------------------------------------------------------------------------
-# Orchestrateur (fetchers injectés — aucun réseau)
+# Orchestrator (injected fetchers — no network)
 # ---------------------------------------------------------------------------
 
 def test_build_science_all_sources():
@@ -360,7 +360,7 @@ def test_build_science_all_sources():
         assert {"sextant:sextant-1", "odatis:odatis-1", "edmed:6944",
                 "argo:1901514", "argo:6904240", "csr:21042655"} <= ids
 
-        # Relance : tout passe en update, pas de doublon (no purge / upsert).
+        # Rerun: everything is an update, no duplicate (no purge / upsert).
         state2 = BuildState()
         summary2 = await sb.build_science(
             coll=coll, state=state2,
@@ -399,7 +399,7 @@ def test_build_science_source_error_does_not_stop_others():
 
 
 # ---------------------------------------------------------------------------
-# Règles — mode science enregistré au catalogue
+# Rules — science mode registered in the catalogue
 # ---------------------------------------------------------------------------
 
 def test_science_rules_registered():

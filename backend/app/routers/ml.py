@@ -1,5 +1,5 @@
 """
-app.routers.ml — Endpoints FastAPI du Bootstrapping ML (weak supervision, anomalies, NER).
+app.routers.ml — FastAPI endpoints for ML bootstrapping (weak supervision, anomalies, NER).
 """
 import asyncio
 import time
@@ -67,7 +67,7 @@ async def gatekeeper_predict(body: dict = Body(...)):
     return pred
 
 
-# --- Anomalies spatiales des PoE --------------------------------------------
+# --- Spatial PoE anomalies --------------------------------------------------
 @router.post("/anomalies/scan", status_code=202)
 async def anomalies_scan(body: dict | None = Body(default=None)):
     if ANOM_STATE.running:
@@ -105,13 +105,13 @@ async def anomalies_report():
     return json.loads(ml_core.ANOMALY_REPORT_FILE.read_text())
 
 
-# --- Dataset NER (préparation spaCy) -----------------------------------------
+# --- NER dataset (spaCy prep) ------------------------------------------------
 @router.post("/ner/export-dataset")
 async def ner_export():
     return await ml_core.export_ner_dataset(_db)
 
 
-# --- Entraînement + extraction NER spaCy locale --------------------------------
+# --- Local spaCy NER training + extraction -------------------------------------
 @router.post("/train/ner", status_code=202)
 async def train_ner(body: dict | None = Body(default=None)):
     if NER_STATE.running:
@@ -138,7 +138,7 @@ async def train_ner(body: dict | None = Body(default=None)):
 @router.get("/train/ner/status")
 async def train_ner_status():
     st = NER_STATE.status()
-    # Le statut survit aux reloads : métriques du modèle persistées sur disque
+    # Status survives reloads: model metrics persisted on disk
     if st.get("summary") is None and ml_core.NER_METRICS_FILE.exists():
         import json
         try:
@@ -159,7 +159,7 @@ async def ner_extract(body: dict = Body(...)):
     return {"entities": entities, "count": len(entities)}
 
 
-# --- Classifieur SERP (priorisation des liens avant téléchargement) -----------
+# --- SERP classifier (rank links before download) -----------------------------
 @router.post("/train/serp", status_code=202)
 async def train_serp():
     if SERP_STATE.running:

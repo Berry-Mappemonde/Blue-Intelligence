@@ -1,4 +1,4 @@
-"""Score d'homonymes au géocodage — pas de réseau."""
+"""Homonym score at geocoding — no network."""
 from shapely.geometry import box
 from shapely.ops import unary_union
 
@@ -119,8 +119,8 @@ def test_needs_geocode_inland_far_probable_and_name_only():
 
 
 def test_scorer_keeps_seville_river_over_roses():
-    # Atlantique (embouchure) + sliver Méditerranée : Roses est in_eez harbour,
-    # Séville inland ~50 km. On garde le toponyme, pas Roses.
+    # Atlantic (mouth) + Mediterranean sliver: Roses is in_eez harbour,
+    # Seville inland ~50 km. Keep the toponym, not Roses.
     atlantic = box(-7.0, 36.55, -6.15, 36.95)
     med = box(2.8, 42.05, 3.4, 42.5)
     geom = unary_union([atlantic, med])

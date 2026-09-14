@@ -3,7 +3,7 @@ import L from "leaflet";
 import { circleOpts, POPUP_OPTS } from "./points";
 
 /**
- * Couche Projets : pastilles canvas, filtrées, sans plafond ni cluster.
+ * Projects layer: filtered canvas dots, no cap and no clustering.
  */
 export default function useProjectsLayer({
   mapObj, clusterRef, zoomingRef, pendingRef, markersById,

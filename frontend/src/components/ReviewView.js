@@ -155,7 +155,7 @@ export default function ReviewView({ t, mode, onMapDirty }) {
         pendingIndexRef.current = 0;
         setIndex(items.length ? Math.min(Math.max(want, 0), items.length - 1) : 0);
       } catch (e) {
-        /* Garde la file précédente : Atlas peut dépasser le timeout. */
+        /* Keep the previous queue: Atlas can exceed the timeout. */
       } finally {
         if (!cancelled) setQueueLoading(false);
       }

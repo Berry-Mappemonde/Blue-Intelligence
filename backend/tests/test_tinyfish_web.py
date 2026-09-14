@@ -1,4 +1,4 @@
-"""Client TinyFish Search / Fetch — httpx mocké, aucun réseau."""
+"""TinyFish Search / Fetch client — mocked httpx, no network."""
 import asyncio
 import json
 from pathlib import Path

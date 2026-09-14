@@ -1,4 +1,4 @@
-"""Pistes IBTrACS v04r01 (since 1980) — compteur chiffré, pas une « saison » LLM."""
+"""IBTrACS v04r01 tracks (since 1980) — numeric counter, not an LLM "season"."""
 from __future__ import annotations
 
 import json
@@ -143,7 +143,7 @@ def _in_dayrange(storm: dict, month: int, day: int | None, dayrange: int) -> boo
         e = datetime.fromisoformat(str(end)[:10]).date()
     except ValueError:
         return month in (storm.get("months") or [])
-    # Fenêtre autour du jour calendaire, année de la tempête.
+    # Window around the calendar day, storm year.
     year = s.year
     try:
         center = date(year, month, min(day, 28 if month == 2 else 30 if month in (4, 6, 9, 11) else 31))
@@ -158,7 +158,7 @@ def crossings(
     month: int, *, day: int | None = None, dayrange: int | None = None,
     radius_nm: float | None = None,
 ) -> dict:
-    """Esprit OpenCPN ``CycloneTrackCrossings`` : entier + liste, jamais un texte."""
+    """OpenCPN ``CycloneTrackCrossings`` spirit: integer + list, never prose."""
     month = parse_month(month)
     window = int(dayrange if dayrange is not None else rule("climatology.cyclone_dayrange", 21))
     radius = float(radius_nm if radius_nm is not None else rule("climatology.cyclone_radius_nm", 120))
@@ -177,7 +177,7 @@ def crossings(
                 near = True
                 break
         if not near and len(coords) >= 2:
-            # Segment track vs jambe (échantillons)
+            # Track segment vs leg (samples)
             for a, b in zip(coords, coords[1:]):
                 if abs(a[0] - b[0]) > 180:
                     continue

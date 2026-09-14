@@ -1,8 +1,8 @@
-"""Juge de documents Review Formalités.
+"""Formalities Review document judge.
 
-Local (bonus URL + catalogue) ∥ cascade NIM → OpenRouter → Claude.
-Les captures pleine page / pages PDF partent au LLM (vision si le backend suit).
-N'écrit jamais review_gold ni poe_ports.
+Local (URL bonus + catalogue) ∥ NIM → OpenRouter → Claude cascade.
+Full-page captures / PDF pages go to the LLM (vision if the backend follows).
+Never writes review_gold or poe_ports.
 """
 from __future__ import annotations
 
@@ -14,10 +14,12 @@ from app.core.extract import (
     extract_structured_ports,
     looks_like_port_catalog,
     pdf_page_jpegs,
+    should_skip_screenshot,
 )
 from app.core.judge import complete_json_cascade
 from app.services.poe_pipeline import list_url_bonus
 from app.services.poe_zone_label import search_polygon_name
+from app.services.territory_ref import td_url_fits_polygon
 from app.services.review_choices import (
     empty_choices,
     gold_ready,
@@ -79,7 +81,7 @@ def rank_td_urls(fiche: dict | None) -> list[str]:
     rows = []
     for rec in (fiche or {}).get("sources_td") or []:
         url = rec.get("url")
-        if url:
+        if url and td_url_fits_polygon(url, fiche):
             rows.append((list_url_bonus(url) + (0.4 if rec.get("official") else 0), url))
     rows.sort(key=lambda x: x[0], reverse=True)
     seen, out = set(), []
@@ -105,13 +107,17 @@ async def _evidence_for(url: str, log) -> dict:
         except Exception:
             images = []
     elif not page.get("is_pdf"):
-        try:
-            from app.core.render import render_screenshot
-            shot = await render_screenshot(url, log=log)
-            if shot:
-                images = [shot]
-        except Exception:
-            images = []
+        skip = should_skip_screenshot(url, page)
+        if skip:
+            log(f"screenshot {url[:70]}: sauté ({skip})")
+        else:
+            try:
+                from app.core.render import render_screenshot
+                shot = await render_screenshot(url, log=log)
+                if shot:
+                    images = [shot]
+            except Exception:
+                images = []
     catalog = extract_structured_ports(text) if text else []
     return {
         "url": url,
@@ -128,7 +134,7 @@ async def _evidence_for(url: str, log) -> dict:
 
 def local_pick(evidences: list[dict],
                token_scores: dict[str, float] | None = None) -> dict:
-    """Heuristique locale : catalogue / bonus d'URL. Tourne en parallèle du LLM."""
+    """Local heuristic: catalogue / URL bonus. Runs in parallel with the LLM."""
     keep, drop = [], []
     reasons = []
     for ev in evidences:
@@ -269,7 +275,7 @@ async def suggest_eez_documents(db, entity_id: str, *,
                                 settings: dict | None = None,
                                 log=None,
                                 lessons: list[dict] | None = None) -> dict:
-    """Pré-remplit keep/drop + commentaire. Pas de Gold."""
+    """Pre-fill keep/drop + comment. No Gold."""
     log = log or (lambda m: None)
     eid = _sid(entity_id)
     packed = await get_fiche(db, "eez", PUBLISHED_RUN, eid)
@@ -299,10 +305,16 @@ async def suggest_eez_documents(db, entity_id: str, *,
         from app.services.review_lessons import load_lessons
         lessons = await load_lessons(db)
     scores = token_scores_from_lessons(lessons)
-    evidences = await asyncio.gather(*[_evidence_for(u, log) for u in urls])
-    local_task = asyncio.to_thread(local_pick, list(evidences), scores)
-    llm_task = _llm_pick(fiche, list(evidences), settings, log, lessons=lessons)
-    local, llm = await asyncio.gather(local_task, llm_task)
+    evidences: list[dict] = []
+    try:
+        for url in urls:
+            evidences.append(await _evidence_for(url, log))
+        local_task = asyncio.to_thread(local_pick, list(evidences), scores)
+        llm_task = _llm_pick(fiche, list(evidences), settings, log, lessons=lessons)
+        local, llm = await asyncio.gather(local_task, llm_task)
+    finally:
+        from app.core.render import shutdown_render
+        await shutdown_render()
     picked = merge_picks(local, llm, {ev["url"] for ev in evidences})
 
     public = empty_choices()
@@ -332,7 +344,7 @@ async def suggest_eez_documents(db, entity_id: str, *,
 
 
 async def all_eez_ids(db) -> list[str]:
-    """Toutes les fiches Formalités (union publiée), pas le filtre Stable / pré-Gold."""
+    """All Formalities cards (published union), not the Stable / pre-Gold filter."""
     packed = await list_queue(
         db, "eez", PUBLISHED_RUN, offset=0, limit=2000,
         q="", pre_gold=False, stable=False)
@@ -346,7 +358,7 @@ async def all_eez_ids(db) -> list[str]:
 
 
 async def run_suggest_batch(db, state, *, settings: dict | None = None) -> dict:
-    """Lot Proposer : une proposition par polygone. Écrase cases + commentaires."""
+    """Suggest batch: one suggestion per polygon. Overwrites ticks + comments."""
     log = state.log if hasattr(state, "log") else (lambda m: None)
     ids = await all_eez_ids(db)
     state.total = len(ids)

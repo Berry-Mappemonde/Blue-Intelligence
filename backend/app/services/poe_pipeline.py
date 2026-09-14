@@ -1,24 +1,24 @@
 """
-poe.py — Pipeline souverain [ZEE / Pays] -> [Ports d'Entrée plaisance].
+poe.py — Sovereign pipeline [EEZ / Country] -> [pleasure-craft Ports of Entry].
 
-Architecture :
-  1. Délimitation ZEE      : VLIZ Marine Regions WFS (World EEZ v12, ~285 zones), simplifié shapely.
-  2. Recherche ciblée      : SearXNG ∥ TinyFish Search (gratuits) -> filet
-                             include_domains si discordance / 0 officiel ->
-                             recherche groundée (OpenRouter :online) en dernier
-                             + round 2 « leçons » (document officiel indirect).
-  3. Whitelist automatique : ISO 3166-1 alpha-2 x motifs d'État validés PSL (tldextract)
-                             + exceptions.json auto-enrichi + filtrage SERP regex (extract_core).
-  4. Collecte & parsing    : cascade hybride extract_core — N1 httpx+trafilatura/PyMuPDF ->
-                             N2 Readability/BS4 -> N3 TinyFish (1 seul appel max/zone, dernier recours).
-                             Depth=2 sélectif sur liens internes réglementaires.
-  5. Extraction structurée : llm_core (OpenRouter, JSON strict)
-                             + RAG local (rag_core) sur les contextes longs.
-  6. Géocodage             : geo_core (Nominatim -> GeoNames, re-ranking sémantique).
-                             Validation spatiale point-in-EEZ (shapely).
-  7. Monitoring            : hash MD5 + similarité sémantique (skip si changement mineur).
-  8. Stockage              : upsert non-destructif via dedup_core (les enrichissements
-                             Bottom-Up osm_confidence / anomalies sont préservés).
+Architecture:
+  1. EEZ delimitation      : VLIZ Marine Regions WFS (World EEZ v12, ~285 zones), shapely-simplified.
+  2. Targeted search       : SearXNG ∥ TinyFish Search (free) -> net
+                             include_domains if disagreement / 0 official ->
+                             grounded search (OpenRouter :online) as last resort
+                             + round 2 "lessons" (indirect official document).
+  3. Automatic whitelist   : ISO 3166-1 alpha-2 x PSL-validated state patterns (tldextract)
+                             + auto-enriched exceptions.json + SERP regex filter (extract_core).
+  4. Collection & parsing  : hybrid extract_core cascade — N1 httpx+trafilatura/PyMuPDF ->
+                             N2 Readability/BS4 -> N3 TinyFish (1 call max/zone, last resort).
+                             Selective depth=2 on internal regulatory links.
+  5. Structured extraction : llm_core (OpenRouter, strict JSON)
+                             + local RAG (rag_core) on long contexts.
+  6. Geocoding             : geo_core (Nominatim -> GeoNames, semantic re-ranking).
+                             Spatial point-in-EEZ validation (shapely).
+  7. Monitoring            : MD5 hash + semantic similarity (skip if minor change).
+  8. Storage               : non-destructive upsert via dedup_core (Bottom-Up
+                             osm_confidence / anomaly enrichments are preserved).
 """
 import asyncio
 import fcntl
@@ -85,7 +85,7 @@ SEARX_PUBLIC_INSTANCES = [
     "https://search.sapti.me",
 ]
 
-# Notre process local (cf. infra/searxng/, .cursor/start.sh). Pas une clé fournisseur.
+# Our local process (see infra/searxng/, .cursor/start.sh). Not a vendor key.
 LOCAL_SEARXNG_URL = "http://127.0.0.1:8888"
 
 PIPELINE_VARIANTS = ("v1", "v2", "tinyfish")
@@ -95,7 +95,7 @@ _VARIANT_ALIASES = {
 
 
 def normalize_variant(value: str | None) -> str:
-    """v1 = SearXNG séquentiel ; v2 = SearXNG parallèle ; tinyfish = union."""
+    """v1 = sequential SearXNG; v2 = parallel SearXNG; tinyfish = union."""
     raw = (value or "tinyfish").strip().lower()
     v = _VARIANT_ALIASES.get(raw, raw)
     if v not in PIPELINE_VARIANTS:
@@ -105,16 +105,16 @@ def normalize_variant(value: str | None) -> str:
 
 
 def configured_searxng_url() -> str:
-    """URL de notre instance. SEARXNG_URL si non vide, sinon loopback:8888."""
+    """URL of our instance. SEARXNG_URL if set, otherwise loopback:8888."""
     own = (os.environ.get("SEARXNG_URL") or "").strip().rstrip("/")
     return own or LOCAL_SEARXNG_URL
 
 
 def searx_instances() -> list[str]:
-    """Instance SearXNG auto-hébergée en tête, instances publiques en secours.
+    """Self-hosted SearXNG instance first, public instances as fallback.
 
-    Si SEARXNG_URL est vide, on préfixe quand même http://127.0.0.1:8888
-    (sans dupliquer). Les publiques restent en secours.
+    If SEARXNG_URL is empty, still prefix http://127.0.0.1:8888
+    (without duplicating). Public instances remain as fallback.
     """
     own = configured_searxng_url()
     rest = [u.rstrip("/") for u in SEARX_PUBLIC_INSTANCES if u.rstrip("/") != own]
@@ -122,7 +122,7 @@ def searx_instances() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Matrice de recherche multilingue par ZEE (génération de requêtes localisées)
+# Multilingual search matrix per EEZ (localized query generation)
 # ---------------------------------------------------------------------------
 LANG_BY_ISO2 = {
     # fr
@@ -139,7 +139,7 @@ LANG_BY_ISO2 = {
     # ar
     "MA": "ar", "DZ": "ar", "TN": "ar", "LY": "ar", "EG": "ar", "SA": "ar", "AE": "ar",
     "QA": "ar", "KW": "ar", "BH": "ar", "OM": "ar", "YE": "ar", "JO": "ar", "LB": "ar", "SY": "ar", "IQ": "ar", "SD": "ar",
-    # autres
+    # other
     "ID": "id", "IT": "it", "GR": "el", "TR": "tr", "RU": "ru", "CN": "zh", "JP": "ja",
     "DE": "de", "NL": "nl", "TH": "th", "VN": "vi", "KR": "ko",
 }
@@ -162,8 +162,8 @@ QUERY_TEMPLATES = {
     "ko": "공식 입국 항구 목록 세관 법령 {name}",
 }
 
-# Jetons de *chemin* (pas le hostname). « douane » / « customs » dans
-# le domaine donnent un faux bonus à une home douanes.
+# *Path* tokens (not the hostname). "douane" / "customs" in
+# the domain give a false bonus to a customs homepage.
 _LIST_PATH_TOKENS = (
     "port-of-entry", "ports-of-entry", "ports-entree", "portos-de-entrada",
     "habilit", "puertos", "designated", "decreto", "decree", "decret",
@@ -188,8 +188,8 @@ _HOME_PATH_RE = re.compile(
 )
 
 
-# Langue des pages d'État de CE polygone, pas du souverain
-# (Sint Maarten : site EN, souverain NL).
+# Language of this polygon's state pages, not of the sovereign
+# (Sint Maarten: EN site, NL sovereign).
 _POLYGON_SEARCH_LANG = {
     "SX": None,
     "AW": None,
@@ -199,7 +199,7 @@ _POLYGON_SEARCH_LANG = {
 
 
 def zone_search_lang(zone: dict) -> str | None:
-    """Langue SERP : ISO2 du polygone s'il est dans la matrice, sinon le souverain."""
+    """SERP language: polygon ISO2 if it is in the matrix, otherwise the sovereign."""
     iso = (zone.get("iso2") or "").upper()
     if iso in _POLYGON_SEARCH_LANG:
         return _POLYGON_SEARCH_LANG[iso]
@@ -211,7 +211,7 @@ def zone_search_lang(zone: dict) -> str | None:
 
 
 def is_france_mainland_eez(zone: dict) -> bool:
-    """Hexagone / régimes conjoints métropole — pas Mayotte ni les DROM."""
+    """Mainland hexagon / joint metropolitan regimes — not Mayotte or the DROM."""
     if (zone.get("iso2") or "").upper() != "FR":
         return False
     key, _ = zone_qualifier(zone)
@@ -219,7 +219,7 @@ def is_france_mainland_eez(zone: dict) -> bool:
 
 
 def localized_query(zone: dict) -> str | None:
-    """Requête traduite dans la langue du polygone VLIZ (pas l'agrégat pays)."""
+    """Query translated into the VLIZ polygon language (not the country aggregate)."""
     place = serp_place_name(zone)
     if not place:
         return None
@@ -250,12 +250,12 @@ def localized_query(zone: dict) -> str | None:
     return family_classic_query(place, lang)
 
 
-# Familles génériques — les 11 polygones restent en if iso (hints / site: / localized).
+# Generic families — the 11 polygons stay on if iso (hints / site: / localized).
 _LIST_CANDIDATE_BONUS = 0.45
 
 
 def family_classic_query(place: str, lang: str | None = None) -> str:
-    """Requête « ports of entry / gazette » pour un polygone sans if iso."""
+    """"Ports of entry / gazette" query for a polygon without an iso if."""
     if lang == "fr":
         return f"ports d'entrée officiels liste douane décret yacht plaisance {place}"
     if lang == "es":
@@ -264,7 +264,7 @@ def family_classic_query(place: str, lang: str | None = None) -> str:
 
 
 def family_default_hints(place: str) -> list[str]:
-    """legal + pleasure + arrival — jamais un nom de port."""
+    """legal + pleasure + arrival — never a port name."""
     generic = f"{place} customs act designated ports of entry official legislation gazette"
     return [
         f"{place} yacht marina small craft pleasure craft official list",
@@ -274,7 +274,7 @@ def family_default_hints(place: str) -> list[str]:
 
 
 def lessons_learned_query(zone: dict) -> str:
-    """Round 2 : document officiel qui ne s'appelle pas « ports of entry »."""
+    """Round 2: official document that is not titled "ports of entry"."""
     place = serp_place_name(zone) or search_polygon_name(zone) or ""
     return (
         f"{place} yacht marina small craft pleasure craft "
@@ -284,7 +284,7 @@ def lessons_learned_query(zone: dict) -> str:
 
 
 def google_style_tld_tokens(zone: dict) -> str:
-    """ccTLD du polygone ; + .fr pour un DROM (Légifrance n'est pas en .yt)."""
+    """Polygon ccTLD; + .fr for a DROM (Légifrance is not on .yt)."""
     iso = (zone.get("iso2") or "").strip().lower()
     sov = (zone.get("sov_iso2") or "").strip().lower()
     toks: list[str] = []
@@ -296,7 +296,7 @@ def google_style_tld_tokens(zone: dict) -> str:
 
 
 def google_style_query(zone: dict, lang: str | None = None) -> str:
-    """Phrase courte type barre Google : lieu + PoE + sailing + official + TLD."""
+    """Short Google-bar style phrase: place + PoE + sailing + official + TLD."""
     place = serp_place_name(zone) or search_polygon_name(zone) or ""
     place = place.replace("-", " ")
     tld_tok = google_style_tld_tokens(zone)
@@ -312,9 +312,9 @@ def google_style_query(zone: dict, lang: str | None = None) -> str:
 
 
 def google_style_shots(zone: dict) -> list[tuple[str, str]]:
-    """(lang, query) — EN toujours ; + fr/es/nl si la langue du polygone l'est.
+    """(lang, query) — EN always; + fr/es/nl if the polygon language is one of those.
 
-    SX a zone_search_lang=None : un seul shot EN, pas le néerlandais.
+    SX has zone_search_lang=None: a single EN shot, not Dutch.
     """
     shots = [("en", google_style_query(zone))]
     lang = zone_search_lang(zone)
@@ -326,7 +326,7 @@ def google_style_shots(zone: dict) -> list[tuple[str, str]]:
 
 
 def has_list_candidate(rows: list | None, min_bonus: float = _LIST_CANDIDATE_BONUS) -> bool:
-    """PDF liste ou page assez profonde — pas une home douanes."""
+    """List PDF or sufficiently deep page — not a customs homepage."""
     for c in rows or []:
         u = c.get("url") or ""
         if not u:
@@ -344,7 +344,7 @@ def needs_lessons_round(official: list | None) -> bool:
 
 
 def bootstrap_national_hits(rejected: list | None, zone: dict) -> list[dict]:
-    """Domaine d'État même hors PSL / hors .{iso2} (leçon sintmaartengov.org)."""
+    """State domain even outside PSL / outside .{iso2} (sintmaartengov.org lesson)."""
     cc_ok = {c for c in ((zone.get("iso2") or "").lower(),) if c}
     out: list[dict] = []
     for c in rejected or []:
@@ -362,7 +362,7 @@ def bootstrap_national_hits(rejected: list | None, zone: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Qualification juridique UNCLOS des ZEE sans PoE (logique métier)
+# UNCLOS legal qualification of EEZs without a PoE (business logic)
 # ---------------------------------------------------------------------------
 UNINHABITED_RE = re.compile(
     r"bouvet|heard|mcdonald|clipperton|crozet|kerguelen|amsterdam|saint.?paul"
@@ -376,8 +376,8 @@ UNINHABITED_RE = re.compile(
 
 
 def qualify_unclos(zone: dict) -> dict | None:
-    """Catégorise une ZEE dépourvue de PoE physique selon le droit maritime.
-    Retourne None si la zone possède des PoE (aucune qualification requise)."""
+    """Categorize an EEZ with no physical PoE under maritime law.
+    Return None if the zone has PoEs (no qualification required)."""
     if (zone.get("poe_count") or 0) > 0:
         return None
     name = f"{zone.get('name') or ''} {zone.get('geoname') or ''}"
@@ -443,9 +443,9 @@ def _merge_bucket(base: dict | None, incoming: dict | None) -> dict:
 
 
 def merge_exceptions(disk: dict, incoming: dict) -> dict:
-    """Union des buckets (auto / seed_urls / …) pour ne pas perdre un
-    bootstrap concurrent. Les clés hors buckets sont reprises du disque
-    puis écrasées par l'entrant s'il les porte."""
+    """Union of buckets (auto / seed_urls / …) so a concurrent bootstrap
+    is not lost. Keys outside buckets are taken from disk then overwritten
+    by the incoming payload if it carries them."""
     merged = dict(disk or {})
     merged.update({k: v for k, v in (incoming or {}).items()
                    if k not in _EXCEPTION_BUCKETS})
@@ -471,14 +471,14 @@ def load_exceptions() -> dict:
 
 
 def polygon_iso2(zone: dict) -> str:
-    """ISO2 du polygone VLIZ, jamais le souverain (Niue ≠ NZ, Mayotte ≠ FR)."""
+    """VLIZ polygon ISO2, never the sovereign (Niue ≠ NZ, Mayotte ≠ FR)."""
     return (zone.get("iso2") or "").strip().upper()
 
 
 def seed_url_candidates(zone: dict, exceptions: dict | None = None) -> list[dict]:
-    """URLs officielles épinglées (page ou PDF d'État — jamais une liste de noms).
+    """Pinned official URLs (state page or PDF — never a list of names).
 
-    Grain polygone (`seed_urls_mrgid`) d'abord — Mayotte ≠ hexagone — puis ISO2.
+    Polygon grain (`seed_urls_mrgid`) first — Mayotte ≠ hexagon — then ISO2.
     """
     exc = exceptions or load_exceptions()
     urls: list[str] = []
@@ -502,8 +502,8 @@ def seed_url_candidates(zone: dict, exceptions: dict | None = None) -> list[dict
 
 
 def default_search_hints(zone: dict) -> list[str]:
-    """Leçon Niue / Mexique, pour TOUT polygone VLIZ : loi douanière + liste.
-    Jamais un nom de port. Le nom est celui du polygone (Mayotte ≠ France)."""
+    """Niue / Mexico lesson, for EVERY VLIZ polygon: customs law + list.
+    Never a port name. The name is the polygon's (Mayotte ≠ France)."""
     poly = serp_place_name(zone)
     if not poly:
         return []
@@ -588,7 +588,7 @@ def default_search_hints(zone: dict) -> list[str]:
 
 
 def search_hint_queries(zone: dict, exceptions: dict | None = None) -> list[str]:
-    """Requêtes supplémentaires pour chaque ZEE (défauts + exceptions pays)."""
+    """Extra queries for each EEZ (defaults + country exceptions)."""
     exc = exceptions or load_exceptions()
     seen, out = set(), []
     for q in default_search_hints(zone):
@@ -606,7 +606,7 @@ def search_hint_queries(zone: dict, exceptions: dict | None = None) -> list[str]
 
 
 def list_url_bonus(url: str) -> float:
-    """Priorise décret / PDF / page liste — pas la home douanes (CDC §18)."""
+    """Prefer decree / PDF / list page — not the customs homepage (CDC §18)."""
     raw = (url or "").strip()
     if not raw:
         return 0.0
@@ -626,8 +626,8 @@ def list_url_bonus(url: str) -> float:
 
 def remember_seed_urls(zone: dict, urls: list[str], exceptions: dict | None = None,
                        persist: bool = True, max_per_country: int = 4) -> list[str]:
-    """Mémorise les URL officielles qui ont produit un catalogue — la prochaine
-    ZEE du même pays n'attend plus le SERP (leçon Mexique / Niue généralisée)."""
+    """Remember official URLs that produced a catalog — the next EEZ of
+    the same country no longer waits on SERP (generalized Mexico / Niue lesson)."""
     cc = polygon_iso2(zone)
     if not cc or not urls:
         return []
@@ -650,7 +650,7 @@ def remember_seed_urls(zone: dict, urls: list[str], exceptions: dict | None = No
 
 
 def review_blacklist_urls(zone: dict, exceptions: dict | None = None) -> list[str]:
-    """URLs écartées en Review pour ce polygone (normalisées)."""
+    """URLs dropped in Review for this polygon (normalized)."""
     exc = exceptions or load_exceptions()
     try:
         mid = str(int(zone.get("mrgid") or 0))
@@ -663,7 +663,7 @@ def review_blacklist_urls(zone: dict, exceptions: dict | None = None) -> list[st
 def remember_review_pins(mrgid, kept_urls: list[str] | None,
                          dropped_urls: list[str] | None = None,
                          persist: bool = True) -> dict:
-    """Épingle les listes Gold au grain ``mrgid`` (pas le pays)."""
+    """Pin Gold lists at the ``mrgid`` grain (not the country)."""
     try:
         mid = str(int(mrgid))
     except (TypeError, ValueError):
@@ -703,8 +703,8 @@ def urls_with_catalog(texts: list[str]) -> list[str]:
 
 
 def save_exceptions(exc: dict):
-    """Écriture flock + merge-on-write : deux zones concurrentes n'écrasent
-    plus leurs bootstraps respectifs (JSON corrompu ou domaines perdus)."""
+    """Flock write + merge-on-write: two concurrent zones no longer
+    overwrite each other's bootstraps (corrupt JSON or lost domains)."""
     try:
         EXCEPTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
         with _exceptions_thread_lock:
@@ -747,7 +747,7 @@ def _is_public_suffix(cand: str) -> bool:
 
 
 def eez_iso2_set() -> set[str]:
-    """Codes ISO des pays / territoires qui ont effectivement une ZEE."""
+    """ISO codes of countries / territories that actually have an EEZ."""
     try:
         from app.services.listing_ref import load_eez_index
         out = set()
@@ -770,11 +770,11 @@ def _preferred_gov_label(iso2: str) -> str:
 
 
 def build_whitelist(iso2: str | None, sov_iso2: str | None, exceptions: dict | None = None) -> list[str]:
-    """Domaines d'État des pays qui ont une ZEE (indice, plus une porte).
+    """State domains of countries that have an EEZ (a hint, no longer a gate).
 
-    Un suffixe PSL joker (Népal, Jamaïque…) ne produit plus les 7 motifs :
-    on garde le libellé usuel (gov / gouv / gob). Les pays sans mer sont
-    ignorés — même si on passe NP ou SK par erreur."""
+    A wildcard PSL suffix (Nepal, Jamaica…) no longer produces the 7 patterns:
+    we keep the usual label (gov / gouv / gob). Landlocked countries are
+    ignored — even if NP or SK is passed by mistake."""
     exc = exceptions or load_exceptions()
     maritime = eez_iso2_set()
     out: set[str] = set()
@@ -829,8 +829,8 @@ def domain_of(url: str) -> str:
 
 
 def is_foreign_gov_domain(domain: str, cc_ok: set[str]) -> bool:
-    """Écarte un site régalien qui n'appartient pas à la ZEE (leçon Samoa :
-    congress.gov / customs.gov.ph ne sont pas des sources samoanes)."""
+    """Drop a state site that does not belong to the EEZ (Samoa lesson:
+    congress.gov / customs.gov.ph are not Samoan sources)."""
     if not domain or not OFFICIAL_TOKENS.search(domain):
         return False
     suffix = domain.rsplit(".", 1)[-1].lower()
@@ -842,7 +842,7 @@ def is_foreign_gov_domain(domain: str, cc_ok: set[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# 1. Référentiel ZEE (VLIZ WFS)
+# 1. EEZ referential (VLIZ WFS)
 # ---------------------------------------------------------------------------
 def _round_coords(obj, nd=3):
     if isinstance(obj, (list, tuple)):
@@ -853,7 +853,7 @@ def _round_coords(obj, nd=3):
 
 
 def _simplify_for_mongo(geom):
-    """Simplifie jusqu'à passer sous ~4 Mo sérialisés (limite Mongo 16 Mo)."""
+    """Simplify until serialized size is under ~4 MB (Mongo 16 MB limit)."""
     for tol in (SIMPLIFY_STORE, 0.08, 0.15, 0.3):
         simp = geom.simplify(tol, preserve_topology=True)
         gj = mapping(simp)
@@ -864,7 +864,7 @@ def _simplify_for_mongo(geom):
 
 
 def _anchor_of(simp):
-    """Point représentatif du plus grand composant — robuste à l'antiméridien."""
+    """Representative point of the largest component — antimeridian-safe."""
     try:
         geoms = list(simp.geoms) if hasattr(simp, "geoms") else [simp]
         big = max(geoms, key=lambda g: g.area)
@@ -876,8 +876,8 @@ def _anchor_of(simp):
 
 
 async def build_referential(db, state, force: bool = False):
-    """Télécharge les ~285 ZEE mondiales (WFS paginé), simplifie, upsert Mongo,
-    écrit le GeoJSON carte. Idempotent — préserve status/poe_count existants."""
+    """Download the ~285 world EEZs (paginated WFS), simplify, upsert Mongo,
+    write the map GeoJSON. Idempotent — preserves existing status/poe_count."""
     log = state.log
     exceptions = load_exceptions()
     async with httpx.AsyncClient(timeout=300, headers={"User-Agent": UA}) as client:
@@ -954,7 +954,7 @@ async def build_referential(db, state, force: bool = False):
             state.progress = done
             log(f"{done}/{total} ZEE intégrées")
 
-    # --- fichier carte (simplification supplémentaire) ---
+    # --- map file (extra simplification) ---
     log("Construction du GeoJSON carte…")
 
     def _map_feature(doc):
@@ -982,7 +982,7 @@ async def build_referential(db, state, force: bool = False):
 
 
 # ---------------------------------------------------------------------------
-# 2. Recherche : SearXNG -> recherche groundée (llm_core) + Level-2 Retry
+# 2. Search: SearXNG -> grounded search (llm_core) + Level-2 Retry
 # ---------------------------------------------------------------------------
 async def search_searxng(query: str, log) -> list[dict]:
     for inst in searx_instances():
@@ -1013,7 +1013,7 @@ async def search_searxng(query: str, log) -> list[dict]:
 
 
 async def search_grounded(zone: dict, whitelist: list[str], log, query_override: str | None = None):
-    """Recherche groundée via llm_core (OpenRouter :online)."""
+    """Grounded search via llm_core (OpenRouter :online)."""
     name = search_polygon_name(zone)
     hints = ", ".join(whitelist[:6]) if whitelist else "official government domains"
     prompt = query_override or (
@@ -1036,8 +1036,8 @@ def _looks_state_candidate(c: dict, whitelist: list[str] | None = None) -> bool:
 
 def rank_candidates_ml(candidates: list[dict], log, scores_out: list | None = None,
                        whitelist: list[str] | None = None) -> list[dict]:
-    """Trie les URLs avant téléchargement. Un domaine d'État n'est jamais
-    écarté pour un score ML bas — seulement reculé. scores_out journalise."""
+    """Rank URLs before download. A state domain is never dropped for a
+    low ML score — only pushed back. scores_out is the log."""
     if len(candidates) < 2:
         return candidates
     try:
@@ -1068,11 +1068,11 @@ def rank_candidates_ml(candidates: list[dict], log, scores_out: list | None = No
 
 
 # ---------------------------------------------------------------------------
-# 3. Collecte & parsing — cascade hybride N1/N2/N3 (extract_core)
+# 3. Collection & parsing — hybrid N1/N2/N3 cascade (extract_core)
 # ---------------------------------------------------------------------------
 async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
-    """Retourne (texte, md5). Cascade N1/N2 + rendu Chromium local (gratuit).
-    Une page bloquée (interstitiel anti-bot) est invalidée, jamais ingérée."""
+    """Return (text, md5). N1/N2 cascade + local Chromium render (free).
+    A blocked page (anti-bot interstitial) is invalidated, never ingested."""
     try:
         res = await extract_cascade(url, min_chars=200, log=log)
     except Exception as e:
@@ -1088,21 +1088,21 @@ async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
-# 4. Extraction PARALLÈLE comparée : LLM (OpenRouter) ∥ NER local (spaCy)
+# 4. Compared PARALLEL extraction: LLM (OpenRouter) ∥ local NER (spaCy)
 # ---------------------------------------------------------------------------
 async def extract_ports_llm(context: str, zone: dict, log, rec=None,
                             catalog_text: str | None = None,
                             settings: dict | None = None) -> list[dict]:
-    """LLM et NER local tournent EN PARALLÈLE sur le même contexte et leurs
-    listes sont comparées port par port (plus de simple fallback) :
-      - port vu par les deux  → extraction_agreement=True (signal de confiance) ;
-      - port vu par le LLM seul → extraction_agreement=False (à recouper) ;
-      - noms vus par le NER seul → journalisés comme candidats à vérifier ;
-      - LLM indisponible → la liste NER devient le fallback (comportement conservé).
-    Une vraie table (noms + coords) court-circuite le LLM ; les fragments
-    « port de X » ne suffisent plus — les lecteurs JSON lisent ces pages.
-    Second lecteur : gpt-oss (ou Kimi si décret) si NVIDIA est allumé.
-    Claude n'intervient qu'après échec des deux lecteurs NIM/OR.
+    """LLM and local NER run IN PARALLEL on the same context and their
+    lists are compared port by port (no longer a simple fallback):
+      - port seen by both → extraction_agreement=True (confidence signal);
+      - port seen by the LLM only → extraction_agreement=False (needs cross-check);
+      - names seen by NER only → logged as candidates to verify;
+      - LLM unavailable → the NER list becomes the fallback (behavior kept).
+    A real table (names + coords) short-circuits the LLM; "port de X"
+    fragments are no longer enough — JSON readers parse these pages.
+    Second reader: gpt-oss (or Kimi if decree) if NVIDIA is on.
+    Claude only steps in after both NIM/OR readers fail.
     """
     raw_catalog = catalog_text if catalog_text is not None else context
     catalog = extract_structured_ports(raw_catalog)
@@ -1142,7 +1142,7 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
                     context, zone, settings=settings, log=log,
                     model=model, engine=engine, fallback=False)
                 return ports
-            # NVIDIA off : pas de Claude ici (dernier recours après les deux lecteurs).
+            # NVIDIA off: no Claude here (last resort after both readers).
             return None
         except Exception as e:
             if log:
@@ -1155,7 +1155,7 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
             ents = await asyncio.to_thread(extract_entities, context[:20000])
             return [e["text"].strip()[:120] for e in ents if e["label"] == "PORT_NAME"]
         except Exception:
-            return None  # NER indisponible (modèle absent) — signal neutre
+            return None  # NER unavailable (model missing) — neutral signal
 
     (llm_ports, llm_err), second_ports, ner_names = await asyncio.gather(
         _primary(), _second(), _ner())
@@ -1171,7 +1171,7 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
     if llm_ports is None and claude_ports:
         log("lecteur principal indisponible — second lecteur retenu")
         llm_ports, llm_err = claude_ports, None
-        claude_names = []  # déjà la liste principale
+        claude_names = []  # already the primary list
     if llm_ports is None:
         from app.core import claude
         if claude.claude_enabled(settings) and claude.budget_allows_call(settings):
@@ -1287,21 +1287,21 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
     return llm_ports
 
 
-_normalize_name = normalize_name  # rétrocompat
+_normalize_name = normalize_name  # backward compat
 
 
 # ---------------------------------------------------------------------------
-# Pipeline complet pour UNE zone — orchestrateur + 5 étapes
+# Full pipeline for ONE zone — orchestrator + 5 steps
 # ---------------------------------------------------------------------------
 async def _skip_if_unchanged(db, zone: dict, force: bool, log, rec=None) -> dict | None:
-    """Étape 1 — Monitoring des sources CONNUES avant toute recherche.
-    DOUBLE VERDICT PARALLÈLE : le hash MD5 et la similarité sémantique sont
-    TOUS DEUX calculés et consignés pour chaque source (plus de cascade), puis
-    une matrice de décision tranche :
-      - MD5 identique                      → inchangé (skip) ;
-      - MD5 différent, similarité >= 0.95  → changement cosmétique (skip, consigné) ;
-      - similarité < 0.95 ou source K.O.   → ré-extraction complète.
-    Retourne le doc zone (mis à jour) si la ré-extraction peut être sautée."""
+    """Step 1 — Monitor KNOWN sources before any search.
+    PARALLEL DOUBLE VERDICT: the MD5 hash and semantic similarity are
+    BOTH computed and recorded for each source (no longer a cascade), then
+    a decision matrix decides:
+      - identical MD5                      → unchanged (skip);
+      - different MD5, similarity >= 0.95  → cosmetic change (skip, recorded);
+      - similarity < 0.95 or source down   → full re-extraction.
+    Return the (updated) zone doc if re-extraction can be skipped."""
     mrgid = int(zone["mrgid"])
     known_hashes = zone.get("source_hashes") or {}
     if force or not known_hashes or zone.get("status") not in ("ia", "ia_sans_source") or not zone.get("poe_count", 0):
@@ -1353,7 +1353,7 @@ async def _skip_if_unchanged(db, zone: dict, force: bool, log, rec=None) -> dict
 
 
 def _normalize_url(url: str) -> str:
-    """Host lower, sans www., sans fragment, slash final retiré (query conservée)."""
+    """Lowercased host, no www., no fragment, trailing slash stripped (query kept)."""
     if not url or not isinstance(url, str):
         return ""
     try:
@@ -1391,7 +1391,7 @@ def _merge_engines(*candidates: dict) -> str | list[str]:
 
 
 def _merge_candidates(*groups: list[dict]) -> list[dict]:
-    """Union dédupliquée par URL normalisée (plusieurs chemins d'un domaine survivent)."""
+    """Deduped union by normalized URL (several paths of a domain survive)."""
     seen: dict[str, dict] = {}
     out: list[dict] = []
     for group in groups:
@@ -1423,7 +1423,7 @@ def _url_score(c: dict) -> float:
 
 
 def _best_per_domain(candidates: list[dict], max_per_domain: int = 3) -> list[dict]:
-    """1 page + jusqu'à 2 PDF liste par domaine (leçon France : liste + carte PPF)."""
+    """1 page + up to 2 list PDFs per domain (France lesson: list + PPF map)."""
     groups: dict[str, list[dict]] = {}
     order: list[str] = []
     for c in candidates or []:
@@ -1470,7 +1470,7 @@ def _jaccard(a: set, b: set) -> float:
 
 
 def _search_agreement(a: list[dict], b: list[dict]) -> dict:
-    """Accord SearXNG ∥ TinyFish. Un moteur vide = panne, pas une discordance."""
+    """SearXNG ∥ TinyFish agreement. An empty engine = outage, not disagreement."""
     urls_a = {_normalize_url(c.get("url")) for c in (a or []) if c.get("url")}
     urls_b = {_normalize_url(c.get("url")) for c in (b or []) if c.get("url")}
     urls_a.discard("")
@@ -1548,7 +1548,7 @@ async def _tf_search_safe(query: str, key: str, log, *, location=None, language=
 
 
 def site_list_pdf_query(domain: str, zone: dict) -> str:
-    """Requête `site:` une fois le domaine d'État connu."""
+    """`site:` query once the state domain is known."""
     iso = polygon_iso2(zone)
     if is_france_mainland_eez(zone):
         return (f"site:{domain} filetype:pdf "
@@ -1584,7 +1584,7 @@ def site_list_pdf_query(domain: str, zone: dict) -> str:
 
 
 def site_list_page_query(domain: str, zone: dict) -> str:
-    """Même hop pour une page HTML (leçon NZ MPI / VE INEA : la liste n'est pas un PDF)."""
+    """Same hop for an HTML page (NZ MPI / VE INEA lesson: the list is not a PDF)."""
     iso = polygon_iso2(zone)
     if is_france_mainland_eez(zone):
         return f"site:{domain} (liste ports de plaisance OR vous naviguez pays non membre)"
@@ -1619,7 +1619,7 @@ def site_list_page_query(domain: str, zone: dict) -> str:
 
 
 def landing_url_candidates(zone: dict) -> list[dict]:
-    """Page d'État de CE mrgid (territories.json) — à crawler, pas à afficher."""
+    """State landing page for THIS mrgid (territories.json) — crawl, do not display."""
     from app.services.territory_ref import curated_landing_urls
     out, seen = [], set()
     for rec in curated_landing_urls(zone.get("mrgid")):
@@ -1633,8 +1633,8 @@ def landing_url_candidates(zone: dict) -> list[dict]:
 
 
 async def _site_list_pdf_search(domains: list[str], zone: dict, log) -> list[dict]:
-    """Deuxième hop : le domaine d'État est connu, la liste est souvent un PDF
-    hors SERP générique (leçon France : Liste-ports-de-plaisance-eligibles.pdf)."""
+    """Second hop: the state domain is known; the list is often a PDF
+    outside the generic SERP (France lesson: Liste-ports-de-plaisance-eligibles.pdf)."""
     out: list[dict] = []
     for dom in domains[:3]:
         if not dom:
@@ -1648,7 +1648,7 @@ async def _site_list_pdf_search(domains: list[str], zone: dict, log) -> list[dic
 
 
 async def _site_list_page_search(domains: list[str], zone: dict, log) -> list[dict]:
-    """Hop HTML : INEA / MPI / douane.nc exposent une page, pas un PDF."""
+    """HTML hop: INEA / MPI / douane.nc expose a page, not a PDF."""
     out: list[dict] = []
     for dom in domains[:3]:
         if not dom:
@@ -1664,13 +1664,13 @@ async def _site_list_page_search(domains: list[str], zone: dict, log) -> list[di
 async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log, rec=None,
                         tf_key: str | None = None, variant: str = "tinyfish",
                         ) -> tuple[list[dict], bool, str | None]:
-    """Étape 2 — round 1 classique puis, si besoin, round 2 leçons.
-    v1 = SearXNG séquentiel (EN puis localisé si vide) ;
-    v2 = SearXNG parallèle EN ∥ local, sans TinyFish ;
-    tinyfish = SearXNG ∥ TinyFish + filet include_domains.
-    Les if iso des 11 polygones restent sur hints / site: / localized_query.
-    Serper (phrase courte + TLD) tourne en parallèle du round 1.
-    :online en dernier. Ne touche jamais poe_ports."""
+    """Step 2 — classic round 1 then, if needed, lessons round 2.
+    v1 = sequential SearXNG (EN then localized if empty);
+    v2 = parallel EN ∥ local SearXNG, no TinyFish;
+    tinyfish = SearXNG ∥ TinyFish + include_domains net.
+    The if iso of the 11 polygons stay on hints / site: / localized_query.
+    Serper (short phrase + TLD) runs in parallel with round 1.
+    :online last. Never touches poe_ports."""
     name = search_polygon_name(zone)
     place = serp_place_name(zone) or name
     variant = normalize_variant(variant)
@@ -1859,7 +1859,7 @@ async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log,
             candidates = rank_candidates_ml(candidates, log, whitelist=whitelist)
             official = [c for c in candidates if url_allowed(c.get("url") or "", whitelist)]
 
-    # Bootstrapping : domaine d'État même hors .{iso2} (leçon SX .org).
+    # Bootstrapping: state domain even outside .{iso2} (SX .org lesson).
     rejected = [c for c in candidates if c not in official]
     if not official and rejected:
         boot = bootstrap_national_hits(rejected, zone)
@@ -1934,8 +1934,8 @@ async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log,
     strictly_official = bool(official)
     cc_low = (zone.get("iso2") or "").lower()
     if not official:
-        # Repli national : la whitelist est un indice, pas une porte.
-        # Les sites gouvernementaux d'autres pays restent exclus.
+        # National fallback: the whitelist is a hint, not a gate.
+        # Government sites of other countries stay excluded.
         cc_ok = {c for c in (cc_low, (zone.get("sov_iso2") or "").lower()) if c}
 
         national = [c for c in rejected if cc_low and c["domain"].endswith("." + cc_low)]
@@ -1957,9 +1957,9 @@ async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log,
 
 async def _collect_texts(official: list[dict], log, rec=None, max_fetch: int = 8
                          ) -> tuple[list[str], dict, list[dict], dict]:
-    """Étape 3 — Collecte : cascade N1∥N2, miroir anti-bot, PDF joints officiels
-    (même si la page est déjà longue), depth-2 si le texte est mince.
-    Les PJ passent avant le reste de la file SERP (leçon France : liste + carte)."""
+    """Step 3 — Collection: N1∥N2 cascade, anti-bot mirror, official attached PDFs
+    (even if the page is already long), depth-2 if the text is thin.
+    Attachments go before the rest of the SERP queue (France lesson: list + map)."""
     texts, hashes, used_sources, excerpts = [], {}, [], {}
     queue = list(official)
     seen_urls: set[str] = set()
@@ -1992,8 +1992,8 @@ async def _collect_texts(official: list[dict], log, rec=None, max_fetch: int = 8
         text = res["text"]
         log(f"fetch {c.get('domain') or domain_of(url)}: {len(text)} chars via {res['level']}")
         blob = (res.get("html") or "") + "\n" + (text or "")
-        # Les href PDF sont dans le HTML ; le texte extrait (trafilatura) les perd
-        # (leçon France : liste + carte PPF liées depuis vous-naviguez).
+        # PDF hrefs are in the HTML; extracted text (trafilatura) loses them
+        # (France lesson: list + PPF map linked from vous-naviguez).
         if should_follow_attachments(blob, url) or official_attachments(blob, url, limit=1):
             extra = []
             for att in official_attachments(blob, url, limit=4):
@@ -2031,7 +2031,7 @@ async def _collect_texts(official: list[dict], log, rec=None, max_fetch: int = 8
 
 
 def _spatial_cand(lat, lon, source, geom, prepared, inland=None) -> dict:
-    """Candidat géocodé + classement ZEE / bord / rivière (pas de tampon 300 km)."""
+    """Geocoded candidate + EEZ / shore / river classification (no 300 km buffer)."""
     cand = {"source": source, "lat": float(lat), "lon": float(lon),
             "validated": False, "dist_km": None, "kind": "unknown"}
     if prepared is None and geom is None:
@@ -2042,7 +2042,7 @@ def _spatial_cand(lat, lon, source, geom, prepared, inland=None) -> dict:
 
 
 def _pick_from_cands(row: dict, picks: dict) -> tuple[dict | None, str | None]:
-    """Choisit un candidat : table/source, accord dual, départage Haiku, ZEE."""
+    """Pick a candidate: table/source, dual agreement, Haiku tie-break, EEZ."""
     if row.get("hint") in ("not_geocodeable", "geocode_deferred"):
         return None, row["hint"]
     cands = row["cands"]
@@ -2070,10 +2070,10 @@ def _pick_from_cands(row: dict, picks: dict) -> tuple[dict | None, str | None]:
 
 
 def _apply_spatial(chosen, arbitration, cands, port_name, log):
-    """Après le départage Haiku : garder seulement ZEE / bord / rivière.
+    """After the Haiku tie-break: keep only EEZ / shore / river.
 
-    Sans géométrie de zone (`kind=unknown`), on ne rejette pas — les tests
-    unitaires et les zones sans polygone gardent le point choisi.
+    Without zone geometry (`kind=unknown`), do not reject — unit tests
+    and zones without a polygon keep the chosen point.
     """
     if not chosen:
         return chosen, arbitration
@@ -2091,7 +2091,7 @@ def _apply_spatial(chosen, arbitration, cands, port_name, log):
 
 
 async def _haiku_tiebreak_zone(zone, rows, settings, log, rec) -> dict:
-    """Un appel Haiku pour tous les désaccords Nominatim ≠ GeoNames de la zone."""
+    """One Haiku call for every Nominatim ≠ GeoNames disagreement in the zone."""
     items = []
     for row in rows:
         nom = next((c for c in row["cands"] if c["source"] == "nominatim"), None)
@@ -2118,14 +2118,14 @@ async def _haiku_tiebreak_zone(zone, rows, settings, log, rec) -> dict:
 async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict], log,
                                rec=None, run=None, catalog_text: str | None = None,
                                settings: dict | None = None) -> list[dict]:
-    """Étape 4 — Extraction parallèle (NIM → OR → Claude ∥ NER) puis géocodage.
+    """Step 4 — Parallel extraction (NIM → OR → Claude ∥ NER) then geocoding.
 
-    Coords déjà dans la source (table ou LLM recopié) → pas de Nominatim.
-    Nom non toponyme → pas de géocode. Désaccord dual → NIM / OR / Claude.
-    Un point n'est gardé que s'il est dans cette ZEE, sur son bord terrestre
-    (≤ 15 km), ou — exception rivière — un port de CE pays à ≤ 400 km.
-    Annuaires muets → ``llm_geocode_port`` (pas ``llm_geocode`` Projet),
-    puis le même test VLIZ. Pas de tampon 300 km, pas de snap_to_ocean.
+    Coords already in the source (table or LLM copy) → no Nominatim.
+    Non-toponym name → no geocode. Dual disagreement → NIM / OR / Claude.
+    A point is kept only if it is in this EEZ, on its land shore
+    (≤ 15 km), or — river exception — a port of THIS country within ≤ 400 km.
+    Silent directories → ``llm_geocode_port`` (not Project ``llm_geocode``),
+    then the same VLIZ test. No 300 km buffer, no snap_to_ocean.
     """
     mrgid = int(zone["mrgid"])
     name = zone.get("name") or zone.get("geoname")
@@ -2138,8 +2138,8 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
     except Exception:
         listing_ports = []
     official_source = any(s.get("official") for s in used_sources)
-    # Liste officielle sans GPS (PPF, MPI…) : Nominatim 1,1 s × N dépasse
-    # le timeout de zone (FR : 52 noms → TimeoutError, 0 port persisté).
+    # Official list without GPS (PPF, MPI…): Nominatim 1.1 s × N exceeds
+    # the zone timeout (FR: 52 names → TimeoutError, 0 ports persisted).
     defer_geocode = (
         len(ports) >= 8
         and all(
@@ -2237,7 +2237,7 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
         chosen, arbitration = _apply_spatial(chosen, arbitration, cands, p["name"], log)
         if (arbitration == "spatial_rejected"
                 and cands and all(c.get("source") == "llm" for c in cands)):
-            # Inventé hors de CE polygone : garder le nom, pas le GPS.
+            # Invented outside THIS polygon: keep the name, not the GPS.
             chosen, arbitration = None, "llm_spatial_rejected"
 
         lat = chosen["lat"] if chosen else None
@@ -2318,10 +2318,10 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
 
 async def _persist_zone_run(db, zone: dict, docs: list[dict], status: str,
                             used_sources: list[dict], hashes: dict, run, rec, log) -> dict:
-    """Étape 5 (mode run versionné) — Écriture dans l'ESPACE DU RUN uniquement :
-    poe_run_ports / poe_run_zones. Les collections v1 (poe_ports, eez_zones) ne
-    sont jamais touchées. Idempotent par (run_id, mrgid) : une re-génération de
-    la zone dans le même run remplace ses ports."""
+    """Step 5 (versioned-run mode) — Write in the RUN SPACE only:
+    poe_run_ports / poe_run_zones. v1 collections (poe_ports, eez_zones) are
+    never touched. Idempotent by (run_id, mrgid): regenerating the zone
+    in the same run replaces its ports."""
     mrgid = int(zone["mrgid"])
     docs = deduplicate_list(docs, title_key="name") if docs else []
     ports_coll = db[run.ports_coll]
@@ -2357,14 +2357,14 @@ async def _persist_zone_run(db, zone: dict, docs: list[dict], status: str,
 
 async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
                         used_sources: list[dict], hashes: dict, excerpts: dict, log) -> dict:
-    """Étape 5 — Écriture non-destructive : dédup interne, upsert des ports
-    (les enrichissements Bottom-Up sont préservés), statut de la zone."""
+    """Step 5 — Non-destructive write: internal dedup, port upsert
+    (Bottom-Up enrichments are preserved), zone status."""
     mrgid = int(zone["mrgid"])
     if docs:
-        # Déduplication interne (core.dedup: Haversine <500m + fuzzy >60%)
+        # Internal dedup (core.dedup: Haversine <500m + fuzzy >60%)
         docs = deduplicate_list(docs, title_key="name")
-        # Upsert NON-DESTRUCTIF : les PoE existants sont enrichis, jamais purgés
-        # (préserve les champs Bottom-Up: osm_confidence, spatial_anomaly…).
+        # NON-DESTRUCTIVE upsert: existing PoEs are enriched, never purged
+        # (preserves Bottom-Up fields: osm_confidence, spatial_anomaly…).
         existing_ports = await db.poe_ports.find({"mrgid": mrgid}).to_list(500)
         inserted = merged = 0
         for d in docs:
@@ -2404,8 +2404,8 @@ async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
         }, "$unset": {"unclos": ""}})
         log(f"terminé: {inserted} nouveau(x) PoE, {merged} fusionné(s) — total zone {poe_count}, statut {status}")
     elif zone.get("poe_count", 0) > 0:
-        # Ré-extraction vide sur une zone déjà peuplée : on PRÉSERVE les ports
-        # existants (le pipeline de recherche est non déterministe).
+        # Empty re-extraction on an already populated zone: PRESERVE existing
+        # ports (the search pipeline is non-deterministic).
         log(f"0 port extrait — {zone.get('poe_count')} PoE existants préservés (aucune purge)")
         await db.eez_zones.update_one({"mrgid": mrgid}, {"$set": {
             "checked_at": now_iso(),
@@ -2426,13 +2426,13 @@ async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
 
 async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                             run=None, refresh: bool = False) -> dict:
-    """Orchestrateur : recherche -> collecte -> extraction -> écriture.
+    """Orchestrator: search -> collect -> extract -> write.
 
-    refresh=True : rafraîchissement périodique uniquement — le monitoring
-    MD5/sémantique peut alors sauter la ré-extraction. Une génération
-    manuelle, un run, ou force=True refont toujours la recherche.
+    refresh=True: periodic refresh only — MD5/semantic monitoring
+    may then skip re-extraction. A manual generation, a run, or
+    force=True always re-runs the search.
 
-    run (RunContext, optionnel) : mode « run versionné from scratch »."""
+    run (RunContext, optional): "versioned from-scratch run" mode."""
     log = logger or (lambda m: None)
     zone = await db.eez_zones.find_one({"mrgid": int(mrgid)})
     if not zone:
@@ -2457,21 +2457,21 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                whitelist=whitelist, variant=variant)
 
     try:
-        # 1. Monitoring : seulement un rafraîchissement périodique.
-        #    Génération / amélioration / run : on cherche toujours.
+        # 1. Monitoring: only a periodic refresh.
+        #    Generation / improvement / run: always search.
         if run is None and refresh:
             unchanged = await _skip_if_unchanged(db, zone, force, log, rec)
             if unchanged is not None:
                 return unchanged
 
-        # 2. Recherche + gatekeeper
+        # 2. Search + gatekeeper
         official, strictly_official, synthesis = await _find_sources(
             zone, whitelist, exceptions, log, rec, variant=variant)
 
-        # 3. Collecte des textes
+        # 3. Collect texts
         texts, hashes, used_sources, excerpts = await _collect_texts(official, log, rec)
 
-        # Monitoring MD5 post-collecte : skip si contenu strictement identique
+        # Post-collection MD5 monitoring: skip if content is strictly identical
         old_hashes = zone.get("source_hashes") or {}
         if (run is None and refresh and not force and hashes and old_hashes
                 and hashes == old_hashes
@@ -2480,19 +2480,19 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
             await db.eez_zones.update_one({"mrgid": int(mrgid)}, {"$set": {"checked_at": now_iso()}})
             return await db.eez_zones.find_one({"mrgid": int(mrgid)})
 
-        # Assemblage du contexte (textes + synthèse groundée éventuelle)
+        # Assemble context (texts + optional grounded synthesis)
         context_parts = list(texts)
         if synthesis:
-            # La synthèse provient de la recherche groundée sur les sources officielles ;
-            # elle est toujours jointe au contexte (les pages gov listent rarement
-            # les ports en HTML brut). Le statut reste piloté par le gatekeeper.
+            # The synthesis comes from grounded search over official sources;
+            # it is always joined to the context (gov pages rarely list
+            # ports in raw HTML). Status remains driven by the gatekeeper.
             context_parts.append(f"[SYNTHÈSE DE RECHERCHE (à recouper)]\n{synthesis[:6000]}")
             if not texts:
                 strictly_official = False
                 log("aucun texte source exploitable — extraction depuis la seule synthèse (confiance basse)")
         if not context_parts:
-            # Aucun texte exploitable : dernier recours groundé AVANT de déclarer
-            # l'erreur (même filet que le retry post-extraction, ici en amont).
+            # No usable text: last-resort grounded search BEFORE declaring
+            # the error (same net as the post-extraction retry, here earlier).
             log("aucun texte exploitable — recours à la synthèse groundée")
             _, syn_rescue = await search_grounded(zone, whitelist, log)
             await emit(rec, "search", engine="grounded", lang="en",
@@ -2516,8 +2516,8 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
             }})
             return await db.eez_zones.find_one({"mrgid": int(mrgid)})
 
-        # RAG local : le LLM reçoit un extrait ; le parseur de catalogue lit
-        # TOUJOURS le texte officiel brut (sinon Alofi / fin de liste SCT disparaissent).
+        # Local RAG: the LLM gets an excerpt; the catalog parser ALWAYS
+        # reads the raw official text (else Alofi / SCT list tail vanish).
         raw = "\n\n".join(context_parts)
         raw_chars = len(raw)
         raw_catalog = extract_structured_ports(raw)
@@ -2541,15 +2541,15 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                    raw_chars=raw_chars, final_chars=len(context),
                    catalog_n=len(raw_catalog))
 
-        # 4. Extraction + géocodage + validation spatiale
+        # 4. Extraction + geocoding + spatial validation
         docs = await _extract_and_geocode(zone, context, used_sources, log, rec, run,
                                           catalog_text=raw, settings=settings)
 
-        # Filet de sécurité : 0 port extrait des pages collectées ET aucune
-        # synthèse groundée encore tentée → un (seul) recours à la recherche
-        # groundée, dont la synthèse est jointe au contexte puis ré-extraite.
-        # (Les pages gov listent rarement les ports en HTML brut ; sans ce
-        # filet, les zones à pages minces finissent toutes en erreur.)
+        # Safety net: 0 ports extracted from collected pages AND no
+        # grounded synthesis tried yet → one (single) grounded-search
+        # fallback, whose synthesis is joined to the context then re-extracted.
+        # (Gov pages rarely list ports in raw HTML; without this net,
+        # thin-page zones all end in error.)
         if not docs and synthesis is None:
             log("0 port extrait des pages collectées — recours à la synthèse groundée (retry unique)")
             _, syn_retry = await search_grounded(zone, whitelist, log)
@@ -2568,7 +2568,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                             d, official_source=False,
                             listing_ports=None))
 
-        # 5. Écriture : la confiance vit sur chaque port, plus de tampon de zone.
+        # 5. Write: confidence lives on each port, no longer a zone buffer.
         status = "ia" if docs else "erreur"
         if run is not None:
             result = await _persist_zone_run(db, zone, docs, status,
@@ -2589,7 +2589,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
 
 
 # ---------------------------------------------------------------------------
-# Sérialisation
+# Serialization
 # ---------------------------------------------------------------------------
 def zone_to_item(doc: dict) -> dict:
     return {

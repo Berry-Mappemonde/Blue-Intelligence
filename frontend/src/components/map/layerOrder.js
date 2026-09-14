@@ -1,9 +1,9 @@
 /**
- * Ordre vertical unique des panes de la carte — source de vérité verrouillée.
+ * Single vertical order of map panes — locked source of truth.
  *
- * Inspiration Open Waters: Seamap : l'ordre de dessin est charge utile, un test
- * (`__tests__/layerOrder.test.js`) fige la liste pour qu'aucun remaniement ne
- * puisse l'altérer par accident. Repères Leaflet (non modifiables) :
+ * Inspired by Open Waters: Seamap: draw order is payload; a test
+ * (`__tests__/layerOrder.test.js`) freezes the list so no accidental
+ * reshuffle can change it. Leaflet landmarks (not editable):
  * tilePane 200 < overlayPane 400 < shadowPane 500 < markerPane 600 <
  * tooltipPane 650 < popupPane 700.
  */
@@ -17,22 +17,22 @@ export const LEAFLET_BUILTIN_PANES = {
 };
 
 export const PANES = [
-  // Fond vectoriel « Carte marine » (MapLibre GL) — sous les tuiles raster.
+  // Vector "Sea chart" basemap (MapLibre GL) — under raster tiles.
   { name: "basemap-gl", zIndex: 190 },
-  // Atlas du 7ᵉ mode — allumés seulement si mode === "climatology".
+  // 7th-mode atlas — lit only when mode === "climatology".
   { name: "climatology-raster", zIndex: 250, pointerEvents: "none" },
   { name: "climatology-vector", zIndex: 260, pointerEvents: "none" },
-  // Overlay hebdomadaire tippecanoe — au-dessus du GL Seamap, sous la route.
+  // Weekly tippecanoe overlay — above GL Seamap, under the route.
   { name: "bi-overlay", zIndex: 270, pointerEvents: "none" },
-  // Route NAVIGUIDE — sous les clusters et marqueurs.
+  // NAVIGUIDE route — under clusters and markers.
   { name: "route", zIndex: 380 },
-  // Polygones AMP — au-dessus de l'overlayPane, sous les escales.
+  // MPA polygons — above overlayPane, under stopovers.
   { name: "amp", zIndex: 420 },
-  // Escales Formalités — au-dessus de tout sauf les marqueurs.
+  // Formalities stopovers — above everything except markers.
   { name: "formalities-escales", zIndex: 500 },
 ];
 
-/** Crée tous les panes personnalisés sur la carte, dans l'ordre verrouillé. */
+/** Create every custom pane on the map, in the locked order. */
 export function createPanes(map) {
   PANES.forEach(({ name, zIndex, pointerEvents }) => {
     map.createPane(name);

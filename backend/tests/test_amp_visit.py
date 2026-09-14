@@ -1,4 +1,4 @@
-"""Découverte visit_url AMP — Fetch / Search, jamais la homepage gestionnaire."""
+"""AMP visit_url discovery — Fetch / Search, never the manager homepage."""
 from __future__ import annotations
 
 import asyncio

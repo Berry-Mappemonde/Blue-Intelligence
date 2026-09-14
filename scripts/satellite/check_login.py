@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vérifie le login CDSE (jeton). N'imprime jamais le mot de passe."""
+"""Check the CDSE login (token). Never print the password."""
 from __future__ import annotations
 
 import json

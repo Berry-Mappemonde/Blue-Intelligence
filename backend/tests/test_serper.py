@@ -1,4 +1,4 @@
-"""Client Serper — httpx mocké, aucun réseau."""
+"""Serper client — mocked httpx, no network."""
 import asyncio
 import json
 from pathlib import Path

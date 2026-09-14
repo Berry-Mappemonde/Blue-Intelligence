@@ -1,7 +1,7 @@
-"""Complète vs incrémental — un run Full refait la carte, il ne saute pas le déjà-posé.
+"""Complete vs incremental — a Full run rebuilds the map, it does not skip what is already placed.
 
 ``from_scratch=None`` + scope/mode ``full`` → True.
-Un Test reste incrémental. Un booléen explicite gagne toujours.
+A Test stays incremental. An explicit boolean always wins.
 """
 from __future__ import annotations
 

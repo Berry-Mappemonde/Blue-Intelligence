@@ -1,14 +1,13 @@
-"""
-Dump mondial des marinas OSM (leisure=marina).
+"""World dump of OSM marinas (leisure=marina).
 
-Palier 1 — contrat :
-  * identité = osm_id (type/id), pas nom@geohash
-  * pas de corridor Berry-Mappemonde, pas de priorité d'escale
-  * pas de purge (upsert, les fiches existantes / enrichies restent)
-  * job tuilé et reprenable
-  * site OSM recopié tel quel (website_status=unchecked) — vérif = palier 2
-  * maps_url calculé, jamais stocké comme vérité Google
-  * pas de mélange avec les PoE / graines Formalités
+Tier 1 — contract:
+  * identity = osm_id (type/id), not name@geohash
+  * no Berry-Mappemonde corridor, no stopover priority
+  * no purge (upsert, existing / enriched cards stay)
+  * tiled and resumable job
+  * OSM site copied as-is (website_status=unchecked) — check = tier 2
+  * maps_url computed, never stored as Google truth
+  * no mix with PoE / Formalities seeds
 """
 from __future__ import annotations
 
@@ -33,13 +32,13 @@ SCHEMA = "marina_world_v1"
 CURSOR_ID = "world_leisure_marina"
 OVERPASS_THROTTLE_S = 3.0
 OVERPASS_TILE_TIMEOUT_S = 180
-# Tuiles monde ~30×90° : Overpass public lâche ou ne rend jamais.
-# On découpe avant l'appel dès que le plus grand côté dépasse ça.
+# World tiles ~30×90°: public Overpass drops or never returns.
+# Split before the call as soon as the longest side exceeds that.
 SPLIT_BEFORE_DEG = 40.0
 UPSERT_HEARTBEAT = 250
 TILE_UPSERT_EVERY = 10
 
-# Statuts que le palier 2 posera ; le dump ne les écrase pas.
+# Statuses that tier 2 will set; the dump does not overwrite them.
 LOCKED_WEBSITE_STATUSES = frozenset({"osm_ok", "tinyfish_ok"})
 
 PRESERVE_ON_UPDATE = (
@@ -124,7 +123,7 @@ def leisure_marina_bbox_ql(
     south: float, west: float, north: float, east: float,
     timeout: int = OVERPASS_TILE_TIMEOUT_S,
 ) -> str:
-    """Uniquement leisure=marina — pas harbour=yes / seamark commercial."""
+    """leisure=marina only — not harbour=yes / commercial seamark."""
     return (
         f"[out:json][timeout:{int(timeout)}];\n"
         f"(\n"
@@ -135,7 +134,7 @@ def leisure_marina_bbox_ql(
 
 
 def google_maps_url(name: str | None, lat: float, lon: float) -> str:
-    """Lien de recherche Maps déterministe — pas une fiche Places."""
+    """Deterministic Maps search link — not a Places card."""
     if name and str(name).strip():
         q = f"{str(name).strip()} {lat:.5f},{lon:.5f}"
     else:
@@ -153,7 +152,7 @@ def osm_website_from_tags(tags: dict | None) -> str | None:
 
 
 def element_name(tags: dict | None) -> str:
-    """Nom OSM réel, ou vide — on n'invente pas « Marina @ lat,lon »."""
+    """Real OSM name, or empty — do not invent “Marina @ lat,lon”."""
     tags = tags or {}
     for key in (
         "name", "name:fr", "name:en", "official_name", "alt_name",
@@ -233,7 +232,7 @@ def merge_website(existing: dict | None, raw_site: str | None) -> tuple[str | No
 
 
 def _apply_osm_google_place(patch: dict, website: str | None, existing: dict | None) -> None:
-    """Si le tag OSM est déjà une URL /maps/place/, on la signale sans TinyFish."""
+    """If the OSM tag is already a /maps/place/ URL, flag it without TinyFish."""
     raw = (website or "").strip()
     if "/maps/place/" not in raw or "/maps/search/" in raw:
         return
@@ -254,15 +253,15 @@ def official_website(doc: dict) -> str | None:
 
 # ------------------------------------------------------------------------
 # Badges services — inspiration UX Open Waters: Seamap (« poi badges ») :
-# la couleur du badge répond à une question du plaisancier (puis-je m'amarrer ?
-# m'avitailler ? sortir le bateau ? trouver des services à terre ?), le détail
-# vient des tags OSM conservés par kept_tags(). Aucune invention : un badge
-# n'apparaît que si au moins un tag l'atteste.
+# badge color answers a pleasure-craft question (can I berth?
+# take on supplies? haul the boat? find shore services?), the detail
+# comes from OSM tags kept by kept_tags(). No invention: a badge
+# appears only if at least one tag attests it.
 # ------------------------------------------------------------------------
 
 _FALSY_TAG_VALUES = frozenset({"no", "none", "0", "false"})
 
-# tag conservé → question (berth / supply / tech / shore)
+# kept tag → question (berth / supply / tech / shore)
 SERVICE_TAG_QUESTIONS = {
     "mooring": "berth",
     "capacity": "berth",
@@ -303,11 +302,11 @@ _MAX_EVIDENCE_PER_QUESTION = 6
 
 
 def marina_services(tags: dict | None) -> dict[str, list[str]]:
-    """Résume les tags OSM en quatre questions : berth / supply / tech / shore.
+    """Summarize OSM tags into four questions: berth / supply / tech / shore.
 
-    Retourne ``question → preuves « clé=valeur »`` (6 max par question) ;
-    les questions sans preuve sont omises. Un tag à valeur négative
-    (``no``/``none``/``0``) ne compte jamais.
+    Return ``question → “key=value” evidence`` (6 max per question);
+    questions without evidence are omitted. A tag with a negative value
+    (``no``/``none``/``0``) never counts.
     """
     tags = tags or {}
     out: dict[str, list[str]] = {}
@@ -538,10 +537,9 @@ async def build_world_marinas(
     run_id: str | None = None,
     recorder=None,
 ) -> dict:
-    """
-    Balaye les tuiles monde, upsert par osm_id, reprend les tuiles déjà faites.
-    `fetch_tile` est injectable pour les tests (pas d'Overpass).
-    `run_id` : écriture isolée (ne pas passer la collection live).
+    """Sweep world tiles, upsert by osm_id, resume already-done tiles.
+    `fetch_tile` is injectable for tests (no Overpass).
+    `run_id`: isolated write (do not pass the live collection).
     """
     from app.services.isolated_runs import bind_run, reset_run
 

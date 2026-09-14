@@ -1,11 +1,11 @@
-"""Sous-processus d'extraction PDF (PyMuPDF isolé).
+"""PDF extraction subprocess (isolated PyMuPDF).
 
-Lancé via ``python -m app.core.pdf_worker IN.pdf OUT.txt [max_pages]``.
-Un crash natif (double free, SIGSEGV) tue uniquement ce process, pas le
-worker PoE qui l'a spawn. Le process parent n'importe jamais ``fitz``.
+Launched via ``python -m app.core.pdf_worker IN.pdf OUT.txt [max_pages]``.
+A native crash (double free, SIGSEGV) kills only this process, not the
+PoE worker that spawned it. The parent process never imports ``fitz``.
 
-Si le PDF n'a pas de couche texte (scan de Gaceta, leçon Venezuela
-règlement capitanías), on OCR les pages via tesseract s'il est installé.
+If the PDF has no text layer (Gaceta scan, Venezuela
+capitanías regulation lesson), pages are OCR'd via tesseract if installed.
 """
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ _SEMAR_MARKS = frozenset({"si", "sí", "x", "+"})
 
 
 def _semar_turistica_block(pdf, max_pages: int = 180) -> str:
-    """Colonne TURÍSTICA du PDF SCT : les marques (si / x / +) ont une abscisse.
+    """TURÍSTICA column of the SCT PDF: marks (si / x / +) have an x-coordinate.
 
-    Le texte linéaire perd cette colonne. On réémet les lignes taguées pour
-    que le parseur ne garde que l'activité touristique.
+    Linear text loses this column. Re-emit tagged lines so
+    the parser keeps tourist activity only.
     """
     tur_x = None
     rows: list[tuple[int, str]] = []

@@ -1,7 +1,6 @@
-"""
-Tests du refactoring Core (llm_core/geo_core/dedup_core/extract_core/rag_core/ml_core/osm_validate)
-+ régression non-destructive des données existantes (projects / poe_ports / eez_zones).
-Rapides : pas de génération LLM ici.
+"""Core refactoring tests (llm_core/geo_core/dedup_core/extract_core/rag_core/ml_core/osm_validate)
++ non-destructive regression of existing data (projects / poe_ports / eez_zones).
+Fast: no LLM generation here.
 """
 import os
 import sys
@@ -41,7 +40,7 @@ def mongo():
     client.close()
 
 
-# --- Modules core : importabilité -------------------------------------------
+# --- Core modules: importability --------------------------------------------
 class TestCoreImports:
     @pytest.mark.parametrize("mod", ["app.core.llm", "app.core.nvidia", "app.core.geo", "app.core.dedup",
                                      "app.core.identity", "app.core.extract",
@@ -69,7 +68,7 @@ class TestDedupCore:
         from app.core import dedup as dedup_core
         existing = {"title": "Port A", "city": "Papeete", "note": None}
         updates = dedup_core.merge_docs(existing, {"title": "Autre", "note": "douane", "new": 1})
-        assert "title" not in updates  # champ existant jamais écrasé
+        assert "title" not in updates  # existing field never overwritten
         assert updates["note"] == "douane"
         assert updates["new"] == 1
 
@@ -84,7 +83,7 @@ class TestDedupCore:
         assert len(out) == 2
 
 
-# --- Régression données existantes ------------------------------------------
+# --- Existing-data regression -----------------------------------------------
 class TestDataRegression:
     def test_projects_count_and_coords(self, api):
         r = api.get(f"{BASE_URL}/api/projects", timeout=180)
@@ -111,7 +110,7 @@ class TestDataRegression:
         assert data["summary"]["total_ports"] >= 1169, data["summary"]["total_ports"]  # baseline = seed/
 
     def test_poe_ports_of_generated_zone(self, api):
-        """Zone générée choisie dynamiquement (robuste aux variations du seed)."""
+        """Dynamically chosen generated zone (robust to seed variation)."""
         zones = api.get(f"{BASE_URL}/api/poe/zones", timeout=120).json()["items"]
         candidates = [z for z in zones if z.get("status") == "ia" and (z.get("poe_count") or 0) >= 3]
         assert candidates, "aucune zone générée avec >=3 PoE"

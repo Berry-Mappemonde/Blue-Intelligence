@@ -16,6 +16,8 @@ from typing import Any
 
 import httpx
 
+from gebco_lookup import attach_depth_offshore, reset_gebco_cache
+
 ICI_RADIUS_NM = 30
 MAX_POE = 4
 MAX_AMP = 5
@@ -25,7 +27,7 @@ MAX_SCIENCE = 5
 EEZ_ACCEPT_NM = 240
 R_NM = 3440.065
 
-# Path-style (query LatLng est en 404 depuis 2026).
+# Path-style (query LatLng has been 404 since 2026).
 MRGID_LATLON_URL = "https://www.marineregions.org/rest/getGazetteerRecordsByLatLong.json"
 USER_AGENT = "NAVIGUIDE-simulator/0.2 (Berry-Mappemonde expedition)"
 WPI_URL = "https://msi.nga.mil/api/publications/world-port-index"
@@ -72,6 +74,7 @@ def reset_caches() -> None:
     _fc_cache.clear()
     _wpi_cache["data"] = None
     _wpi_cache["ts"] = 0.0
+    reset_gebco_cache()
 
 
 def bi_base() -> str:
@@ -93,7 +96,8 @@ def empty_dossier(lat: float, lon: float, radius_nm: float = ICI_RADIUS_NM) -> d
         "weather": None,
         "polar": None,
         "event": None,
-        "sources": {"zee": None, "bi": None},
+        "sources": {"zee": None, "bi": None, "gebco": None},
+        "depthOffshore": None,
     }
 
 
@@ -471,7 +475,7 @@ async def fill_dossier(
         return _poe_from_fc(data, lat, lon)
 
     async def amp_task() -> list[dict]:
-        # Cache Mongo (centroïdes). GET /amp?bbox= petit déclenche ProtectedSeas.
+        # Mongo cache (centroids). A small GET /amp?bbox= triggers ProtectedSeas.
         feats = await _cached_fc(http, f"{bi}/export/amp.geojson")
         return nearest_places(feats, lat, lon, radius_nm, MAX_AMP)
 
@@ -480,7 +484,7 @@ async def fill_dossier(
         return nearest_places(feats, lat, lon, radius_nm, MAX_PROJECTS)
 
     async def marinas_task() -> list[dict]:
-        # /marinas = cache mémoire BI ; l'export reconstruit tout Mongo.
+        # /marinas = BI memory cache; the export rebuilds all of Mongo.
         feats = await _cached_fc(http, f"{bi}/marinas")
         return nearest_places(feats, lat, lon, radius_nm, MAX_NEARBY)
 
@@ -540,6 +544,8 @@ async def fill_dossier(
             d["sources"]["bi"] = "partial"
         else:
             d["sources"]["bi"] = "unavailable"
+
+        await attach_depth_offshore(d, http)
     finally:
         if own:
             await http.aclose()

@@ -1,4 +1,4 @@
-"""Revue name_only — apply_one / apply_review sans Atlas."""
+"""name_only review — apply_one / apply_review without Atlas."""
 from __future__ import annotations
 
 import pytest
