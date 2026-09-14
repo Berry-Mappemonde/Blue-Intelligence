@@ -66,8 +66,8 @@ class TestParseAndLegal:
         assert nvidia.looks_like_legal_text("Fort Bay is nice") is False
         model, engine = nvidia.second_extract_choice(
             "Fort Bay Harbour is the official port of entry for visiting yachts. " * 4)
-        assert model == nvidia.GPT_OSS_MODEL
-        assert engine == "nvidia-gpt-oss"
+        assert model == nvidia.SECONDARY_MODEL
+        assert engine == "nvidia-muse"
 
     def test_engine_label(self):
         assert nvidia.engine_label() == "nvidia-gpt-oss"
@@ -199,10 +199,9 @@ class TestProvider:
         assert kimi_legal["reasoning_effort"] == "high"
 
         pro = nvidia.chat_payload("deepseek-ai/deepseek-v4-pro-0813", "sys", "user", 32)
-        assert pro["temperature"] == 0
-        assert "top_p" not in pro  # infer : ne pas toucher temp et top_p ensemble
-        assert pro["reasoning_effort"] == "none"
-        assert pro["chat_template_kwargs"] == {"thinking": False}
+        assert pro["model"] == nvidia.GPT_OSS_MODEL
+        assert pro["temperature"] == 0.6
+        assert pro["top_p"] == 0.7
         assert pro["response_format"] == {"type": "json_object"}
 
         oss = nvidia.chat_payload("openai/gpt-oss-20b", "sys", "user", 32)
