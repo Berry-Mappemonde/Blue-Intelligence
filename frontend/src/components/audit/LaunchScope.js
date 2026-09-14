@@ -1,7 +1,7 @@
 import { Play, Square } from "lucide-react";
 
 /**
- * Chrome commun Test | Full | Lancer (+ Stop) pour toutes les cartes Console.
+ * Shared Test | Full | Launch (+ Stop) chrome for every Console card.
  */
 export default function LaunchScope({
   t, scope, setScope, onLaunch, onStop, running, busy, hint, launchLabel, launchTestId, children,

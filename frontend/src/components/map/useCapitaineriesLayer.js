@@ -12,7 +12,7 @@ const esc = (value) => String(value ?? "")
 const COLOR = "#38bdf8";
 
 /**
- * Couche Capitaineries : OSM + SHOM + NOAA, pastilles canvas, sans cluster.
+ * Harbour-master layer: OSM + SHOM + NOAA, canvas dots, no clustering.
  */
 export default function useCapitaineriesLayer({
   mapObj, clusterRef, markersById, capitaineries, tRef,

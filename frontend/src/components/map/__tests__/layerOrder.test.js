@@ -1,17 +1,17 @@
 /**
- * Verrouillage de l'ordre des couches et du registre des fonds de carte.
+ * Lock on layer order and the basemap registry.
  *
- * Inspiration Open Waters: Seamap (`style/index.test.ts`) : l'ordre de dessin
- * est charge utile — un remaniement accidentel doit casser ce test, jamais
- * passer inaperçu en revue.
+ * Inspired by Open Waters: Seamap (`style/index.test.ts`): draw order is
+ * payload — an accidental reshuffle must break this test, never slip
+ * through review unnoticed.
  */
 import { LEAFLET_BUILTIN_PANES, PANES, createPanes } from "../layerOrder";
 import { SCIENCE_WMS_PANES } from "../useScienceWms";
 import { BASEMAPS, BASEMAP_CYCLE, nextBasemap, stripUnavailableSources } from "../basemaps";
 import { maplibreWorkerUrl } from "../maplibreWorker";
 
-describe("ordre des panes (verrouillé)", () => {
-  test("la liste exacte des panes ne bouge pas sans casser ce test", () => {
+describe("pane order (locked)", () => {
+  test("the exact pane list cannot change without breaking this test", () => {
     expect(PANES.map((p) => `${p.name}@${p.zIndex}`)).toEqual([
       "basemap-gl@190",
       "climatology-raster@250",
@@ -23,28 +23,28 @@ describe("ordre des panes (verrouillé)", () => {
     ]);
   });
 
-  test("empilement strictement croissant, cohérent avec les panes Leaflet", () => {
+  test("strictly increasing stack, consistent with Leaflet panes", () => {
     const zs = PANES.map((p) => p.zIndex);
     const sorted = [...zs].sort((a, b) => a - b);
     expect(zs).toEqual(sorted);
     expect(new Set(zs).size).toBe(zs.length);
 
     const z = Object.fromEntries(PANES.map((p) => [p.name, p.zIndex]));
-    // Le fond carte marine reste SOUS les tuiles raster.
+    // The sea-chart basemap stays UNDER raster tiles.
     expect(z["basemap-gl"]).toBeLessThan(LEAFLET_BUILTIN_PANES.tilePane);
-    // La route NAVIGUIDE au-dessus des tuiles, sous l'overlayPane.
+    // NAVIGUIDE route above tiles, under overlayPane.
     expect(z.route).toBeGreaterThan(LEAFLET_BUILTIN_PANES.tilePane);
     expect(z.route).toBeLessThan(LEAFLET_BUILTIN_PANES.overlayPane);
-    // AMP au-dessus de l'overlayPane, escales au-dessus des AMP.
+    // MPA above overlayPane, stopovers above MPAs.
     expect(z.amp).toBeGreaterThan(LEAFLET_BUILTIN_PANES.overlayPane);
     expect(z["formalities-escales"]).toBeGreaterThan(z.amp);
-    // Tout reste sous les marqueurs (et donc sous les popups).
+    // Everything stays under markers (and therefore under popups).
     PANES.forEach((p) => {
       expect(p.zIndex).toBeLessThan(LEAFLET_BUILTIN_PANES.markerPane);
     });
   });
 
-  test("createPanes applique les zIndex sur la carte", () => {
+  test("createPanes applies zIndex values on the map", () => {
     const panes = {};
     const fakeMap = {
       createPane: (name) => { panes[name] = { style: {} }; },
@@ -62,7 +62,7 @@ describe("ordre des panes (verrouillé)", () => {
     expect(PANES.find((p) => p.name === "bi-overlay").pointerEvents).toBe("none");
   });
 
-  test("bathy EMODnet reste sous l'atlas climatologie", () => {
+  test("EMODnet bathy stays under the climatology atlas", () => {
     expect(SCIENCE_WMS_PANES["science-wms-bathy"]).toBe(240);
     expect(SCIENCE_WMS_PANES["science-wms-bathy"]).toBeLessThan(
       PANES.find((p) => p.name === "climatology-raster").zIndex,
@@ -70,20 +70,20 @@ describe("ordre des panes (verrouillé)", () => {
   });
 });
 
-describe("registre des fonds de carte (verrouillé)", () => {
-  test("exactement trois fonds : dark, light, sea", () => {
+describe("basemap registry (locked)", () => {
+  test("exactly three basemaps: dark, light, sea", () => {
     expect(Object.keys(BASEMAPS)).toEqual(["dark", "light", "sea"]);
     expect(BASEMAP_CYCLE).toEqual(["dark", "light", "sea"]);
   });
 
-  test("les fonds raster ont une URL de tuiles https", () => {
+  test("raster basemaps have an https tile URL", () => {
     ["dark", "light"].forEach((k) => {
       expect(BASEMAPS[k].kind).toBe("raster");
       expect(BASEMAPS[k].url).toMatch(/^https:\/\//);
     });
   });
 
-  test("la carte marine est un style GL avec attribution et avertissement", () => {
+  test("the sea chart is a GL style with attribution and a warning", () => {
     const sea = BASEMAPS.sea;
     expect(sea.kind).toBe("gl");
     expect(sea.styleUrl).toMatch(/^https:\/\/.*style\.json$/);
@@ -93,15 +93,15 @@ describe("registre des fonds de carte (verrouillé)", () => {
     expect(sea.attribution).toContain("OpenStreetMap");
   });
 
-  test("le cycle des fonds revient à son point de départ", () => {
+  test("the basemap cycle returns to its starting point", () => {
     expect(nextBasemap("dark")).toBe("light");
     expect(nextBasemap("light")).toBe("sea");
     expect(nextBasemap("sea")).toBe("dark");
-    // valeur inconnue → premier fond du cycle (jamais d'undefined)
+    // unknown value → first basemap in the cycle (never undefined)
     expect(nextBasemap("banana")).toBe("dark");
   });
 
-  test("stripUnavailableSources retire elevation sans toucher aux autres sources", () => {
+  test("stripUnavailableSources drops elevation without touching other sources", () => {
     const style = {
       sources: { seamap: { type: "vector" }, elevation: { type: "raster-dem" } },
       layers: [
