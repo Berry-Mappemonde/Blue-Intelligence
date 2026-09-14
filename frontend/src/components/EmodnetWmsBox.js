@@ -19,7 +19,7 @@ export default function EmodnetWmsBox({ t, scienceWms, onToggleWms }) {
       className="shrink-0 border-t border-line p-3 bg-surface"
       data-testid="emodnet-wms-box"
     >
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-1">
+      <p className="font-heading text-[12px] font-semibold text-slate-200 mb-1">
         {t("scienceWmsTitle")}
       </p>
       <p className="font-mono text-[9px] text-slate-500 leading-relaxed mb-2">

@@ -18,7 +18,7 @@ export default function NotForNavModal({ t, open, onAccept }) {
       <div className="max-w-md w-full bg-surface border border-amber-400/50 rounded-sm shadow-xl p-5">
         <h2
           id="not-for-nav-title"
-          className="font-heading font-bold text-sm uppercase tracking-wide text-amber-200"
+          className="font-heading font-bold text-base text-amber-200"
         >
           {t("notForNavTitle")}
         </h2>
