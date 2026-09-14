@@ -39,3 +39,11 @@ export function nmPerSecond(profile, { boatKnots, atlanticNm }) {
   if (profile === "read") return atl / 240;
   return atl / 70;
 }
+
+/** Durée écran d’un hop aérien, pour que l’avion reste visible à chaque profil. */
+export function airHopSeconds(profile) {
+  if (profile === "real") return 8;
+  if (profile === "read") return 4.5;
+  if (profile === "fast") return 3.2;
+  return 3.6;
+}
