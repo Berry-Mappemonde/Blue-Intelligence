@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from app.core import extract as ext
 from app.core.nvidia import CHAINS, chat_payload
 from app.core.vision_msg import claude_user_content, openai_user_content
 from app.services.poe_pipeline import remember_review_pins, seed_url_candidates
@@ -80,6 +81,37 @@ def test_review_chain_and_chat_payload_vision():
     assert content[0]["type"] == "text"
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_render_screenshot_skips_retired_host_without_browser(monkeypatch):
+    import app.core.render as render
+
+    async def boom_browser(log):
+        raise AssertionError("retired host must not launch Chromium")
+
+    monkeypatch.setattr(render, "_get_browser", boom_browser)
+    logs = []
+    out = asyncio.run(render.render_screenshot(
+        "https://elmirador.sct.gob.mx/los-puertos", log=logs.append))
+    assert out is None
+    assert any("sauté" in m for m in logs)
+
+
+def test_evidence_skips_screenshot_after_failed_fetch(monkeypatch):
+    from app.services import review_doc_picker as picker
+
+    async def dead(url, keep_raw=True, log=None):
+        return ext.empty_page(url, error="ConnectError") | {"fetch_failed": True}
+
+    async def boom_shot(url, log=None):
+        raise AssertionError("must not screenshot a dead URL")
+
+    monkeypatch.setattr(picker, "extract_cascade", dead)
+    monkeypatch.setattr("app.core.render.render_screenshot", boom_shot)
+    logs = []
+    ev = asyncio.run(picker._evidence_for("https://slow.example.gov/x", logs.append))
+    assert ev["images"] == []
+    assert any("sauté" in m for m in logs)
 
 
 def test_render_screenshot_none_when_playwright_missing(monkeypatch):

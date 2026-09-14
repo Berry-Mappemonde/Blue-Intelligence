@@ -14,6 +14,7 @@ from app.core.extract import (
     extract_structured_ports,
     looks_like_port_catalog,
     pdf_page_jpegs,
+    should_skip_screenshot,
 )
 from app.core.judge import complete_json_cascade
 from app.services.poe_pipeline import list_url_bonus
@@ -105,13 +106,17 @@ async def _evidence_for(url: str, log) -> dict:
         except Exception:
             images = []
     elif not page.get("is_pdf"):
-        try:
-            from app.core.render import render_screenshot
-            shot = await render_screenshot(url, log=log)
-            if shot:
-                images = [shot]
-        except Exception:
-            images = []
+        skip = should_skip_screenshot(url, page)
+        if skip:
+            log(f"screenshot {url[:70]}: sauté ({skip})")
+        else:
+            try:
+                from app.core.render import render_screenshot
+                shot = await render_screenshot(url, log=log)
+                if shot:
+                    images = [shot]
+            except Exception:
+                images = []
     catalog = extract_structured_ports(text) if text else []
     return {
         "url": url,
