@@ -329,6 +329,7 @@ Pas de régime « publication exclusive Formalités ». Pas de « filtre skipper
 | `docs/CAHIER_DES_CHARGES_PROJETS.md` | Objet projet, phase D, snapped/fallback. |
 | `docs/CONTRATS_MODES.md` | Cinq contrats **pipeline** (pas Review). |
 | `docs/REGLES_PARAMETRES.md` | Règles que les choix Review doivent pouvoir **écrire**. |
+| `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` | Review / Gold = filière **contrôle** ; pas un fond de carte. |
 
 ## 12. Rapport de review
 
