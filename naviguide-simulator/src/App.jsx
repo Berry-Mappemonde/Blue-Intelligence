@@ -337,6 +337,22 @@ export default function App() {
     const prev = prevPlayheadRef.current;
     const cur = playback.nm;
     prevPlayheadRef.current = cur;
+    if (Math.abs(cur - prev) > 8) {
+      lastArrivalKeyRef.current = "";
+      const landed = escaleMarks.find((m) => {
+        const at = m.filmNm ?? m.nm;
+        return at > 0.5 && Math.abs(cur - at) <= 0.8;
+      });
+      if (!landed) {
+        setArrivalBanner(null);
+        return undefined;
+      }
+      const landKey = `${landed.name}-${Math.round(landed.filmNm ?? landed.nm)}`;
+      lastArrivalKeyRef.current = landKey;
+      setArrivalBanner(landed);
+      const timer = setTimeout(() => setArrivalBanner(null), 8000);
+      return () => clearTimeout(timer);
+    }
     if (cur + 2 < prev) {
       lastArrivalKeyRef.current = "";
       setArrivalBanner(null);

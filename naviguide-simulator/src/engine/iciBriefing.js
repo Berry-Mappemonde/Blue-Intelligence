@@ -200,7 +200,7 @@ function legSentence(dossier, lang) {
 
 function depthSentence(dossier, lang) {
   const d = Number(dossier?.depthOffshore);
-  if (!Number.isFinite(d)) return "";
+  if (!Number.isFinite(d) || Math.abs(d) < 1) return "";
   const m = Math.round(Math.abs(d));
   return isEn(lang)
     ? `GEBCO offshore sounding: ${m} m (GEBCO Compilation Group; not for navigation).`

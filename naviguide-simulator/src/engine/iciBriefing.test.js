@@ -134,5 +134,12 @@ describe("narrateIci", () => {
     }, "fr");
     assert.match(text, /GEBCO/);
     assert.match(text, /3200/);
+    const silent = narrateIci({
+      zee: { name: "Haute mer", mrgid: null, gold: false },
+      nearby: { marinas: [], capitaineries: [], wpi: [] },
+      depthOffshore: 0,
+      sources: { zee: "marineregions", bi: "ok" },
+    }, "fr");
+    assert.doesNotMatch(silent, /GEBCO/);
   });
 });
