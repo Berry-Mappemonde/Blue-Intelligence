@@ -5,7 +5,7 @@ import {
 } from "../safetyIsobathSpec";
 
 describe("safetyIsobathSpec", () => {
-  test("aplat DEPARE où drval1 < seuil (défaut 2 m)", () => {
+  test("DEPARE fill where drval1 < threshold (default 2 m)", () => {
     const [layer] = safetyIsobathLayers();
     expect(layer.id).toBe(SAFETY_ISOBATH_LAYER_ID);
     expect(layer.source).toBe("seascape-vector");
@@ -17,7 +17,7 @@ describe("safetyIsobathSpec", () => {
     ]);
   });
 
-  test("seuil 5 / 10 m ; valeur inconnue → 2 m", () => {
+  test("5 / 10 m threshold; unknown value → 2 m", () => {
     expect(safetyIsobathLayers(5)[0].filter[2][2]).toBe(5);
     expect(safetyIsobathLayers(10)[0].filter[2][2]).toBe(10);
     expect(safetyIsobathLayers(99)[0].filter[2][2]).toBe(DEFAULT_SAFETY_M);

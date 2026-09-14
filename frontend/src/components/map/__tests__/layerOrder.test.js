@@ -116,7 +116,7 @@ describe("basemap registry (locked)", () => {
     expect(style.sources.elevation).toBeDefined();
   });
 
-  test("le worker MapLibre est servi en statique, pas via le chunk webpack", () => {
+  test("the MapLibre worker is served as a static file, not via the webpack chunk", () => {
     expect(maplibreWorkerUrl("")).toBe("/maplibre/maplibre-gl-worker.mjs");
     expect(maplibreWorkerUrl("/app")).toBe("/app/maplibre/maplibre-gl-worker.mjs");
     expect(maplibreWorkerUrl("/app/")).toBe("/app/maplibre/maplibre-gl-worker.mjs");
