@@ -42,7 +42,7 @@ export default function MapLayersSidebar({
             data-testid="overlay-bi-toggle"
             className="mt-0.5 accent-accent"
             checked={!!overlayOn}
-            onChange={() => onToggleOverlay && onToggleOverlay(!overlayOn)}
+            onChange={(e) => onToggleOverlay && onToggleOverlay(e.target.checked)}
           />
           <span>{t("overlayBiToggle")}</span>
         </label>
@@ -66,7 +66,7 @@ export default function MapLayersSidebar({
               data-testid="noaa-aids-toggle"
               className="mt-0.5 accent-accent"
               checked={!!noaaAidsOn}
-              onChange={() => onToggleNoaaAids && onToggleNoaaAids(!noaaAidsOn)}
+              onChange={(e) => onToggleNoaaAids && onToggleNoaaAids(e.target.checked)}
             />
             <span>{t("noaaAidsToggle")}</span>
           </label>
@@ -92,7 +92,7 @@ export default function MapLayersSidebar({
                   data-testid={`map-wms-${layer.id}`}
                   className="mt-0.5 accent-accent"
                   checked={on}
-                  onChange={() => onToggleWms && onToggleWms(layer.id, !on)}
+                  onChange={(e) => onToggleWms && onToggleWms(layer.id, e.target.checked)}
                 />
                 <span>{t(layer.labelKey)}</span>
               </label>
