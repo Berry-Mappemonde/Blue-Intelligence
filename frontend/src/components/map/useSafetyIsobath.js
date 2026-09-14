@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { SAFETY_ISOBATH_LAYER_ID, safetyIsobathLayers } from "./safetyIsobathSpec";
 
 /**
- * Colore les DEPARE Seascape sous le seuil skipper, sur le GL Seamap.
+ * Color Seascape DEPARE features below the skipper threshold, on GL Seamap.
  */
 export default function useSafetyIsobath({ glMap, enabled, meters }) {
   useEffect(() => {
@@ -13,7 +13,7 @@ export default function useSafetyIsobath({ glMap, enabled, meters }) {
     const remove = () => {
       try {
         if (map.getLayer(SAFETY_ISOBATH_LAYER_ID)) map.removeLayer(SAFETY_ISOBATH_LAYER_ID);
-      } catch (_) { /* style pas encore prêt */ }
+      } catch (_) { /* style not ready yet */ }
     };
 
     if (!enabled) {

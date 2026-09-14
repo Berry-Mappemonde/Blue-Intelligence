@@ -1,5 +1,5 @@
-"""app.routers.capitaineries — dump OSM harbour_master + overlays SHOM / NOAA
-(BUISGL FUNCTN=2), enrichissement téléphone / VHF."""
+"""app.routers.capitaineries — OSM harbour_master dump + SHOM / NOAA overlays
+(BUISGL FUNCTN=2), phone / VHF enrichment."""
 import asyncio
 import os
 import time
@@ -138,7 +138,7 @@ async def list_capitaineries(source: str | None = None, visible: bool = False,
 
 @router.get("/noaa/aids")
 async def noaa_aids(bbox: str = ""):
-    """Feux / bouées ENC Direct. Bbox hors eaux US → collection vide."""
+    """ENC Direct lights / buoys. Bbox outside US waters → empty collection."""
     from app.services import noaa_enc
     parsed = noaa_enc.parse_bbox(bbox)
     if not parsed or not noaa_enc.bbox_intersects_us(parsed):
@@ -255,8 +255,8 @@ async def capitaineries_build_start(body: BuildBody | None = None):
             await isolated_runs.finalize_run(
                 db, "capitaineries", run_id, extra=extra,
                 cancelled=bool(BUILD_STATE.cancel))
-            # Full : « dump mondial, puis enrichissement » — par priorité,
-            # stoppable, garde crédits OpenRouter dans l'endpoint.
+            # Full: "world dump, then enrichment" — by priority,
+            # stoppable, keeps OpenRouter credits in the endpoint.
             if scope == "full" and not BUILD_STATE.cancel and not ENRICH_BATCH_STATE.running:
                 try:
                     BUILD_STATE.log(
@@ -635,10 +635,10 @@ async def capitaineries_run_events(run_id: str, step: str | None = None,
 
 @router.get("/capitaineries/runs/{run_id}/geojson")
 async def capitaineries_run_geojson(run_id: str):
-    """FeatureCollection du run — sélecteur de run de la carte.
+    """Run FeatureCollection — map run selector.
 
-    Les dumps live historiques (`wrote_capitaineries=true`) n'ont pas
-    d'items isolés : on sert alors la collection live, qu'ils ont écrite.
+    Historical live dumps (`wrote_capitaineries=true`) have no
+    isolated items: then serve the live collection they wrote.
     """
     meta = await db.capitainerie_runs.find_one({"_id": run_id})
     if not meta:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lance SearXNG sans Docker (JSON activé) sur 127.0.0.1:8888.
+# Start SearXNG without Docker (JSON enabled) on 127.0.0.1:8888.
 set -euo pipefail
 ROOT="${SEARXNG_HOME:-/opt/searxng}"
 SETTINGS="${SEARXNG_SETTINGS_PATH:-/tmp/searxng-settings.yml}"

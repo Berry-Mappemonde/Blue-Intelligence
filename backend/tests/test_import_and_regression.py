@@ -17,7 +17,7 @@ BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 
 
 def _cleanup_fixtures():
-    """Supprime les projets TEST_Import_* créés par cette suite (idempotent)."""
+    """Delete TEST_Import_* projects created by this suite (idempotent)."""
     from pathlib import Path as _P
     from dotenv import dotenv_values
     from pymongo import MongoClient

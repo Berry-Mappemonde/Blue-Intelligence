@@ -1,4 +1,4 @@
-"""Inspirations seamap : exports versionnés, snapshots immuables, badges services, audit."""
+"""Seamap inspirations: versioned exports, immutable snapshots, service badges, audit."""
 from __future__ import annotations
 
 import json
@@ -45,10 +45,10 @@ def test_versioned_fc_metadata_complete_et_features_intactes():
     assert meta["license"] == "ODbL"
     assert meta["disclaimer"] == DISCLAIMER_EN
     assert "navigation" in meta["disclaimer_fr"].lower()
-    # features et clés existantes intactes
+    # existing features and keys intact
     assert out["features"] == FEATURES
     assert out["attribution"] == "© OpenStreetMap contributors"
-    assert "metadata" not in fc  # l'original n'est pas muté
+    assert "metadata" not in fc  # the original is not mutated
 
 
 def test_fingerprint_stable_et_sensible_au_contenu():
@@ -57,7 +57,7 @@ def test_fingerprint_stable_et_sensible_au_contenu():
     changed = json.loads(json.dumps(FEATURES))
     changed[0]["properties"]["name"] = "Z"
     assert content_fingerprint(changed) != a
-    # même contenu deux jours différents → même empreinte, versions datées distinctes
+    # same content on two different days → same fingerprint, distinct dated versions
     v1 = versioned_fc({"features": FEATURES}, "d",
                       now=datetime(2026, 1, 1, tzinfo=timezone.utc))
     v2 = versioned_fc({"features": FEATURES}, "d",
@@ -80,7 +80,7 @@ def test_snapshot_ecrit_manifest_et_reste_immuable(tmp_path):
     assert entry["bytes"] > 0
     on_disk = json.loads((target / "MANIFEST.json").read_text(encoding="utf-8"))
     assert on_disk["files"]["route.geojson"]["content_sha256"] == entry["content_sha256"]
-    # immuable : même date → refus, contenu intact
+    # immutable: same date → refuse, content intact
     before = (target / "route.geojson").read_text(encoding="utf-8")
     with pytest.raises(FileExistsError):
         write_snapshot_files(tmp_path, "2026-09-10", {"route": fc})
@@ -129,7 +129,7 @@ def test_slim_feature_expose_svc_seulement_si_present():
     assert with_svc["properties"]["svc"] == {"supply": ["fuel=yes"]}
 
 
-# ------------------------------------------------------------ audit des tags
+# ------------------------------------------------------------ tag audit
 
 def test_audit_collect_tag_stats():
     from audit_tags import collect_tag_stats
@@ -143,7 +143,7 @@ def test_audit_collect_tag_stats():
     assert stats["docs_with_tags"] == 2
     assert stats["seamark_types"]["harbour"] == 1
     assert stats["seamark_types"]["anchorage"] == 1
-    # sous-clé extraite en sautant le segment numérique
+    # sub-key extracted by skipping the numeric segment
     assert stats["seamark_subkeys"]["colour"] == {"light"}
     assert stats["key_counts"]["fuel"] == 1
 

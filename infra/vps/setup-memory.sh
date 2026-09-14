@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Swap 4 Go + swappiness basse + plafond cache MongoDB.
-# Idempotent. Ne redémarre PAS mongod (à faire hors run Complet).
+# 4 GB swap + low swappiness + MongoDB cache cap.
+# Idempotent. Does NOT restart mongod (do that outside a Full run).
 set -euo pipefail
 
 SWAPFILE=/swapfile

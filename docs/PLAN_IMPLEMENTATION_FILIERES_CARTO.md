@@ -1,812 +1,812 @@
-# Plan d’implémentation — Filières carto (contrôle, carte, hydro, satellite)
+# Implementation plan — Cartographic tracks (control, map, hydro, satellite)
 
-Document de cadrage. Il remet en ordre un tas d’idées utiles mais
-**mélangées** : ontologie OSM, SHOM/NOAA, Review / Gold, GeoJSON
-versionné, géocodage, VLM, Seamap, tippecanoe, EMODnet, NOAA ENC,
+Framing document. It puts back in order a pile of useful but
+**mixed** ideas: OSM ontology, SHOM/NOAA, Review / Gold, versioned
+GeoJSON, geocoding, VLM, Seamap, tippecanoe, EMODnet, NOAA ENC,
 IENC, GEBCO, Sentinel.
 
-Écrit en langage simple : c’est le contrat de ce que l’on cherche, et
-de ce que l’on refuse. Chaque brique a **un métier**. On ne lui en
-colle pas un second.
+Written in plain language: this is the contract of what we seek, and
+of what we refuse. Each brick has **one job**. We do not stick a
+second one on it.
 
-Version **1.0** — 14 septembre 2026.
+Version **1.0** — 14 September 2026.
 
-Hérite de : `README.md` (fonds Seamap, exports, catalogue),
+Inherits from: `README.md` (Seamap basemaps, exports, catalogue),
 `docs/CATALOGUE_SEAMARK.md`, `docs/CONTRATS_MODES.md`,
 `docs/CONTRATS_REVIEW_PAR_MODE.md`, `docs/CAHIER_DES_CHARGES_REVIEW.md`,
 `docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md`,
 `docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`,
 `docs/hackathon-nebius-nvidia.md`, `infra/vps/seamap/README.md`.
 
-**Sommaire**
+**Contents**
 
-1. En une phrase
-2. Pourquoi ce travail existe
-3. Ce que l’on veut obtenir
-4. Ce que l’on ne veut pas
-5. Vocabulaire
-6. Les quatre filières (la remise en ordre)
-7. Partage Blue Intelligence / NAVIGUIDE simulator
-8. État actuel et écarts
-9. Filière 1 — Contrôle (objets et preuves)
-10. Filière 2 — Carte (fond + overlays + avertissement)
-11. Filière 3 — Hydrographie officielle (API, pas des fichiers S-57)
-12. Filière 4 — Satellite (pilotes corridor Berry)
-13. Ordre de chantier
-14. Fichiers touchés
-15. Recette
-16. Risques
-17. Hors périmètre
-18. Documents dont ce plan hérite
-
----
-
-## 1. En une phrase
-
-Séparer **quatre métiers** qui ne se recouvrent pas : (1) **contrôler**
-un objet extrait contre un référentiel et une relecture humaine,
-(2) **afficher** Seamap + nos overlays + EMODnet avec un vrai
-« NOT FOR NAVIGATION », (3) **étendre** les objets officiels déjà
-branchés **par API**, (4) **piloter** Sentinel sur le corridor Berry
-dans le mode Science — sans jamais transformer Blue Intelligence en
-encodeur S-101 ni NAVIGUIDE en ECDIS.
+1. In one sentence
+2. Why this work exists
+3. What we want to achieve
+4. What we do not want
+5. Vocabulary
+6. The four tracks (putting things in order)
+7. Blue Intelligence / NAVIGUIDE simulator split
+8. Current state and gaps
+9. Track 1 — Control (objects and evidence)
+10. Track 2 — Map (basemap + overlays + warning)
+11. Track 3 — Official hydrography (API, not S-57 files)
+12. Track 4 — Satellite (Berry corridor pilots)
+13. Build order
+14. Files touched
+15. Recipe
+16. Risks
+17. Out of scope
+18. Documents this plan inherits
 
 ---
 
-## 2. Pourquoi ce travail existe
+## 1. In one sentence
 
-Les briques sont déjà là. Ce qui manque, c’est de **ne pas les
-confondre**.
+Separate **four jobs** that do not overlap: (1) **control**
+an extracted object against a reference and a human review,
+(2) **display** Seamap + our overlays + EMODnet with a real
+“NOT FOR NAVIGATION”, (3) **extend** the official objects already
+wired **by API**, (4) **pilot** Sentinel on the Berry corridor
+in Science mode — without ever turning Blue Intelligence into an
+S-101 encoder or NAVIGUIDE into an ECDIS.
 
-Aujourd’hui on a :
+---
 
-- un catalogue `seamark:*` et un audit de tags ;
-- SHOM (SMCFAC / BUISGL) et NOAA ENC Direct **déjà** collés sur les
-  capitaineries ;
-- Review / Gold (file humaine) ;
-- des GeoJSON versionnés + sha256 + un PMTiles hebdo **publié mais
-  jamais affiché** ;
-- `geo.py` (Nominatim ∥ GeoNames) ;
-- `vision_msg.py` + NIM / Nemotron (juge de documents) ;
-- Seamap (OSM + PMTiles + MapLibre) comme fond « Carte marine » ;
-- EMODnet en WMS **et** en point, **seulement** en mode Science ;
-- un bandeau « Ne convient pas à la navigation », **pas** une
-  fenêtre d’acceptation.
+## 2. Why this work exists
 
-Si on mélange ces rôles, on part dans de mauvaises implémentations :
+The bricks are already there. What is missing is **not confusing
+them**.
 
-| Confusion | Ce qu’elle produirait |
+Today we have:
+
+- a `seamark:*` catalogue and a tag audit;
+- SHOM (SMCFAC / BUISGL) and NOAA ENC Direct **already** glued onto
+  harbour offices;
+- Review / Gold (human queue);
+- versioned GeoJSON + sha256 + a weekly PMTiles **published but
+  never displayed**;
+- `geo.py` (Nominatim ∥ GeoNames);
+- `vision_msg.py` + NIM / Nemotron (document judge);
+- Seamap (OSM + PMTiles + MapLibre) as the “Nautical chart” basemap;
+- EMODnet as WMS **and** as a point, **only** in Science mode;
+- a “Not suitable for navigation” banner, **not** an
+  acceptance window.
+
+If we mix these roles, we head into bad implementations:
+
+| Confusion | What it would produce |
 |-----------|------------------------|
-| Catalogue OSM = encodeur S-101 | Un produit hydrographique que nous ne sommes pas |
-| SHOM/NOAA = source à recopier telle quelle | Un ponton de croquis promu « officiel » |
-| `geo.py` = calage d’image | Un géoréférenceur pixel dont nous n’avons pas besoin |
-| VLM = recaler des pixels | Un usage vision hors contrat (et hors VPS) |
-| EMODnet WMS = seulement Science | Un fond utile caché aux autres modes |
-| GEBCO = profondeur de port | Un chiffre trop gros pour un bassin |
-| Sentinel = carte marine | Une image satellite présentée comme un sondage |
+| OSM catalogue = S-101 encoder | A hydrographic product we are not |
+| SHOM/NOAA = source to copy as-is | A sketch pontoon promoted to “official” |
+| `geo.py` = image registration | A pixel georeferencer we do not need |
+| VLM = shift pixels | A vision use outside the contract (and outside the VPS) |
+| EMODnet WMS = Science only | A useful basemap hidden from other modes |
+| GEBCO = harbour depth | A number too coarse for a basin |
+| Sentinel = nautical chart | A satellite image presented as a sounding |
 
-NAVIGUIDE (prod et simulateur) est un **SADP** : aide à la décision
-plaisancière. Blue Intelligence est une **base géospatiale + carte**.
-Ni l’un ni l’autre n’est un ECDIS. Ce plan garde cette frontière.
-
----
-
-## 3. Ce que l’on veut obtenir
-
-Quatre livrables, **dans cet ordre de dépendances** (pas quatre
-projets parallèles qui s’ignorent).
-
-1. **Contrôle.** Un objet BI (ponton, bureau, feu, zone de
-   profondeur extraite) a une **identité**, un **référentiel de
-   contrôle** s’il existe (SHOM / NOAA / catalogue OSM), et passe
-   par **Review / Gold** avant d’entrer dans un run certifié.
-2. **Carte.** Seamap reste le fond. Dessus : overlay hebdomadaire
-   tippecanoe, WMS EMODnet **aussi hors Science**, isobathe de
-   sécurité si les tuiles portent une profondeur, **fenêtre
-   d’acceptation** « NOT FOR NAVIGATION » (le bandeau ne suffit pas).
-3. **Hydro officielle par API.** Étendre NOAA ENC Direct (feux,
-   bouées, isobathes US) **via l’API ArcGIS déjà utilisée**, jamais
-   via des fichiers S-57. GEBCO seulement **au large**, pour
-   NAVIGUIDE. IENC / VNF **hors périmètre**.
-4. **Pilotes Sentinel.** Corridor Berry seulement. Trait de côte +
-   estran + SDB simple, export GeoJSON OSM-shaped, affichage **mode
-   Science** avec le même avertissement. Calcul **hors VPS**.
-
-Phrase de partage (comme la climatologie) :
-
-**Blue Intelligence montre, contrôle et versionne. Le simulateur
-NAVIGUIDE s’en sert pour le film, sans inventer une deuxième carte.**
+NAVIGUIDE (prod and simulator) is an **SADP**: pleasure-craft
+decision support. Blue Intelligence is a **geospatial base + map**.
+Neither is an ECDIS. This plan keeps that boundary.
 
 ---
 
-## 4. Ce que l’on ne veut pas
+## 3. What we want to achieve
 
-- Encoder ou exporter du **S-101** / ingérer des **fichiers S-57**.
-- Recaler une image (croquis, Sentinel, PDF) avec `geo.py` ou un VLM.
-- Faire du VLM un moteur de bathymétrie ou de géoréférencement.
-- Gold silencieux, Gold sans clic, Gold qui change la carte sans
-  « Afficher la review » (`docs/CONTRATS_REVIEW_PAR_MODE.md` §0 et §8).
-- Review / Gold des modes Science et Climatologie en V1 (C8).
-- Isobathes **vectorielles** EMODnet sur le VPS (GDAL + trop de
-  calcul).
-- GEBCO comme profondeur d’approche d’un port.
-- IENC / VNF (fleuves) dans le périmètre actuel.
-- ACOLITE / CoastSat / ICESat-2 **sur le VPS** (4 vCores, 8 Go,
-  ~26 Go déjà pris par Seamap).
-- Présenter un produit Sentinel comme une carte marine.
-- Un 8ᵉ mode BI. Science absorbe les pilotes satellite.
-- Copier le C++ GPL de Seamap / OpenCPN. On consomme le `style.json`
-  CC-BY et on réécrit.
+Four deliverables, **in this dependency order** (not four
+parallel projects that ignore each other).
+
+1. **Control.** A BI object (pontoon, office, light, extracted
+   depth area) has an **identity**, a **control reference**
+   if one exists (SHOM / NOAA / OSM catalogue), and goes through
+   **Review / Gold** before entering a certified run.
+2. **Map.** Seamap remains the basemap. On top: weekly
+   tippecanoe overlay, EMODnet WMS **also outside Science**, safety
+   contour if the tiles carry a depth, **acceptance
+   window** “NOT FOR NAVIGATION” (the banner is not enough).
+3. **Official hydro by API.** Extend NOAA ENC Direct (US lights,
+   buoys, contours) **via the ArcGIS API already used**, never
+   via S-57 files. GEBCO only **offshore**, for
+   NAVIGUIDE. IENC / VNF **out of scope**.
+4. **Sentinel pilots.** Berry corridor only. Coastline +
+   intertidal + simple SDB, OSM-shaped GeoJSON export, display in
+   **Science mode** with the same warning. Compute **off the VPS**.
+
+Split sentence (like climatology):
+
+**Blue Intelligence shows, controls and versions. The NAVIGUIDE
+simulator uses it for the film, without inventing a second map.**
 
 ---
 
-## 5. Vocabulaire
+## 4. What we do not want
 
-| Mot | Sens ici |
+- Encode or export **S-101** / ingest **S-57 files**.
+- Register an image (sketch, Sentinel, PDF) with `geo.py` or a VLM.
+- Make the VLM a bathymetry or georeferencing engine.
+- Silent Gold, Gold without a click, Gold that changes the map without
+  “Show the review” (`docs/CONTRATS_REVIEW_PAR_MODE.md` §0 and §8).
+- Review / Gold of Science and Climatology modes in V1 (C8).
+- **Vector** EMODnet contours on the VPS (GDAL + too much
+  compute).
+- GEBCO as an approach depth for a harbour.
+- IENC / VNF (rivers) in the current scope.
+- ACOLITE / CoastSat / ICESat-2 **on the VPS** (4 vCores, 8 GB,
+  ~26 GB already taken by Seamap).
+- Presenting a Sentinel product as a nautical chart.
+- An 8th BI mode. Science absorbs the satellite pilots.
+- Copying Seamap / OpenCPN GPL C++. We consume the CC-BY
+  `style.json` and we rewrite.
+
+---
+
+## 5. Vocabulary
+
+| Word | Meaning here |
 |-----|----------|
-| **Filière** | Une chaîne avec un métier unique. Quatre filières, pas un fourre-tout « carto ». |
-| **Contrôle** | Comparer un objet extrait à un référentiel **déjà publié**, puis à un œil humain. |
-| **Référentiel** | SHOM WFS, NOAA ENC Direct, Marine Regions, catalogue `seamark:*`. Pas un LLM. |
-| **SMCFAC** | Objet S-57 « small craft facility » (ponton / installation plaisance). Le WFS SHOM le sert en **point**. |
-| **BUISGL** | Bâtiment. `FUNCTN=2` = bureau de capitainerie. |
-| **Overlay 250 m** | Coller SHOM/NOAA sur OSM **par distance seule**, pas par nom (`find_building`). |
-| **Review / Gold** | File humaine → clic Gold → **run certifié**. La carte ne le montre que si « Afficher la review » est coché. |
-| **GeoJSON versionné** | Format **intermédiaire** : `metadata.version` = `AAAA-MM-JJ.<sha25612>`. Pas une carte, pas une ENC. |
-| **Gazetteer** | Annuaire de **toponymes** (où est ce nom ?). Amorce = `geo.py`. |
-| **Juge VLM** | Oui / non sur une **mention** (« est-ce une règle de navigation ? »). Pas un calage pixel. |
-| **Seamap** | Fond vectoriel Open Waters (OSM + PMTiles + MapLibre). Pile du fond « Carte marine ». |
-| **Overlay tippecanoe** | PMTiles **de nos** 7 exports, construit chaque lundi. Calque **par-dessus** Seamap, pas à la place. |
-| **S-52 allégée** | Colorer une isobathe de sécurité si un attribut de profondeur existe. Pas un moteur S-52. |
-| **SDB** | Bathymétrie par satellite (formule de Stumpf). Produit de recherche, pas un sondage. |
-| **Estran** | Zone découverte à marée basse. MNDWI / CoastSat le dessinent ; ce n’est pas une ENC. |
-| **CDSE** | Copernicus Data Space Ecosystem (images Sentinel). **Autre compte** que CMEMS (modèles mer). |
-| **Corridor Berry** | Bande le long de la route officielle. Seul périmètre des pilotes Sentinel. |
+| **Track** | A chain with a single job. Four tracks, not a “carto” catch-all. |
+| **Control** | Compare an extracted object to a reference **already published**, then to a human eye. |
+| **Reference** | SHOM WFS, NOAA ENC Direct, Marine Regions, `seamark:*` catalogue. Not an LLM. |
+| **SMCFAC** | S-57 object “small craft facility” (pontoon / pleasure-craft facility). The SHOM WFS serves it as a **point**. |
+| **BUISGL** | Building. `FUNCTN=2` = harbour-office building. |
+| **250 m overlay** | Glue SHOM/NOAA onto OSM **by distance alone**, not by name (`find_building`). |
+| **Review / Gold** | Human queue → Gold click → **certified run**. The map shows it only if “Show the review” is checked. |
+| **Versioned GeoJSON** | **Intermediate** format: `metadata.version` = `YYYY-MM-DD.<sha25612>`. Not a chart, not an ENC. |
+| **Gazetteer** | Directory of **toponyms** (where is this name?). Seed = `geo.py`. |
+| **VLM judge** | Yes / no on a **mention** (“is this a navigation rule?”). Not a pixel registration. |
+| **Seamap** | Open Waters vector basemap (OSM + PMTiles + MapLibre). Stack of the “Nautical chart” basemap. |
+| **tippecanoe overlay** | PMTiles of **our** 7 exports, built every Monday. Layer **on top of** Seamap, not instead of it. |
+| **Light S-52** | Colour a safety contour if a depth attribute exists. Not an S-52 engine. |
+| **SDB** | Satellite-derived bathymetry (Stumpf formula). Research product, not a sounding. |
+| **Intertidal** | Zone uncovered at low tide. MNDWI / CoastSat draw it; it is not an ENC. |
+| **CDSE** | Copernicus Data Space Ecosystem (Sentinel images). **Another account** than CMEMS (sea models). |
+| **Berry corridor** | Band along the official route. Sole scope of the Sentinel pilots. |
 
 ---
 
-## 6. Les quatre filières (la remise en ordre)
+## 6. The four tracks (putting things in order)
 
 ```
-  1. CONTRÔLE                         2. CARTE
-  objet + preuve + humain             fond + overlay + avertissement
+  1. CONTROL                          2. MAP
+  object + evidence + human           basemap + overlay + warning
   ┌─────────────────────┐             ┌──────────────────────────┐
-  │ catalogue OSM       │             │ Seamap (OSM+PMTiles+ML)  │
-  │   = cible export    │             │ + overlay tippecanoe     │
-  │ SHOM / NOAA         │             │ + WMS EMODnet (tous      │
-  │   = référentiel     │────────────▶│   modes, pas seulement   │
+  │ OSM catalogue       │             │ Seamap (OSM+PMTiles+ML)  │
+  │   = export target   │             │ + tippecanoe overlay     │
+  │ SHOM / NOAA         │             │ + EMODnet WMS (all       │
+  │   = reference       │────────────▶│   modes, not only        │
   │ Review / Gold       │  GeoJSON    │   Science)               │
-  │   = file humaine    │  + sha256   │ + isobathe sécurité      │
-  │ geo.py              │             │ + fenêtre NOT FOR NAV    │
+  │   = human queue     │  + sha256   │ + safety contour         │
+  │ geo.py              │             │ + NOT FOR NAV window     │
   │   = gazetteer       │             └──────────────────────────┘
   │ VLM                 │
-  │   = juge de mention │
+  │   = mention judge   │
   └─────────────────────┘
             │
-            │  exports versionnés (même contrat)
+            │  versioned exports (same contract)
             ▼
-  3. HYDRO OFFICIELLE                 4. SATELLITE (pilotes)
-  API seulement                       corridor Berry, hors VPS
+  3. OFFICIAL HYDRO                   4. SATELLITE (pilots)
+  API only                            Berry corridor, off VPS
   ┌─────────────────────┐             ┌──────────────────────────┐
   │ NOAA ENC Direct     │             │ Sentinel-2 via CDSE      │
-  │   feux / bouées /   │             │ ACOLITE + MNDWI/CoastSat │
-  │   isobathes  (US)   │             │ SDB Stumpf ± ICESat-2    │
-  │ GEBCO au large      │             │ vs EMODnet (erreur)      │
-  │ EMODnet : WMS+point │             │ GeoJSON OSM-shaped       │
-  │ IENC/VNF : NON      │             │ → mode Science seulement │
-  │ S-57 / S-101 : NON  │             └──────────────────────────┘
+  │   lights / buoys /  │             │ ACOLITE + MNDWI/CoastSat │
+  │   contours  (US)    │             │ SDB Stumpf ± ICESat-2    │
+  │ GEBCO offshore      │             │ vs EMODnet (error)       │
+  │ EMODnet: WMS+point  │             │ OSM-shaped GeoJSON       │
+  │ IENC/VNF: NO        │             │ → Science mode only      │
+  │ S-57 / S-101: NO    │             └──────────────────────────┘
   └─────────────────────┘
 ```
 
-Les flèches sont des **contrats**, pas des copies de code. Le GeoJSON
-versionné est le **seul** format qui traverse les quatre filières.
+The arrows are **contracts**, not code copies. Versioned GeoJSON
+is the **only** format that crosses the four tracks.
 
 ---
 
-## 7. Partage Blue Intelligence / NAVIGUIDE simulator
+## 7. Blue Intelligence / NAVIGUIDE simulator split
 
-Même esprit que « BI montre l’atlas. NAVIGUIDE s’en sert »
-(`docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` §6). Ici :
+Same spirit as “BI shows the atlas. NAVIGUIDE uses it”
+(`docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` §6). Here:
 
 ```
-              GeoJSON versionné + sha256
-              (+ PMTiles overlay le lundi)
+              Versioned GeoJSON + sha256
+              (+ PMTiles overlay on Monday)
                          │
           ┌──────────────┴──────────────┐
           ▼                             ▼
   Blue Intelligence              NAVIGUIDE simulator
-  7 modes + Review/Gold          film Leaflet (étape 1)
-  fond Seamap MapLibre           pastilles déjà là
-  overlay + EMODnet + modal      mêmes exports /bi/*
-  Science = catalogues +         ici() : 0 ou 1 objet
-    pilotes Sentinel             localisé, pas le monde
+  7 modes + Review/Gold          Leaflet film (stage 1)
+  Seamap MapLibre basemap        pills already there
+  overlay + EMODnet + modal      same /bi/* exports
+  Science = catalogues +         ici() : 0 or 1 object
+    Sentinel pilots              localised, not the world
           │                             │
           │                      prod naviguide.fr
-          │                      INTTOUCHÉE par ce plan
+          │                      UNTOUCHED by this plan
           └─────────────────────────────┘
 ```
 
-| Idée | Blue Intelligence | Simulateur NAVIGUIDE | Prod `naviguide.fr` |
+| Idea | Blue Intelligence | NAVIGUIDE simulator | Prod `naviguide.fr` |
 |------|-------------------|----------------------|---------------------|
-| Catalogue OSM + audit | Cible d’export, badges, audit lundi | Rien à peindre ; les tags déjà dans les exports | Inchangée |
-| SHOM / NOAA contrôle | Overlay 250 m + fiche Review | Un bureau Gold dans `ici()` / Briefing, pas un dump US | Inchangée |
-| Review / Gold | File indispensable ; interrupteur Map | Consomme le **run certifié** (étape Gold du hackathon), jamais le dump brut comme « officiel » | Inchangée |
-| GeoJSON + sha256 | Intermédiaire + snapshots + release `data-*` | Fetch `/bi/export/*` déjà en place ; vérifier `metadata.version` | Proxy `/bi` déjà là |
-| Gazetteer (`geo.py`) | P / PoE / futurs toponymes Berry | Noms d’escales, sac `ici()` | Inchangée |
-| VLM juge | Formalités / AMP / enrich : « est-ce une règle ? » | Nemotron Ultra **barre** une mention non prouvée (cahier hackathon) — même question, autre écran | Inchangée |
-| Seamap fond | Déjà le fond « Carte marine » | Leaflet + tuiles OpenSeaMap raster (balisage). **Pas** MapLibre/PMTiles en étape 1 | MapLibre + Seamap déjà |
-| Overlay tippecanoe | À **afficher** (aujourd’hui seulement publié) | Option plus tard : une pastille « overlay BI » ; d’abord les GeoJSON | Hors ce plan |
-| EMODnet WMS hors Science | Interrupteur carte, tous modes | Pastilles Science déjà prévues (bathy / fonds / câbles) | Hors ce plan |
-| Fenêtre NOT FOR NAV | Premier usage fond mer + Science satellite | Premier allumage balisage / Science | Hors ce plan |
-| Isobathe sécurité | Si attribut de profondeur dans Seamap | Inutile en Leaflet raster ; le simulateur n’a pas Seascape | Hors ce plan |
-| NOAA ENC feux/bouées | Mode Capitaineries / couche US, API | Un feu **proche de `ici()`** sur une jambe US | Hors ce plan |
-| GEBCO | Inutile en port ; ne pas peindre sur BI | Moteur / no-go **au large** (pas une pastille port) | Déjà des zones GEBCO manuscrites dans le workspace routing |
-| Sentinel | Mode Science, bandeau, export | 0 ou 1 trait de côte **local** dans le sac, jamais les 8 catalogues | Inchangée |
-| IENC / VNF | Non | Non | Non |
+| OSM catalogue + audit | Export target, badges, Monday audit | Nothing to paint; tags already in the exports | Unchanged |
+| SHOM / NOAA control | 250 m overlay + Review fiche | One Gold office in `ici()` / Briefing, not a US dump | Unchanged |
+| Review / Gold | Indispensable queue; Map switch | Consumes the **certified run** (hackathon Gold step), never the raw dump as “official” | Unchanged |
+| GeoJSON + sha256 | Intermediate + snapshots + `data-*` release | Fetch `/bi/export/*` already in place; check `metadata.version` | `/bi` proxy already there |
+| Gazetteer (`geo.py`) | P / PoE / future Berry toponyms | Stop names, `ici()` pack | Unchanged |
+| VLM judge | Formalities / MPA / enrich: “is this a rule?” | Nemotron Ultra **strikes** an unproven mention (hackathon briefing) — same question, other screen | Unchanged |
+| Seamap basemap | Already the “Nautical chart” basemap | Leaflet + OpenSeaMap raster tiles (marks). **No** MapLibre/PMTiles in stage 1 | MapLibre + Seamap already |
+| tippecanoe overlay | To **display** (today only published) | Later option: a “BI overlay” pill; GeoJSON first | Outside this plan |
+| EMODnet WMS outside Science | Map switch, all modes | Science pills already planned (bathy / seabed / cables) | Outside this plan |
+| NOT FOR NAV window | First use of sea basemap + Science satellite | First lighting of marks / Science | Outside this plan |
+| Safety contour | If a depth attribute in Seamap | Useless on Leaflet raster; the simulator has no Seascape | Outside this plan |
+| NOAA ENC lights/buoys | Harbour-offices mode / US layer, API | One light **near `ici()`** on a US leg | Outside this plan |
+| GEBCO | Useless in harbour; do not paint on BI | Engine / no-go **offshore** (not a harbour pill) | Hand-drawn GEBCO zones already in the routing workspace |
+| Sentinel | Science mode, banner, export | 0 or 1 **local** coastline in the pack, never the 8 catalogues | Unchanged |
+| IENC / VNF | No | No | No |
 
-**Règle simulateur.** L’étape 1 est Leaflet, sans MapLibre, sans
-import/export fichier, prod intouchée
-(`docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`). Ce plan
-**n’annule pas** ça. Le simulateur profite surtout des **exports**,
-du **Gold**, du **juge**, d’**EMODnet en pastilles**, et plus tard
-d’**un** objet satellite dans `ici()`. Il ne reçoit pas Seamap
-PMTiles ni l’isobathe S-52.
+**Simulator rule.** Stage 1 is Leaflet, without MapLibre, without
+file import/export, prod untouched
+(`docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`). This plan
+**does not cancel** that. The simulator mainly benefits from the
+**exports**, **Gold**, the **judge**, **EMODnet as pills**, and later
+**one** satellite object in `ici()`. It does not receive Seamap
+PMTiles nor the S-52 contour.
 
 ---
 
-## 8. État actuel et écarts
+## 8. Current state and gaps
 
-### Déjà en place (ne pas reconstruire)
+### Already in place (do not rebuild)
 
-| Brique | Où | Métier réel aujourd’hui |
+| Brick | Where | Real job today |
 |--------|----|-------------------------|
-| `backend/data/seamark_catalog.json` + `scripts/audit_tags.py` | Catalogue + rapport | Ce que les pipelines **lisent** dans OSM |
-| `capitainerie_world.py` | SHOM WFS + NOAA ENC Direct `FUNCTN=2` | Overlay bureaux, pas un encodeur |
-| `review_queue.py` / `review_gold.py` / onglet Review | File humaine | Formalités le plus avancé ; Marinas trop « pré-Gold » ; Capitaineries / AMP Gold trop large ou absent |
-| `export_meta.py` + `POST /api/export/snapshot` | GeoJSON + sha25612 | Intermédiaire stable |
-| `.github/workflows/weekly-data-build.yml` | 7 GeoJSON → tippecanoe → release `data-*` | Archive **publiée**, overlay **non chargé** dans le frontend |
-| `backend/app/core/geo.py` | Nominatim ∥ GeoNames | Géocodage de **noms**, pas d’images |
-| `vision_msg.py` + `review_doc_picker.py` | JPEG → NIM / Claude | Juge de **documents** Formalités |
-| Seamap miroir VPS | `infra/vps/seamap/` | Fond ~26 Go, cron lundi |
-| Bandeau nautique | `MapView.js` `data-testid="nautical-disclaimer"` | Toujours visible si fond mer ; **pas** de clic d’acceptation |
-| EMODnet WMS | `useScienceWms.js` | **`mode === "science"` seulement** |
-| EMODnet point | `GET /api/depth` | Popups marinas / mouillages |
-| Simulateur | `useToggleLayers.js` | GeoJSON BI + OpenSeaMap raster + stub climatologie |
+| `backend/data/seamark_catalog.json` + `scripts/audit_tags.py` | Catalogue + report | What the pipelines **read** in OSM |
+| `capitainerie_world.py` | SHOM WFS + NOAA ENC Direct `FUNCTN=2` | Office overlay, not an encoder |
+| `review_queue.py` / `review_gold.py` / Review tab | Human queue | Formalities furthest along; Marinas too “pre-Gold”; Harbour offices / MPA Gold too wide or missing |
+| `export_meta.py` + `POST /api/export/snapshot` | GeoJSON + sha25612 | Stable intermediate |
+| `.github/workflows/weekly-data-build.yml` | 7 GeoJSON → tippecanoe → `data-*` release | Archive **published**, overlay **not loaded** in the frontend |
+| `backend/app/core/geo.py` | Nominatim ∥ GeoNames | Geocoding of **names**, not images |
+| `vision_msg.py` + `review_doc_picker.py` | JPEG → NIM / Claude | Judge of Formalities **documents** |
+| Seamap VPS mirror | `infra/vps/seamap/` | ~26 GB basemap, Monday cron |
+| Nautical banner | `MapView.js` `data-testid="nautical-disclaimer"` | Always visible if sea basemap; **no** acceptance click |
+| EMODnet WMS | `useScienceWms.js` | **`mode === "science"` only** |
+| EMODnet point | `GET /api/depth` | Marina / anchorage popups |
+| Simulator | `useToggleLayers.js` | BI GeoJSON + OpenSeaMap raster + climatology stub |
 
-### Trous (ce que ce plan comble)
+### Holes (what this plan fills)
 
-| Trou | Filière |
+| Hole | Track |
 |------|---------|
-| PMTiles `blue-intelligence-*.pmtiles` jamais référencé dans le frontend | 2 |
-| EMODnet WMS verrouillé au mode Science | 2 |
-| Pas de fenêtre d’acceptation (bandeau seulement) | 2 |
-| Pas d’isobathe de sécurité locale (on s’en remet au style Seamap) | 2 |
-| « Afficher la review » : i18n prêt, **bouton Map absent** | 1 |
-| Gold capitainerie / AMP : contrat écrit, code trop large ou incomplet | 1 |
-| Types `candidat` du catalogue (feux, roches, mouillages) pas encore dans un pipeline | 1 |
-| NOAA ENC : seulement `FUNCTN=2` (bureaux), pas feux / bouées / isobathes | 3 |
-| GEBCO : zones dessinées à la main dans le routing, pas une grille | 3 |
-| Sentinel / CDSE / ACOLITE / CoastSat / ICESat-2 : **zéro code** | 4 |
-| Compte CDSE vs CMEMS : **à vérifier** (humain + secrets) | 4 |
+| PMTiles `blue-intelligence-*.pmtiles` never referenced in the frontend | 2 |
+| EMODnet WMS locked to Science mode | 2 |
+| No acceptance window (banner only) | 2 |
+| No local safety contour (we rely on the Seamap style) | 2 |
+| “Show the review”: i18n ready, **Map button missing** | 1 |
+| Harbour-office / MPA Gold: contract written, code too wide or incomplete | 1 |
+| Catalogue `candidat` types (lights, rocks, anchorages) not yet in a pipeline | 1 |
+| NOAA ENC: only `FUNCTN=2` (offices), not lights / buoys / contours | 3 |
+| GEBCO: hand-drawn zones in routing, not a grid | 3 |
+| Sentinel / CDSE / ACOLITE / CoastSat / ICESat-2: **zero code** | 4 |
+| CDSE vs CMEMS account: **to verify** (human + secrets) | 4 |
 
 ---
 
-## 9. Filière 1 — Contrôle (objets et preuves)
+## 9. Track 1 — Control (objects and evidence)
 
-C’est la filière **déjà commencée**. On la nomme pour arrêter de lui
-demander d’être une carte ou un encodeur.
+This is the track **already started**. We name it so we stop asking
+it to be a map or an encoder.
 
-### 9.1 Catalogue OSM → champs BI (cible d’export OpenSeaMap)
+### 9.1 OSM catalogue → BI fields (OpenSeaMap export target)
 
-**Métier.** Dire noir sur blanc quels tags on lit, lesquels sont
-`candidat`, et produire un GeoJSON **dans le vocabulaire OSM /
-OpenSeaMap** (`leisure=marina`, `seamark:type=…`). Ce n’est **pas**
-un encodeur S-101.
+**Job.** State in black and white which tags we read, which are
+`candidat`, and produce a GeoJSON **in the OSM /
+OpenSeaMap vocabulary** (`leisure=marina`, `seamark:type=…`). This is
+**not** an S-101 encoder.
 
-**Déjà là.** `docs/CATALOGUE_SEAMARK.md`, `seamark_catalog.json`,
-`audit_tags.py` (lundi, dans le workflow hebdo). Badges marinas via
+**Already there.** `docs/CATALOGUE_SEAMARK.md`, `seamark_catalog.json`,
+`audit_tags.py` (Monday, in the weekly workflow). Marina badges via
 `SERVICE_TAG_QUESTIONS`.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C1 | Promouvoir en `exploite` les tags qu’un pipeline lit vraiment (mouillages `anchorage` / `mooring` dès que `anchorage_build.py` les garde) | Audit : plus de « candidat alors que le dump les porte » |
-| C2 | Documenter le **mapping inverse** : champ slim BI → tag OSM d’export (ex. badge Avitaillement → `fuel=yes` / `seamark:small_craft_facility:category=fuel`) | Une table dans le catalogue ; un test sur un fixture |
-| C3 | Quand un pilote satellite exporte (`natural=coastline`, `seamark:type=depth_area`), **ajouter ces clés** au catalogue **avant** le premier dump | Pas de tag hors catalogue sans entrée `candidat` |
+| C1 | Promote to `exploite` the tags a pipeline actually reads (anchorages `anchorage` / `mooring` as soon as `anchorage_build.py` keeps them) | Audit: no more “candidat even though the dump carries them” |
+| C2 | Document the **inverse mapping**: slim BI field → export OSM tag (e.g. Avitaillement badge → `fuel=yes` / `seamark:small_craft_facility:category=fuel`) | A table in the catalogue; a test on a fixture |
+| C3 | When a satellite pilot exports (`natural=coastline`, `seamark:type=depth_area`), **add those keys** to the catalogue **before** the first dump | No tag outside the catalogue without a `candidat` entry |
 
-**Interdit.** Générer des attributs S-101 (`DRVAL1`, `CATSCF`…)
-depuis OSM. Le sens autorisé est OSM → champs BI → GeoJSON OSM.
-SHOM/NOAA restent un **calque de contrôle**, pas la cible d’export.
+**Forbidden.** Generate S-101 attributes (`DRVAL1`, `CATSCF`…)
+from OSM. The allowed direction is OSM → BI fields → OSM GeoJSON.
+SHOM/NOAA remain a **control layer**, not the export target.
 
-### 9.2 SHOM / NOAA comme référentiel de contrôle
+### 9.2 SHOM / NOAA as a control reference
 
-**Métier.** Un ponton lu dans un croquis, un site web ou un tag OSM
-**n’est pas** un SMCFAC. Un bureau OSM **n’est pas** un BUISGL
-`FUNCTN=2` tant que l’overlay 250 m n’a pas collé le même bâtiment.
+**Job.** A pontoon read from a sketch, a website or an OSM tag
+**is not** an SMCFAC. An OSM office **is not** a BUISGL
+`FUNCTN=2` until the 250 m overlay has glued the same building.
 
-**Déjà là.** Capitaineries : OSM monde → SHOM `buisgl_point` +
-`smcfac_point` → NOAA ENC Direct `FUNCTN=2` (points + centroïdes).
-Fiche Review : garder / détacher l’overlay. Marinas : dump OSM
-seulement ; SHOM documenté dans `marina_build.py`, pas branché.
+**Already there.** Harbour offices: world OSM → SHOM `buisgl_point` +
+`smcfac_point` → NOAA ENC Direct `FUNCTN=2` (points + centroids).
+Review fiche: keep / detach the overlay. Marinas: OSM dump
+only; SHOM documented in `marina_build.py`, not wired.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C4 | Sur la fiche **Marina**, montrer s’il existe un SMCFAC / CATHAF à ≤ 250 m : « référentiel publié » vs « seulement OSM ». **Pas** de fusion automatique des bassins | Le réviseur voit les deux points ; Gold n’exige pas le SMCFAC (une marina n’est pas un décret) |
-| C5 | Garder NOAA / SHOM **orphelin** visible (déjà le cas capitaineries) : un bureau sans OSM reste un candidat, pas une vérité carte | Test d’identité existant inchangé |
-| C6 | Ne pas étendre `merge_km` au-delà de 0,25 km | Contrat `find_building` |
+| C4 | On the **Marina** fiche, show whether an SMCFAC / CATHAF exists at ≤ 250 m: “published reference” vs “OSM only”. **No** automatic basin merge | The reviewer sees both points; Gold does not require the SMCFAC (a marina is not a decree) |
+| C5 | Keep NOAA / SHOM **orphan** visible (already the case for harbour offices): an office without OSM remains a candidate, not a map truth | Existing identity test unchanged |
+| C6 | Do not extend `merge_km` beyond 0.25 km | `find_building` contract |
 
-**Phrase de test.** Un ponton extrait d’un texte, sans SMCFAC ni tag
-`leisure=marina`, **ne peut pas** être Gold comme marina.
+**Test sentence.** A pontoon extracted from text, with no SMCFAC and no
+`leisure=marina` tag, **cannot** be Gold as a marina.
 
-### 9.3 Review / Gold — file indispensable
+### 9.3 Review / Gold — indispensable queue
 
-**Métier.** L’œil humain. Sans cette file, les filières 2–4 peignent
-du brut.
+**Job.** The human eye. Without this queue, tracks 2–4 paint
+raw data.
 
-Le code et les contrats existent (`CAHIER_DES_CHARGES_REVIEW.md`,
-`CONTRATS_REVIEW_PAR_MODE.md`). Ce plan **n’invente pas** une
-« Culture Review » à côté : c’est **le même** onglet Review.
+The code and contracts exist (`CAHIER_DES_CHARGES_REVIEW.md`,
+`CONTRATS_REVIEW_PAR_MODE.md`). This plan **does not invent** a
+“Culture Review” beside them: it is **the same** Review tab.
 
-**À faire (écarts déjà écrits, à coder).**
+**To do (gaps already written, to code).**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C7 | Bouton Map **Afficher la review** (i18n `reviewShowReview` déjà là) | Gold seul ne change pas la carte ; coché = run certifié |
-| C8 | Capitaineries : plus de `gold_on: true` par défaut ; Gold après acceptation **bâtiment** | Phrase de test du méta-contrat §0 |
-| C9 | AMP : liste des candidats `visit_url` ; Gold refuse `visit_url == manager_url` | Contrat §6 |
-| C10 | Marinas : OSM ≠ pré-Gold automatique | Contrat §4.5 |
+| C7 | Map button **Show the review** (i18n `reviewShowReview` already there) | Gold alone does not change the map; checked = certified run |
+| C8 | Harbour offices: no more default `gold_on: true`; Gold after **building** acceptance | Meta-contract §0 test sentence |
+| C9 | MPA: list of `visit_url` candidates; Gold refuses `visit_url == manager_url` | Contract §6 |
+| C10 | Marinas: OSM ≠ automatic pre-Gold | Contract §4.5 |
 
-Science / Climatologie / pilotes Sentinel : **pas** de file Review
-V1. Le bandeau + la fenêtre d’acceptation portent l’avertissement.
+Science / Climatology / Sentinel pilots: **no** V1 Review
+queue. The banner + the acceptance window carry the warning.
 
-### 9.4 GeoJSON versionné + sha256 — format intermédiaire
+### 9.4 Versioned GeoJSON + sha256 — intermediate format
 
-**Métier.** Porter un jeu d’une filière à l’autre **sans** perdre la
-date, l’empreinte et l’avertissement.
+**Job.** Carry a dataset from one track to another **without** losing
+date, fingerprint and warning.
 
-**Déjà là.** `versioned_fc()`, snapshots immuables, release lundi
-avec `SHA256SUMS-*.txt`.
+**Already there.** `versioned_fc()`, immutable snapshots, Monday release
+with `SHA256SUMS-*.txt`.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C11 | Tout **nouveau** jeu (feux NOAA, coastline Sentinel, depth_area) passe par `versioned_fc()` | Même `metadata` que les 7 exports |
-| C12 | Le workflow lundi **ajoute** les nouveaux exports s’ils sont publics (sinon release à part, même discipline sha256) | `gh release create` échoue si le tag existe : immuabilité |
+| C11 | Every **new** dataset (NOAA lights, Sentinel coastline, depth_area) goes through `versioned_fc()` | Same `metadata` as the 7 exports |
+| C12 | The Monday workflow **adds** the new exports if they are public (else a separate release, same sha256 discipline) | `gh release create` fails if the tag exists: immutability |
 
-### 9.5 Gazetteer (`geo.py`) — amorce, pas un calage d’image
+### 9.5 Gazetteer (`geo.py`) — seed, not an image registration
 
-**Métier.** « Où est ce **nom** ? » Nominatim ∥ GeoNames, cache
-Mongo, tests d’espace ensuite (havre vs polygone VLIZ).
+**Job.** “Where is this **name**?” Nominatim ∥ GeoNames, Mongo
+cache, space tests afterwards (haven vs VLIZ polygon).
 
-**À faire (plus tard, après C7–C10).**
+**To do (later, after C7–C10).**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C13 | Extraire une table `toponyms` (nom, lat/lon, source, `mrgid` si ZEE) alimentée par les succès de géocodage + noms VLIZ | Un nom déjà vu ne reconsomme pas le quota |
-| C14 | `project_geocode.py` (CDC Projets) s’il devient nécessaire : **juge de lieu**, toujours via `geocode_name` | Pas de nouveau client HTTP « image → GPS » |
+| C13 | Extract a `toponyms` table (name, lat/lon, source, `mrgid` if EEZ) fed by geocoding successes + VLIZ names | A name already seen does not consume quota again |
+| C14 | `project_geocode.py` (Projects spec) if it becomes necessary: **place judge**, always via `geocode_name` | No new HTTP client “image → GPS” |
 
-**Interdit.** Utiliser `snap_to_ocean` pour « coller » un trait de
-côte Sentinel. Le satellite a son propre GPS (filière 4).
+**Forbidden.** Use `snap_to_ocean` to “glue” a Sentinel
+coastline. The satellite has its own GPS (track 4).
 
-### 9.6 VLM — juge de mention, pas de pixels
+### 9.6 VLM — mention judge, not pixels
 
-**Métier.** Sur une page, un PDF, une capture : « cette phrase est-elle
-une **règle de navigation** (VHF, interdiction de mouiller, port
-d’entrée, tirant) ou du tourisme ? »
+**Job.** On a page, a PDF, a screenshot: “is this sentence a
+**navigation rule** (VHF, anchoring ban, port of
+entry, draft) or tourism?”
 
-**Déjà là.** `vision_msg.py` envoie des JPEG ; Formalités s’en sert
-pour **choisir le bon PDF**, pas pour lire une carte.
+**Already there.** `vision_msg.py` sends JPEGs; Formalities uses it
+to **choose the right PDF**, not to read a chart.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| C15 | Un juge JSON `navigation_rule: true\|false` + `quote` (extrait) branché sur `complete_json_cascade`, rôle `judge` | Fixture : « VHF 09 à l’entrée » → true ; « restaurant avec vue mer » → false |
-| C16 | Branchement : enrichissement marina / capitainerie (ne pas inventer un VHF), candidats AMP visite, plus tard Briefing simulateur (Ultra barre) | Champ vide si false ; on n’écrit pas un faux canal |
+| C15 | A JSON judge `navigation_rule: true\|false` + `quote` (excerpt) wired to `complete_json_cascade`, role `judge` | Fixture: “VHF 09 at the entrance” → true; “restaurant with sea view” → false |
+| C16 | Wiring: marina / harbour-office enrichment (do not invent a VHF), MPA visit candidates, later simulator Briefing (Ultra strikes) | Empty field if false; we do not write a fake channel |
 
-**Interdit.** Demander au VLM les coins d’une image, une homographie,
-ou une profondeur.
+**Forbidden.** Ask the VLM for the corners of an image, a homography,
+or a depth.
 
 ---
 
-## 10. Filière 2 — Carte (fond + overlays + avertissement)
+## 10. Track 2 — Map (basemap + overlays + warning)
 
-C’est le chantier **le plus visible**, et le plus petit en code.
-Seamap **reste** le fond : OSM + PMTiles + MapLibre
-(`useNauticalBasemap.js`, miroir `infra/vps/seamap/`).
+This is the **most visible** workshop, and the smallest in code.
+Seamap **remains** the basemap: OSM + PMTiles + MapLibre
+(`useNauticalBasemap.js`, mirror `infra/vps/seamap/`).
 
-### 10.1 Overlay hebdomadaire tippecanoe
+### 10.1 Weekly tippecanoe overlay
 
-**Déjà là.** Chaque lundi 05:00 UTC, tippecanoe construit
-`blue-intelligence-$STAMP.pmtiles` (projets, marinas, mouillages,
-capitaineries, AMP, PoE, route) et le publie sur la release GitHub
-`data-$STAMP`.
+**Already there.** Every Monday 05:00 UTC, tippecanoe builds
+`blue-intelligence-$STAMP.pmtiles` (projects, marinas, anchorages,
+harbour offices, MPAs, PoE, route) and publishes it on the GitHub
+`data-$STAMP` release.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| M1 | Servir l’overlay : URL de la **dernière** release (ou copie nginx `/tiles/bi-overlay/current.pmtiles` si on veut éviter GitHub à l’exécution) | Une variable `REACT_APP_BI_OVERLAY_URL` |
-| M2 | Couche MapLibre **par-dessus** le style Seamap (source `pmtiles://…`, layers par `-L` tippecanoe) | Fond Seamap visible ; overlay éteignable |
-| M3 | Interrupteur « Données BI (semaine) » dans le chrome carte, **tous modes**, défaut **on** une fois le fond mer accepté | `data-testid="overlay-bi-toggle"` |
-| M4 | Pane / z-index : overlay **au-dessus** du GL Seamap (190), **sous** la route (380) et les clusters | Étendre `layerOrder.js` + test jest |
-| M5 | Simulateur : **ne pas** porter PMTiles en étape 1. Les pastilles GeoJSON suffisent. Noter M1–M4 comme étape simulateur **ultérieure** | Étape 1 Leaflet intacte |
+| M1 | Serve the overlay: URL of the **latest** release (or nginx copy `/tiles/bi-overlay/current.pmtiles` if we want to avoid GitHub at runtime) | A `REACT_APP_BI_OVERLAY_URL` variable |
+| M2 | MapLibre layer **on top of** the Seamap style (source `pmtiles://…`, layers per tippecanoe `-L`) | Seamap basemap visible; overlay switchable off |
+| M3 | “BI data (week)” switch in the map chrome, **all modes**, default **on** once the sea basemap is accepted | `data-testid="overlay-bi-toggle"` |
+| M4 | Pane / z-index: overlay **above** Seamap GL (190), **below** the route (380) and the clusters | Extend `layerOrder.js` + jest test |
+| M5 | Simulator: **do not** port PMTiles in stage 1. GeoJSON pills are enough. Note M1–M4 as a **later** simulator stage | Stage 1 Leaflet intact |
 
-Budget disque : l’overlay tippecanoe est **petit** (points + route),
-sans rapport avec les 26 Go Seamap. Copie VPS possible sans `KEEP`
-agressif.
+Disk budget: the tippecanoe overlay is **small** (points + route),
+unrelated to the 26 GB Seamap. VPS copy possible without aggressive
+`KEEP`.
 
-### 10.2 EMODnet WMS hors mode Science
+### 10.2 EMODnet WMS outside Science mode
 
-**Déjà là.** Trois étages (bathy, substrat, câbles), panes 250 / 310
-/ 370, persistance `bi.scienceWms`. Le hook refuse tout si
+**Already there.** Three layers (bathy, substrate, cables), panes 250 / 310
+/ 370, persistence `bi.scienceWms`. The hook refuses everything if
 `mode !== "science"`.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| M6 | Retirer le garde `mode === "science"` ; le hook ne dépend plus que de `enabled` | WMS allumable en Marinas / Formalités / etc. |
-| M7 | Déplacer (ou **dupliquer**) les trois boutons hors du seul `SciencePanel` : chrome carte commun (à côté du fond sombre / clair / mer) | Test : mode Marinas + bathy ON → tuiles `mean_multicolour` |
-| M8 | Conflit z-index avec climatologie (aussi 250) : bathy EMODnet **sous** l’atlas si mode Climatologie | Ajuster `SCIENCE_WMS_PANES` / `PANES` et le test d’ordre |
-| M9 | Simulateur : pastilles Science déjà au cahier hackathon (Bathymétrie / Fonds / Câbles). Brancher les **mêmes** URL WMS que `useScienceWms.js` | Pas un proxy VPS ; tuiles chez EMODnet |
+| M6 | Remove the `mode === "science"` guard; the hook depends only on `enabled` | WMS lightable in Marinas / Formalities / etc. |
+| M7 | Move (or **duplicate**) the three buttons out of `SciencePanel` alone: shared map chrome (next to dark / light / sea basemap) | Test: Marinas mode + bathy ON → `mean_multicolour` tiles |
+| M8 | Z-index conflict with climatology (also 250): EMODnet bathy **under** the atlas if Climatology mode | Adjust `SCIENCE_WMS_PANES` / `PANES` and the order test |
+| M9 | Simulator: Science pills already in the hackathon briefing (Bathymetry / Seabed / Cables). Wire the **same** WMS URLs as `useScienceWms.js` | Not a VPS proxy; tiles at EMODnet |
 
-Le sondage ponctuel `GET /api/depth` **reste** dans les popups
-marinas / mouillages (déjà hors Science). On ne le déplace pas.
+The `GET /api/depth` point sounding **stays** in marina /
+anchorage popups (already outside Science). We do not move it.
 
-### 10.3 Fenêtre d’acceptation « NOT FOR NAVIGATION »
+### 10.3 “NOT FOR NAVIGATION” acceptance window
 
-**Déjà là.** Bandeau bas si `nauticalActive`. Textes
+**Already there.** Bottom banner if `nauticalActive`. Texts
 `seaMapDisclaimerTitle` / `Body`. `basemaps.sea.notForNavigation`.
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| M10 | Modale **bloquante** au premier passage sur le fond mer **ou** à l’allumage d’un WMS / overlay / couche satellite : titre, corps, case « Je comprends : ne convient pas à la navigation », bouton Accepter | Sans acceptation : fond mer refusé (repli sombre/clair), WMS off |
-| M11 | Persistance `localStorage` `bi.notForNav.accepted` + date + `content_sha256` du texte (si le texte change, on redemande) | Rechargement : plus de modale, **bandeau conservé** |
-| M12 | Même geste simulateur à l’allumage Balisage ou Science WMS (`naviguide-simulator`) | `data-testid="not-for-nav-modal"` |
-| M13 | Les exports gardent `disclaimer` / `disclaimer_fr` (déjà) | Pas de changement de contrat JSON |
+| M10 | **Blocking** modal on first visit to the sea basemap **or** when lighting a WMS / overlay / satellite layer: title, body, checkbox “I understand: not suitable for navigation”, Accept button | Without acceptance: sea basemap refused (dark/light fallback), WMS off |
+| M11 | Persistence `localStorage` `bi.notForNav.accepted` + date + text `content_sha256` (if the text changes, we ask again) | Reload: no more modal, **banner kept** |
+| M12 | Same gesture in the simulator when lighting Marks or Science WMS (`naviguide-simulator`) | `data-testid="not-for-nav-modal"` |
+| M13 | Exports keep `disclaimer` / `disclaimer_fr` (already) | No JSON contract change |
 
-Le bandeau **reste**. La fenêtre est l’**acceptation**. Les deux
-coexistent.
+The banner **stays**. The window is the **acceptance**. Both
+coexist.
 
-### 10.4 Isobathe de sécurité (S-52 allégée)
+### 10.4 Safety contour (light S-52)
 
-**Condition.** Seulement si les tuiles Seamap / Seascape exposent un
-attribut de profondeur interrogeable (nom exact à confirmer dans le
-`style.json` miroir : souvent une couche bathymétrie raster
-**sans** attribut par pixel côté client).
+**Condition.** Only if Seamap / Seascape tiles expose a
+queryable depth attribute (exact name to confirm in the
+mirror `style.json`: often a raster bathymetry layer
+**without** a per-pixel attribute on the client).
 
-**À faire d’abord : un diagnostic, pas une peinture.**
+**Do first: a diagnosis, not a paint.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| M14 | Lire le `style.json` Seamap (miroir ou CDN) : lister les layers dont `source-layer` / `paint` parlent de depth / contour / DEPARE | Note dans ce dossier ou `docs/audits/` : **attribut oui/non** |
-| M15 | **Si oui** : expression MapLibre — seuil skipper (défaut **2 m**, réglable 2 / 5 / 10) ; aplat ou ligne d’isobathe **au-dessus** du fond, sous l’overlay BI | Test visuel + `data-testid="safety-isobath"` |
-| M16 | **Si non** (cas probable : Seascape reste sur CDN, raster) : **ne pas** inventer une isobathe. Garder EMODnet WMS + `GET /api/depth`. Documenter le refus ici | Une phrase dans le README fonds de carte |
+| M14 | Read the Seamap `style.json` (mirror or CDN): list layers whose `source-layer` / `paint` speak of depth / contour / DEPARE | Note in this folder or `docs/audits/`: **attribute yes/no** |
+| M15 | **If yes**: MapLibre expression — skipper threshold (default **2 m**, adjustable 2 / 5 / 10); fill or contour line **above** the basemap, under the BI overlay | Visual test + `data-testid="safety-isobath"` |
+| M16 | **If no** (likely case: Seascape stays on CDN, raster): **do not** invent a contour. Keep EMODnet WMS + `GET /api/depth`. Document the refusal here | A sentence in the basemap README |
 
-**Interdit.** Recoder S-52 (symboles IALA, lights sectors, safety
-contour ECDIS). On colore **une** limite, on n’écrit pas un ECDIS.
+**Forbidden.** Recode S-52 (IALA symbols, lights sectors, ECDIS
+safety contour). We colour **one** limit, we do not write an ECDIS.
 
 ---
 
-## 11. Filière 3 — Hydrographie officielle (API, pas des fichiers S-57)
+## 11. Track 3 — Official hydrography (API, not S-57 files)
 
-### 11.1 NOAA ENC Direct — étendre ce qui est déjà branché
+### 11.1 NOAA ENC Direct — extend what is already wired
 
-**Couverture.** Eaux US seulement. Même MapServer :
+**Coverage.** US waters only. Same MapServer:
 
 `https://gis.charttools.noaa.gov/arcgis/rest/services/encdirect`
 
-**Déjà là.** Couches harbour / approach / coastal / berthing,
-`FUNCTN=2` seulement (`NOAA_ENC_LAYERS` dans
+**Already there.** Harbour / approach / coastal / berthing layers,
+`FUNCTN=2` only (`NOAA_ENC_LAYERS` in
 `capitainerie_world.py`).
 
-**À faire.**
+**To do.**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| H1 | Inventaire des `layer_id` publics : feux (`LIGHTS`), bouées / balises (`BOY*`, `BCN*`), isobathes / DEPARE si le service les expose en GeoJSON | Tableau `docs/` ou commentaire + test d’un `query` bbox |
-| H2 | Fetch tuilé (même discipline que l’overlay capitaineries) : upsert `noaa:{service}:{layer}:{fid}`, slim GeoJSON via `versioned_fc` | Licence NOAA + disclaimer déjà cités |
-| H3 | Affichage : couche optionnelle **US**, pas mondiale. BI : interrupteur dans Capitaineries **ou** chrome carte. Simulateur : seulement si `ici()` est dans une bbox US | Zéro objet hors bbox ENC Direct |
-| H4 | Contrôle (filière 1) : un feu OSM `seamark:type=light` **proche** d’un LIGHTS NOAA = même geste 250 m que le bureau | Pas de fusion 500 m `same_site` |
+| H1 | Inventory of public `layer_id`s: lights (`LIGHTS`), buoys / beacons (`BOY*`, `BCN*`), contours / DEPARE if the service exposes them as GeoJSON | Table in `docs/` or comment + bbox `query` test |
+| H2 | Tiled fetch (same discipline as the harbour-office overlay): upsert `noaa:{service}:{layer}:{fid}`, slim GeoJSON via `versioned_fc` | NOAA licence + disclaimer already cited |
+| H3 | Display: optional **US** layer, not worldwide. BI: switch in Harbour offices **or** map chrome. Simulator: only if `ici()` is in a US bbox | Zero objects outside the ENC Direct bbox |
+| H4 | Control (track 1): an OSM light `seamark:type=light` **near** a NOAA LIGHTS = same 250 m gesture as the office | No 500 m `same_site` merge |
 
-**Interdit.** Télécharger des cellules S-57 `.000`. Parser un ENC.
-Encoder du S-101.
+**Forbidden.** Download S-57 `.000` cells. Parse an ENC.
+Encode S-101.
 
-### 11.2 EMODnet — rester au WMS + point
+### 11.2 EMODnet — stay on WMS + point
 
-Déjà branché. Le saut vers des isobathes **vectorielles** demande
-GDAL et un cube trop gros pour le VPS. **Refusé** (voir §4).
+Already wired. The jump to **vector** contours needs
+GDAL and a cube too large for the VPS. **Refused** (see §4).
 
-Si un jour on veut du vecteur : calcul **hors VPS**, snapshot
-GeoJSON versionné, servi comme la climatologie. Pas dans ce plan.
+If one day we want vector: compute **off the VPS**, versioned
+GeoJSON snapshot, served like climatology. Not in this plan.
 
-### 11.3 GEBCO — au large, pour NAVIGUIDE
+### 11.3 GEBCO — offshore, for NAVIGUIDE
 
-**Métier.** No-go / isochrone **offshore**. Inutile pour un port
-(résolution trop grossière ; EMODnet + OSM + `GET /api/depth`
-gagnent à quai).
+**Job.** **Offshore** no-go / isochrone. Useless for a harbour
+(resolution too coarse; EMODnet + OSM + `GET /api/depth`
+win at the quay).
 
-**Déjà là.** Zones rectangulaires manuscrites dans
-`naviguide/.../bathymetry.py` (workspace routing). Pas dans BI.
+**Already there.** Hand-drawn rectangular zones in
+`naviguide/.../bathymetry.py` (routing workspace). Not in BI.
 
-**À faire (simulateur / moteur, pas la carte BI).**
+**To do (simulator / engine, not the BI map).**
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| H5 | Grille GEBCO **précalculée hors VPS** (comme les snapshots climatologie), lookup point pour l’isochrone / `ici().depth_offshore` | `null` près des côtes (seuil à écrire, ex. 20 M du rivage) |
-| H6 | **Ne pas** peindre GEBCO sur Blue Intelligence | Pas de layer GEBCO dans `layerOrder.js` |
+| H5 | GEBCO grid **precomputed off the VPS** (like climatology snapshots), point lookup for the isochrone / `ici().depth_offshore` | `null` near coasts (threshold to write, e.g. 20 M from shore) |
+| H6 | **Do not** paint GEBCO on Blue Intelligence | No GEBCO layer in `layerOrder.js` |
 
-Prod `naviguide.fr` : hors ce plan (même règle que l’étape 1
-simulateur). On prépare le lookup dans le simulateur / le workspace
-routing **copié**, on ne colle pas les deux dépôts.
+Prod `naviguide.fr`: outside this plan (same rule as simulator
+stage 1). We prepare the lookup in the simulator / the **copied**
+routing workspace, we do not glue the two repos.
 
 ### 11.4 IENC / VNF
 
-Intéressant pour les **fleuves**. Hors périmètre : la route Berry et
-les 7 modes sont **maritimes**. Une ligne dans §17 suffit. Pas de
-ticket, pas de prototype.
+Interesting for **rivers**. Out of scope: the Berry route and
+the 7 modes are **maritime**. One line in §17 is enough. No
+ticket, no prototype.
 
 ---
 
-## 12. Filière 4 — Satellite (pilotes corridor Berry)
+## 12. Track 4 — Satellite (Berry corridor pilots)
 
-**Métier.** Voir l’erreur d’un trait de côte / d’une profondeur
-**estimée**, la comparer à EMODnet, l’exporter en GeoJSON OSM-shaped,
-l’afficher en **Science** avec le bandeau. Ce n’est pas une ENC.
+**Job.** See the error of an **estimated** coastline / depth,
+compare it to EMODnet, export it as OSM-shaped GeoJSON,
+display it in **Science** with the banner. This is not an ENC.
 
-**Périmètre.** Uniquement le corridor de `backend/data/route.geojson`
-(buffer à fixer, ex. 30 M). Pas le monde.
+**Scope.** Only the corridor of `backend/data/route.geojson`
+(buffer to fix, e.g. 30 M). Not the world.
 
-**Calcul.** Mac de l’opérateur ou machine hors ligne. Le VPS **sert**
-le GeoJSON, comme les snapshots climatologie.
+**Compute.** Operator Mac or offline machine. The VPS **serves**
+the GeoJSON, like climatology snapshots.
 
-### 12.0 Compte CDSE (bloquant humain)
+### 12.0 CDSE account (human blocker)
 
-CMEMS (vent, houle, courant, climatologie) **n’est pas** CDSE
-(images Sentinel-2).
+CMEMS (wind, swell, current, climatology) **is not** CDSE
+(Sentinel-2 images).
 
-| Id | Travail | Critère |
+| Id | Work | Criterion |
 |----|---------|---------|
-| S0 | Vérifier le compte Copernicus : a-t-on un accès **CDSE** (dataspace.copernicus.eu) distinct du login CMEMS déjà utilisé par `scripts/climatology/cmems_auth.py` ? | Note dans `scripts/satellite/README.md` : oui/non + qui possède le login. **Pas de secret dans git** |
+| S0 | Check the Copernicus account: do we have a **CDSE** access (dataspace.copernicus.eu) distinct from the CMEMS login already used by `scripts/climatology/cmems_auth.py`? | Note in `scripts/satellite/README.md`: yes/no + who owns the login. **No secret in git** |
 
-Sans S0, on n’écrit pas de downloader.
+Without S0, we do not write a downloader.
 
-### 12.1 Chaîne proposée (hors VPS)
+### 12.1 Proposed chain (off VPS)
 
-| Étape | Outil | Sortie |
+| Step | Tool | Output |
 |-------|-------|--------|
-| S1 | Sentinel-2 L1C/L2A sur scènes qui couvrent le corridor (CDSE STAC) | Scènes datées, liste sha256 |
-| S2 | ACOLITE (correction atmosphérique côtière) | Réflectances |
-| S3 | MNDWI et/ou CoastSat | Polyligne `natural=coastline` + polygone estran |
-| S4 | SDB Stumpf **si** une trace ICESat-2 ATL03/ATL24 croise la scène | `seamark:type=depth_area` (classes peu profondes, pas un DTM 1 m) |
-| S5 | Comparer à EMODnet (`depth_sample` + WMS) | Champs `error_m`, `n`, DOI / date des deux produits |
-| S6 | `versioned_fc()` → `coastline.geojson` / `depth_areas.geojson` | `metadata.disclaimer` obligatoire |
-| S7 | Mode Science : filtre « Satellite (pilote) » + mêmes boutons WMS + bandeau / modale M10 | Review **off** (placeholder) |
+| S1 | Sentinel-2 L1C/L2A on scenes that cover the corridor (CDSE STAC) | Dated scenes, sha256 list |
+| S2 | ACOLITE (coastal atmospheric correction) | Reflectances |
+| S3 | MNDWI and/or CoastSat | `natural=coastline` polyline + intertidal polygon |
+| S4 | Stumpf SDB **if** an ICESat-2 ATL03/ATL24 track crosses the scene | `seamark:type=depth_area` (shallow classes, not a 1 m DTM) |
+| S5 | Compare to EMODnet (`depth_sample` + WMS) | Fields `error_m`, `n`, DOI / date of both products |
+| S6 | `versioned_fc()` → `coastline.geojson` / `depth_areas.geojson` | `metadata.disclaimer` mandatory |
+| S7 | Science mode: “Satellite (pilot)” filter + same WMS buttons + banner / M10 modal | Review **off** (placeholder) |
 
-**Interdit.** Recaler l’image avec le VLM. Inventer une profondeur
-sans ICESat-2 **et** sans le dire (`null` + `method: "stumpf-uncalibrated"`
-si on affiche quand même un essai — par défaut on **n’affiche pas**).
+**Forbidden.** Register the image with the VLM. Invent a depth
+without ICESat-2 **and** without saying so (`null` + `method: "stumpf-uncalibrated"`
+if we still display a trial — by default we **do not display**).
 
-### 12.2 Ce que le simulateur en fait
+### 12.2 What the simulator does with it
 
-Le cahier hackathon : Science = **0 ou 1 jeu localisé** dans le sac
-`ici()`, pas les catalogues entiers. Un trait de côte pilote entre
-dans `ici().science` **si** le bateau est dans le corridor **et**
-si un export existe. Sinon `null`. Nano raconte ; Ultra ne prend
-pas une côte satellite pour une ENC.
+The hackathon briefing: Science = **0 or 1 localised dataset** in the
+`ici()` pack, not the whole catalogues. A pilot coastline enters
+`ici().science` **if** the boat is in the corridor **and**
+if an export exists. Else `null`. Nano narrates; Ultra does not take
+a satellite coast for an ENC.
 
 ---
 
-## 13. Ordre de chantier
+## 13. Build order
 
-Pas de calendrier en jours. L’ordre est **technique** : d’abord ce
-qui débloque l’affichage et le contrat Review, ensuite l’API NOAA,
-ensuite le satellite (bloqué par S0).
+No calendar in days. The order is **technical**: first what
+unlocks display and the Review contract, then the NOAA API,
+then satellite (blocked by S0).
 
-### Vague 0 — Diagnostic (aucun secret, peu de code)
+### Wave 0 — Diagnosis (no secret, little code)
 
-| Id | Livrable |
+| Id | Deliverable |
 |----|----------|
-| M14 | Attribut de profondeur Seamap : oui / non |
-| S0 | Compte CDSE : oui / non |
-| H1 | Liste des layers ENC Direct utiles (feux, bouées, DEPARE) |
+| M14 | Seamap depth attribute: yes / no |
+| S0 | CDSE account: yes / no |
+| H1 | List of useful ENC Direct layers (lights, buoys, DEPARE) |
 
-### Vague 1 — Carte visible (filière 2) + interrupteur Review
+### Wave 1 — Visible map (track 2) + Review switch
 
-Dépend de M14 seulement pour M15 (sinon on saute M15–M16).
+Depends on M14 only for M15 (else we skip M15–M16).
 
-| Id | Livrable | Où |
+| Id | Deliverable | Where |
 |----|----------|-----|
-| M10–M13 | Fenêtre d’acceptation + bandeau conservé | BI + simulateur |
-| M6–M8 | EMODnet WMS tous modes | BI |
-| M9 | WMS EMODnet en pastilles Science | simulateur |
-| M1–M4 | Overlay tippecanoe sur Seamap | BI |
-| C7 | Afficher la review | BI Map |
-| M15 | Isobathe **si** M14 positif | BI |
+| M10–M13 | Acceptance window + banner kept | BI + simulator |
+| M6–M8 | EMODnet WMS all modes | BI |
+| M9 | EMODnet WMS as Science pills | simulator |
+| M1–M4 | tippecanoe overlay on Seamap | BI |
+| C7 | Show the review | BI Map |
+| M15 | Contour **if** M14 positive | BI |
 
-**Recette vague 1.** Fond mer → modale → accepter → bandeau. Allumer
-bathy en mode Marinas. Voir l’overlay de la semaine. Gold sans
-« Afficher la review » : carte inchangée.
+**Wave 1 recipe.** Sea basemap → modal → accept → banner. Light
+bathy in Marinas mode. See this week’s overlay. Gold without
+“Show the review”: map unchanged.
 
-### Vague 2 — Contrôle (filière 1, écarts déjà contractés)
+### Wave 2 — Control (track 1, gaps already contracted)
 
-| Id | Livrable |
+| Id | Deliverable |
 |----|----------|
-| C8–C10 | Gold capitaineries / AMP / marinas selon contrat |
-| C4 | SMCFAC voisin sur fiche Marina |
-| C1–C3 | Catalogue : `exploite` / mapping export / clés satellite en `candidat` |
-| C15–C16 | Juge « règle de navigation ? » |
+| C8–C10 | Harbour-office / MPA / marina Gold per contract |
+| C4 | Neighbouring SMCFAC on Marina fiche |
+| C1–C3 | Catalogue: `exploite` / export mapping / satellite keys as `candidat` |
+| C15–C16 | “Navigation rule?” judge |
 
-**Recette vague 2.** Phrase de test CONTRATS §0 verte pour chaque
-kind. Un VHF inventé par le juge `false` n’est pas écrit.
+**Wave 2 recipe.** CONTRATS §0 test sentence green for each
+kind. A VHF invented by the `false` judge is not written.
 
-### Vague 3 — NOAA étendu + GEBCO large (filière 3)
+### Wave 3 — Extended NOAA + offshore GEBCO (track 3)
 
-| Id | Livrable |
+| Id | Deliverable |
 |----|----------|
-| H2–H4 | Feux / bouées US par API, overlay 250 m vs OSM |
-| H5–H6 | Lookup GEBCO offshore dans le **simulateur / routing**, pas sur BI |
+| H2–H4 | US lights / buoys by API, 250 m overlay vs OSM |
+| H5–H6 | Offshore GEBCO lookup in the **simulator / routing**, not on BI |
 
-**Recette vague 3.** Bbox Méditerranée : 0 objet NOAA. Bbox
-Chesapeake : au moins un feu ou une bouée. Point à 5 M d’un port :
-GEBCO `null`. Point au milieu de l’Atlantique : une profondeur.
+**Wave 3 recipe.** Mediterranean bbox: 0 NOAA objects. Chesapeake
+bbox: at least one light or buoy. Point 5 M from a harbour:
+GEBCO `null`. Point in mid-Atlantic: a depth.
 
-### Vague 4 — Pilotes Sentinel (filière 4)
+### Wave 4 — Sentinel pilots (track 4)
 
-Bloquée par S0 = oui.
+Blocked by S0 = yes.
 
-| Id | Livrable |
+| Id | Deliverable |
 |----|----------|
-| S1–S6 | Scripts `scripts/satellite/` hors VPS + 1–2 scènes Berry + exports |
-| S7 | Affichage Science |
-| `ici().science` | 0 ou 1 trait si le bateau est dessus |
+| S1–S6 | `scripts/satellite/` scripts off VPS + 1–2 Berry scenes + exports |
+| S7 | Science display |
+| `ici().science` | 0 or 1 line if the boat is on it |
 
-**Recette vague 4.** Une scène, un GeoJSON avec `metadata.version`,
-erreur vs EMODnet écrite, bandeau visible, aucun Review Gold.
+**Wave 4 recipe.** One scene, one GeoJSON with `metadata.version`,
+error vs EMODnet written, banner visible, no Review Gold.
 
-Les vagues 1 et 2 peuvent **avancer en parallèle** (carte vs
-Review). La vague 4 ne commence pas avant S0. La vague 3 peut
-chevaucher 2 (même pattern overlay que les capitaineries).
+Waves 1 and 2 can **advance in parallel** (map vs
+Review). Wave 4 does not start before S0. Wave 3 can
+overlap 2 (same overlay pattern as harbour offices).
 
 ---
 
-## 14. Fichiers touchés
+## 14. Files touched
 
-### Vague 1 (carte + Review interrupteur)
+### Wave 1 (map + Review switch)
 
-| Fichier | Rôle |
+| File | Role |
 |---------|------|
-| `frontend/src/components/map/NotForNavModal.js` | **Nouveau** — modale |
-| `frontend/src/components/MapView.js` | Modale + bandeau |
-| `frontend/src/components/map/useScienceWms.js` | Plus de garde `mode === "science"` |
-| `frontend/src/components/map/useBiOverlay.js` | **Nouveau** — PMTiles overlay |
-| `frontend/src/components/map/layerOrder.js` | Pane overlay + évent. isobathe |
-| `frontend/src/components/map/__tests__/layerOrder.test.js` | Figer l’ordre |
-| `frontend/src/App.js` / chrome carte | Boutons WMS + overlay hors SciencePanel |
-| `frontend/src/i18n.js` | Clés modale / overlay / isobathe |
-| `frontend/src/components/Header.js` ou chrome Map | Interrupteur « Afficher la review » (C7) |
-| `infra/vps/seamap/` ou `deploy-app.sh` | Option : `REACT_APP_BI_OVERLAY_URL` |
-| `naviguide-simulator/src/components/` | Modale + WMS EMODnet (M9, M12) |
+| `frontend/src/components/map/NotForNavModal.js` | **New** — modal |
+| `frontend/src/components/MapView.js` | Modal + banner |
+| `frontend/src/components/map/useScienceWms.js` | No more `mode === "science"` guard |
+| `frontend/src/components/map/useBiOverlay.js` | **New** — PMTiles overlay |
+| `frontend/src/components/map/layerOrder.js` | Overlay pane + possibly contour |
+| `frontend/src/components/map/__tests__/layerOrder.test.js` | Freeze the order |
+| `frontend/src/App.js` / map chrome | WMS + overlay buttons outside SciencePanel |
+| `frontend/src/i18n.js` | Modal / overlay / contour keys |
+| `frontend/src/components/Header.js` or Map chrome | “Show the review” switch (C7) |
+| `infra/vps/seamap/` or `deploy-app.sh` | Option: `REACT_APP_BI_OVERLAY_URL` |
+| `naviguide-simulator/src/components/` | Modal + EMODnet WMS (M9, M12) |
 
-### Vague 2 (contrôle)
+### Wave 2 (control)
 
-| Fichier | Rôle |
+| File | Role |
 |---------|------|
-| `backend/app/services/review_gold.py` | Plus de pré-Gold automatique |
-| `backend/app/services/review_queue.py` | Candidats AMP ; SMCFAC voisin marina |
-| `frontend/src/components/review/*` | Fiches alignées contrat |
+| `backend/app/services/review_gold.py` | No more automatic pre-Gold |
+| `backend/app/services/review_queue.py` | MPA candidates; neighbouring marina SMCFAC |
+| `frontend/src/components/review/*` | Fiches aligned to contract |
 | `backend/data/seamark_catalog.json` + `docs/CATALOGUE_SEAMARK.md` | C1–C3 |
 | `backend/app/core/judge.py` + tests | C15 |
-| `backend/tests/test_review*.py` / `test_capitaineries.py` | Phrases de test §0 |
+| `backend/tests/test_review*.py` / `test_capitaineries.py` | §0 test sentences |
 
-### Vague 3 (NOAA / GEBCO)
+### Wave 3 (NOAA / GEBCO)
 
-| Fichier | Rôle |
+| File | Role |
 |---------|------|
-| `backend/app/services/capitainerie_world.py` ou `noaa_enc.py` | H2 (nouveau module **si** le fichier dépasse le bureau) |
-| `backend/app/routers/` | Export feux / bouées US |
-| `naviguide-simulator` / copie routing | H5 lookup GEBCO |
-| `backend/tests/test_capitaineries.py` | Patterns NOAA à étendre |
+| `backend/app/services/capitainerie_world.py` or `noaa_enc.py` | H2 (new module **if** the file outgrows the office) |
+| `backend/app/routers/` | US lights / buoys export |
+| `naviguide-simulator` / routing copy | H5 GEBCO lookup |
+| `backend/tests/test_capitaineries.py` | NOAA patterns to extend |
 
-### Vague 4 (satellite)
+### Wave 4 (satellite)
 
-| Fichier | Rôle |
+| File | Role |
 |---------|------|
-| `scripts/satellite/README.md` | S0 + recette Mac |
-| `scripts/satellite/*.py` | STAC CDSE, exports ; **pas** ACOLITE vendu dans l’image VPS |
-| `backend/app/services/science_build.py` / router | Ingérer le GeoJSON pilote (`source: sentinel-pilot`) |
-| `frontend/src/components/SciencePanel.js` | Filtre Satellite |
-| `naviguide-simulator/src/engine/ici.js` | Champ science local |
+| `scripts/satellite/README.md` | S0 + Mac recipe |
+| `scripts/satellite/*.py` | CDSE STAC, exports; **not** ACOLITE shipped in the VPS image |
+| `backend/app/services/science_build.py` / router | Ingest the pilot GeoJSON (`source: sentinel-pilot`) |
+| `frontend/src/components/SciencePanel.js` | Satellite filter |
+| `naviguide-simulator/src/engine/ici.js` | Local science field |
 
-**Interdit de toucher** (ce plan) : `naviguide/naviguide-app/` prod,
-`infra/vps/sync-from-atlas.sh`, cubes NetCDF sur le VPS.
+**Forbidden to touch** (this plan): prod `naviguide/naviguide-app/`,
+`infra/vps/sync-from-atlas.sh`, NetCDF cubes on the VPS.
 
 ---
 
-## 15. Recette
+## 15. Recipe
 
-Recette **globale** une fois les quatre vagues faites. Chaque vague
-a la sienne au §13.
+**Global** recipe once the four waves are done. Each wave
+has its own in §13.
 
-1. Fond mer : modale → accepter → bandeau toujours là.
-2. Mode Marinas : allumer EMODnet bathy **sans** passer par Science.
-3. Overlay de la semaine visible ; `metadata.version` de l’export =
-   stamp de la release `data-*`.
-4. Gold d’une capitainerie : Map inchangée tant que « Afficher la
-   review » est décoché.
-5. Fiche marina : un SMCFAC à 200 m s’affiche comme **contrôle**,
-   pas comme identité.
-6. Juge : citation VHF → `true` ; pub resto → `false`.
-7. Chesapeake : feu ou bouée NOAA. Golfe de Gascogne : **zéro** NOAA.
-8. Atlantique large : GEBCO répond dans le simulateur. Dans un port :
+1. Sea basemap: modal → accept → banner still there.
+2. Marinas mode: light EMODnet bathy **without** going through Science.
+3. This week’s overlay visible; export `metadata.version` =
+   stamp of the `data-*` release.
+4. Harbour-office Gold: Map unchanged while “Show the
+   review” is unchecked.
+5. Marina fiche: an SMCFAC at 200 m displays as **control**,
+   not as identity.
+6. Judge: VHF quote → `true`; restaurant ad → `false`.
+7. Chesapeake: NOAA light or buoy. Bay of Biscay: **zero** NOAA.
+8. Mid-Atlantic: GEBCO answers in the simulator. In a harbour:
    `null`.
-9. Science + pilote : trait de côte + `error_m` vs EMODnet + bandeau.
-   Onglet Review = placeholder.
-10. Prod `blueintelligence.online` / `naviguide.fr` : ce plan ne les
-    déploie **pas** tout seul. Vague 1–2 = PR BI. Vague 3–4
-    simulateur = PR `naviguide-simulator/` seulement.
+9. Science + pilot: coastline + `error_m` vs EMODnet + banner.
+   Review tab = placeholder.
+10. Prod `blueintelligence.online` / `naviguide.fr`: this plan does
+    **not** deploy them on its own. Wave 1–2 = BI PR. Wave 3–4
+    simulator = `naviguide-simulator/` PR only.
 
 ---
 
-## 16. Risques
+## 16. Risks
 
-| Risque | Mitigation |
+| Risk | Mitigation |
 |--------|------------|
-| Seascape sans attribut → isobathe impossible | M14 d’abord ; sinon EMODnet + depth point |
-| Release GitHub injoignable pour l’overlay | Copie VPS `current.pmtiles` (petit) |
-| WMS EMODnet partout : perf / lisibilité | Défaut **off** ; panes `pointer-events: none` déjà |
-| Confondre CDSE et CMEMS | S0 bloquant ; deux README |
-| ACOLITE trop lourd | Jamais sur le VPS ; 1–2 scènes |
-| Gold trop facile (OSM ⇒ Gold) | C8–C10 avant d’afficher plus d’objets NOAA |
-| Présenter SDB comme un sondage | `kind` / `method` / disclaimer ; Review off |
-| Étendre NOAA au monde | Filtre bbox ENC Direct ; test Méditerranée = 0 |
-| Coller GEBCO sur un port | `null` sous le seuil côtier |
-| VLM « qui voit la carte » | Prompt + tests : mention textuelle seulement |
+| Seascape without attribute → contour impossible | M14 first; else EMODnet + depth point |
+| GitHub release unreachable for the overlay | VPS copy `current.pmtiles` (small) |
+| EMODnet WMS everywhere: perf / readability | Default **off**; `pointer-events: none` panes already |
+| Confusing CDSE and CMEMS | Blocking S0; two READMEs |
+| ACOLITE too heavy | Never on the VPS; 1–2 scenes |
+| Gold too easy (OSM ⇒ Gold) | C8–C10 before displaying more NOAA objects |
+| Presenting SDB as a sounding | `kind` / `method` / disclaimer; Review off |
+| Extending NOAA worldwide | ENC Direct bbox filter; Mediterranean test = 0 |
+| Gluing GEBCO onto a harbour | `null` under the coastal threshold |
+| VLM “that sees the map” | Prompt + tests: textual mention only |
 
 ---
 
-## 17. Hors périmètre
+## 17. Out of scope
 
-- Encodeur / décodeur **S-101** ou lecture de fichiers **S-57**.
-- **IENC / VNF** (navigation intérieure).
-- Isobathes **vectorielles** EMODnet sur le VPS.
-- GEBCO comme couche portuaire ou fond BI.
-- Géoréférencement d’image (croquis, PDF carte, Sentinel) par VLM
-  ou par `geo.py`.
-- Moteur **S-52** complet (symboles, secteurs de feux, safety
-  contour ECDIS).
-- Review / Gold Science, Climatologie, pilotes Sentinel (V1).
-- Modifier `naviguide.fr` (prod) ou fusionner simulateur ↔ prod.
-- Fleuves, lacs, hors corridor pour Sentinel.
-- StormGlass / Windy / cartes payantes comme source.
+- **S-101** encoder / decoder or reading **S-57** files.
+- **IENC / VNF** (inland navigation).
+- **Vector** EMODnet contours on the VPS.
+- GEBCO as a harbour layer or BI basemap.
+- Image georeferencing (sketch, chart PDF, Sentinel) by VLM
+  or by `geo.py`.
+- Full **S-52** engine (symbols, light sectors, ECDIS
+  safety contour).
+- Review / Gold Science, Climatology, Sentinel pilots (V1).
+- Modify `naviguide.fr` (prod) or merge simulator ↔ prod.
+- Rivers, lakes, outside the corridor for Sentinel.
+- StormGlass / Windy / paid charts as a source.
 
 ---
 
-## 18. Documents dont ce plan hérite
+## 18. Documents this plan inherits
 
-| Document | Ce qu’on en garde |
+| Document | What we keep from it |
 |----------|-------------------|
-| `README.md` | Fond Seamap, exports sha256, catalogue, avertissement |
-| `docs/CATALOGUE_SEAMARK.md` | OSM → champs BI ; audit ; pas d’invention |
-| `docs/CONTRATS_MODES.md` | 7 modes ; Science = API structurées ; géocodage = noms |
-| `docs/CONTRATS_REVIEW_PAR_MODE.md` | Méta-contrat Gold ; « Afficher la review » ; pas Science/Climat |
-| `docs/CAHIER_DES_CHARGES_REVIEW.md` | File humaine Formalités |
-| `docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` | BI montre / NAVIGUIDE s’en sert ; hors VPS ; `null` honnête |
-| `docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md` | Leaflet ; prod intouchée ; pastilles ; `ici()` |
-| `docs/hackathon-nebius-nvidia.md` | Gold + Tavily + Ultra ; Science = 0 ou 1 local ; disclaimer |
-| `infra/vps/seamap/README.md` | Miroir PMTiles ; cron lundi ; pas de GPL Seamap |
-| `.github/workflows/weekly-data-build.yml` | Overlay déjà construit |
+| `README.md` | Seamap basemap, sha256 exports, catalogue, warning |
+| `docs/CATALOGUE_SEAMARK.md` | OSM → BI fields; audit; no invention |
+| `docs/CONTRATS_MODES.md` | 7 modes; Science = structured APIs; geocoding = names |
+| `docs/CONTRATS_REVIEW_PAR_MODE.md` | Gold meta-contract; “Show the review”; no Science/Climat |
+| `docs/CAHIER_DES_CHARGES_REVIEW.md` | Formalities human queue |
+| `docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` | BI shows / NAVIGUIDE uses; off VPS; honest `null` |
+| `docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md` | Leaflet; prod untouched; pills; `ici()` |
+| `docs/hackathon-nebius-nvidia.md` | Gold + Tavily + Ultra; Science = 0 or 1 local; disclaimer |
+| `infra/vps/seamap/README.md` | PMTiles mirror; Monday cron; no Seamap GPL |
+| `.github/workflows/weekly-data-build.yml` | Overlay already built |
 
-En cas de conflit :
+In case of conflict:
 
-- **objet d’un mode** → `CONTRATS_MODES.md` ;
-- **Gold / carte** → `CONTRATS_REVIEW_PAR_MODE.md` §0 et §8 ;
-- **fond mer / overlay** → ce plan, vague 1 ;
-- **simulateur vs prod** → plan étape 1 (Leaflet, prod intouchée) ;
-- **S-101 / S-57 / calage pixel** → §4 de ce plan (refusé).
+- **object of a mode** → `CONTRATS_MODES.md`;
+- **Gold / map** → `CONTRATS_REVIEW_PAR_MODE.md` §0 and §8;
+- **sea basemap / overlay** → this plan, wave 1;
+- **simulator vs prod** → stage 1 plan (Leaflet, prod untouched);
+- **S-101 / S-57 / pixel registration** → §4 of this plan (refused).

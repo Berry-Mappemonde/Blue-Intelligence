@@ -1,4 +1,4 @@
-"""app.routers.climatology — 7ᵉ mode : atlas mensuel sourcé, kind climatology.
+"""app.routers.climatology — 7th mode: sourced monthly atlas, kind climatology.
 
 GET /api/climatology/meta
 GET /api/climatology/point?lat=&lon=&month=

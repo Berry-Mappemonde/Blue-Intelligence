@@ -1,4 +1,4 @@
-"""Emprise du corridor Berry autour d'un point de la route (degrés)."""
+"""Berry corridor footprint around a route point (degrees)."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ROUTE = ROOT / "backend" / "data" / "route.geojson"
 
-# 30 milles marins ≈ 0,5° de latitude.
+# 30 nautical miles ≈ 0.5° of latitude.
 NM30_DEG = 30 * 1852 / 111_320
 
 
@@ -16,7 +16,7 @@ def load_route(path: Path | None = None) -> dict:
 
 
 def first_sea_lonlat(route: dict) -> tuple[float, float]:
-    """Premier point maritime : La Rochelle sur la route officielle."""
+    """First maritime point: La Rochelle on the official route."""
     for feat in route.get("features") or []:
         props = feat.get("properties") or {}
         geom = feat.get("geometry") or {}
@@ -30,7 +30,7 @@ def first_sea_lonlat(route: dict) -> tuple[float, float]:
 
 
 def bbox_around(lon: float, lat: float, buffer_deg: float = NM30_DEG) -> list[float]:
-    """Bbox [ouest, sud, est, nord] autour d'un point."""
+    """Bbox [west, south, east, north] around a point."""
     return [
         lon - buffer_deg,
         lat - buffer_deg,

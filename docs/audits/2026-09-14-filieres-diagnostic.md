@@ -1,55 +1,55 @@
-# Diagnostic filières carto — 14 septembre 2026
+# Cartographic tracks diagnostic — 14 September 2026
 
-Vague 0 du plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
-Aucun secret. Lecture du `style.json` public Seamap et du MapServer
-NOAA ENC Direct.
+Wave 0 of the plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+No secret. Reading of the public Seamap `style.json` and the NOAA ENC
+Direct MapServer.
 
-## M14 — Attribut de profondeur Seamap / Seascape
+## M14 — Seamap / Seascape depth attribute
 
-**Oui.** Le style `https://tiles.openwaters.io/seamap/style.json`
-charge `seascape-vector` (CDN Open Waters, pas le VPS).
+**Yes.** The style `https://tiles.openwaters.io/seamap/style.json`
+loads `seascape-vector` (Open Waters CDN, not the VPS).
 
-| Layer style | Source | `source-layer` | Attribut utile |
+| Style layer | Source | `source-layer` | Useful attribute |
 |-------------|--------|----------------|----------------|
-| `depth-areas` | `seascape-vector` | `depare` | `drval1` (filtre `unsurveyed` = `!has drval1`) |
-| `contour-lines` | `seascape-vector` | `contours` | présents ; propriété exacte à confirmer au paint |
-| `soundings` | `seascape-vector` | `soundings` | sondes ponctuelles |
-| `depth-shading` | `seascape-dem` | — | raster DEM, **pas** d’attribut par pixel côté client |
+| `depth-areas` | `seascape-vector` | `depare` | `drval1` (filter `unsurveyed` = `!has drval1`) |
+| `contour-lines` | `seascape-vector` | `contours` | present; exact property to confirm at paint |
+| `soundings` | `seascape-vector` | `soundings` | point soundings |
+| `depth-shading` | `seascape-dem` | — | DEM raster, **no** per-pixel attribute on the client |
 
-Conséquence : **M15 est possible** — aplat MapLibre sur `depare`
-où `drval1` < seuil skipper (2 / 5 / 10 m). Ce n’est **pas** un
-moteur S-52. Seascape reste sur CDN (hors budget VPS).
+Consequence: **M15 is possible** — MapLibre fill on `depare`
+where `drval1` < skipper threshold (2 / 5 / 10 m). This is **not** an
+S-52 engine. Seascape stays on the CDN (outside the VPS budget).
 
-## H1 — NOAA ENC Direct (API, eaux US)
+## H1 — NOAA ENC Direct (API, US waters)
 
-MapServer : `https://gis.charttools.noaa.gov/arcgis/rest/services/encdirect`
+MapServer: `https://gis.charttools.noaa.gov/arcgis/rest/services/encdirect`
 
-Déjà branché pour les bureaux : `FUNCTN=2` (harbour / approach /
+Already wired for offices: `FUNCTN=2` (harbour / approach /
 coastal / berthing).
 
-Layers utiles pour feux / bouées (points) :
+Layers useful for lights / buoys (points):
 
-| Service | id | Nom |
+| Service | id | Name |
 |---------|----|-----|
 | `enc_harbour` | 11 | Harbor.Light_point |
 | `enc_harbour` | 6 | Harbor.Buoy_Lateral_point |
-| `enc_harbour` | 4–8 | autres bouées |
+| `enc_harbour` | 4–8 | other buoys |
 | `enc_harbour` | 1–3 | beacons |
 | `enc_approach` | 13 | Approach.Light_point |
-| `enc_approach` | 6–10 | bouées |
+| `enc_approach` | 6–10 | buoys |
 | `enc_coastal` | 10 | Coastal.Light_point |
-| `enc_coastal` | 4–7 | bouées |
+| `enc_coastal` | 4–7 | buoys |
 | `enc_berthing` | 6 | Berthing.Light_point |
 
-Pas de couche `DEPARE` / isobathe vectorielle évidente sous ces
-noms dans le MapServer public interrogé. Les isobathes US restent
-hors V1 API (on ne télécharge pas de cellules S-57).
+No obvious `DEPARE` / vector isobath layer under these
+names in the public MapServer queried. US isobaths remain
+outside the V1 API (we do not download S-57 cells).
 
-## S0 — Compte CDSE vs CMEMS
+## S0 — CDSE vs CMEMS account
 
-**Oui** (2026-09-14, opérateur Berry). CMEMS reste le login
-climatologie (`scripts/climatology/cmems_auth.py`). CDSE
-(`dataspace.copernicus.eu`) est un **autre** portail, autre mot
-de passe, stocké dans `scripts/satellite/.env` (gitignoré).
+**Yes** (2026-09-14, operator Berry). CMEMS remains the climatology
+login (`scripts/climatology/cmems_auth.py`). CDSE
+(`dataspace.copernicus.eu`) is a **different** portal, different
+password, stored in `scripts/satellite/.env` (gitignored).
 
-Voir `scripts/satellite/README.md`. Pas de secret dans git.
+See `scripts/satellite/README.md`. No secret in git.

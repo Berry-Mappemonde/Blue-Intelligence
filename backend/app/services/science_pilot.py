@@ -1,4 +1,4 @@
-"""Ingest des pilotes Sentinel (hors moisson SOURCES)."""
+"""Ingest Sentinel pilots (outside the SOURCES harvest)."""
 from __future__ import annotations
 
 from app.core.export_meta import versioned_fc
@@ -7,7 +7,7 @@ PILOT_SOURCE = "sentinel-pilot"
 
 
 def docs_from_pilot_fc(fc: dict) -> list[dict]:
-    """GeoJSON OSM-shaped → documents science_items. Jamais dans SOURCES."""
+    """OSM-shaped GeoJSON → science_items documents. Never in SOURCES."""
     docs = []
     meta = fc.get("metadata") or {}
     for i, feat in enumerate(fc.get("features") or []):

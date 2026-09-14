@@ -1,4 +1,4 @@
-"""Découverte Projets : N1 motifs → Fetch → Search TF ∥ Serper (1 shot). Sans réseau."""
+"""Projects discovery: N1 motifs → Fetch → Search TF ∥ Serper (1 shot). No network."""
 from __future__ import annotations
 
 import asyncio
@@ -411,7 +411,7 @@ def test_no_serper_hard_cap_still_calls_serper(monkeypatch):
 
 
 def test_home_internal_links_are_not_n1_fiches(monkeypatch):
-    """Sur un catalogue, About/News ne comptent pas comme fiches — Search tourne."""
+    """On a catalogue, About/News do not count as cards — Search runs."""
     _HtmlClient.html = HOME_HTML
     sw = _swarm()
     search = {"tf": 0, "sp": 0}
@@ -692,7 +692,7 @@ def test_no_serper_key_still_runs_tf_search(monkeypatch):
 
 
 def test_mode_test_journal_shows_n1_then_search(monkeypatch, tmp_path):
-    """Run mode=test simulé (1 graine home) : N1 → Search dans le journal, pas de full 776."""
+    """Simulated mode=test run (1 home seed): N1 → Search in the journal, no full 776."""
     monkeypatch.setattr(run_journal, "RUNS_DIR", tmp_path)
     sw = _swarm()
     sw.run_id = "20260912-193000-test01"

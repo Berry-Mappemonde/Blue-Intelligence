@@ -1,10 +1,10 @@
 """
-restore_data.py — Restauration NON-DESTRUCTIVE des sauvegardes GeoJSON.
+restore_data.py — NON-DESTRUCTIVE restore of GeoJSON backups.
 
 Usage:
   python3 scripts/restore_data.py poe /tmp/poe_backup.geojson
-  python3 scripts/restore_data.py zones          # backfill statuts après build référentiel
-Les projets se restaurent via l'endpoint existant POST /api/import/geojson.
+  python3 scripts/restore_data.py zones          # backfill statuses after the reference build
+Projects are restored via the existing POST /api/import/geojson endpoint.
 """
 import json
 import os
@@ -53,7 +53,7 @@ def restore_poe(path: str):
 
 
 def backfill_zones():
-    """À lancer APRÈS le build du référentiel ZEE : statut + poe_count depuis les ports restaurés."""
+    """Run AFTER the EEZ reference build: status + poe_count from restored ports."""
     updated = 0
     for row in db.poe_ports.aggregate([
         {"$group": {"_id": "$mrgid", "n": {"$sum": 1}, "last": {"$max": "$extracted_at"}}}

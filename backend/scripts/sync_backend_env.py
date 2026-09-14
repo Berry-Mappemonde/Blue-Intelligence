@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Aligne backend/.env sur les secrets du process (Atlas, NIM).
+"""Align backend/.env on the process secrets (Atlas, NIM).
 
-Le fichier est gitignoré. On ne logue jamais les valeurs — seulement les
-hôtes (localhost vs Atlas). Remplace un MONGO_URL localhost si le process
-a déjà une URI mongodb.net / mongodb+srv.
+The file is gitignored. Never log values — only
+hosts (localhost vs Atlas). Replace a localhost MONGO_URL if the process
+already has a mongodb.net / mongodb+srv URI.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def parse_env(text: str) -> dict[str, str]:
 
 
 def render_env(values: dict[str, str], original: str | None = None) -> str:
-    """Préserve commentaires / clés inconnues ; met à jour les clés gérées."""
+    """Preserve comments / unknown keys; update managed keys."""
     managed = set(_KEYS)
     seen: set[str] = set()
     lines: list[str] = []
@@ -69,7 +69,7 @@ def render_env(values: dict[str, str], original: str | None = None) -> str:
 
 
 def plan_sync(file_vals: dict[str, str], proc: dict[str, str]) -> dict[str, str]:
-    """Calcule le .env cible. Process Atlas gagne sur un fichier localhost."""
+    """Compute the target .env. Process Atlas wins over a localhost file."""
     out = dict(file_vals)
     proc_mongo = (proc.get("MONGO_URL") or "").strip()
     file_mongo = (out.get("MONGO_URL") or "").strip()

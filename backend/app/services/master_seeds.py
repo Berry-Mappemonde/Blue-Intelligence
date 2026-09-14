@@ -1,8 +1,8 @@
-"""MasterSeeds élargis (CDC Projets C5 / §18 / §22).
+"""Expanded MasterSeeds (Projects CDC C5 / §18 / §22).
 
-Union des financeurs v1 + 21 listings curés. Follow the Money écrit dans
-la même table : le plafond `max_partner_orgs` ne s'applique qu'aux
-organismes *nouveaux*, pas à une fondation déjà vue en v1.
+Union of v1 funders + 21 curated listings. Follow the Money writes into
+the same table: the `max_partner_orgs` cap applies only to
+*new* organizations, not to a foundation already seen in v1.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ SKIP_LISTING_NETLOCS = {
     "tinyurl.com", "t.co", "goo.gl", "maps.google.com",
 }
 
-# Journaux / éditeurs : un hit SERP n'est pas le site de l'organisme (BMKG ≠ nature.com).
+# Journals / publishers: a SERP hit is not the organization's site (BMKG ≠ nature.com).
 PUBLISHER_NETLOCS = {
     "nature.com", "springer.com", "springerlink.com", "springernature.com",
     "wiley.com", "onlinelibrary.wiley.com", "sciencedirect.com", "elsevier.com",
@@ -42,14 +42,14 @@ _INITIAL_STOP = {
     "at", "to", "by", "or", "und", "der", "die", "das",
 }
 
-# Trop courts / trop courants pour coller un domaine (Pew/Oak/WWF restent).
+# Too short / too common to glue a domain (Pew/Oak/WWF stay).
 _TOKEN_STOP_3 = _INITIAL_STOP | {
     "usa", "org", "com", "net", "www", "inc", "ltd", "llc", "new", "old",
     "red", "bay", "sea", "ngo",
 }
 
-# « Blue Carbon » ≠ bluenaturalcapital.org ; on retombe sur les jetons
-# complets si le nom n'a plus rien après ce filtre.
+# “Blue Carbon” ≠ bluenaturalcapital.org; fall back to the tokens
+# complete if the name has nothing left after this filter.
 _GENERIC_ORG_TOKENS = {
     "blue", "ocean", "oceans", "marine", "fund", "fonds", "foundation",
     "fondation", "institute", "institut", "university", "universite",
@@ -62,14 +62,14 @@ _GENERIC_ORG_TOKENS = {
     "germany", "france", "united", "states", "america",
 }
 
-# Un domaine porté par ≥ N noms v1 distincts est un catalogue partagé
-# (surfrider.org = 99 financeurs, pas la Coastal Commission).
+# A domain carried by ≥ N distinct v1 names is a shared catalog
+# (surfrider.org = 99 funders, not the Coastal Commission).
 _FREQUENT_HUB_MIN = 3
 _FREQUENT_HUBS: frozenset[str] | None = None
 
-# Catalogues partagés : beaucoup de financeurs v1 ont cette « home » parce
-# que leurs fiches vivent sur le hub (Decade Actions, HUB Ocean), pas sur
-# le site de l'organisme. Ce n'est pas une home à crawler.
+# Shared catalogs: many v1 funders have this "home" because
+# that their cards live on the hub (Decade Actions, HUB Ocean), not on
+# the organization's site. This is not a home to crawl.
 SHARED_HUB_NETLOCS = {
     "oceandecade.org",
     "hubocean.earth",
@@ -81,7 +81,7 @@ SHARED_HUB_NETLOCS = {
     "iwlearn.net",
 }
 
-# Le hub EST la home de ces noms (le secrétariat, pas un organisme hébergé).
+# The hub IS the home of these names (the secretariat, not a hosted org).
 HUB_OWNER_TOKENS = {
     "oceandecade.org": (
         "ocean decade",
@@ -152,7 +152,7 @@ def is_noise_name(name: str) -> bool:
 
 
 def frequent_hub_netlocs() -> frozenset[str]:
-    """Domaines v1 partagés par plusieurs organismes (hors Decade / HUB)."""
+    """v1 domains shared by several organizations (except Decade / HUB)."""
     global _FREQUENT_HUBS
     if _FREQUENT_HUBS is not None:
         return _FREQUENT_HUBS
@@ -184,7 +184,7 @@ def reset_frequent_hubs() -> None:
 
 
 def set_frequent_hubs_from_projects(projects: list[dict]) -> frozenset[str]:
-    """Domaines partagés par ≥ N financeurs distincts dans le GeoJSON v1."""
+    """Domains shared by ≥ N distinct funders in the v1 GeoJSON."""
     global _FREQUENT_HUBS
     by: dict[str, set[str]] = defaultdict(set)
     for doc in projects or []:
@@ -204,7 +204,7 @@ def set_frequent_hubs_from_projects(projects: list[dict]) -> frozenset[str]:
 
 
 def is_shared_hub(url_or_domain: str | None) -> bool:
-    """True si l'hôte est un catalogue partagé (Decade, Surfrider v1, …)."""
+    """True if the host is a shared catalog (Decade, Surfrider v1, …)."""
     d = domain_of(url_or_domain)
     if not d:
         raw = (url_or_domain or "").strip().lower().replace("www.", "")
@@ -217,7 +217,7 @@ def is_shared_hub(url_or_domain: str | None) -> bool:
 
 
 def name_owns_hub(name: str, url_or_domain: str | None) -> bool:
-    """Le financeur *est* le hub (Ocean Decade, HUB Ocean), pas un hébergé."""
+    """The funder *is* the hub (Ocean Decade, HUB Ocean), not a hosted org."""
     d = domain_of(url_or_domain)
     if not d:
         raw = (url_or_domain or "").strip().lower().replace("www.", "")
@@ -231,14 +231,14 @@ def name_owns_hub(name: str, url_or_domain: str | None) -> bool:
             continue
         if n == on:
             return True
-        # Chapters Surfrider ; pas les programmes « Ocean Decade Programme … ».
+        # Surfrider chapters; not “Ocean Decade Programme …” programs.
         if d == "surfrider.org" and n.startswith(on + " "):
             return True
     return False
 
 
 def is_shared_hub_home(seed: dict | None) -> bool:
-    """Home enregistrée = hub emprunté, pas le site de cet organisme."""
+    """Registered home = borrowed hub, not this organization's site."""
     seed = seed or {}
     url = (seed.get("url") or "").strip()
     name = seed.get("name") or ""
@@ -252,7 +252,7 @@ def is_shared_hub_home(seed: dict | None) -> bool:
 
 
 def needs_official_home(seed: dict | None) -> bool:
-    """Pas d'URL, journal, ou home v1 empruntée → chercher le vrai site."""
+    """No URL, journal, or borrowed v1 home → look for the real site."""
     seed = seed or {}
     url = (seed.get("url") or "").strip()
     if not url:
@@ -263,13 +263,13 @@ def needs_official_home(seed: dict | None) -> bool:
 
 
 def official_site_query(name: str) -> str:
-    """Un shot : « "BMKG" official site ». Pas de site:hub."""
+    """One shot: “BMKG official site”. No site:hub."""
     n = (name or "").strip()
     return f'"{n}" official site' if n else ""
 
 
 def official_site_retry_query(name: str) -> str | None:
-    """2ᵉ shot si le nom long ne donne rien : acronyme entre parenthèses."""
+    """2nd shot if the long name yields nothing: acronym in parentheses."""
     m = re.search(r"\(([A-Z][A-Z0-9]{1,7})\)", name or "")
     if not m:
         return None
@@ -277,7 +277,7 @@ def official_site_retry_query(name: str) -> str | None:
 
 
 def is_publisher_host(url_or_domain: str | None) -> bool:
-    """True si l'hôte est un journal / éditeur, pas l'organisme."""
+    """True if the host is a journal / publisher, not the organization."""
     d = domain_of(url_or_domain)
     if not d:
         raw = (url_or_domain or "").strip().lower().replace("www.", "")
@@ -291,7 +291,7 @@ def is_publisher_host(url_or_domain: str | None) -> bool:
 
 
 def official_name_tokens(name: str) -> list[str]:
-    """Jetons pour matcher un domaine : mots, acronymes (BMFTR, Pew, WWF)."""
+    """Tokens to match a domain: words, acronyms (BMFTR, Pew, WWF)."""
     tokens = [t for t in norm_name(name).split() if len(t) >= 4]
     for t in norm_name(name).split():
         if len(t) == 3 and t not in _TOKEN_STOP_3 and t not in tokens:
@@ -324,7 +324,7 @@ def official_name_tokens(name: str) -> list[str]:
 
 
 def domain_matches_org(url_or_domain: str | None, name: str) -> bool:
-    """Le domaine porte un jeton distinctif du nom (pas juste « blue »)."""
+    """The domain carries a distinctive name token (not just “blue”)."""
     d = domain_of(url_or_domain)
     if not d:
         raw = (url_or_domain or "").strip().lower().replace("www.", "")
@@ -386,7 +386,7 @@ def _strip_name_articles(n: str) -> str:
 
 
 def names_soft_match(a: str, b: str, aliases: list | None = None) -> bool:
-    """Même organisme : articles / suffixe Foundation, acronyme alias (WWF)."""
+    """Same organization: articles / Foundation suffix, acronym alias (WWF)."""
     if names_match(a, b, aliases):
         return True
     na = _strip_name_articles(norm_name(a))
@@ -402,7 +402,7 @@ def names_soft_match(a: str, b: str, aliases: list | None = None) -> bool:
         nal = norm_name(al)
         if not nal or " " in nal or not (2 <= len(nal) <= 6):
             continue
-        # Les deux noms doivent porter l'acronyme. Sinon « WWF Oceans »
+        # Both names must carry the acronym. Else “WWF Oceans”
         # (alias WWF) collerait n'importe quel partenaire.
         a_has = na == nal or na.startswith(nal + " ")
         b_has = nb == nal or nb.startswith(nal + " ")
@@ -424,7 +424,7 @@ def names_soft_match(a: str, b: str, aliases: list | None = None) -> bool:
 
 
 def prefer_official_home(seed: dict | None) -> dict:
-    """Si la home est officielle, ne pas crawler un hub recollé (Mongo / v1)."""
+    """If the home is official, do not crawl a reattached hub (Mongo / v1)."""
     item = dict(seed or {})
     name = item.get("name") or ""
     home = (item.get("home_url") or "").strip()
@@ -444,7 +444,7 @@ def prefer_official_home(seed: dict | None) -> dict:
 
 
 def listing_url_from_project_urls(urls: list[str], funder_name: str = "") -> str | None:
-    """Racine du domaine *propriétaire* — jamais un hub emprunté."""
+    """Root of the *owner* domain — never a borrowed hub."""
     counts: Counter[str] = Counter()
     for u in urls:
         d = domain_of(u)
@@ -466,7 +466,7 @@ def listing_url_from_project_urls(urls: list[str], funder_name: str = "") -> str
 
 
 def funder_names_from_project(doc: dict) -> list[str]:
-    """Noms tels qu'en base. Ne pas re-découper une chaîne déjà jointe."""
+    """Names as stored. Do not re-split an already joined string."""
     raw = doc.get("funders")
     if isinstance(raw, list) and raw:
         return [str(x).strip() for x in raw if str(x).strip()]
@@ -498,7 +498,7 @@ def build_v1_seeds(projects: list[dict]) -> list[dict]:
 
 
 def merge_curated(v1_seeds: list[dict], curated: list[dict] | None = None) -> list[dict]:
-    """Union par nom/alias. Un financeur hébergé sur CORDIS / FPA2 n'est pas jeté."""
+    """Union by name/alias. A funder hosted on CORDIS / FPA2 is not dropped."""
     curated = curated if curated is not None else _curated_seeds()
     out: list[dict] = []
     used = set()
@@ -547,10 +547,10 @@ def _without_priority(seed: dict) -> dict:
 
 
 def seeds_for_run(seeds: list[dict]) -> list[dict]:
-    """File Complet : curés d'abord, puis gros project_count. Pas d'alphabet A–Z.
+    """Complet queue: curated first, then high project_count. No A–Z alphabet.
 
-    FTM dépense ses tickets sur les partenaires des vrais portails (Pew, WWF),
-    pas sur la première page « Alpha / Brevard » du JSON.
+    FTM spends its tickets on partners of real portals (Pew, WWF),
+    not on the first "Alpha / Brevard" page of the JSON.
     """
     from app.services.seed_catalog import is_crawl_ready
     ready = [s for s in seeds if is_crawl_ready(s)]

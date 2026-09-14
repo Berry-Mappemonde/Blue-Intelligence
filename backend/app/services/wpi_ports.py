@@ -1,13 +1,12 @@
-"""
-wpi_ports — World Port Index (NGA Pub 150) comme contre-liste commerce.
+"""wpi_ports — World Port Index (NGA Pub 150) as a commercial counter-list.
 
-Le WPI est un inventaire de ports de commerce / industriels (domaine public
-US). On l'ingère, on l'apparie aux graines déjà connues (nom + ~1 km), on
-pose `wpi_commercial`. Ce n'est **jamais** une preuve qu'un yacht peut
-dédouaner : pas de nouvelle graine, pas de `seed_sources`, pas de GPS, pas
-de verdict confirmed/probable, pas de jeton envoyé au juge.
+WPI is an inventory of commercial / industrial ports (US public
+domain). Ingest it, match it to already-known seeds (name + ~1 km),
+set `wpi_commercial`. It is **never** proof that a yacht can
+clear: no new seed, no `seed_sources`, no GPS, no
+confirmed/probable verdict, no token sent to the judge.
 
-Le champ WPI « First Port of Entry » est ignoré comme statut juridique.
+The WPI “First Port of Entry” field is ignored as legal status.
 """
 from __future__ import annotations
 
@@ -77,7 +76,7 @@ def _wpi_index(raw: str) -> str:
 
 
 def parse_wpi_coord(raw) -> float | None:
-    """Décimal, ou DMS type 36°50'00\"N. None si vide / invalide."""
+    """Decimal, or DMS like 36°50'00"N. None if empty / invalid."""
     if raw is None:
         return None
     text = str(raw).strip().strip('"').replace("''", '"')
@@ -107,7 +106,7 @@ def parse_wpi_coord(raw) -> float | None:
 
 
 def parse_wpi_row(row: dict) -> dict | None:
-    """Une ligne CSV/JSON → enregistrement slim, ou None si inutilisable."""
+    """One CSV/JSON row → slim record, or None if unusable."""
     name = _cell(row, _NAME_KEYS)
     lat = parse_wpi_coord(_cell(row, _LAT_KEYS) or row.get("lat"))
     lon = parse_wpi_coord(_cell(row, _LON_KEYS) or row.get("lon"))
@@ -133,7 +132,7 @@ def parse_wpi_row(row: dict) -> dict | None:
 
 
 def parse_wpi_csv(src: str | Path | io.StringIO) -> list[dict]:
-    """Parse le CSV officiel UpdatedPub150.csv (utf-8 ou latin-1)."""
+    """Parse the official UpdatedPub150.csv (utf-8 or latin-1)."""
     if isinstance(src, io.StringIO):
         text = src.getvalue()
     else:
@@ -159,7 +158,7 @@ def parse_wpi_csv(src: str | Path | io.StringIO) -> list[dict]:
 
 
 def ingest_wpi_records(ports: list[dict], *, generated_at: str | None = None) -> dict:
-    """Document snapshot (pas une preuve PoE)."""
+    """Snapshot document (not PoE evidence)."""
     clean: list[dict] = []
     seen: set[str] = set()
     for raw in ports or []:
@@ -208,7 +207,7 @@ def load_wpi_ports(path: str | None = None) -> dict:
 
 
 def wpi_is_commercial(_rec: dict | None = None) -> bool:
-    """Toute entrée WPI valide est une contre-liste commerce (Harbor Use souvent Unknown)."""
+    """Every valid WPI entry is a commercial counter-list (Harbor Use often Unknown)."""
     return True
 
 
@@ -240,9 +239,9 @@ def wpi_matches_name(seed_name: str, rec: dict) -> bool:
 
 def match_wpi_port(seed: dict, ports: list[dict] | None = None,
                    radius_km: float | None = None) -> dict | None:
-    """Apparie une graine déjà connue. None si pas de nom+proximité (ou nom unique).
+    """Match an already-known seed. None without name+proximity (or a unique name).
 
-    Ne crée pas de graine. Ne copie pas le GPS WPI.
+    Do not create a seed. Do not copy the WPI GPS.
     """
     from app.core.run_rules import get_rule
     if radius_km is None:
@@ -258,7 +257,7 @@ def match_wpi_port(seed: dict, ports: list[dict] | None = None,
     except (TypeError, ValueError):
         lat = lon = None
     if lat is not None:
-        # ~2 km de préfiltre (1 km de rayon + marge).
+        # ~2 km prefilter (1 km radius + slack).
         box = [
             rec for rec in catalog
             if abs(float(rec.get("lat") or 99) - lat) <= 0.02

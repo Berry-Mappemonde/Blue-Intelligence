@@ -1,9 +1,9 @@
-"""Cache stale-while-revalidate du dump GeoJSON marinas (GET /api/marinas).
+"""Stale-while-revalidate cache of the marinas GeoJSON dump (GET /api/marinas).
 
-Sur un Mongo distant, reconstruire les ~32 000 features prend plusieurs
-minutes : ces tests verrouillent le contrat du cache — une seule lecture
-Mongo par reconstruction, l'ancien contenu servi pendant le rafraîchissement,
-et une invalidation qui ne casse jamais un contexte sans boucle asyncio.
+On a remote Mongo, rebuilding the ~32,000 features takes several
+minutes: these tests lock the cache contract — one Mongo
+read per rebuild, old content served during refresh,
+and an invalidation that never breaks a context without an asyncio loop.
 """
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def test_requetes_filtrees_ne_passent_pas_par_le_cache(monkeypatch):
 def test_mark_stale_sans_boucle_asyncio_ne_leve_pas(monkeypatch):
     _reset_cache(monkeypatch, fc={"type": "FeatureCollection", "features": []},
                  built_at=time.monotonic())
-    marinas_router.mark_marinas_fc_stale()  # hors event loop : ne doit pas lever
+    marinas_router.mark_marinas_fc_stale()  # off the event loop: must not raise
     assert marinas_router._MARINAS_FC_CACHE["built_at"] == 0.0
 
 

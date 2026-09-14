@@ -1,4 +1,4 @@
-"""sync_backend_env — aucun réseau, aucun secret réel."""
+"""sync_backend_env — no network, no real secret."""
 import sys
 from pathlib import Path
 

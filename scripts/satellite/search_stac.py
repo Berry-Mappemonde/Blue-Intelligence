@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Liste 1–2 scènes Sentinel-2 L1C sur le corridor (STAC CDSE).
+"""List 1–2 Sentinel-2 L1C scenes on the corridor (CDSE STAC).
 
-ACOLITE refuse le L2A (correction ESA). Il faut le L1C (image brute).
-N'écrit aucune image. À lancer sur le Mac de l'opérateur.
+ACOLITE rejects L2A (ESA correction). It needs L1C (raw image).
+Does not write any image. Run on the operator's Mac.
 """
 from __future__ import annotations
 
@@ -95,15 +95,15 @@ def search_scenes(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Recherche STAC Sentinel-2 (pas de téléchargement)")
+    p = argparse.ArgumentParser(description="Sentinel-2 STAC search (no download)")
     p.add_argument("--limit", type=int, default=2)
     p.add_argument("--max-cloud", type=float, default=20)
     p.add_argument(
         "--collection",
         default=DEFAULT_COLLECTION,
-        help="Collection STAC (défaut : sentinel-2-l1c, requis par ACOLITE)",
+        help="STAC collection (default: sentinel-2-l1c, required by ACOLITE)",
     )
-    p.add_argument("--out", type=Path, help="Écrire le manifeste JSON ici")
+    p.add_argument("--out", type=Path, help="Write the JSON manifest here")
     args = p.parse_args()
     bbox = default_bbox()
     token = access_token()

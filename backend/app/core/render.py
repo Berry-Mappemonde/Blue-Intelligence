@@ -1,15 +1,15 @@
 """
-render_core — Rendu navigateur local (Playwright + Chromium headless).
+render_core — Local browser render (Playwright + headless Chromium).
 
-``render_html`` (cascade Complet / PoE) et ``render_screenshot`` (vision
-Review) lancent Chromium dans un *sous-processus* (``app.core.render_worker``).
-Un crash natif (munmap_chunk sous MemoryHigh=2G) ou un site qui ne finit
-jamais de se charger tue uniquement l'enfant : l'API continue, la RAM
-est rendue. Le groupe de process (Python + Chrome) est tué au délai.
+``render_html`` (Full / PoE cascade) and ``render_screenshot`` (Review
+vision) launch Chromium in a *subprocess* (``app.core.render_worker``).
+A native crash (munmap_chunk under MemoryHigh=2G) or a site that never
+finishes loading kills only the child: the API continues, RAM is
+released. The process group (Python + Chrome) is killed on timeout.
 
-Dégradation propre : si playwright ou son navigateur n'est pas installé,
-on retourne None et la cascade continue sans rendu.
-Installation : pip install playwright && playwright install chromium
+Clean degradation: if playwright or its browser is not installed,
+we return None and the cascade continues without render.
+Install: pip install playwright && playwright install chromium
 """
 import asyncio
 import os
@@ -27,7 +27,7 @@ UA_BROWSER = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
 _pw = None
 _browser = None
 _lock = asyncio.Lock()
-# Un Chromium à la fois dans le cgroup MemoryHigh=2G.
+# One Chromium at a time in the MemoryHigh=2G cgroup.
 _sem = asyncio.Semaphore(1)
 _unavailable = False
 RENDER_SUBPROCESS_GRACE_S = 20
@@ -35,7 +35,7 @@ SCREENSHOT_MAX_HEIGHT = 2400
 
 
 class RenderUnavailable(Exception):
-    """Playwright / navigateur absent — désactive les rendus suivants."""
+    """Playwright / browser missing — disable subsequent renders."""
 
 
 def _render_worker_env() -> dict:
@@ -49,7 +49,7 @@ def _render_worker_env() -> dict:
 
 
 def _kill_worker_group(proc: subprocess.Popen) -> None:
-    """Tue Python + Chromium (session setsid), pas seulement le père."""
+    """Kill Python + Chromium (setsid session), not only the parent."""
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
@@ -89,7 +89,7 @@ def _decode_worker(proc: subprocess.CompletedProcess) -> None:
 
 
 def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> str | None:
-    """Spawn ``app.core.render_worker`` HTML — hookable depuis les tests."""
+    """Spawn ``app.core.render_worker`` HTML — hookable from tests."""
     with tempfile.TemporaryDirectory(prefix="bi-render-") as tmp:
         out = Path(tmp) / "page.html"
         try:
@@ -106,7 +106,7 @@ def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> str | None:
 
 def _run_screenshot_worker(url: str, timeout_s: int, settle_ms: int,
                            max_height: int = SCREENSHOT_MAX_HEIGHT) -> bytes | None:
-    """Spawn ``app.core.render_worker --screenshot`` — hookable depuis les tests."""
+    """Spawn ``app.core.render_worker --screenshot`` — hookable from tests."""
     with tempfile.TemporaryDirectory(prefix="bi-shot-") as tmp:
         out = Path(tmp) / "page.jpg"
         try:
@@ -124,7 +124,7 @@ def _run_screenshot_worker(url: str, timeout_s: int, settle_ms: int,
 
 
 async def _get_browser(log):
-    """Ancien navigateur partagé — plus utilisé pour les captures Review."""
+    """Former shared browser — no longer used for Review screenshots."""
     global _pw, _browser, _unavailable
     if _unavailable:
         return None
@@ -146,7 +146,7 @@ async def _get_browser(log):
 
 
 async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=None) -> str | None:
-    """HTML rendu par Chromium isolé (DOM après JavaScript), ou None."""
+    """HTML rendered by isolated Chromium (DOM after JavaScript), or None."""
     global _unavailable
     log = log or (lambda m: None)
     if _unavailable:
@@ -166,7 +166,7 @@ async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=
 
 async def render_screenshot(url: str, timeout_s: int = 45, settle_ms: int = 2500,
                             log=None) -> bytes | None:
-    """Capture JPEG bornée (vision Review) dans un sous-processus, ou None."""
+    """Bounded JPEG capture (Review vision) in a subprocess, or None."""
     global _unavailable
     from app.core.extract import should_skip_screenshot
     log = log or (lambda m: None)
@@ -191,7 +191,7 @@ async def render_screenshot(url: str, timeout_s: int = 45, settle_ms: int = 2500
 
 
 async def shutdown_render():
-    """Fermeture propre (appelée au shutdown de l'app et après chaque fiche)."""
+    """Clean shutdown (called on app shutdown and after each sheet)."""
     global _pw, _browser
     try:
         if _browser is not None:

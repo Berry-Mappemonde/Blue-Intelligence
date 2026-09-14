@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Recharge osm_port_seeds depuis Overpass, puis mesure l'union (v1+runs+OSM+listing).
+"""Reload osm_port_seeds from Overpass, then measure the union (v1+runs+OSM+listing).
 
-Hérite MONGO_URL / DB_NAME du process uvicorn s'ils pointent vers Atlas
-(install.sh aligne aussi backend/.env : localhost → Atlas si le secret est là).
-N'écrit jamais dans poe_ports.
+Inherit MONGO_URL / DB_NAME from the uvicorn process if they point at Atlas
+(install.sh also aligns backend/.env: localhost → Atlas if the secret is there).
+Never writes poe_ports.
 """
 from __future__ import annotations
 

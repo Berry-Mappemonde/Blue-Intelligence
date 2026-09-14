@@ -1,31 +1,30 @@
-"""
-poe_seeds — Inventaire bottom-up des ports candidats déjà connus.
+"""poe_seeds — Bottom-up inventory of already-known candidate ports.
 
-Ne crawl pas. Ne touche pas poe_ports. Les sources sont des graines
-(union dédupliquée, pas un croisement exclusif) :
+Does not crawl. Does not touch poe_ports. Sources are seeds
+(deduplicated union, not an exclusive join):
 
-  - carte v1 (poe_ports)
-  - runs versionnés (poe_run_ports) — mondiaux ou canaris
-  - OSM cache (osm_port_seeds) : havres + marinas ≤ 800 m d'une douane /
-    border_control / port_of_entry (graine P, pas un PoE)
-  - priors fichier (harbour/marina ≤ 800 m d'une douane / border_control)
-  - listing communautaire (rôle poe | other, souvent sans coordonnées)
+  - v1 map (poe_ports)
+  - versioned runs (poe_run_ports) — world or canary
+  - OSM cache (osm_port_seeds): havens + marinas ≤ 800 m from a customs /
+    border_control / port_of_entry (P-seed, not a PoE)
+  - file priors (harbour/marina ≤ 800 m from a customs / border_control)
+  - community listing (role poe | other, often without coordinates)
 
-Une identité (mrgid + nom) porte toutes les observations. On n'aplatit
-pas listing / OSM / runs en un seul is_poe. VLIZ (mrgid) = clé de zone,
-pas un moteur de crawl.
+One identity (mrgid + name) carries all observations. Do not flatten
+listing / OSM / runs into a single is_poe. VLIZ (mrgid) = zone key,
+not a crawl engine.
 
-Collection persistée : poe_seed_ports (reconstruite).
-La graine dit à TinyFish *quoi* chercher (`search_query`). Noonsite est
-exclu des recherches : le listing est déjà dans la base. Claude juge les
-extraits officiels (nom + zone), pas les jetons listing/OSM/runs.
+Persisted collection: poe_seed_ports (rebuilt).
+The seed tells TinyFish *what* to search (`search_query`). Noonsite is
+excluded from searches: the listing is already in the database. Claude judges
+official excerpts (name + zone), not listing/OSM/run tokens.
 
-Verdicts de vérification (pas une extraction) :
+Verification verdicts (not an extraction):
 
-  confirmed  — listing:poe ∩ (v1|run|osm) + coordonnées : déjà recoupé
-  probable   — OSM ≥ 0.5 ou ≥ 2 sources extraites, ou listing:poe ∩ extrait sans point
-  unverified — une seule source extraite (souvent v1 seule) : à juger
-  name_only  — listing:poe sans point : file de géocode, pas de SERP mondial
+  confirmed  — listing:poe ∩ (v1|run|osm) + coordinates: already cross-checked
+  probable   — OSM ≥ 0.5 or ≥ 2 extracted sources, or listing:poe ∩ excerpt without a point
+  unverified — a single extracted source (often v1 alone): to judge
+  name_only  — listing:poe without a point: geocode queue, no world SERP
 """
 from __future__ import annotations
 
@@ -47,7 +46,7 @@ from app.services.poe_pipeline import now_iso
 
 SEED_COLLECTION = "poe_seed_ports"
 OSM_PRIORS_FILE = DATA_DIR / "osm_port_priors.json"
-# Déjà extrait dans le listing — ne pas le redemander à TinyFish.
+# Already extracted in the listing — do not ask TinyFish again.
 SEARCH_EXCLUDE_DOMAINS = ("noonsite.com",)
 
 SEED_LEGEND = (
@@ -76,7 +75,7 @@ _PREFIX = (
     "porto de ", "port of ", "port de ", "pkk porti i ", "puerto de ", "haven ",
     "port autonome de ",
 )
-# Fautes listing → forme déjà en base (normalize_name).
+# Listing typos → form already in the database (normalize_name).
 _LISTING_NAME_ALIASES = {
     "khuludhufushi": "kulhudhuffushi",
     "grandmannan": "grandmanan",
@@ -96,7 +95,7 @@ def _alias_name(name: str) -> str:
 
 
 def listing_name_parts(name: str) -> list[str]:
-    """Découpe « A / B » et « A and B » pour l'appariement. Garde le nom plein."""
+    """Split “A / B” and “A and B” for matching. Keep the full name."""
     raw = (name or "").strip()
     if not raw:
         return []
@@ -127,7 +126,7 @@ def _names_overlap(a: str, b: str) -> bool:
 
 
 def _match_seed(seed: dict, pool: list[dict]) -> dict | None:
-    """Dédup : fuzzy habituel + alias « Port of / (…) » (Fort Bay ≈ Fort Bay (Fort Baai))."""
+    """Dedupe: usual fuzzy + “Port of / (…)” aliases (Fort Bay ≈ Fort Bay (Fort Baai))."""
     hit = find_duplicate_in_list(seed, pool, title_key="name")
     if hit:
         return hit
@@ -151,7 +150,7 @@ def _match_seed(seed: dict, pool: list[dict]) -> dict | None:
                 return other
     return None
 
-# Runs mondiaux déjà en base Atlas (285 ZEE). Le canari 12 ZEE n'en fait pas partie.
+# World runs already in the Atlas database (285 EEZ). The 12-EEZ canary is not among them.
 DEFAULT_MONDIAL_RUN_IDS = (
     "20260905-201122-91f6da",   # bestof3-complete
     "20260905-084036-fe1e08",   # bestof3-v2
@@ -227,7 +226,7 @@ def _slim(port: dict, source: str) -> dict:
 
 
 def _merge_seed(existing: dict, incoming: dict) -> None:
-    """Enrichit existing. Union des sources ; les coords vides se remplissent."""
+    """Enrich existing. Union of sources; empty coords get filled."""
     srcs = list(existing.get("seed_sources") or [])
     for s in incoming.get("seed_sources") or []:
         if s not in srcs:
@@ -302,10 +301,10 @@ def _merge_seed(existing: dict, incoming: dict) -> None:
 
 def union_extracted(batches: list[tuple[str, list[dict]]],
                     drop_legal: bool = True) -> list[dict]:
-    """Déduplique v1 + runs. `batches` = [(source, ports), ...].
+    """Deduplicate v1 + runs. `batches` = [(source, ports), ...].
 
-    L'appariement se fait par ZEE (mrgid) : un scan mondial O(n²) timeout
-    au-delà de quelques milliers de ports.
+    Matching is by EEZ (mrgid): a world O(n²) scan times out
+    beyond a few thousand ports.
     """
     out: list[dict] = []
     by_zone: dict[int | None, list[dict]] = {}
@@ -336,7 +335,7 @@ def union_extracted(batches: list[tuple[str, list[dict]]],
 
 
 def listing_name_seeds(listing_ports: list[dict]) -> list[dict]:
-    """Graines nom-seul (rôle poe). Pas de lat/lon."""
+    """Name-only seeds (poe role). No lat/lon."""
     seeds = []
     for lp in listing_ports:
         if lp.get("role") != "poe":
@@ -384,7 +383,7 @@ def listing_name_seeds(listing_ports: list[dict]) -> list[dict]:
 
 
 def attach_listing_seeds(extracted: list[dict], listing_ports: list[dict]) -> dict:
-    """Ajoute les noms listing sans match. Les matches annotent la graine extraite."""
+    """Add unmatched listing names. Matches annotate the extracted seed."""
     listing_seeds = listing_name_seeds(listing_ports)
     by_zone: dict[int | None, list[dict]] = {}
     for p in extracted:
@@ -423,7 +422,7 @@ def attach_listing_seeds(extracted: list[dict], listing_ports: list[dict]) -> di
 
 
 def attach_listing_other(seeds: list[dict], listing_ports: list[dict]) -> int:
-    """Attache le rôle listing:other sur une identité déjà connue. Pas de graine novel."""
+    """Attach the listing:other role on an already-known identity. No novel seed."""
     by_zone: dict[int | None, list[dict]] = {}
     for p in seeds:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
@@ -480,11 +479,11 @@ def _nearest_seed(seed: dict, pool: list[dict], max_km: float) -> dict | None:
 
 
 def attach_osm_seeds(extracted: list[dict], osm_docs: list[dict]) -> dict:
-    """Union OSM : fusion nom / proximité, création des havres nommés orphelins.
+    """OSM union: name / proximity merge, create orphan named havens.
 
-    Une marina n'entre que si le cache l'a déjà marquée près d'un contrôle
-    (`osm_near_control`) ou si un bureau douane/border est dans le même lot
-    à ≤ 800 m.
+    A marina enters only if the cache already marked it near a control
+    (`osm_near_control`) or a customs/border office is in the same batch
+    within ≤ 800 m.
     """
     from app.services.osm_seeds import (
         cache_doc_to_seed, collect_control_points, control_kind_flags,
@@ -562,7 +561,7 @@ def load_osm_priors(path: str | None = None) -> dict:
 
 
 def osm_priors_as_seeds(osm: dict | None = None) -> list[dict]:
-    """Havres / marinas déjà recoupés avec une douane ou un poste frontière."""
+    """Havens / marinas already cross-checked with a customs or border post."""
     doc = osm if osm is not None else load_osm_priors()
     out: list[dict] = []
     for raw in doc.get("ports") or []:
@@ -627,7 +626,7 @@ def osm_priors_as_seeds(osm: dict | None = None) -> list[dict]:
 
 
 def attach_converted_osm(extracted: list[dict], osm_seeds: list[dict]) -> dict:
-    """Fusionne des graines OSM déjà converties (priors ou cache)."""
+    """Merge already-converted OSM seeds (priors or cache)."""
     by_zone: dict[int | None, list[dict]] = {}
     for p in extracted:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
@@ -664,7 +663,7 @@ def attach_osm_priors(extracted: list[dict], osm: dict | None = None) -> dict:
 
 
 def attach_wpi_commercial(seeds: list[dict], wpi: dict | None = None) -> dict:
-    """Pose wpi_commercial sur les graines déjà connues. 0 création, 0 preuve PoE."""
+    """Set wpi_commercial on already-known seeds. 0 creation, 0 PoE evidence."""
     from app.services.wpi_ports import load_wpi_ports, match_wpi_port
 
     doc = wpi if wpi is not None else load_wpi_ports()
@@ -744,7 +743,7 @@ def seed_tokens(seed: dict) -> list[str]:
 
 
 def format_seed_line(seed: dict) -> str:
-    """Résumé humain de l'inventaire — pas envoyé à Claude."""
+    """Human inventory summary — not sent to Claude."""
     name = (seed.get("name") or "").strip() or "unknown"
     parts = [name]
     if seed.get("lat") is not None and seed.get("lon") is not None:
@@ -759,7 +758,7 @@ def format_seed_line(seed: dict) -> str:
 
 
 def seed_search_query(seed: dict) -> str:
-    """Requête TinyFish pour CETTE graine. Pas de nom Noonsite, pas de jetons."""
+    """TinyFish query for THIS seed. No Noonsite name, no tokens."""
     name = (seed.get("name") or seed.get("listing_name") or "").strip()
     zone = (seed.get("zone_name") or "").strip()
     if not name:
@@ -771,7 +770,7 @@ def seed_search_query(seed: dict) -> str:
 
 
 def url_is_excluded_search(url: str, banned=SEARCH_EXCLUDE_DOMAINS) -> bool:
-    """True si l'URL est noonsite (ou autre domaine déjà extrait)."""
+    """True if the URL is noonsite (or another already-extracted domain)."""
     from app.core.tinyfish import _tf_domain
     host = _tf_domain(url or "")
     if not host:
@@ -788,7 +787,7 @@ def match_named_seed(seeds: list[dict], mrgid: int, name: str) -> dict | None:
 def seed_from_files(mrgid: int, name: str, *,
                     listing_ports: list[dict] | None = None,
                     priors_doc: dict | None = None) -> dict | None:
-    """Lookup hors Mongo : listing + priors OSM pour une ZEE."""
+    """Lookup off Mongo: listing + OSM priors for an EEZ."""
     mid = int(mrgid)
     listing = listing_ports if listing_ports is not None else listing_ports_for_mrgid(
         project_listing()["ports"], mid)
@@ -805,7 +804,7 @@ def build_seeds_offline(*, extracted: list[dict] | None = None,
                         include_priors: bool = True,
                         wpi_doc: dict | None = None,
                         include_wpi: bool = True) -> dict:
-    """Assemble l'inventaire sans Mongo (listing + OSM priors + WPI + extraits)."""
+    """Assemble the inventory without Mongo (listing + OSM priors + WPI + excerpts)."""
     ports = list(extracted or [])
     prior_stats: dict = {}
     wpi_stats: dict = {}
@@ -837,7 +836,7 @@ VERDICTS = ("confirmed", "probable", "unverified", "name_only")
 
 
 def _is_extracted_source(source: str) -> bool:
-    """WPI / listing ne comptent pas : ce ne sont pas des extraits officiels."""
+    """WPI / listing do not count: they are not official excerpts."""
     if source in ("wpi", "wpi_commercial", "listing"):
         return False
     return source == "v1" or source == "osm" or str(source).startswith("run:")
@@ -852,7 +851,7 @@ def _extracted_source_count(seed: dict) -> int:
 
 
 def verdict_for_seed(seed: dict) -> str:
-    """Classe une graine : est-ce déjà un PoE recoupé, ou un nom à vérifier ?"""
+    """Classify a seed: already a cross-checked PoE, or a name to verify?"""
     has_listing = listing_is_poe(seed)
     has_extracted = _has_extracted_source(seed)
     has_coords = bool(seed.get("has_coords") or (
@@ -880,7 +879,7 @@ def verdict_for_seed(seed: dict) -> str:
 
 
 def annotate_verdicts(seeds: list[dict]) -> dict[str, int]:
-    """Pose verify_verdict sur chaque graine. Retourne les comptes."""
+    """Set verify_verdict on each seed. Return the counts."""
     buckets = {v: 0 for v in VERDICTS}
     for seed in seeds:
         verdict = verdict_for_seed(seed)
@@ -891,7 +890,7 @@ def annotate_verdicts(seeds: list[dict]) -> dict[str, int]:
 
 def build_seed_report(extracted: list[dict], listing_ports: list[dict],
                       include_listing_seeds: bool = True) -> dict:
-    """Couverture listing de l'union extraite, plus file résiduelle."""
+    """Listing coverage of the extracted union, plus residual queue."""
     packed = attach_listing_seeds(list(extracted), listing_ports)
     extracted = packed["extracted"]
     seeds = packed["seeds"] if include_listing_seeds else extracted
@@ -939,7 +938,7 @@ def build_seed_report(extracted: list[dict], listing_ports: list[dict],
 
 
 async def persist_verify_run(db, report: dict, *, label: str = "seed-verify") -> dict:
-    """Écrit l'union classée dans un run versionné. Ne touche pas poe_ports."""
+    """Write the classified union into a versioned run. Do not touch poe_ports."""
     from app.services.poe_runs import ensure_run_indexes, new_run_id
     from app.services.run_fingerprint import build_code_fingerprint, merge_run_params
 
@@ -1098,7 +1097,7 @@ def seed_db_doc(seed: dict, built_at: str) -> dict:
 
 
 async def persist_seed_database(db, report: dict) -> dict:
-    """Remplace poe_seed_ports. Ne touche pas poe_ports / poe_run_ports."""
+    """Replace poe_seed_ports. Do not touch poe_ports / poe_run_ports."""
     await ensure_seed_indexes(db)
     built = report.get("built_at") or now_iso()
     by_key: dict[str, dict] = {}
@@ -1131,7 +1130,7 @@ async def collect_seed_report(db, run_ids: list[str] | None = None,
                               include_listing: bool = True,
                               include_osm: bool = True,
                               use_default_mondials: bool = False) -> dict:
-    """Charge Atlas, unionne, classe. Retourne le rapport interne (avec seeds)."""
+    """Load Atlas, union, classify. Return the internal report (with seeds)."""
     from app.services.osm_seeds import cache_stats, load_cached_osm
 
     ids = list(run_ids or [])
@@ -1191,7 +1190,7 @@ async def collect_seed_report(db, run_ids: list[str] | None = None,
 
 
 def public_seed_view(report: dict, *, mode: str = "seed-union") -> dict:
-    """Réponse API : pas les seeds (trop gros), seulement les comptes."""
+    """API response: not the seeds (too large), only the counts."""
     return {
         "mode": mode,
         "crawled": False,
@@ -1214,7 +1213,7 @@ async def build_seed_union(db, run_ids: list[str] | None = None,
                            include_listing: bool = True,
                            include_osm: bool = True,
                            use_default_mondials: bool = False) -> dict:
-    """Charge Atlas, unionne, compare au listing. Lecture seule."""
+    """Load Atlas, union, compare to the listing. Read-only."""
     report = await collect_seed_report(
         db, run_ids, include_v1=include_v1, include_listing=include_listing,
         include_osm=include_osm, use_default_mondials=use_default_mondials)

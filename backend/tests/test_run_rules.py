@@ -1,4 +1,4 @@
-"""Catalogue des règles : principe, intervalles, snapshot, bind."""
+"""Rules catalogue: principle, intervals, snapshot, bind."""
 import os
 import sys
 from pathlib import Path
