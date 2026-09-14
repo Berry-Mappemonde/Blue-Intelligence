@@ -12,9 +12,11 @@ import { getCardinalDirection } from "./utils/getCardinalDirection";
 import { useLang } from "./i18n/LangContext.jsx";
 import { ITINERARY_POINTS } from "./constants/itineraryPoints";
 import { SimulationFilmBar } from "./components/SimulationFilmBar.jsx";
+import { ArrivalCard } from "./components/ArrivalCard.jsx";
 import { useSimulatorMap } from "./hooks/useSimulatorMap.js";
 import { useMarkerOffsets } from "./hooks/useMarkerOffsets.js";
 import { useRoutePlayback } from "./hooks/useRoutePlayback.js";
+import { useRouteWindProfile } from "./hooks/useRouteWindProfile.js";
 import { useExpeditionSpeed } from "./hooks/useExpeditionSpeed.js";
 import { useIciDossier } from "./hooks/useIciDossier.js";
 import { useFilmCamera } from "./hooks/useFilmCamera.js";
@@ -32,6 +34,8 @@ import {
 } from "./engine/routePlayhead.js";
 import { interpolateCast, isAirPhase, mergeEpisodeMarks, sailNmToFilmNm } from "./engine/filmCast.js";
 import { expeditionBoatKnots } from "./engine/playSpeeds.js";
+import { formatSeaClock } from "./engine/seaTime.js";
+import { nextStationAfter } from "./engine/stationDwell.js";
 import { summarizeRoute, featuresToSegments } from "./utils/geo.js";
 import { waypointsFromCollection } from "./utils/waypointsFromCollection.js";
 import { buildLocalCustomBriefing } from "./utils/customRouteBriefing.js";
@@ -106,6 +110,7 @@ export default function App() {
 
   const [simulationMode, setSimulationMode] = useState(false);
   const [cinemaMode, setCinemaMode] = useState(false);
+  const [clockScale, setClockScale] = useState("nm");
   const [arrivalBanner, setArrivalBanner] = useState(null);
   const [liveKnots, setLiveKnots] = useState(null);
   const cinemaSavedRef = useRef({ sidebar: true, tools: true });
@@ -168,6 +173,13 @@ export default function App() {
     flat: flatRoute,
     marks: escaleMarks,
     boatKnots,
+    enabled: simulationMode,
+  });
+  const windProfile = useRouteWindProfile({
+    flat: flatRoute,
+    marks: escaleMarks,
+    polarData,
+    cruiseKnots,
     enabled: simulationMode,
   });
 
@@ -347,6 +359,9 @@ export default function App() {
       } else if (e.code === "KeyC") {
         e.preventDefault();
         toggleCinema();
+      } else if (e.code === "KeyT") {
+        e.preventDefault();
+        setClockScale((s) => (s === "nm" ? "days" : "nm"));
       } else if (e.code === "Escape" && cinemaMode) {
         e.preventDefault();
         leaveCinema();
@@ -901,17 +916,23 @@ export default function App() {
       )}
 
       {maritimeLayers.showClimatology && (
-        <div className={`absolute left-1/2 -translate-x-1/2 z-20 bg-sky-950/90 border border-sky-400/40 text-sky-100 text-xs px-4 py-2 rounded-full ${simulationMode ? "bottom-32" : "bottom-6"}`}>
+        <div className={`absolute left-1/2 -translate-x-1/2 z-20 bg-sky-950/90 border border-sky-400/40 text-sky-100 text-xs px-4 py-2 rounded-full ${simulationMode ? "bottom-48" : "bottom-6"}`}>
           {t("climatologyStub")}
         </div>
       )}
 
-      {simulationMode && arrivalBanner && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[2030] pointer-events-none">
-          <div className="bg-slate-950/92 border border-cyan-400/40 text-white px-5 py-3 rounded-2xl shadow-2xl text-center max-w-[min(420px,92vw)]">
-            <div className="text-base font-semibold leading-snug">{t("filmArrived", { name: arrivalBanner.name })}</div>
-          </div>
-        </div>
+      {simulationMode && (arrivalBanner || playback.holdingStation) && (
+        <ArrivalCard
+          name={(arrivalBanner || playback.holdingStation).name}
+          sailNm={(arrivalBanner || playback.holdingStation).nm}
+          seaTime={formatSeaClock((arrivalBanner || playback.holdingStation).nm, expeditionSpeed.knots)}
+          nextName={nextStationAfter(
+            (arrivalBanner || playback.holdingStation).filmNm
+              ?? (arrivalBanner || playback.holdingStation).nm,
+            escaleMarks,
+          )?.name}
+          holding={playback.holding}
+        />
       )}
 
       {simulationMode && (
@@ -942,13 +963,18 @@ export default function App() {
           onCinema={toggleCinema}
           liveSpeed={expeditionSpeed.live}
           boatName={polarData?.boat_name}
+          clockScale={clockScale}
+          onClockScale={setClockScale}
+          windSeries={windProfile.series}
+          windLoading={windProfile.loading}
+          holding={playback.holding}
         />
       )}
 
       <LayerFichePopup popup={layerPopup} onClose={() => setLayerPopup(null)} />
 
       {selectedSatellite && (
-        <div className={`absolute left-1/2 -translate-x-1/2 z-[2100] w-[320px] bg-slate-900/96 border border-white/10 rounded-xl p-3 text-white text-xs shadow-2xl ${simulationMode ? "bottom-36" : "bottom-8"}`}>
+        <div className={`absolute left-1/2 -translate-x-1/2 z-[2100] w-[320px] bg-slate-900/96 border border-white/10 rounded-xl p-3 text-white text-xs shadow-2xl ${simulationMode ? "bottom-52" : "bottom-8"}`}>
           <button type="button" className="absolute top-2 right-2 text-slate-400" onClick={() => setSelectedSatellite(null)}><X size={14} /></button>
           <div className="font-semibold mb-2">{t("satelliteData")}</div>
           <div className="flex gap-1 mb-2">
