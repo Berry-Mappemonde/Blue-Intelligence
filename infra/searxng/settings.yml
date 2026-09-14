@@ -1,8 +1,8 @@
-# Configuration SearXNG minimale pour Blue Intelligence.
-# - format json activé (requis par le pipeline PoE : /search?format=json)
-# - limiter désactivé (instance privée, pas de Valkey/Redis)
-# - duckduckgo / brave / wikipedia : moteurs sans clés API
-# - google / bing désactivés : sans clés ils échouent souvent et vident les results
+# Minimal SearXNG configuration for Blue Intelligence.
+# - json format enabled (required by the PoE pipeline: /search?format=json)
+# - limiter disabled (private instance, no Valkey/Redis)
+# - duckduckgo / brave / wikipedia: engines without API keys
+# - google / bing disabled: without keys they often fail and empty the results
 use_default_settings: true
 
 general:
