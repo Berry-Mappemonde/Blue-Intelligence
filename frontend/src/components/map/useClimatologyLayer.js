@@ -71,6 +71,9 @@ function popupHtml(kind, p, t) {
     }
   } else if (kind === "wave") {
     rows.push(`Hs ${esc(p.stat)}: ${esc(p.hs_m)} m`);
+    if (p.period_s != null) rows.push(`T ${esc(p.period_s)} s`);
+    if (p.dir_deg != null) rows.push(`dir ${esc(p.dir_deg)}°`);
+    if (p.stat === "p50") rows.push(esc(t("climoWaveP50Hint")));
     if (p.stat === "p90") rows.push(esc(t("climoWaveP90Hint")));
     if (p.stat === "mean") rows.push(esc(t("climoWaveMeanHint")));
   } else if (kind === "current") {
