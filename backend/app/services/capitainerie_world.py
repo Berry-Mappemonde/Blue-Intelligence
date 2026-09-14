@@ -1,15 +1,15 @@
-"""Dump mondial des capitaineries OSM (harbour_master) + overlays SHOM / NOAA.
+"""World dump of OSM harbormasters (harbour_master) + SHOM / NOAA overlays.
 
-Contrat :
-  * objet = bureau de capitainerie, pas le plan d'eau, pas la marina
-  * identité OSM = osm_id (type/id) ; SHOM orphelin = shom:{layer}:{fid}
-    ; NOAA orphelin = noaa:{service}:{layer}:{fid}
-  * pas de rattachement aux marinas
-  * pas de purge (upsert)
-  * job tuilé Overpass reprenable, puis overlay SHOM
-    (BUISGL FUNCTN=2 = harbour-master's office ; SMCFAC CATSCF=6 s'il existe)
-    puis overlay NOAA ENC Direct (même FUNCTN=2, points + centroïdes d'aires)
-  * téléphone / VHF lus d'abord dans les tags, jamais inventés
+Contract:
+  * object = harbormaster office, not the water body, not the marina
+  * OSM identity = osm_id (type/id); orphan SHOM = shom:{layer}:{fid}
+    ; orphan NOAA = noaa:{service}:{layer}:{fid}
+  * no attachment to marinas
+  * no purge (upsert)
+  * resumable tiled Overpass job, then SHOM overlay
+    (BUISGL FUNCTN=2 = harbour-master's office; SMCFAC CATSCF=6 if it exists)
+    then NOAA ENC Direct overlay (same FUNCTN=2, points + area centroids)
+  * phone / VHF read from tags first, never invented
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ from app.services.marina_world import (
 SCHEMA = "capitainerie_world_v1"
 CURSOR_ID = "world_harbour_master"
 TILE_UPSERT_EVERY = 10
-SHOM_CATSCF = "6"  # SMCFAC : rarement peuplé sur le WFS public
+SHOM_CATSCF = "6"  # SMCFAC: rarely populated on the public WFS
 SHOM_BUISGL_FUNCTN = "2"  # S-57 FUNCTN = harbour-master's office
 SHOM_MERGE_KM = OVERLAY_RADIUS_KM
 NOAA_MERGE_KM = OVERLAY_RADIUS_KM
@@ -56,7 +56,7 @@ SHOM_LAYERS: tuple[tuple[str, str], ...] = (
     ("INFORMATIONS_PORTUAIRES_BDD_WFS:buisgl_point", "buisgl"),
     ("INFORMATIONS_PORTUAIRES_BDD_WFS:smcfac_point", "smcfac"),
 )
-# ENC Direct to GIS — FUNCTN=2 vit surtout sur les *aires* harbour, pas les points.
+# ENC Direct to GIS — FUNCTN=2 lives mostly on harbour *areas*, not points.
 NOAA_MAPSERVER = "https://gis.charttools.noaa.gov/arcgis/rest/services/encdirect"
 NOAA_FUNCTN_WHERE = (
     "FUNCTN='2' OR FUNCTN LIKE '2,%' OR FUNCTN LIKE '%,2' "
@@ -89,14 +89,14 @@ GENERIC_OFFICE_NAMES = frozenset({
     "harbor master",
 })
 
-# Bboxes WGS84 (south, west, north, east) où le WFS SHOM a des SMCFAC.
+# WGS84 bboxes (south, west, north, east) where the SHOM WFS has SMCFAC.
 SHOM_BBOXES: tuple[tuple[float, float, float, float], ...] = (
-    (41.0, -6.0, 52.0, 10.0),       # métropole + Corse
+    (41.0, -6.0, 52.0, 10.0),       # mainland France + Corsica
     (14.0, -62.0, 18.6, -60.5),     # Antilles
-    (-21.6, 55.0, -20.7, 56.1),     # Réunion
+    (-21.6, 55.0, -20.7, 56.1),     # Reunion
     (-13.1, 44.9, -12.5, 45.4),     # Mayotte
-    (-23.0, 163.0, -19.5, 168.6),   # Nouvelle-Calédonie
-    (-18.2, -152.0, -7.8, -134.0),  # Polynésie
+    (-23.0, 163.0, -19.5, 168.6),   # New Caledonia
+    (-18.2, -152.0, -7.8, -134.0),  # Polynesia
     (46.7, -56.5, 47.2, -56.0),     # Saint-Pierre-et-Miquelon
     (-14.5, -178.3, -13.0, -176.0), # Wallis-et-Futuna
 )
@@ -358,7 +358,7 @@ def _clean_vhf(raw: str | None) -> str | None:
 
 
 def contact_from_text(text: str | None) -> tuple[str | None, str | None]:
-    """Tél / VHF extraits d'une page (markdown Fetch, readability, INFORM)."""
+    """Phone / VHF extracted from a page (Fetch markdown, readability, INFORM)."""
     if not text or not str(text).strip():
         return None, None
     blob = str(text)
@@ -366,7 +366,7 @@ def contact_from_text(text: str | None) -> tuple[str | None, str | None]:
 
 
 def contact_from_tags(tags: dict | None) -> tuple[str | None, str | None]:
-    """Téléphone et canal VHF lus dans les tags OSM/SHOM. Jamais inventés."""
+    """Phone and VHF channel read from OSM/SHOM tags. Never invented."""
     tags = tags or {}
     phone = None
     for key in PHONE_TAG_KEYS:
@@ -388,7 +388,7 @@ def contact_from_tags(tags: dict | None) -> tuple[str | None, str | None]:
 
 
 def fill_contact(doc: dict, phone: str | None, vhf: str | None) -> dict:
-    """Remplit seulement les champs vides."""
+    """Fill empty fields only."""
     if phone and not doc.get("telephone"):
         doc["telephone"] = phone
     if vhf and not doc.get("canal_vhf"):
@@ -476,7 +476,7 @@ def _shom_latlon(feat: dict) -> tuple[float, float] | None:
 
 
 def capitainerie_from_shom(feat: dict, *, layer: str = "smcfac") -> dict | None:
-    """Bureau SHOM : BUISGL FUNCTN=2, ou SMCFAC CATSCF=6 s'il existe."""
+    """SHOM office: BUISGL FUNCTN=2, or SMCFAC CATSCF=6 if it exists."""
     props = feat.get("properties") or {}
     if layer == "buisgl":
         if not is_buisgl_harbour_master(props.get("functn")):
@@ -614,7 +614,7 @@ def _source_label(sources: list[str]) -> str:
 def nearest_office(
     lat: float, lon: float, pts: list[dict], radius_km: float | None = None,
 ):
-    """Calque bâtiment (≤ 250 m, distance seule). Pas la fusion de fiches Projets/PoE."""
+    """Building overlay (≤ 250 m, distance only). Not Project/PoE card merge."""
     hit = find_building(lat, lon, pts, radius_km=radius_km)
     return None if hit is None else hit.doc
 
@@ -676,7 +676,7 @@ async def upsert_osm(coll, cand: dict, now_iso: str) -> str:
 
 
 async def upsert_shom(coll, cand: dict, now_iso: str, osm_pts: list[dict]) -> str:
-    """Calque SHOM sur un OSM à ≤ 250 m (distance seule), sinon orphelin."""
+    """SHOM overlay on an OSM within ≤ 250 m (distance only), else orphan."""
     hit = nearest_osm(cand["lat"], cand["lon"], osm_pts)
     if hit:
         sources = _merge_sources(hit.get("sources"), [OSM_SOURCE, SHOM_SOURCE])
@@ -741,7 +741,7 @@ async def upsert_shom(coll, cand: dict, now_iso: str, osm_pts: list[dict]) -> st
 
 
 async def upsert_noaa(coll, cand: dict, now_iso: str, pts: list[dict]) -> str:
-    """Calque NOAA sur un bureau à ≤ 250 m (distance seule), sinon orphelin."""
+    """NOAA overlay on an office within ≤ 250 m (distance only), else orphan."""
     hit = nearest_office(cand["lat"], cand["lon"], pts)
     if hit:
         sources = _merge_sources(hit.get("sources"), [NOAA_SOURCE])
@@ -845,12 +845,12 @@ async def reset_cursor(cursor_coll) -> None:
 
 
 def _id_partial_index(field: str) -> dict:
-    """Index unique (run_id, id) : seulement si l'id est une chaîne.
+    """Unique index (run_id, id): only if the id is a string.
 
-    Un index *sparse* composé (run_id, shom_id) indexe tout document qui a
-    `run_id` — donc tous. Mongo y range `shom_id: null` / champ absent comme
-    la même clé : la 2ᵉ fiche OSM d'un run isolé lève E11000. Le dump tuile
-    Albanie n'avait qu'1 harbour_master et ne le voyait pas.
+    A compound *sparse* index (run_id, shom_id) indexes every document that has
+    `run_id` — i.e. all of them. Mongo stores `shom_id: null` / missing field as
+    the same key: the 2nd OSM card of an isolated run raises E11000. The Albania
+    tile dump had only 1 harbour_master and did not see it.
     """
     return {
         "unique": True,
@@ -873,7 +873,7 @@ async def _drop_index_quiet(coll, name: str) -> None:
 
 async def ensure_indexes(coll, *, isolated: bool = False) -> None:
     try:
-        # Unique sparse : un `osm_id: null` explicite n'est indexé qu'une fois.
+        # Unique sparse: an explicit `osm_id: null` is indexed only once.
         if hasattr(coll, "update_many"):
             await coll.update_many({"osm_id": None}, {"$unset": {"osm_id": ""}})
             await coll.update_many({"shom_id": None}, {"$unset": {"shom_id": ""}})
@@ -1069,7 +1069,7 @@ def _chart_office_name(objnam: str | None, inform: str | None, fallback: str) ->
 def capitainerie_from_noaa(
     feat: dict, *, service: str, layer_id: int, kind: str = "point",
 ) -> dict | None:
-    """Bureau NOAA ENC : BUISGL FUNCTN=2 (point ou centroïde d'aire)."""
+    """NOAA ENC office: BUISGL FUNCTN=2 (point or area centroid)."""
     props = feat.get("properties") or feat.get("attributes") or {}
     if not is_buisgl_harbour_master(props.get("FUNCTN") or props.get("functn")):
         return None
@@ -1115,7 +1115,7 @@ async def noaa_fetch_harbour_offices(
     logger=None,
     layers: tuple[tuple[str, int, str], ...] | None = None,
 ) -> list[dict]:
-    """ENC Direct : FUNCTN=2 sur points + aires, plusieurs bandes d'échelle."""
+    """ENC Direct: FUNCTN=2 on points + areas, several scale bands."""
     out: list[dict] = []
     for service, layer_id, kind in (layers or NOAA_ENC_LAYERS):
         url = f"{NOAA_MAPSERVER}/{service}/MapServer/{layer_id}/query"

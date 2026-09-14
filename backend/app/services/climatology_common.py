@@ -1,7 +1,7 @@
-"""Contrats partagés du mode Climatologie (kind, périodes, terre, unités).
+"""Shared Climatology-mode contracts (kind, periods, land, units).
 
-Les snapshots vivent dans ``backend/data/climatology/`` et sont générés hors
-VPS (Mac). Ici on les sert, on n'invente pas un vent / une Hs / un courant.
+Snapshots live in ``backend/data/climatology/`` and are generated off
+the VPS (Mac). Here we serve them; we do not invent a wind / Hs / current.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ CLIMATOLOGY_DIR = _BACKEND_DIR / "data" / "climatology"
 
 try:
     from app.core.run_rules import catalog_default as _catalog_default
-except Exception:  # pragma: no cover — import NAVIGUIDE sans Mongo
+except Exception:  # pragma: no cover — import NAVIGUIDE without Mongo
     _catalog_default = None
 
 _RULE_FALLBACKS = {
@@ -33,8 +33,8 @@ _RULE_FALLBACKS = {
     "climatology.avoid_cyclone_tracks": True,
 }
 
-# Périodes nominatives — chaque produit a la sienne. Le champ `period` du
-# point est un résumé, pas une vérité unique (voir le plan §15).
+# Named periods — each product has its own. The point's `period` field
+# is a summary, not a single truth (see plan §15).
 PERIOD_SUMMARY = "1980-2020"
 WIND_PERIOD = "1994-2020"
 WAVE_PERIOD = "1993-2019"
@@ -82,21 +82,21 @@ MS_TO_KN = 1.94384
 SECTORS = 8
 SECTOR_DEG = 45.0
 
-# Boîtes terre (repli si global_land_mask n'est pas installé).
+# Land boxes (fallback if global_land_mask is not installed).
 # Recette : Sahara et Andes doivent tomber dedans ; 15°N 25°W, 40°S, 26°N 80°W hors.
 _LAND_BOXES = [
-    (30, 72, -130, -60),     # Amérique du Nord intérieure
+    (30, 72, -130, -60),     # Interior North America
     (14, 32, -115, -88),     # Mexique / SW US
-    (7, 18, -92, -77),       # Amérique centrale
-    (-50, 10, -75, -40),     # Amérique du Sud intérieure (Andes)
-    (36, 71, -10, 40),       # Europe intérieure
+    (7, 18, -92, -77),       # Central America
+    (-50, 10, -75, -40),     # Interior South America (Andes)
+    (36, 71, -10, 40),       # Interior Europe
     (12, 37, -17, 50),       # Sahara / Afrique N + Sahel
-    (-34, 15, 10, 42),       # Afrique intérieure
+    (-34, 15, 10, 42),       # Interior Africa
     (12, 32, 35, 60),        # Arabie
     (8, 35, 68, 97),         # Inde
-    (-8, 28, 95, 122),       # Asie du SE
+    (-8, 28, 95, 122),       # SE Asia
     (18, 54, 73, 135),       # Chine / Asie centrale
-    (-38, -12, 114, 152),    # Australie intérieure
+    (-38, -12, 114, 152),    # Interior Australia
     (-90, -63, -180, 180),   # Antarctique
     (60, 84, -75, -12),      # Groenland
     (-25, -12, 43, 50),      # Madagascar
@@ -141,7 +141,7 @@ def wrap_lon(lon: float) -> float:
 
 
 def is_land(lat: float, lon: float) -> bool:
-    """True sur terre. Ne jamais inventer un vent / une Hs / un courant là."""
+    """True on land. Never invent a wind / Hs / current there."""
     if not (-90.0 <= lat <= 90.0):
         return True
     lon = wrap_lon(lon)
@@ -157,9 +157,9 @@ def is_land(lat: float, lon: float) -> bool:
 
 
 def wind_from_uv(u_ms: float, v_ms: float) -> tuple[float, float]:
-    """Direction d'où vient le vent (conv. météo) + vitesse en kn.
+    """Direction the wind comes from (met. conv.) + speed in kn.
 
-    ``atan2(-u, -v)`` — déjà la convention de ``getWind.py``.
+    ``atan2(-u, -v)`` — already the ``getWind.py`` convention.
     """
     spd_kn = math.hypot(u_ms, v_ms) * MS_TO_KN
     coming_from = (math.degrees(math.atan2(-u_ms, -v_ms)) + 360.0) % 360.0
@@ -167,9 +167,9 @@ def wind_from_uv(u_ms: float, v_ms: float) -> tuple[float, float]:
 
 
 def current_to_uv(u_ms: float, v_ms: float) -> tuple[float, float]:
-    """Direction vers où ça porte + vitesse en kn.
+    """Direction it sets toward + speed in kn.
 
-    ``atan2(u, v)`` — déjà la convention de ``getCurrent.py``.
+    ``atan2(u, v)`` — already the ``getCurrent.py`` convention.
     """
     spd_kn = math.hypot(u_ms, v_ms) * MS_TO_KN
     going_to = (math.degrees(math.atan2(u_ms, v_ms)) + 360.0) % 360.0
@@ -193,7 +193,7 @@ def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def point_to_segment_nm(
     lat: float, lon: float, lat1: float, lon1: float, lat2: float, lon2: float,
 ) -> float:
-    """Distance approx. d'un point à un segment (échantillons le long du GC)."""
+    """Approx. distance from a point to a segment (samples along the GC)."""
     best = min(
         haversine_nm(lat, lon, lat1, lon1),
         haversine_nm(lat, lon, lat2, lon2),
@@ -228,7 +228,7 @@ def _sidecar_stat(path: Path) -> str | None:
 
 
 def snapshot_status(month: int | None = None) -> dict:
-    """Présence et ``stat`` du mois affiché (janvier si ``month`` est omis)."""
+    """Presence and ``stat`` of the displayed month (January if ``month`` is omitted)."""
     root = climatology_dir()
     wind_dir = root / "wind"
     wave_dir = root / "wave"
