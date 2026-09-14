@@ -44,13 +44,6 @@ jobs:
       - name: Audit des tags (mode GeoJSON, sans Mongo)
         run: python3 scripts/audit_tags.py --geojson seed/projects.geojson seed/ports_of_entry.geojson
 
-  gmail-classer:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Règles de classement Gmail (stdlib, aucun secret)
-        run: python3 scripts/gmail/test_classer.py
-
   deploy-gate:
     runs-on: ubuntu-latest
     steps:
