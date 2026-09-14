@@ -1,0 +1,17 @@
+Hello everyone.
+
+I'm going to present Blue Intelligence: an autonomous maritime geospatial intelligence agent that turns the web into a mapped database.
+
+The problem. The ocean is undergoing rapid industrialization: offshore wind, aquaculture, deep-sea mining, conservation. Data on who is doing what and where is scattered across government portals, company registries, and port databases. These sites are built for humans: forms, pagination, JavaScript. Today, analysts spend hours clicking to produce a common operational picture — slow, costly, and quickly outdated.
+
+The goal. Replace this manual work with an autonomous system. Blue Intelligence browses, extracts, structures, and maps marine conservation projects — marine protected areas, reefs, mangroves, seagrass beds, and efforts against illegal fishing — around the world.
+
+How it works. The app combines TinyFish and Claude. TinyFish agents browse the web, handle pagination, and find links to project pages. Claude analyzes the content: a gatekeeper filters what is truly marine, an extractor pulls out title, description, coordinates, funder, and status. Coordinates are snapped to the sea when they fall on land. An S_ocean score rates reliability and ocean relevance. Everything is stored in SQLite, fully local.
+
+The interface. A global Leaflet map displays projects as GeoJSON. Popups show funder, description, dates, and image. You can filter by organization. A sidebar lists projects and an "AI Swarm" button launches automatic extraction. Parameters — number of agents, Claude models, marine thresholds — are configurable and stored in the browser.
+
+The ecosystem. Blue Intelligence is the "Impact" module of NAVIGUIDE, the intelligent navigation platform for the Berry-Mappemonde expedition: 45,000 nautical miles, 13 French overseas territories. Discovered projects are exported as GeoJSON so the routing engine can add an environmental layer. The route then connects marine sanctuaries and protection projects detected automatically.
+
+In short. Blue Intelligence turns the living web of maritime data into an actionable geospatial database. It's automated maritime OSINT for conservation and responsible navigation.
+
+Thank you.
