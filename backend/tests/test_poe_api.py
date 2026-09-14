@@ -103,7 +103,7 @@ class TestPorts:
         assert r.json()["features"] == []
 
 
-# --- Module: fiche ZEE (revue) ----------------------------------------------
+# --- Module: EEZ card (review) ----------------------------------------------
 class TestZoneFiche:
     def test_fiche_has_ports_and_td_bu(self, client, zones):
         gen = [z for z in zones["items"] if (z.get("poe_count") or 0) > 0]
