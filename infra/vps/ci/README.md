@@ -12,3 +12,5 @@ python3 infra/vps/ci/prod_jobs_busy.py --base-url http://127.0.0.1:8001
 
 La sonde envoie un `User-Agent` dédié : Cloudflare bloque `Python-urllib/3.x`.
 Un endpoint en 404/410 est ignoré (ex. `generate-batch` retiré).
+Le lot Review **Proposer** (`GET /api/review/suggest/status`) exige
+`ADMIN_KEY` (env ou `backend/.env` sur le VPS).
