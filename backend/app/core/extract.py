@@ -11,9 +11,10 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
                            pour les pages JavaScript et les challenges « soft ».
-                           Jamais sur une URL .pdf, une image (.png/.jpg…) ni un
-                           captcha dur (SiteGround, Akamai) — Chromium plante le
-                           process sous MemoryHigh. Allumé seulement si le HTML
+                           Chromium tourne dans un sous-processus (comme
+                           PyMuPDF) : un ABRT ne tue plus l'API. Jamais sur une
+                           URL .pdf, une image (.png/.jpg…) ni un captcha dur
+                           (SiteGround, Akamai). Allumé seulement si le HTML
                            simple ET Fetch ont échoué.
   Miroir                 : Jina ∥ TinyFish Fetch (si clé), puis Wayback.
 
@@ -90,7 +91,9 @@ SERP_HARD_RE = re.compile(
     r"|doordash\.com"
     r"|//unblock\.|\.unblock\.|/cdn-cgi/|captcha|datadome|perimeterx"
     r"|queue-it\.net|incapsula|distilnetworks"
-    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?))",
+    r"|\.docx?($|\?)|\.xlsx?($|\?)|\.pptx?($|\?)|\.zip($|\?)|\.exe($|\?)"
+    r"|\.png($|\?)|\.jpe?g($|\?)|\.gif($|\?)|\.webp($|\?)|\.svg($|\?)"
+    r"|\.bmp($|\?)|\.ico($|\?)|\.tiff?($|\?)|\.avif($|\?))",
     re.I,
 )
 
@@ -227,6 +230,29 @@ def content_is_image(content: bytes | None, content_type: str = "",
     if ctype.startswith("image/"):
         return True
     return bool(url_looks_like_image(url) and blob[:1] not in (b"<", b"{"))
+
+
+_HTMLISH_TYPES = frozenset({
+    "text/html", "application/xhtml+xml", "application/xhtml",
+    "text/xml", "application/xml", "text/plain",
+})
+
+
+def content_looks_like_html(content: bytes | None, content_type: str = "") -> bool:
+    """Vrai document à parser. Un PNG lu comme de l'UTF-8 n'en est pas un."""
+    blob = content or b""
+    ctype = (content_type or "").lower().split(";", 1)[0].strip()
+    head = blob.lstrip()[:80]
+    if head.startswith(b"<") or head.lower().startswith(b"<!doctype"):
+        return True
+    if ctype.startswith("image/") or ctype in {
+        "application/pdf", "application/zip", "application/octet-stream",
+        "application/gzip", "audio/mpeg", "video/mp4",
+    }:
+        return False
+    if ctype in _HTMLISH_TYPES or ctype.startswith("text/"):
+        return True
+    return False
 
 
 def looks_bot_challenge_response(resp, content: bytes | None, url: str = "") -> bool:
@@ -1907,6 +1933,10 @@ async def extract_cascade(url: str, min_chars: int = 200, allow_render: bool = T
             out["error"] = "image_content"
             return out
         is_pdf = content_is_pdf(content, ctype, out["final_url"] or url, disposition)
+        if not is_pdf and not content_looks_like_html(content, ctype):
+            log("contenu binaire — cascade sautée, pas de Chromium")
+            out["error"] = "binary_content"
+            return out
         out["is_pdf"] = is_pdf
         if keep_raw and content:
             out["raw"] = content

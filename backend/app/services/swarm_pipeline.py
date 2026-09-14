@@ -263,7 +263,7 @@ def _links_from_fetch_record(rec: dict | None, base_url: str) -> list[str]:
         if not raw:
             continue
         href = urljoin(base_url, raw).split("#")[0].split("?")[0]
-        if href.startswith("http"):
+        if href.startswith("http") and not url_looks_like_image(href):
             out.append(href)
     return out
 
@@ -1194,6 +1194,8 @@ class Swarm:
                 self.agent_log(aid, f"{len(urls)} project URLs discovered ({used_engine})")
                 self.log(f"[{seed['name']}] {len(urls)} project pages found via {used_engine} → DeepLinkCache + queue")
                 for u in urls:
+                    if url_looks_like_image(u):
+                        continue
                     await self.db.deeplink_pages.update_one(
                         {"url": u}, {"$set": {"url": u, "funder": seed["name"], "source": seed["url"], "ts": now_iso()},
                                      "$setOnInsert": {"_id": str(uuid.uuid4())}}, upsert=True)
@@ -1437,6 +1439,8 @@ class Swarm:
         hrefs = await self._crawl_page_links(seed)
         urls = []
         for href in hrefs:
+            if url_looks_like_image(href):
+                continue
             path = urlparse(href).path
             if is_project_fiche_path(path, apply_blacklist=False):
                 urls.append(href)
@@ -1831,6 +1835,14 @@ class Swarm:
                 )
                 return {"status": "seen_v1", "url": url}
 
+        if url_looks_like_image(url):
+            reason = "URL image — portrait ou média, pas une fiche projet"
+            await self._write_verdict(item, "rejected", title=url, reason=reason)
+            await self.add_failed(url, source, funder, reason, "image")
+            await self._emit("rejected", url=url, reason=reason)
+            self._bump_saturation(False)
+            return {"status": "rejected", "url": url}
+
         aid = self.new_agent("Cascade N1→N2", "extract", url, source)
         t0 = time.time()
         await self._emit("extract_start", url=url, funder=funder, source=source)
@@ -1839,6 +1851,23 @@ class Swarm:
             self.agent_log(aid, "Cascade hybride: N1 trafilatura/PyMuPDF → N2 Readability")
             page = await extract_cascade(url, min_chars=200,
                                          log=lambda m: self.agent_log(aid, m))
+            err = page.get("error")
+            if err in {"image_url", "image_content", "binary_content"}:
+                reason = (
+                    "contenu image — pas une fiche projet"
+                    if err.startswith("image")
+                    else "contenu binaire — pas une fiche projet"
+                )
+                self.set_agent(aid, status="REJECTED")
+                self.agent_log(aid, f"REJECTED: {reason}")
+                await self._write_verdict(item, "rejected", title=url, reason=reason)
+                await self._emit("rejected", url=url, reason=reason)
+                await self.telemetry(
+                    url, "Cascade N1→N2", "REJECTED",
+                    (time.time() - t0) * 1000, 0, reason)
+                await self.add_failed(url, source, funder, reason, "image")
+                self._bump_saturation(False)
+                return {"status": "rejected", "url": url}
             if not page["text"]:
                 raise ValueError(f"cascade N1/N2 sans texte exploitable ({page['level']})")
             page_title = (page["title"] or "").strip() or url

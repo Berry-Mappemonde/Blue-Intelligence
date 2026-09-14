@@ -46,6 +46,13 @@ class TestPdfUrlAndCaptcha:
         assert ext.path_looks_like_image("/photos/team.jpg") is True
         assert ext.url_looks_like_image("https://example.org/projects/coral") is False
 
+    def test_serp_hard_drops_image_urls(self):
+        assert ext.serp_drop_reason(
+            "https://marviva.net/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+        ) == "hard"
+        assert ext.serp_drop_reason(
+            "https://example.org/projects/coral-reef") is None
+
     def test_siteground_is_hard_challenge(self):
         html = "<html><body>Checking the site connection security. sg-captcha</body></html>"
         assert ext.looks_hard_challenge(html=html, title="Robot Challenge Screen") is True
@@ -104,6 +111,15 @@ class TestContentIsImage:
 
     def test_content_type_image(self):
         assert ext.content_is_image(b"xxxx", "image/png") is True
+
+
+class TestContentLooksLikeHtml:
+    def test_html_and_png(self):
+        assert ext.content_looks_like_html(
+            b"<!DOCTYPE html><html></html>", "text/html") is True
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        assert ext.content_looks_like_html(png, "image/png") is False
+        assert ext.content_looks_like_html(b"\x00\x01\x02\xff", "application/octet-stream") is False
 
 
 class TestMapsUrl:
@@ -418,6 +434,32 @@ class TestReadUrls:
         assert rendered == []
         assert mirrored == []
         assert page["error"] == "image_content"
+        assert page["text"] == ""
+
+    def test_binary_octet_stream_skips_chromium(self, monkeypatch):
+        rendered = []
+        mirrored = []
+
+        async def fake_raw(url, timeout=25):
+            return _FakeResp(b"\x00\x01\x02\xff" * 40, "application/octet-stream",
+                             url="https://cdn.example/blob")
+
+        async def boom_render(url, log=None):
+            rendered.append(url)
+            raise AssertionError("no chromium on binary")
+
+        async def boom_mirror(url, log=None, skip_tinyfish=False):
+            mirrored.append(url)
+            return None
+
+        monkeypatch.setattr(ext, "fetch_raw", fake_raw)
+        monkeypatch.setattr("app.core.render.render_html", boom_render)
+        monkeypatch.setattr(ext, "fetch_mirror_text", boom_mirror)
+
+        page = _run(ext.extract_cascade("https://cdn.example/blob", min_chars=200))
+        assert rendered == []
+        assert mirrored == []
+        assert page["error"] == "binary_content"
         assert page["text"] == ""
 
 

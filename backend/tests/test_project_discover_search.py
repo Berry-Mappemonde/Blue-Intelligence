@@ -16,7 +16,8 @@ import pytest
 from app.core.tinyfish import POE_PURPOSE, PROJECTS_DISCOVERY_PURPOSE, PROJECTS_LISTING_PURPOSE
 from app.services import run_journal
 from app.services.swarm_pipeline import (
-    Swarm, filter_discover_urls, official_site_from_hits, project_search_query,
+    Swarm, _is_soft_fiche_path, filter_discover_urls, is_project_fiche_path,
+    official_site_from_hits, project_search_query,
 )
 from tests.test_project_runs import _FakeDB
 
@@ -113,6 +114,12 @@ def test_filter_exclude_urls_skips_already_eliminated():
     out = filter_discover_urls(
         hits, SEED, 10, exclude_urls=["https://example.org/projects/coral"])
     assert out == ["https://example.org/projects/kelp"]
+
+
+def test_portrait_png_is_not_a_project_fiche():
+    path = "/wp-content/uploads/2025/12/Mabelys-Ramos-1.png"
+    assert is_project_fiche_path(path) is False
+    assert _is_soft_fiche_path(path) is False
 
 
 def test_filter_drops_image_urls_even_on_soft_path():
