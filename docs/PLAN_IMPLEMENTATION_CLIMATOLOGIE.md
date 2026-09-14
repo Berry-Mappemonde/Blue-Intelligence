@@ -598,9 +598,13 @@ inchangée).
 
 ## 21. Hors périmètre (V1)
 
-- Prévision GFS / IFS / ICON / AIFS et overlay « cette semaine ».
+- Prévision GFS / IFS / ICON / AIFS et overlay « cette semaine » **dans le
+  7ᵉ mode BI**. Le chantier forecast du **simulateur** est
+  [PLAN_IMPLEMENTATION_SIMULATION_B.md](./PLAN_IMPLEMENTATION_SIMULATION_B.md)
+  (après
+  [PLAN_IMPLEMENTATION_SIMULATION_A.md](./PLAN_IMPLEMENTATION_SIMULATION_A.md)).
 - Déverrouillage `valid_time` de `getWave.py` / `getCurrent.py` (chantier forecast
-  à part).
+  à part — B côté simulateur, pas le clic NRT).
 - Auto-hébergement Open-Meteo, ingestion GRIB NOMADS.
 - Review / Gold du mode Climatologie.
 - Rayons R34 IBTrACS, années analogues El Niño, bins vent 40+ kn.
@@ -620,6 +624,10 @@ inchangée).
 - `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/PRD.md`.
 - `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
   satellite : métiers distincts de l’atlas mensuel.
+- `docs/PLAN_IMPLEMENTATION_SIMULATION_A.md` — ETA du film simulateur
+  selon le mois, trait searoute fixe.
+- `docs/PLAN_IMPLEMENTATION_SIMULATION_B.md` — `kind: forecast` 0–10 j
+  + Suivre + isochrone d’une jambe, **dans** `naviguide-simulator/`.
 - Code : `getWind.py`, `getWave.py`, `getCurrent.py`, `climatology.py`,
   `isochrone.py`, `useScienceWms.js`, `layerOrder.js`, `MaritimeLayers.jsx`,
   `export_meta.py`, `meteo_agent.py`.
