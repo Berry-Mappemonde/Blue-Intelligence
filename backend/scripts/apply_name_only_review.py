@@ -1,6 +1,6 @@
-"""Applique docs/data/poe-name-only-33-verifications.json sur Atlas.
+"""Apply docs/data/poe-name-only-33-verifications.json on Atlas.
 
-N'écrit pas poe_ports. Ne lance pas seeds/build.
+Does not write poe_ports. Does not run seeds/build.
 """
 from __future__ import annotations
 

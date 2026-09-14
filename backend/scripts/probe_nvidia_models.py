@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Sonde les modèles NVIDIA NIM du palier d'essai (build.nvidia.com).
+"""Probe NVIDIA NIM models of the trial tier (build.nvidia.com).
 
-Mesure, avec la même forme d'appel que l'adaptateur PoE :
-  1. ping JSON strict
-  2. juge Fort Bay (plaisance) vs Tiwai Point (cargo)
-  3. extraction d'une liste officielle courte
+Measure, with the same call shape as the PoE adapter:
+  1. strict JSON ping
+  2. judge Fort Bay (pleasure-craft) vs Tiwai Point (cargo)
+  3. extract a short official list
 
-Aucun écriture Mongo. Clé : NVIDIA_API_KEY.
+No Mongo writes. Key: NVIDIA_API_KEY.
 
   python scripts/probe_nvidia_models.py
   python scripts/probe_nvidia_models.py --only meta/muse-glimmer-30b,moonshotai/kimi-k3
@@ -44,10 +44,10 @@ _SKIP_RE = re.compile(
     re.I,
 )
 
-# Source de vérité : docs.api.nvidia.com/nim/reference/llm-apis
-# + fiches chat du catalogue build.nvidia.com/models.
-# GET /v1/models est un index OpenAI périmé (ids 404 : yi-large, dbrx, …).
-# Beaucoup d'ids docs répondent 410 Gone (hosted trial EOL) alors que la
+# Source of truth: docs.api.nvidia.com/nim/reference/llm-apis
+# + chat cards of the build.nvidia.com/models catalogue.
+# GET /v1/models is a stale OpenAI index (404 ids: yi-large, dbrx, …).
+# Many docs ids answer 410 Gone (hosted trial EOL) while the
 # fiche catalogue reste en ligne (playground / NIM self-host).
 OFFICIAL_CHAT_IDS = (
     "deepseek-ai/deepseek-v4-flash",
@@ -111,7 +111,7 @@ OFFICIAL_CHAT_IDS = (
     "z-ai/glm-5.2",
 )
 
-# Ancienne liste (index /v1/models). Conservée pour --curated.
+# Old list (/v1/models index). Kept for --curated.
 CURATED = OFFICIAL_CHAT_IDS
 
 PING_USER = 'Réponds uniquement avec {"ok": true}.'
@@ -206,7 +206,7 @@ def classify_ping(p: dict) -> str:
 
 def _payload(model: str, system: str, user: str, max_tokens: int,
               json_object: bool | None = None) -> dict:
-    """json_object=None : selon la fiche Build (Muse/Laguna/Gemma 4 = off)."""
+    """json_object=None: per the Build card (Muse/Laguna/Gemma 4 = off)."""
     return nvidia.chat_payload(
         model, system, user, max_tokens, json_object=json_object)
 
@@ -222,7 +222,7 @@ def _retry_wait(response: httpx.Response, fallback: float = 8.0) -> float:
 
 async def post_chat(client: httpx.AsyncClient, key: str, payload: dict,
                      *, retries: int = 1, require_json: bool = True) -> dict:
-    """Un POST chat/completions. 1 retry 429 ; retry sans json_object si 400."""
+    """One chat/completions POST. 1 retry on 429; retry without json_object on 400."""
     used = dict(payload)
     last = {"ok": False, "status": 0, "error": "no response", "raw": "",
             "json": None, "latency_s": 0.0, "finish": None, "usage": {}}
@@ -434,11 +434,11 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="/opt/cursor/artifacts/nvidia_probe.json")
     ap.add_argument("--only", default="",
-                    help="Liste d'id séparés par des virgules")
+                    help="Comma-separated id list")
     ap.add_argument("--all-catalog", action="store_true",
-                    help="Ping les ids GET /v1/models (index OpenAI, souvent périmé)")
+                    help="Ping GET /v1/models ids (OpenAI index, often stale)")
     ap.add_argument("--plain", action="store_true",
-                    help="Ping chat sans json_object (disponibilité hosted)")
+                    help="Ping chat without json_object (hosted availability)")
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--no-quality", action="store_true")
     args = ap.parse_args()
@@ -453,7 +453,7 @@ async def main() -> None:
         elif args.all_catalog:
             wanted = chat
         else:
-            # IDs des fiches Build / llm-apis, même absents de GET /v1/models.
+            # IDs from Build / llm-apis cards, even if absent from GET /v1/models.
             wanted = list(dict.fromkeys(OFFICIAL_CHAT_IDS))
 
         sem = asyncio.Semaphore(max(1, args.concurrency))
@@ -485,7 +485,7 @@ async def main() -> None:
                         nvidia.PRIMARY_MODEL, nvidia.SECONDARY_MODEL,
                         nvidia.LEGAL_MODEL, "poolside/laguna-xs-2.1")):
                     quality_ids.append(m)
-            # Un modèle à la fois : juge + extract ≈ 3 appels.
+            # One model at a time: judge + extract ≈ 3 calls.
             for model in quality_ids:
                 print(f"[quality] {model} …", flush=True)
                 row = await quality_one(client, key, model)

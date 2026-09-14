@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Étape B (hors Complet) : Search « official site » pour les homes inconnues.
+"""Step B (off Complet): Search “official site” for unknown homes.
 
-Règle stricte : le domaine doit coller au nom (`domain_matches_org`).
-Sinon `home_status=unknown`, pas de crawl. Pas d'Agent TinyFish.
+Strict rule: the domain must match the name (`domain_matches_org`).
+Else `home_status=unknown`, no crawl. No TinyFish Agent.
 
-Chaque résultat est d'abord append dans `official_homes_search.jsonl`
-(fsync), puis le catalogue est réécrit atomiquement tous les N organismes.
-Une interruption reprend sans rejouer les noms déjà consignés.
+Each result is first appended to `official_homes_search.jsonl`
+(fsync), then the catalogue is rewritten atomically every N organizations.
+An interruption resumes without replaying already-logged names.
 
     python3 scripts/resolve_official_homes.py --dry-run
     python3 scripts/resolve_official_homes.py --apply   # TinyFish / Serper
@@ -21,8 +21,8 @@ import signal
 import sys
 from pathlib import Path
 
-# Ce script ne parle pas à Mongo (ni Atlas figé, ni VPS). Forcer localhost
-# avant tout import éventuel de app.config.
+# This script does not talk to Mongo (neither frozen Atlas nor VPS). Force localhost
+# before any possible import of app.config.
 os.environ["MONGO_URL"] = "mongodb://127.0.0.1:27017"
 os.environ.setdefault("DB_NAME", "bi_official_homes_unused")
 
@@ -51,8 +51,8 @@ OFFICIAL_SITE_PURPOSE = (
     "Ignore news articles, journals, Wikipedia and shared project hubs."
 )
 
-# Si les N premiers appels renvoient 0 hit, l'API est probablement hors service :
-# on s'arrête sans marquer les graines « unknown » (reprise possible).
+# If the first N calls return 0 hits, the API is probably down:
+# stop without marking seeds “unknown” (resume possible).
 EMPTY_HITS_ABORT = 5
 
 
@@ -61,7 +61,7 @@ def _load(path: Path) -> dict:
 
 
 def load_search_settings() -> dict:
-    """Clés env / .env uniquement — pas de get_settings() Mongo."""
+    """env / .env keys only — no Mongo get_settings()."""
     return {
         "tinyfish_api_key": tf_api_key(),
         "serper_api_key": serper_api_key(),
@@ -292,7 +292,7 @@ def _copy_artifacts(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Search official site hors Complet")
+    p = argparse.ArgumentParser(description="Search official site off Complet")
     p.add_argument("--seeds", type=Path, default=MASTER_SEEDS_PATH)
     p.add_argument("--journal", type=Path, default=SEARCH_JOURNAL_PATH)
     p.add_argument("--audit-out", type=Path, default=AUDIT_PATH)
