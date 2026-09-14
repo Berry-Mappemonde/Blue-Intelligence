@@ -15,7 +15,7 @@ import ReviewView from "./components/ReviewView";
 import SettingsPanel from "./components/SettingsPanel";
 import ReportModal from "./components/ReportModal";
 import NotForNavModal from "./components/map/NotForNavModal";
-import MapLayersSidebar, { DEFAULT_SCIENCE_WMS } from "./components/MapLayersSidebar";
+import { DEFAULT_SCIENCE_WMS } from "./components/MapLayersSidebar";
 import { DEFAULT_SAFETY_M } from "./components/map/safetyIsobathSpec";
 import {
   readNotForNavAccepted,
@@ -844,9 +844,9 @@ export default function App() {
             )
           ) : null}
         </main>
-        {view === "map" && (
-          <MapLayersSidebar
-            t={t}
+          {showSettings && (
+          <SettingsPanel t={t} lang={lang} mode={mode} settings={settings}
+            isAdmin={isAdmin}
             overlayOn={overlayOn}
             onToggleOverlay={setOverlayOn}
             scienceWms={scienceWms}
@@ -856,11 +856,6 @@ export default function App() {
             noaaAidsOn={noaaAidsOn}
             onToggleNoaaAids={setNoaaAidsOn}
             showNoaa={mode === "capitaineries"}
-          />
-        )}
-          {showSettings && (
-          <SettingsPanel t={t} lang={lang} mode={mode} settings={settings}
-            isAdmin={isAdmin}
             onSaved={fetchSettings}
             // 2026-08-24 bug-fix — import router-callback receives the mode
             // that was actually imported so we only refresh the affected
