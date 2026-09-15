@@ -221,23 +221,26 @@ async def review_suggest_post(body: SuggestBody):
             400, "suggest is eez|amp|project|marina|capitainerie")
     scope = (body.scope or "one").strip().lower()
     if kind in FIELD_KINDS:
-        if scope == "all" or not body.id:
+        if scope in ("all", "remaining") or not body.id:
             raise HTTPException(
                 400, "marina/capitainerie: une fiche à la fois (pas de lot OSM)")
         try:
             return await suggest_one(db, kind, body.id)
         except ValueError as e:
             raise _suggest_value_error(e) from e
-    if scope == "all" or not body.id:
+    if scope in ("all", "remaining") or not body.id:
         if kind not in BATCH_KINDS:
             raise HTTPException(400, "batch Proposer is eez|amp|project only")
         if SUGGEST_STATE.running:
             raise HTTPException(409, "suggest batch already running")
+        skip_existing = scope == "remaining"
+        batch_scope = "remaining" if skip_existing else "all"
         SUGGEST_STATE.start()
 
         async def _runner():
             try:
-                await run_suggest_batch(db, kind, SUGGEST_STATE)
+                await run_suggest_batch(
+                    db, kind, SUGGEST_STATE, skip_existing=skip_existing)
             except Exception as e:
                 SUGGEST_STATE.error = f"{type(e).__name__}: {e}"
                 SUGGEST_STATE.log(f"FATAL: {SUGGEST_STATE.error}")
@@ -245,7 +248,7 @@ async def review_suggest_post(body: SuggestBody):
                 SUGGEST_STATE.finish()
 
         asyncio.create_task(_runner())
-        return {"status": "started", "scope": "all", "kind": kind}
+        return {"status": "started", "scope": batch_scope, "kind": kind}
     try:
         return await suggest_one(db, kind, body.id)
     except ValueError as e:

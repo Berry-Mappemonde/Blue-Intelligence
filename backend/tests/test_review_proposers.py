@@ -18,7 +18,11 @@ from app.services.review_lessons import (
     proposal_key,
 )
 from app.services.review_project_picker import local_pick_project, merge_project
-from app.services.review_suggest import run_suggest_batch, suggest_one
+from app.services.review_suggest import (
+    existing_suggest_ids,
+    run_suggest_batch,
+    suggest_one,
+)
 from app.services import review_gold, review_queue
 from test_review_queue import _db
 
@@ -337,6 +341,49 @@ def test_batch_rejected_for_marina_and_runs_amp(monkeypatch):
     assert "PS-1" in called
     assert out["ok"] == len(called)
     assert out["kind"] == "amp"
+
+
+def test_batch_remaining_skips_existing_amp(monkeypatch):
+    _no_llm_amp(monkeypatch)
+    db = _db()
+    asyncio.run(db.review_suggest.update_one(
+        {"_id": "amp:PS-1"},
+        {"$set": {
+            "_id": "amp:PS-1", "kind": "amp", "entity_id": "PS-1",
+            "keep": ["https://parc-marin.fr/visite"], "drop": [],
+            "engine": "local",
+        }},
+        upsert=True,
+    ))
+    called = []
+
+    async def fake_amp(db, eid, **_k):
+        called.append(str(eid))
+        return {"id": eid, "engine": "local", "choices": {"visit": {}}}
+
+    monkeypatch.setattr(
+        "app.services.review_amp_picker.suggest_amp_documents", fake_amp)
+    out = asyncio.run(run_suggest_batch(
+        db, "amp", TaskState(), settings={}, skip_existing=True))
+    assert called == []
+    assert out["ok"] == 0
+    assert out["total"] == 0
+    assert out["skipped"] == 1
+    assert out["scope"] == "remaining"
+
+
+def test_existing_suggest_ids_reads_legacy_eez():
+    db = _db()
+    asyncio.run(db.review_suggest.update_one(
+        {"_id": "5677"},
+        {"$set": {
+            "_id": "5677", "kind": "eez", "entity_id": "5677",
+            "keep": [], "drop": [],
+        }},
+        upsert=True,
+    ))
+    got = asyncio.run(existing_suggest_ids(db, "eez"))
+    assert "5677" in got
 
 
 def test_legacy_eez_proposal_key_still_readable():

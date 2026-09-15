@@ -315,6 +315,8 @@ async def suggest_eez_documents(db, entity_id: str, *,
     finally:
         from app.core.render import shutdown_render
         await shutdown_render()
+        import gc
+        gc.collect()
     picked = merge_picks(local, llm, {ev["url"] for ev in evidences})
 
     public = empty_choices()
@@ -357,10 +359,18 @@ async def all_eez_ids(db) -> list[str]:
     return out
 
 
-async def run_suggest_batch(db, state, *, settings: dict | None = None) -> dict:
+async def run_suggest_batch(db, state, *, settings: dict | None = None,
+                            skip_existing: bool = False) -> dict:
     """Lot Proposer : une proposition par polygone. Écrase cases + commentaires."""
     log = state.log if hasattr(state, "log") else (lambda m: None)
     ids = await all_eez_ids(db)
+    if skip_existing:
+        from app.services.review_suggest import existing_suggest_ids
+        already = await existing_suggest_ids(db, "eez")
+        kept = [eid for eid in ids if eid not in already]
+        log(f"lot Proposer eez : {len(kept)} restantes "
+            f"({len(ids) - len(kept)} déjà proposées)")
+        ids = kept
     state.total = len(ids)
     state.progress = 0
     if settings is None:

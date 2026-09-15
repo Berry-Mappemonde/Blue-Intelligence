@@ -1,10 +1,13 @@
 """Dispatch Proposer Review par kind.
 
-Lot (scope=all) : eez, amp, project.
+Lot (scope=all | remaining) : eez, amp, project.
+``remaining`` saute les entity_id déjà dans ``review_suggest``.
 Fiche seule : marina, capitainerie (interdit le lot OSM).
 N'écrit jamais Gold ni les collections live.
 """
 from __future__ import annotations
+
+import gc
 
 from app.services.poe_zone_fiche import PUBLISHED_RUN
 from app.services.review_queue import list_queue
@@ -28,6 +31,26 @@ async def all_kind_ids(db, kind: str) -> list[str]:
         if eid and eid not in seen:
             seen.add(eid)
             out.append(eid)
+    return out
+
+
+async def existing_suggest_ids(db, kind: str) -> set[str]:
+    """entity_id déjà proposés (clé ``kind:id`` ou legacy eez = mrgid seul)."""
+    kind = (kind or "eez").strip().lower()
+    docs = await db.review_suggest.find({"kind": kind}).to_list(5000)
+    out: set[str] = set()
+    prefix = f"{kind}:"
+    for doc in docs or []:
+        eid = _sid(doc.get("entity_id"))
+        if eid:
+            out.add(eid)
+        oid = _sid(doc.get("_id"))
+        if oid.startswith(prefix):
+            rest = oid[len(prefix):]
+            if rest:
+                out.add(rest)
+        elif kind == "eez" and oid:
+            out.add(oid)
     return out
 
 
@@ -55,12 +78,21 @@ async def suggest_one(db, kind: str, entity_id: str, *,
 
 
 async def run_suggest_batch(db, kind: str, state, *,
-                            settings: dict | None = None) -> dict:
+                            settings: dict | None = None,
+                            skip_existing: bool = False) -> dict:
     kind = (kind or "").strip().lower()
     if kind not in BATCH_KINDS:
         raise ValueError("batch Proposer is eez|amp|project only")
     log = state.log if hasattr(state, "log") else (lambda m: None)
     ids = await all_kind_ids(db, kind)
+    skipped = 0
+    if skip_existing:
+        already = await existing_suggest_ids(db, kind)
+        kept = [eid for eid in ids if eid not in already]
+        skipped = len(ids) - len(kept)
+        ids = kept
+        log(f"lot Proposer {kind} : {len(ids)} restantes "
+            f"({skipped} déjà proposées)")
     state.total = len(ids)
     state.progress = 0
     if settings is None:
@@ -94,10 +126,14 @@ async def run_suggest_batch(db, kind: str, state, *,
                 "error": f"{type(e).__name__}",
             })
             log(f"lot {kind} {eid}: {type(e).__name__}: {str(e)[:120]}")
+        finally:
+            gc.collect()
         state.progress = ok + fail
     summary = {
         "ok": ok, "fail": fail, "total": len(ids), "kind": kind,
         "last_id": last_id, "cancelled": bool(getattr(state, "cancel", False)),
+        "skipped": skipped,
+        "scope": "remaining" if skip_existing else "all",
     }
     state.summary = summary
     return summary
