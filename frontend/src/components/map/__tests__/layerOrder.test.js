@@ -14,9 +14,9 @@ describe("pane order (locked)", () => {
   test("the exact pane list cannot change without breaking this test", () => {
     expect(PANES.map((p) => `${p.name}@${p.zIndex}`)).toEqual([
       "basemap-gl@190",
-      "climatology-raster@250",
-      "climatology-vector@260",
-      "bi-overlay@270",
+      "bi-overlay@250",
+      "climatology-raster@280",
+      "climatology-vector@290",
       "route@380",
       "amp@420",
       "formalities-escales@500",
@@ -67,6 +67,12 @@ describe("pane order (locked)", () => {
     expect(SCIENCE_WMS_PANES["science-wms-bathy"]).toBeLessThan(
       PANES.find((p) => p.name === "climatology-raster").zIndex,
     );
+  });
+
+  test("weekly overlay stays under Hs raster and cyclone tracks", () => {
+    const z = Object.fromEntries(PANES.map((p) => [p.name, p.zIndex]));
+    expect(z["bi-overlay"]).toBeLessThan(z["climatology-raster"]);
+    expect(z["climatology-raster"]).toBeLessThan(z["climatology-vector"]);
   });
 });
 

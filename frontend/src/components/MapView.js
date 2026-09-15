@@ -14,7 +14,7 @@ import useProjectsLayer from "./map/useProjectsLayer";
 import useRouteLayer from "./map/useRouteLayer";
 import useScienceLayer from "./map/useScienceLayer";
 import useScienceWms, { ensureWmsPanes } from "./map/useScienceWms";
-import useBiOverlay from "./map/useBiOverlay";
+import useBiOverlay, { shouldShowBiOverlay } from "./map/useBiOverlay";
 import useSafetyIsobath from "./map/useSafetyIsobath";
 import useNoaaAids from "./map/useNoaaAids";
 import useClimatologyLayer from "./map/useClimatologyLayer";
@@ -233,7 +233,10 @@ export default function MapView({
   const nauticalActive = useNauticalBasemap({
     mapObj, tileRef, basemap, enabled: nauticalAllowed, onGlMap: setGlMap,
   });
-  useBiOverlay({ mapObj, enabled: overlayOn && nauticalAllowed });
+  useBiOverlay({
+    mapObj,
+    enabled: shouldShowBiOverlay({ overlayOn, nauticalAllowed, mode }),
+  });
   useSafetyIsobath({ glMap, enabled: nauticalActive && nauticalAllowed, meters: safetyM });
 
   useEffect(() => {
