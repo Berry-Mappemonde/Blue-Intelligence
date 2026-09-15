@@ -1,7 +1,7 @@
-"""Décalage par rapport au *fil* cargo, pas par rapport à un grand rectangle.
+"""Offset relative to the cargo *filament*, not to a large rectangle.
 
-En pleine mer : on pousse le trait de ``offset_nm`` perpendiculairement
-à l'autoroute searoute. Près d'une terre ou dans un détroit : on ne touche pas.
+In open water: push the line by ``offset_nm`` perpendicular to the
+searoute highway. Near land or in a strait: do not touch it.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ LandFn = Optional[Callable[[float, float], bool]]
 
 
 def dist_to_filament_nm(lon: float, lat: float, filament: Sequence[Sequence[float]]) -> float:
-    """Distance au fil : plus proche sommet (suffisant pour un couloir océan)."""
+    """Distance to the filament: nearest vertex (enough for an ocean corridor)."""
     if not filament:
         return 0.0
     return min(haversine_nm(lon, lat, p[0], p[1]) for p in filament)
@@ -51,7 +51,7 @@ def offset_from_filament(
     keep_ends_frac: float = 0.18,
     is_land=None,
 ) -> list[list[float]]:
-    """Pousse le milieu océanique 20 nm à côté du fil cargo."""
+    """Push the ocean mid-run 20 nm beside the cargo filament."""
     pts = [list(p[:2]) for p in cargo]
     n = len(pts)
     if n < 4:

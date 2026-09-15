@@ -1,4 +1,4 @@
-"""Vent de zone — même logique que src/utils/climatologyWind.js. kind: climatology."""
+"""Zone wind — same logic as src/utils/climatologyWind.js. kind: climatology."""
 from __future__ import annotations
 
 import math

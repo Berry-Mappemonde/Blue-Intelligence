@@ -1,4 +1,4 @@
-"""Métriques du banc A/B — sans réseau, sans searoute."""
+"""A/B bench metrics — no network, no searoute."""
 
 from __future__ import annotations
 

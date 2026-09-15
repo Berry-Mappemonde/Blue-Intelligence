@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Sonde les files d'enrichissement / Complet / lot Review Proposer.
+"""Probe enrichment / Full / Review Propose batch queues.
 
-Sortie :
-  0  — aucun run en cours (redémarrer blue-intelligence est sûr)
-  10 — au moins un run occupe le processus uvicorn
-  1  — l'API n'a pas répondu de façon exploitable (sauf connexion refusée :
-       traité comme idle, le service est à l'arrêt)
+Exit codes:
+  0  — no run in progress (restarting blue-intelligence is safe)
+  10 — at least one run occupies the uvicorn process
+  1  — the API did not answer in a usable way (except connection refused:
+       treated as idle, the service is down)
 
-Les GET Console sont publics. Le lot Review Proposer
-(``/api/review/suggest/status``) exige ``X-Admin-Key`` en production :
-la sonde lit ``ADMIN_KEY`` (env ou ``backend/.env`` sur le VPS).
+Console GETs are public. The Review Propose batch
+(``/api/review/suggest/status``) requires ``X-Admin-Key`` in production:
+the probe reads ``ADMIN_KEY`` (env or ``backend/.env`` on the VPS).
 """
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ BUSY_EXIT = 10
 ERROR_EXIT = 1
 
 DEFAULT_BASE = "http://127.0.0.1:8001"
-# Cloudflare Bot Fight bloque le UA par défaut de urllib (« Python-urllib/3.x »).
+# Cloudflare Bot Fight blocks urllib's default UA ("Python-urllib/3.x").
 USER_AGENT = "BlueIntelligence-DeployProbe/1.0 (+https://blueintelligence.online)"
 
-# Files Console / enrichissement qui vivent en mémoire dans uvicorn.
+# Console / enrichment queues that live in uvicorn memory.
 PROBE_PATHS = (
     "/api/swarm/status",
     "/api/projects/runs",
@@ -48,7 +48,7 @@ PROBE_PATHS = (
     "/api/review/suggest/status",
 )
 
-# Lectures Review : garde admin (voir app.main._ADMIN_GET_PREFIXES).
+# Review reads: admin guard (see app.main._ADMIN_GET_PREFIXES).
 ADMIN_PROBE_PATHS = frozenset({"/api/review/suggest/status"})
 
 
@@ -57,7 +57,7 @@ def _truthy_id(value) -> bool:
 
 
 def payload_reasons(data: dict) -> list[str]:
-    """Pourquoi ce JSON indique un run en cours (liste vide = idle)."""
+    """Why this JSON indicates a run in progress (empty list = idle)."""
     reasons: list[str] = []
     if not isinstance(data, dict):
         return reasons
@@ -147,13 +147,13 @@ def fetch_json(url: str, timeout: float, admin_key: str = "") -> dict:
         raw = resp.read().decode("utf-8") or "{}"
         data = json.loads(raw)
     if not isinstance(data, dict):
-        raise ValueError(f"réponse non-objet: {type(data).__name__}")
+        raise ValueError(f"non-object response: {type(data).__name__}")
     return data
 
 
 def probe(base_url: str, timeout: float = 12.0,
           admin_key: str = "") -> tuple[int, list[dict]]:
-    """Retourne (code_sortie, détail par chemin)."""
+    """Return (exit_code, per-path detail)."""
     base = base_url.rstrip("/")
     details: list[dict] = []
     busy_hits: list[dict] = []

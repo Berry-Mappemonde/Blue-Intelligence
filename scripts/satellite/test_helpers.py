@@ -6,17 +6,17 @@ from stamp import stamp_features
 
 
 class HelpersTest(unittest.TestCase):
-    def test_product_name_ajoute_safe(self):
+    def test_product_name_adds_safe(self):
         self.assertEqual(
             product_name("S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321"),
             "S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321.SAFE",
         )
         self.assertEqual(product_name("X.SAFE"), "X.SAFE")
 
-    def test_recherche_par_defaut_l1c(self):
+    def test_default_search_is_l1c(self):
         self.assertEqual(DEFAULT_COLLECTION, "sentinel-2-l1c")
 
-    def test_refuse_l2a_pour_acolite(self):
+    def test_rejects_l2a_for_acolite(self):
         self.assertTrue(is_l2a_scene(
             "S2C_MSIL2A_20260912T110631_N0512_R137_T30TWR_20260912T145321"
         ))

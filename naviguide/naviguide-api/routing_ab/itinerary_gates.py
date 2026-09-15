@@ -1,8 +1,8 @@
-"""Portes déjà présentes dans l'itinéraire Berry (itineraryPoints.ts).
+"""Gates already present on the Berry itinerary (itineraryPoints.ts).
 
-Ce sont les vrais plots de production : le frontend les enchaîne, puis
-``GET /route`` calcule chaque jambe. Ce n'est PAS la liste prototype
-``enriched.GATES`` (Mentawai ouest, via 180°) — celle-là n'est pas branchée.
+These are the real production plots: the frontend chains them, then
+``GET /route`` computes each leg. This is NOT the prototype list
+``enriched.GATES`` (west Mentawai, via 180°) — that one is not wired.
 """
 
 from __future__ import annotations
@@ -18,27 +18,27 @@ class ItineraryGate:
     name: str
     lon: float
     lat: float
-    kind: str  # escale | porte
+    kind: str  # stopover | gate
     note: str
 
 
 # Faithful copy of the "Intermediate point" + key stopovers from itineraryPoints.ts
 ITINERARY_GATES: tuple[ItineraryGate, ...] = (
-    ItineraryGate("Avant Corse", 8.438, 41.181, "porte", "Contournement Corse"),
-    ItineraryGate("Ajaccio", 8.7386, 41.9192, "escale", "Escale"),
-    ItineraryGate("Après Corse N", 8.664, 43.306, "porte", "Sortie Corse"),
-    ItineraryGate("Après Corse E", 9.844, 42.221, "porte", "Sortie Corse"),
-    ItineraryGate("Canaries", -15.181, 29.325, "escale", "Escale"),
-    ItineraryGate("Cap-Vert", -24.531, 13.919, "porte", "Plot alizés"),
-    ItineraryGate("Sainte-Lucie", -61.498, 13.499, "escale", "Escale"),
-    ItineraryGate("Torres (GNEC)", 142.135679, -10.543294, "porte", "Détroit — déjà dans l'app"),
+    ItineraryGate("Avant Corse", 8.438, 41.181, "porte", "Corsica bypass"),
+    ItineraryGate("Ajaccio", 8.7386, 41.9192, "escale", "Stopover"),
+    ItineraryGate("Après Corse N", 8.664, 43.306, "porte", "Corsica exit"),
+    ItineraryGate("Après Corse E", 9.844, 42.221, "porte", "Corsica exit"),
+    ItineraryGate("Canaries", -15.181, 29.325, "escale", "Stopover"),
+    ItineraryGate("Cap-Vert", -24.531, 13.919, "porte", "Trade-wind plot"),
+    ItineraryGate("Sainte-Lucie", -61.498, 13.499, "escale", "Stopover"),
+    ItineraryGate("Torres (GNEC)", 142.135679, -10.543294, "porte", "Strait — already in the app"),
     ItineraryGate("Haut Australie 1", 135.776, -8.976, "porte", "Arafura"),
-    ItineraryGate("Haut Australie 2", 105.093, -9.365, "porte", "Sud Indonésie"),
-    ItineraryGate("Haut Australie 3", 88.606, 6.373, "porte", "Nord océan Indien"),
-    ItineraryGate("Cap Bonne-Espérance", 14.084, -33.583, "porte", "Contournement Afrique"),
-    ItineraryGate("Sainte-Hélène", -5.7392, -15.9165, "porte", "Plot Atlantique S"),
-    ItineraryGate("Ascension", -14.3291, -7.9692, "porte", "Plot Atlantique S"),
-    ItineraryGate("Ascension–Cap-Vert", -24.595, 4.649, "porte", "Remontée Atlantique"),
+    ItineraryGate("Haut Australie 2", 105.093, -9.365, "porte", "South Indonesia"),
+    ItineraryGate("Haut Australie 3", 88.606, 6.373, "porte", "North Indian Ocean"),
+    ItineraryGate("Cap Bonne-Espérance", 14.084, -33.583, "porte", "Africa bypass"),
+    ItineraryGate("Sainte-Hélène", -5.7392, -15.9165, "porte", "South Atlantic plot"),
+    ItineraryGate("Ascension", -14.3291, -7.9692, "porte", "South Atlantic plot"),
+    ItineraryGate("Ascension–Cap-Vert", -24.595, 4.649, "porte", "Atlantic climb"),
 )
 
 
@@ -60,7 +60,7 @@ def coords_hit_box(coords: list[list[float]], box: tuple) -> bool:
 
 
 def missing_canals_on_path(coords: list[list[float]]) -> list[str]:
-    """Canaux croisés par le trait cargo, sans plot d'itinéraire dedans."""
+    """Canals crossed by the cargo line with no itinerary plot inside."""
     missing: list[str] = []
     for name, box in CANAL_HINTS:
         if coords_hit_box(coords, box) and not itinerary_covers_box(box):

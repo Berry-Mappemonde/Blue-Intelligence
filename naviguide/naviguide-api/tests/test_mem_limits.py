@@ -1,4 +1,4 @@
-"""Plafonds RAM NAVIGUIDE — aucun réseau."""
+"""NAVIGUIDE RAM caps — no network."""
 from __future__ import annotations
 
 import sys

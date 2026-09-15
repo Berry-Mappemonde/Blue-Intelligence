@@ -1,4 +1,4 @@
-"""Plafonds RAM pour les caches in-process de naviguide-api (VPS 8 Go)."""
+"""RAM caps for naviguide-api in-process caches (8 GB VPS)."""
 from __future__ import annotations
 
 ROUTE_CACHE_MAX = 64
@@ -9,7 +9,7 @@ ZEE_NO_BBOX_MAX_FEATURES = 20
 
 
 def lru_set(cache: dict, key, value, max_items: int = ROUTE_CACHE_MAX) -> None:
-    """Insert en LRU (dict Python 3.7+ ordonné). Évince la plus ancienne."""
+    """LRU insert (ordered Python 3.7+ dict). Evict the oldest entry."""
     if key in cache:
         cache.pop(key)
     elif len(cache) >= max_items:

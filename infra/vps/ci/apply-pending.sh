@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reprend les déploiements reportés (à lancer SUR le VPS).
+# Resume deferred deployments (run this ON the VPS).
 set -euo pipefail
 
 APP="${APP:-$HOME/blue-intelligence-map}"

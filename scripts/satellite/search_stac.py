@@ -111,7 +111,7 @@ def main() -> int:
     manifest = {
         "bbox": bbox,
         "collection": args.collection,
-        "note": "L1C pour ACOLITE. Ne pas utiliser une scène MSIL2A.",
+        "note": "L1C for ACOLITE. Do not use an MSIL2A scene.",
         "scenes": scenes,
     }
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

@@ -1,8 +1,8 @@
-"""Cube de prévision sur un couloir (pas un GRIB globe).
+"""Forecast cube on a corridor (not a worldwide GRIB).
 
-Vent : Open-Meteo GFS nommé. Vague / courant : CMEMS ANFC si identifiants,
-sinon Hs/courant absents (repli climatologie, kind honnête).
-Le backend `synthetic` n’existe que pour les tests (NAVIGUIDE_FORECAST_BACKEND).
+Wind: named Open-Meteo GFS. Wave / current: CMEMS ANFC if credentials
+are set, otherwise Hs/current are absent (climatology fallback, honest kind).
+The `synthetic` backend exists only for tests (NAVIGUIDE_FORECAST_BACKEND).
 """
 from __future__ import annotations
 

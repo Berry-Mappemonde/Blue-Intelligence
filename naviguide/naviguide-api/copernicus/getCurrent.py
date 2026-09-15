@@ -1,9 +1,8 @@
 """
-Script pour récupérer les données de courants marins depuis Copernicus Marine
-pour une position géographique donnée.
+Fetch sea-current data from Copernicus Marine for a given geographic position.
 
-Dataset : cmems_mod_glo_phy_anfc_0.083deg_PT1H-m
-Variables : uo (eastward_sea_water_velocity), vo (northward_sea_water_velocity)
+Dataset: cmems_mod_glo_phy_anfc_0.083deg_PT1H-m
+Variables: uo (eastward_sea_water_velocity), vo (northward_sea_water_velocity)
 """
 import math
 import pandas as pd
@@ -14,17 +13,17 @@ from datetime import datetime, timedelta
 
 def get_current_data_at_position(latitude, longitude, username=None, password=None):
     """
-    Récupère les données de courant marin de surface à une position donnée.
+    Fetch surface sea-current data at a given position.
 
     Args:
-        latitude  (float) : Latitude  (-90 à 90)
-        longitude (float) : Longitude (-180 à 180)
-        username  (str)   : Username Copernicus Marine
-        password  (str)   : Password Copernicus Marine
+        latitude  (float) : latitude  (-90 to 90)
+        longitude (float) : longitude (-180 to 180)
+        username  (str)   : Copernicus Marine username
+        password  (str)   : Copernicus Marine password
 
     Returns:
-        dict | None : Données de courant (vitesse m/s, nœuds, direction °)
-                      ou None en cas d'erreur.
+        dict | None : current data (speed m/s, knots, direction °)
+                      or None on error.
     """
     try:
         # Global Ocean Physics Analysis and Forecast — currents at surface
@@ -34,7 +33,7 @@ def get_current_data_at_position(latitude, longitude, username=None, password=No
         end_date   = datetime.now() - timedelta(days=1)
         start_date = end_date - timedelta(days=1)
 
-        margin = 0.2   # zone ±0.2° autour du point
+        margin = 0.2   # ±0.2° box around the point
 
         print(f"🌊 Récupération des courants marins pour:")
         print(f"   Latitude  : {latitude}°")
@@ -62,7 +61,7 @@ def get_current_data_at_position(latitude, longitude, username=None, password=No
             method="nearest"
         )
 
-        # Surface (depth=0 ou premier niveau)
+        # Surface (depth=0 or first level)
         def _extract_surface(var_name):
             da = point_data[var_name].isel(time=-1)
             # If depth dimension exists, take surface (index 0)
@@ -70,8 +69,8 @@ def get_current_data_at_position(latitude, longitude, username=None, password=No
                 da = da.isel(depth=0)
             return float(da.values)
 
-        u_current = _extract_surface("uo")   # m/s — composante Est
-        v_current = _extract_surface("vo")   # m/s — composante Nord
+        u_current = _extract_surface("uo")   # m/s — east component
+        v_current = _extract_surface("vo")   # m/s — north component
 
         # Guard: NaN means point is on land or outside dataset coverage
         if math.isnan(u_current) or math.isnan(v_current):
@@ -84,14 +83,14 @@ def get_current_data_at_position(latitude, longitude, username=None, password=No
         speed_kmh    = speed_ms * 3.6
 
         # Direction the current is going (oceanographic)
-        # 0° = Nord, 90° = Est, 180° = Sud, 270° = Ouest
+        # 0° = North, 90° = East, 180° = South, 270° = West
         direction_deg = (math.atan2(u_current, v_current) * 180.0 / math.pi) % 360
 
         result = {
             "latitude":        latitude,
             "longitude":       longitude,
-            "u_component":     round(u_current,  4),  # m/s (Est)
-            "v_component":     round(v_current,  4),  # m/s (Nord)
+            "u_component":     round(u_current,  4),  # m/s (east)
+            "v_component":     round(v_current,  4),  # m/s (north)
             "speed_ms":        round(speed_ms,   3),
             "speed_knots":     round(speed_knots, 2),
             "speed_kmh":       round(speed_kmh,  2),
@@ -118,8 +117,8 @@ def get_current_data_at_position(latitude, longitude, username=None, password=No
 
 def overCurrent(latitude, longitude, threshold_knots=2.0, username=None, password=None):
     """
-    Retourne True si la vitesse du courant dépasse le seuil donné (défaut 2 nœuds).
-    Utilisé pour marquer les points d'alerte sur la route.
+    Return True if current speed exceeds the given threshold (default 2 kn).
+    Used to mark alert points on the route.
     """
     data = get_current_data_at_position(latitude, longitude, username, password)
     if data is None:

@@ -7,7 +7,9 @@
 **Date:** 14 September 2026 — aligned with the *Naviguide simulation cockpit* thread  
 **Français :** [hackathon-nebius-nvidia.md](./hackathon-nebius-nvidia.md)
 
-**Leaflet cockpit plan (EN):** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md)
+**Leaflet cockpit plan (EN):** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md)  
+**Simulation A (climatological clock):** [PLAN_IMPLEMENTATION_SIMULATION_A.md](./PLAN_IMPLEMENTATION_SIMULATION_A.md)  
+**Simulation B (virtual boat, after A):** [PLAN_IMPLEMENTATION_SIMULATION_B.md](./PLAN_IMPLEMENTATION_SIMULATION_B.md)
 
 **Submission deadline:** Friday 30 October 2026, 10:00 PT  
 **Judging:** 1–15 December 2026 · results around 11 January 2027  

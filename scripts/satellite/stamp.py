@@ -1,9 +1,9 @@
-"""OSM-shaped + source sentinel-pilot, sans dépendre du backend."""
+"""OSM-shaped + sentinel-pilot source, without depending on the backend."""
 
 PILOT_SOURCE = "sentinel-pilot"
 DISCLAIMER = (
-    "Ne convient pas à la navigation. Trait / profondeur estimés "
-    "(Sentinel pilote), à comparer aux cartes officielles."
+    "Not for navigation. Estimated line / depth "
+    "(Sentinel pilot), compare with official charts."
 )
 
 

@@ -1121,7 +1121,7 @@ async def geocode_port_dual(port: dict, zone: dict, log=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Validation spatiale point-in-EEZ (shapely)
+# Spatial validation: point-in-EEZ (shapely)
 # ---------------------------------------------------------------------------
 def point_in_eez(lat: float, lon: float, geom, prepared=None, tol_deg: float = 0.5):
     """Return (validated: bool, dist_km: float|None). tol_deg ≈ 55 coastal km.

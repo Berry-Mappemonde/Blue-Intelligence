@@ -1,6 +1,5 @@
 """
-Script pour récupérer les données de vent depuis Copernicus Marine
-pour une position géographique donnée
+Fetch wind data from Copernicus Marine for a given geographic position.
 """
 import math
 import pandas as pd
@@ -11,16 +10,16 @@ from datetime import datetime, timedelta
 
 def get_wind_data_at_position(latitude, longitude, username=None, password=None):
     """
-    Récupère les données de vent à une position donnée
-    
+    Fetch wind data at a given position.
+
     Args:
-        latitude (float): Latitude (-90 à 90)
-        longitude (float): Longitude (-180 à 180)
-        username (str): Votre username Copernicus Marine
-        password (str): Votre password Copernicus Marine
-    
+        latitude (float): latitude (-90 to 90)
+        longitude (float): longitude (-180 to 180)
+        username (str): Copernicus Marine username
+        password (str): Copernicus Marine password
+
     Returns:
-        dict: Données de vent (eastward_wind, northward_wind, vitesse, direction)
+        dict: wind data (eastward_wind, northward_wind, speed, direction)
     """
     
     try:
@@ -44,7 +43,7 @@ def get_wind_data_at_position(latitude, longitude, username=None, password=None)
             dataset_id=dataset_id,
             username=username,
             password=password,
-            variables=["eastward_wind", "northward_wind"],  # ✅ Composantes du VENT
+            variables=["eastward_wind", "northward_wind"],  # wind components
             minimum_longitude=longitude - margin,
             maximum_longitude=longitude + margin,
             minimum_latitude=latitude - margin,
@@ -66,18 +65,18 @@ def get_wind_data_at_position(latitude, longitude, username=None, password=None)
         u_wind = float(point_data['eastward_wind'].isel(time=-1).values)
         v_wind = float(point_data['northward_wind'].isel(time=-1).values)
         
-        # Calculer vitesse et direction
+        # Compute speed and direction
         import math
         wind_speed = math.sqrt(u_wind**2 + v_wind**2)
         
         # ✅ Meteorological direction (where the wind COMES FROM)
-        # Convention : 0° = Nord, 90° = Est, 180° = Sud, 270° = Ouest
+        # Convention: 0° = North, 90° = East, 180° = South, 270° = West
         wind_direction = (math.atan2(-u_wind, -v_wind) * 180 / math.pi) % 360
 
         # Fetch the timestamp and convert it to an ISO string
         timestamp_value = point_data.time.isel(time=-1).values
         
-        # Convertir numpy.datetime64 en string ISO 8601
+        # Convert numpy.datetime64 to an ISO 8601 string
         if isinstance(timestamp_value, np.datetime64):
             timestamp_str = pd.Timestamp(timestamp_value).isoformat()
         else:
@@ -86,11 +85,11 @@ def get_wind_data_at_position(latitude, longitude, username=None, password=None)
         result = {
             "latitude": latitude,
             "longitude": longitude,
-            "u_component": round(u_wind, 3),  # m/s (composante Est)
-            "v_component": round(v_wind, 3),  # m/s (composante Nord)
+            "u_component": round(u_wind, 3),  # m/s (east component)
+            "v_component": round(v_wind, 3),  # m/s (north component)
             "wind_speed": round(wind_speed, 3),  # m/s
             "wind_speed_kmh": round(wind_speed * 3.6, 2),  # km/h
-            "wind_speed_knots": round(wind_speed * 1.944, 2),  # nœuds
+            "wind_speed_knots": round(wind_speed * 1.944, 2),  # knots
             "wind_direction": round(wind_direction, 1),  # degrees (where the wind comes from)
             "timestamp": timestamp_str
         }

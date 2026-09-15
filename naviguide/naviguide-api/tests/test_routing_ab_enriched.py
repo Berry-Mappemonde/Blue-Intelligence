@@ -1,4 +1,4 @@
-"""Portes voile et décalage cargo — déterministes, sans réseau."""
+"""Sailing gates and cargo offset — deterministic, no network."""
 
 from __future__ import annotations
 

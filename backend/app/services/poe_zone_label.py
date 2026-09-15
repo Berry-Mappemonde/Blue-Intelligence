@@ -58,7 +58,7 @@ def partners_without_self(tail: str, sovereign: str) -> str:
 
 
 def zone_qualifier(zone: dict) -> tuple[str, str]:
-    """Retourne (qualifier_key, texte)."""
+    """Return (qualifier_key, text)."""
     name = (zone.get("name") or "").strip()
     sov = (zone.get("sovereign") or "").strip()
     pol = (zone.get("pol_type") or "").strip()

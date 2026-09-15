@@ -1,6 +1,6 @@
-"""Isochrone d’une jambe — copie adaptée (pas d’import depuis naviguide/).
+"""One-leg isochrone — adapted copy (no import from naviguide/).
 
-Propagate / prune / land mask. vent, courant, vague et polar sont injectés.
+Propagate / prune / land mask. Wind, current, wave and polar are injected.
 """
 from __future__ import annotations
 

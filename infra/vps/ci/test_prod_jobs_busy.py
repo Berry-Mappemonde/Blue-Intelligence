@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests hermétiques de la sonde des files produit (pas de réseau)."""
+"""Hermetic tests of the product-queue probe (no network)."""
 from __future__ import annotations
 
 import io
@@ -117,7 +117,7 @@ class ProbeLoopTests(unittest.TestCase):
                     url, 410, "Gone", hdrs=None, fp=None)
             return {"running": False}
 
-        # Le chemin 410 n'est plus dans PROBE_PATHS : on simule via side_effect
+        # The 410 path is no longer in PROBE_PATHS: we simulate it via side_effect
         # sur le premier chemin.
         with mock.patch.object(
             probe, "PROBE_PATHS",

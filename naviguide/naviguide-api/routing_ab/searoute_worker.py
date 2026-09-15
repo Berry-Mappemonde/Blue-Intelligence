@@ -1,7 +1,7 @@
-"""Sous-processus : calcule une route searoute et écrit du GeoJSON sur stdout.
+"""Subprocess: compute a searoute route and write GeoJSON to stdout.
 
-Sert à comparer searoute 1.4 et 1.6 sans mélanger deux versions dans
-le même interpréteur.
+Used to compare searoute 1.4 and 1.6 without mixing two versions in
+the same interpreter.
 """
 
 from __future__ import annotations

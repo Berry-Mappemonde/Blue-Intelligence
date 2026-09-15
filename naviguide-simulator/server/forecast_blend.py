@@ -1,4 +1,4 @@
-"""wind_fn(lat, lon, t) : prévision 0–7 j, fondu 7–10 j, climatologie ensuite."""
+"""wind_fn(lat, lon, t): 0–7 d forecast, 7–10 d blend, climatology after that."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -21,7 +21,7 @@ def _hours_since(t0: datetime, t: datetime) -> float:
 
 
 def _blend_dir(a: float, b: float, w: float) -> float:
-    """w = poids de b (0 = a, 1 = b). Plus courte arc."""
+    """w = weight of b (0 = a, 1 = b). Shortest arc."""
     d = (b - a + 540) % 360 - 180
     return (a + d * w + 360) % 360
 

@@ -1,9 +1,9 @@
 name: CI
 
-# Tests rapides et hermétiques (aucun secret, aucun service) :
-#   - jest verrouille l'ordre des couches carte et le registre des fonds ;
-#   - le build CRA attrape les régressions de bundling (maplibre chargé à la demande) ;
-#   - le script d'audit des tags tourne en mode GeoJSON sur les seeds (stdlib pur).
+# Fast, hermetic tests (no secrets, no live services):
+#   - jest freezes map layer order and the basemap registry;
+#   - the CRA build catches bundling regressions (MapLibre loaded on demand);
+#   - the tag-audit script runs in GeoJSON mode on the seeds (stdlib only).
 
 on:
   pull_request:
@@ -41,16 +41,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Audit des tags (mode GeoJSON, sans Mongo)
+      - name: Tag audit (GeoJSON mode, no Mongo)
         run: python3 scripts/audit_tags.py --geojson seed/projects.geojson seed/ports_of_entry.geojson
 
   deploy-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Sonde des files produit + plan de déploiement
+      - name: Product-queue probe + deploy plan
         run: python3 infra/vps/ci/test_prod_jobs_busy.py
-      - name: Syntaxe bash des scripts VPS
+      - name: Bash syntax of VPS scripts
         run: |
           bash -n infra/vps/deploy-app.sh
           bash -n infra/vps/naviguide/deploy-naviguide.sh

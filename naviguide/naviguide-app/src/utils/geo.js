@@ -33,7 +33,7 @@ export function summarizeRoute(segments) {
   return { nm: Math.round(nm * 10) / 10, segments: count };
 }
 
-/** FeatureCollection LineString → segments { coords } pour summarizeRoute / export. */
+/** FeatureCollection LineString → segments { coords } for summarizeRoute / export. */
 export function featuresToSegments(fc) {
   if (!fc?.features) return [];
   return fc.features

@@ -1,8 +1,8 @@
-"""Banc d'essai A/B du routage mer NAVIGUIDE (Problème A).
+"""NAVIGUIDE sea-routing A/B bench (Problem A).
 
-Compare les graphes cargos (searoute, scgraph) et un graphe enrichi
-voile (portes de catamaran + décalage hors couloirs). Ne change pas
-l'endpoint de production ``GET /route``.
+Compares cargo graphs (searoute, scgraph) and an enriched sailing graph
+(catamaran gates + offset off corridors). Does not change the production
+``GET /route`` endpoint.
 """
 
 from .legs import BENCHMARK_LEGS

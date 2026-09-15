@@ -83,14 +83,14 @@ SECTORS = 8
 SECTOR_DEG = 45.0
 
 # Land boxes (fallback if global_land_mask is not installed).
-# Recette : Sahara et Andes doivent tomber dedans ; 15°N 25°W, 40°S, 26°N 80°W hors.
+# Recipe: Sahara and Andes must fall inside; 15°N 25°W, 40°S, 26°N 80°W stay outside.
 _LAND_BOXES = [
     (30, 72, -130, -60),     # Interior North America
-    (14, 32, -115, -88),     # Mexique / SW US
+    (14, 32, -115, -88),     # Mexico / SW US
     (7, 18, -92, -77),       # Central America
     (-50, 10, -75, -40),     # Interior South America (Andes)
     (36, 71, -10, 40),       # Interior Europe
-    (12, 37, -17, 50),       # Sahara / Afrique N + Sahel
+    (12, 37, -17, 50),       # Sahara / N Africa + Sahel
     (-34, 15, 10, 42),       # Interior Africa
     (12, 32, 35, 60),        # Arabie
     (8, 35, 68, 97),         # Inde

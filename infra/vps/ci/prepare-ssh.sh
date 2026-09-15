@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prépare la clé SSH du secret GitHub (à lancer sur le runner).
-# Variables : VPS_SSH_KEY (obligatoire), VPS_HOST (défaut ubuntu@135.125.226.16)
+# Prepare the SSH key from the GitHub secret (run this on the runner).
+# Variables: VPS_SSH_KEY (required), VPS_HOST (default ubuntu@135.125.226.16)
 set -euo pipefail
 
 if [ -z "${VPS_SSH_KEY:-}" ]; then
@@ -14,7 +14,7 @@ KEY_FILE="${HOME}/.ssh/github-deploy-vps"
 
 mkdir -p "${HOME}/.ssh"
 chmod 700 "${HOME}/.ssh"
-# Le secret peut arriver sans saut de ligne final.
+# The secret may arrive without a trailing newline.
 printf '%s\n' "$VPS_SSH_KEY" > "$KEY_FILE"
 chmod 600 "$KEY_FILE"
 

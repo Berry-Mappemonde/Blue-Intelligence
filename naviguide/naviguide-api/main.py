@@ -569,9 +569,9 @@ _route_cache: dict = {}
 
 def searoute_with_exact_end(start, end):
     """
-    Calcule une route maritime entre deux points et ajoute un segment géodésique
-    jusqu'à la destination exacte si searoute s'arrête trop tôt.
-    Gère correctement le passage de l'antiméridien (180°/-180°).
+    Compute a sea route between two points and add a geodesic segment
+    to the exact destination if searoute stops too early.
+    Handles the antimeridian crossing (180°/-180°) correctly.
 
     Bidirectional cache: if the reverse segment B→A was already computed, the
     cached coordinate list is reversed and returned immediately — ensuring that
@@ -721,7 +721,7 @@ def get_route(
     check_wind: bool = Query(False),
     sample_rate: int = Query(100)
 ):
-    """Calcule une route maritime et renvoie le GeoJSON."""
+    """Compute a sea route and return the GeoJSON."""
     start = (start_lon, start_lat)
     end = (end_lon, end_lat)
 
@@ -813,7 +813,7 @@ def _sim_current(lat: float, lon: float) -> dict:
 
 @app.post("/wind")
 def get_wind(request: PositionRequest):
-    """Récupère les données de vent via Copernicus Marine, avec fallback simulation."""
+    """Fetch wind data via Copernicus Marine, with a simulation fallback."""
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD:
             wind_data = get_wind_data_at_position(
@@ -831,7 +831,7 @@ def get_wind(request: PositionRequest):
 
 @app.post("/wave")
 def get_wave(request: PositionRequest):
-    """Récupère les données de vague via Copernicus Marine, avec fallback simulation."""
+    """Fetch wave data via Copernicus Marine, with a simulation fallback."""
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD:
             wave_data = get_wave_data_at_position(
@@ -849,7 +849,7 @@ def get_wave(request: PositionRequest):
 
 @app.post("/current")
 def get_current(request: PositionRequest):
-    """Récupère les données de courant via Copernicus Marine, avec fallback simulation."""
+    """Fetch current data via Copernicus Marine, with a simulation fallback."""
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD:
             current_data = get_current_data_at_position(
@@ -916,8 +916,8 @@ _VLIZ_WMS = "https://geo.vliz.be/geoserver/MarineRegions/wms"
 @app.get("/proxy/zee/wms", summary="ZEE WMS tile proxy (VLIZ)")
 async def proxy_zee_wms(request: Request):
     """
-    Proxy WMS GetMap pour les ZEE. Tuiles à la demande — chargement instantané.
-    MapLibre envoie BBOX, WIDTH, HEIGHT ; on forward à VLIZ.
+    WMS GetMap proxy for EEZs. Tiles on demand — instant load.
+    MapLibre sends BBOX, WIDTH, HEIGHT; we forward to VLIZ.
     """
     params = dict(request.query_params)
     bbox = params.get("bbox") or params.get("BBOX")
@@ -926,7 +926,7 @@ async def proxy_zee_wms(request: Request):
     params.setdefault("service", "WMS")
     params.setdefault("version", "1.1.1")
     params.setdefault("request", "GetMap")
-    params["layers"] = "eez_boundaries"  # Limites uniquement (polylignes, pas de polygones)
+    params["layers"] = "eez_boundaries"  # Boundaries only (polylines, no polygons)
     params.setdefault("format", "image/png")
     params.setdefault("transparent", "true")
     params.setdefault("srs", "EPSG:3857")
@@ -954,9 +954,9 @@ async def proxy_zee(
     maxFeatures: int = Query(80, ge=1, le=ZEE_MAX_FEATURES_CAP, description="Max EEZ polygons to return"),
 ):
     """
-    Proxy pour l'API WFS VLIZ Marine Regions — ZEE (Zones Économiques Exclusives).
-    Uniquement par bbox (la carte envoie déjà la vue). Sans bbox, petit échantillon
-    de test seulement — jamais un cache mondial en RAM.
+    Proxy for the VLIZ Marine Regions WFS API — EEZs (Exclusive Economic Zones).
+    Bbox only (the map already sends the viewport). Without a bbox, a small test
+    sample only — never a worldwide cache in RAM.
     """
     if not bbox and maxFeatures > ZEE_NO_BBOX_MAX_FEATURES:
         raise HTTPException(
@@ -1010,8 +1010,8 @@ async def proxy_zee(
 @app.get("/proxy/ports", summary="WPI world ports as GeoJSON (NGA/MSI)")
 async def proxy_ports():
     """
-    Retourne les ports mondiaux du World Port Index (NGA/MSI) en GeoJSON.
-    Résultat mis en cache 24 h côté serveur.
+    Return World Port Index (NGA/MSI) ports as GeoJSON.
+    Result cached 24 h on the server.
     """
     # Serve from cache if still fresh
     if _wpi_cache["data"] and (time.time() - _wpi_cache["ts"] < _WPI_CACHE_TTL):

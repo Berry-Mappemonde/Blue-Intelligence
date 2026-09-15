@@ -1,7 +1,7 @@
-"""Sondage GEBCO au large pour le sac `ici()`.
+"""Offshore GEBCO sounding for the `ici()` pack.
 
-Pas de grille NetCDF sur le VPS (plan H5 : lookup point).
-Source : OpenTopoData (GEBCO 2020). Attribution : GEBCO Compilation Group.
+No NetCDF grid on the VPS (plan H5: point lookup).
+Source: OpenTopoData (GEBCO 2020). Attribution: GEBCO Compilation Group.
 """
 from __future__ import annotations
 

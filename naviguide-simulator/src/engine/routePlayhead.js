@@ -10,7 +10,7 @@ export function isNamedEscale(stop) {
 
 /**
  * Flatten every segment (land included) into one polyline + cumulative miles.
- * Point 0 = premier vertex (Saint-Maur pour Berry).
+ * Point 0 = first vertex (Saint-Maur for Berry).
  * Air hops (Cayenne → Halifax / SPM): 0 nm at sea, film duration separately.
  * Longitudes unwrapped so the antimeridian does not cut the film.
  */

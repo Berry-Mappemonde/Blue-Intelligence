@@ -1,8 +1,8 @@
-"""Couloirs cargos (boîtes AIS simplifiées) et score anti-trafic.
+"""Cargo corridors (simplified AIS boxes) and anti-traffic score.
 
-Reprend l'esprit du score Agent 1 : 1.0 = loin des cargos, 0.0 = dedans.
-Ces boîtes servent à MESURER et à décaler le graphe enrichi — pas à
-redessiner une carte AIS officielle.
+Keeps the spirit of the Agent 1 score: 1.0 = far from cargos, 0.0 = inside.
+These boxes are used to MEASURE and to offset the enriched graph — not to
+redraw an official AIS chart.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def _in_box(lon: float, lat: float, box: ShippingBox) -> bool:
 
 
 def point_lane_weight(lon: float, lat: float) -> float:
-    """Poids max du couloir cargo qui contient le point (0 si aucun)."""
+    """Max weight of the cargo corridor that contains the point (0 if none)."""
     weight = 0.0
     for box in SHIPPING_LANES:
         if _in_box(lon, lat, box):
@@ -58,7 +58,7 @@ def in_no_offset_zone(lon: float, lat: float) -> bool:
 
 
 def anti_shipping_score(coords: Sequence[Sequence[float]]) -> float:
-    """1.0 = hors couloirs, 0.0 = entièrement dans un couloir dense."""
+    """1.0 = off corridors, 0.0 = entirely inside a dense corridor."""
     flat = [c[:2] for c in coords if len(c) >= 2]
     if not flat:
         return 1.0

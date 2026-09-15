@@ -12,9 +12,9 @@ Version **1.0** — 14 September 2026.
 recipe-ready (clock table, t0, dated HUD, March / July tests).
 **Do not start B until A4 is green.**
 
-**English :** not yet.
+This document is the English workshop plan.
 
-**Hackathon briefing (FR) :** [hackathon-nebius-nvidia.md](./hackathon-nebius-nvidia.md)
+**Hackathon briefing (EN):** [hackathon-nebius-nvidia.en.md](./hackathon-nebius-nvidia.en.md)
 
 ---
 

@@ -119,12 +119,12 @@ def _host_matches_domain(host: str, domain: str) -> bool:
 
 
 def td_url_fits_polygon(url: str, zone: dict | None) -> bool:
-    """True si la page peut appartenir à CE polygone.
+    """True if the page can belong to THIS polygon.
 
-    Quand le polygone n'est pas le souverain (NC ≠ FR), on n'accepte que
-    les domaines curés / le ccTLD local. Légifrance et mer.gouv.fr restent
-    sur la France hexagone, pas sur Nouméa.
-    Sans référentiel (Saba…) : on ne filtre pas.
+    When the polygon is not the sovereign (NC ≠ FR), accept only curated
+    domains / the local ccTLD. Légifrance and mer.gouv.fr stay on
+    metropolitan France, not on Nouméa.
+    With no referential (Saba…): do not filter.
     """
     zone = zone or {}
     iso2 = str(zone.get("iso2") or "").strip().upper()

@@ -192,7 +192,7 @@ def get_climatological_wind(
 
 def wind_at(lat: float, lon: float, month: int,
             mode: str = "most_likely") -> Tuple[float, float]:
-    """Atlas CMEMS si le snapshot est là, sinon le repli zones (plus jamais la source)."""
+    """CMEMS atlas if the snapshot is present, otherwise the zone fallback (never the source again)."""
     try:
         from .atlas_bridge import atlas_wind
         hit = atlas_wind(lat, lon, month, mode=mode)

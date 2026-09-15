@@ -91,12 +91,12 @@ def audit_mongo(mongo_url: str, db_name: str, catalog: dict) -> list[str]:
         stats = collect_tag_stats((d.get("tags") or {}) for d in cursor)
         docs = stats["docs"]
         lines.append(f"\n## Collection `{coll_name}`")
-        lines.append(f"\n{docs} documents, {stats['docs_with_tags']} avec tags.")
+        lines.append(f"\n{docs} documents, {stats['docs_with_tags']} with tags.")
         if not docs:
             continue
 
-        lines.append("\n### Couverture des clés exploitées (catalogue)\n")
-        lines.append("| clé | docs | % |")
+        lines.append("\n### Coverage of used keys (catalogue)\n")
+        lines.append("| key | docs | % |")
         lines.append("|---|---:|---:|")
         exploited = [e["key"] for e in catalog["exact_keys"] if e["status"] == "exploite"]
         covered = [(k, stats["key_counts"].get(k, 0)) for k in exploited]
@@ -105,14 +105,14 @@ def audit_mongo(mongo_url: str, db_name: str, catalog: dict) -> list[str]:
                 lines.append(f"| `{key}` | {count} | {100.0 * count / docs:.1f} |")
         absent = [k for k, c in covered if not c]
         if absent:
-            lines.append(f"\nJamais observées ici : {', '.join('`' + k + '`' for k in sorted(absent))}.")
+            lines.append(f"\nNever observed here: {', '.join('`' + k + '`' for k in sorted(absent))}.")
 
         if stats["seamark_types"]:
-            lines.append("\n### Familles seamark observées\n")
-            lines.append("| seamark:type / famille | occurrences | statut catalogue |")
+            lines.append("\n### Observed seamark families\n")
+            lines.append("| seamark:type / family | occurrences | catalogue status |")
             lines.append("|---|---:|---|")
             for typ, count in stats["seamark_types"].most_common():
-                status = documented_types.get(typ, "HORS CATALOGUE — candidat ?")
+                status = documented_types.get(typ, "OUT OF CATALOGUE — candidate?")
                 lines.append(f"| `{typ}` | {count} | {status} |")
 
         undocumented_sub = sorted(
@@ -121,11 +121,11 @@ def audit_mongo(mongo_url: str, db_name: str, catalog: dict) -> list[str]:
             key=lambda kv: -len(kv[1]),
         )
         if undocumented_sub:
-            lines.append("\n### Sous-clés seamark non documentées (candidates)\n")
+            lines.append("\n### Undocumented seamark subkeys (candidates)\n")
             for sub, types in undocumented_sub[:TOP_N]:
-                lines.append(f"- `seamark:*:{sub}` — portée par {len(types)} famille(s) : {', '.join(sorted(types))}")
+                lines.append(f"- `seamark:*:{sub}` — carried by {len(types)} family(ies): {', '.join(sorted(types))}")
             if len(undocumented_sub) > TOP_N:
-                lines.append(f"- … et {len(undocumented_sub) - TOP_N} de plus")
+                lines.append(f"- … and {len(undocumented_sub) - TOP_N} more")
 
         others = [
             (k, c) for k, c in stats["key_counts"].most_common()
@@ -133,12 +133,12 @@ def audit_mongo(mongo_url: str, db_name: str, catalog: dict) -> list[str]:
             and not any(k.startswith(p) for p in prefixes)
         ]
         if others:
-            lines.append("\n### Clés hors catalogue les plus fréquentes (candidates)\n")
+            lines.append("\n### Most frequent keys outside the catalogue (candidates)\n")
             for key, count in others[:TOP_N]:
                 rare = " *(rare)*" if count <= 2 else ""
                 lines.append(f"- `{key}` × {count}{rare}")
             if len(others) > TOP_N:
-                lines.append(f"- … et {len(others) - TOP_N} de plus")
+                lines.append(f"- … and {len(others) - TOP_N} more")
     return lines
 
 
@@ -152,11 +152,11 @@ def audit_geojson(paths: list[str]) -> list[str]:
         try:
             fc = json.loads(path.read_text(encoding="utf-8"))
         except Exception as e:  # missing / invalid file: report it and continue
-            lines.append(f"\nIllisible : {e}")
+            lines.append(f"\nUnreadable: {e}")
             continue
         feats = fc.get("features") or []
         meta = fc.get("metadata") or {}
-        version = meta.get("version") or "non versionné"
+        version = meta.get("version") or "unversioned"
         lines.append(f"\n{len(feats)} features — version `{version}`.")
         if not feats:
             continue
@@ -169,12 +169,12 @@ def audit_geojson(paths: list[str]) -> list[str]:
                     filled[k] += 1
             for q in (props.get("svc") or {}):
                 svc_questions[q] += 1
-        lines.append("\n| propriété | remplie | % |")
+        lines.append("\n| property | filled | % |")
         lines.append("|---|---:|---:|")
         for key, count in filled.most_common(30):
             lines.append(f"| `{key}` | {count} | {100.0 * count / len(feats):.1f} |")
         if svc_questions:
-            lines.append("\nBadges services (`svc`) : "
+            lines.append("\nService badges (`svc`): "
                          + ", ".join(f"{q}={c}" for q, c in svc_questions.most_common()))
     return lines
 
@@ -190,11 +190,11 @@ def main() -> int:
     catalog = load_catalog()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     header = [
-        "# Audit des tags — Blue Intelligence",
-        f"\nGénéré le {now} · catalogue v{catalog.get('version')} "
+        "# Tag audit — Blue Intelligence",
+        f"\nGenerated on {now} · catalogue v{catalog.get('version')} "
         f"(`backend/data/seamark_catalog.json`)",
-        "\nRapport, pas contrôle : les candidats demandent un œil humain avant "
-        "d'entrer au catalogue (les données OSM réelles contiennent des typos).",
+        "\nReport, not a check: candidates need a human eye before "
+        "entering the catalogue (real OSM data contains typos).",
     ]
     if args.geojson:
         body = audit_geojson(args.geojson)
@@ -206,7 +206,7 @@ def main() -> int:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(report, encoding="utf-8")
-        print(f"rapport écrit → {out_path}")
+        print(f"report written → {out_path}")
     else:
         print(report)
     return 0

@@ -1,7 +1,7 @@
-"""Jambes Berry utilisées pour le banc A/B.
+"""Berry legs used for the A/B bench.
 
-Les coordonnées viennent de itineraryPoints.ts et des tests Torres
-historiques (WP 141.9 / -10.7). Rien n'est inventé hors de ces sources.
+Coordinates come from itineraryPoints.ts and the historical Torres
+tests (WP 141.9 / -10.7). Nothing is invented outside those sources.
 """
 
 from __future__ import annotations
@@ -39,19 +39,19 @@ SAINTE_LUCIE = (-61.498, 13.499)
 BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
     BenchmarkLeg(
         id="noumea_torres_itin",
-        label="Nouméa → Torres (WP itinéraire)",
+        label="Nouméa → Torres (itinerary WP)",
         start=NOUMEA,
         end=TORRES_ITIN,
         family="torres",
-        notes="Détroit de Torres, risque de détour mer de Corail.",
+        notes="Torres Strait, Coral Sea detour risk.",
     ),
     BenchmarkLeg(
         id="noumea_torres_legacy",
-        label="Nouméa → Torres (WP tests 141.9)",
+        label="Nouméa → Torres (test WP 141.9)",
         start=NOUMEA,
         end=TORRES_LEGACY,
         family="torres",
-        notes="Waypoint historique de test_torres.py (Prince of Wales).",
+        notes="Historical waypoint from test_torres.py (Prince of Wales).",
     ),
     BenchmarkLeg(
         id="torres_arafura",
@@ -59,7 +59,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=TORRES_ITIN,
         end=ARAFURA,
         family="torres",
-        notes="Sortie ouest du détroit vers la mer d'Arafura.",
+        notes="West exit of the strait toward the Arafura Sea.",
     ),
     BenchmarkLeg(
         id="haut_aus_2_3",
@@ -67,7 +67,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=HAUT_AUS_2,
         end=HAUT_AUS_3,
         family="mentawai",
-        notes="Arc qui rase Nias / Mentawai si le graphe cargo coupe trop près.",
+        notes="Arc that skims Nias / Mentawai if the cargo graph cuts too close.",
     ),
     BenchmarkLeg(
         id="wallis_noumea",
@@ -75,7 +75,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=WALLIS,
         end=NOUMEA,
         family="antimeridian",
-        notes="Franchissement ±180°. Le trait ne doit pas faire le tour du globe.",
+        notes="±180° crossing. The line must not go around the globe.",
     ),
     BenchmarkLeg(
         id="papeete_wallis",
@@ -83,7 +83,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=PAPEETE,
         end=WALLIS,
         family="antimeridian",
-        notes="Traversée Pacifique, proche de la ligne de changement de date.",
+        notes="Pacific crossing, close to the date line.",
     ),
     BenchmarkLeg(
         id="cayenne_papeete",
@@ -91,7 +91,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=CAYENNE,
         end=PAPEETE,
         family="ocean",
-        notes="Très longue jambe : montre le couloir cargo transocéanique.",
+        notes="Very long leg: shows the transoceanic cargo corridor.",
     ),
     BenchmarkLeg(
         id="cap_verde_sainte_lucie",
@@ -99,7 +99,7 @@ BENCHMARK_LEGS: tuple[BenchmarkLeg, ...] = (
         start=CAP_VERDE,
         end=SAINTE_LUCIE,
         family="ocean",
-        notes="Alizés Atlantique, couloir transatlantique cargo.",
+        notes="Atlantic trade winds, transatlantic cargo corridor.",
     ),
 )
 

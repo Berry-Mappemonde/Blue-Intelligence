@@ -1,32 +1,32 @@
 """
-NAVIGUIDE — Cascade LLM : NVIDIA NIM → OpenRouter → Claude (Anthropic).
+NAVIGUIDE — LLM cascade: NVIDIA NIM → OpenRouter → Claude (Anthropic).
 
-Aligné sur l'adaptateur Blue Intelligence (backend/app/core/nvidia.py et
-backend/app/core/llm.py) : mêmes endpoints, mêmes variables d'environnement,
-même ordre de cascade. Version *texte* (briefings, chat, conseils de route) —
-pas de mode JSON strict ici.
+Aligned with the Blue Intelligence adapter (backend/app/core/nvidia.py and
+backend/app/core/llm.py): same endpoints, same environment variables,
+same cascade order. *Text* version (briefings, chat, route advice) —
+no strict JSON mode here.
 
-Ordre de cascade — un fournisseur sans clé est simplement sauté :
+Cascade order — a provider without a key is simply skipped:
   1. NVIDIA NIM   https://integrate.api.nvidia.com/v1   (NVIDIA_API_KEY)
-     chaîne interne : deepseek-v4-pro → gpt-oss-20b → muse-glimmer-30b
+     inner chain: deepseek-v4-pro → gpt-oss-20b → muse-glimmer-30b
   2. OpenRouter   https://openrouter.ai/api/v1          (OPENROUTER_API_KEY)
-  3. Claude       SDK anthropic                         (ANTHROPIC_API_KEY)
+  3. Claude       anthropic SDK                         (ANTHROPIC_API_KEY)
 
-Surcharges env : NVIDIA_MODEL (tête de chaîne NIM), OPENROUTER_MODEL,
+Env overrides: NVIDIA_MODEL (NIM chain head), OPENROUTER_MODEL,
 ANTHROPIC_MODEL.
 
-API publique :
+Public API:
   complete(prompt, system="", messages=None, max_tokens=1024)
-      → (texte, provider) — synchrone, provider ∈ {nvidia, openrouter,
-        claude, none}. Ne lève jamais : ("", "none") si tout échoue.
+      → (text, provider) — sync, provider ∈ {nvidia, openrouter,
+        claude, none}. Never raises: ("", "none") if everything fails.
   stream(prompt, system="", max_tokens=1024)
-      → AsyncIterator[str] — jetons SSE. Bascule au fournisseur/modèle
-        suivant tant qu'aucun jeton n'a été émis ; s'arrête si le flux
-        se rompt après le premier jeton (comportement SSE historique).
+      → AsyncIterator[str] — SSE tokens. Switch to the next
+        provider/model while no token has been emitted; stop if the
+        stream breaks after the first token (historical SSE behaviour).
   has_any_llm() → bool
 
-Import — ce fichier vit à la racine naviguide/, partagé par les deux racines
-de service (naviguide-api/ et naviguide_workspace/) :
+Import — this file lives at the naviguide/ root, shared by both service
+roots (naviguide-api/ and naviguide_workspace/):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from llm_cascade import complete, stream
 """
@@ -45,10 +45,10 @@ _LOG_READY = False
 
 
 def _ensure_log_handler() -> None:
-    """Handler stderr par défaut si le service hôte n'a configuré aucun logging
-    (ex. naviguide-api sous uvicorn), pour voir fournisseur servant et bascules
-    dans journalctl. Décidé au premier appel — pas à l'import — afin de laisser
-    le service configurer son propre logging d'abord (orchestrateur, polar)."""
+    """Default stderr handler if the host service has not configured logging
+    (e.g. naviguide-api under uvicorn), so the serving provider and fallbacks
+    show up in journalctl. Decided on the first call — not at import — so the
+    service can configure its own logging first (orchestrator, polar)."""
     global _LOG_READY
     if _LOG_READY:
         return
@@ -77,7 +77,7 @@ ANTHROPIC_DEFAULT = "claude-opus-4-5"
 
 # Short timeouts (interactive use): a queued model fails over quickly to
 # the next one (nominal NIM answers in 1-8 s). In SSE, read = max wait before
-# premier jeton / entre chunks.
+# first token / between chunks.
 _TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 _STREAM_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
@@ -114,8 +114,8 @@ def _anthropic_model() -> str:
 
 
 def _nim_extras(model: str) -> Dict:
-    """Paramètres des fiches infer NIM (repris de Blue Intelligence) :
-    raisonnement coupé pour que max_tokens serve à la réponse, pas au thinking."""
+    """NIM infer-sheet parameters (taken from Blue Intelligence):
+    reasoning cut so max_tokens serves the answer, not thinking."""
     m = model.lower()
     if "deepseek-v4-flash" in m:
         return {
@@ -252,16 +252,16 @@ def complete(
     messages: Optional[List[Dict]] = None,
     max_tokens: int = 1024,
 ) -> Tuple[str, str]:
-    """Complétion texte via la cascade NIM → OpenRouter → Claude.
+    """Text completion via the NIM → OpenRouter → Claude cascade.
 
     Args:
-        prompt   — dernier message utilisateur (optionnel si `messages` fourni)
-        system   — prompt système (optionnel)
-        messages — historique [{role, content}] au format OpenAI (optionnel)
+        prompt   — last user message (optional if `messages` is provided)
+        system   — system prompt (optional)
+        messages — history [{role, content}] in OpenAI format (optional)
 
     Returns:
-        (texte, provider) — provider ∈ {"nvidia", "openrouter", "claude"}.
-        ("", "none") si aucun fournisseur n'est disponible ou si tout échoue.
+        (text, provider) — provider ∈ {"nvidia", "openrouter", "claude"}.
+        ("", "none") if no provider is available or if everything fails.
     """
     _ensure_log_handler()
     user_msgs = _user_messages(prompt, messages)
@@ -292,7 +292,7 @@ def complete(
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _openai_sse(url: str, headers: Dict[str, str], payload: Dict) -> AsyncIterator[str]:
-    """Flux SSE chat/completions OpenAI-compatible → jetons de texte."""
+    """OpenAI-compatible chat/completions SSE stream → text tokens."""
     async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as client:
         async with client.stream("POST", url, headers=headers, json=payload) as r:
             if r.status_code >= 400:
@@ -318,11 +318,11 @@ async def stream(
     system: str = "",
     max_tokens: int = 1024,
 ) -> AsyncIterator[str]:
-    """Flux de jetons via la cascade NIM → OpenRouter → Claude.
+    """Token stream via the NIM → OpenRouter → Claude cascade.
 
-    Tant qu'aucun jeton n'a été émis, un échec passe au modèle/fournisseur
-    suivant. Une rupture après le premier jeton arrête le flux (l'appelant
-    gère déjà ce cas via son fallback « aucun contenu »).
+    While no token has been emitted, a failure moves to the next
+    model/provider. A break after the first token stops the stream (the
+    caller already handles that case via its "no content" fallback).
     """
     _ensure_log_handler()
     oai_msgs = _with_system(system, [{"role": "user", "content": prompt}])

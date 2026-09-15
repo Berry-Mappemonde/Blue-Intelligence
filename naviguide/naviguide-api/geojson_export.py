@@ -182,9 +182,9 @@ points = [
 
 def searoute_with_exact_end(start, end):
     """
-    Calcule une route maritime entre deux points et ajoute un segment géodésique
-    jusqu'à la destination exacte si searoute s'arrête trop tôt.
-    Gère correctement le passage de l'antiméridien (180°/-180°).
+    Compute a sea route between two points and add a geodesic segment
+    to the exact destination if searoute stops too early.
+    Handles the antimeridian crossing (180°/-180°) correctly.
     """
     try:
         route = sr.searoute(start, end)
@@ -203,8 +203,8 @@ def searoute_with_exact_end(start, end):
     dist = geod.Inverse(last_point[1], last_point[0], end[1], end[0])["s12"]  # metres
 
     # If the route does not reach the exact point, add a short geodesic line
-    if dist > 1000:  # seuil = 1 km
-        n_points = max(2, int(dist // 5000))  # environ 1 point tous les 5 km
+    if dist > 1000:  # threshold = 1 km
+        n_points = max(2, int(dist // 5000))  # about 1 point every 5 km
         line = geod.InverseLine(last_point[1], last_point[0], end[1], end[0])
         extra_coords = []
         
@@ -234,17 +234,17 @@ def searoute_with_exact_end(start, end):
 
 def compute_full_route(points):
     """
-    Calcule toutes les routes maritimes entre les points successifs du tableau,
-    en s'assurant que chaque route atteint précisément le point défini.
-    
-    :param points: liste de dictionnaires contenant 'lat' et 'lon'
-    :return: objet GeoJSON (FeatureCollection)
+    Compute every sea route between successive points of the array,
+    making sure each route reaches the defined point exactly.
+
+    :param points: list of dictionaries containing 'lat' and 'lon'
+    :return: GeoJSON object (FeatureCollection)
     """
     features = []
 
     for i in range(len(points) - 1):
-        # Skip la connexion 12->13 (Marigot -> Halifax)
-        # et 14->15 (Saint-Pierre -> Cayenne) pour dissocier Halifax et Saint-Pierre
+        # Skip the 12->13 link (Marigot -> Halifax)
+        # and 14->15 (Saint-Pierre -> Cayenne) to keep Halifax and Saint-Pierre apart
         if i == 12 or i == 14:
             continue
             

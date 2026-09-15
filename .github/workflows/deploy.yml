@@ -1,8 +1,8 @@
-name: Déploiement VPS
+name: VPS deploy
 
-# Trois sites, un job chacun. Build sur GitHub (pas de npm/pip sur le VPS
-# 8 Go). Blue Intelligence attend qu'aucun run d'enrichissement / Complet
-# n'occupe uvicorn ; le rattrapage toutes les 20 min reprend la file.
+# Three sites, one job each. Build on GitHub (no npm/pip on the 8 GB VPS).
+# Blue Intelligence waits until no Full / enrichment run occupies uvicorn;
+# the catch-up job every 20 min retries the queue.
 
 on:
   push:
@@ -12,12 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: "Site à déployer"
+        description: "Site to deploy"
         type: choice
         options: [all, blue-intelligence, naviguide, simulator]
         default: all
       force:
-        description: "Forcer Blue Intelligence même si un run est en cours"
+        description: "Force Blue Intelligence even if a run is in progress"
         type: boolean
         default: false
 
@@ -74,7 +74,7 @@ jobs:
           REACT_APP_BACKEND_URL: ""
           REACT_APP_SEAMAP_STYLE_URL: https://blueintelligence.online/tiles/seamap/style.json
         run: npm run build
-      - name: Vérifier le bundle
+      - name: Verify the bundle
         run: test -f frontend/build/index.html
       - name: SSH
         env:
@@ -164,7 +164,7 @@ jobs:
             "SHA=$SHA FORCE_DEPLOY=$FORCE_DEPLOY SKIP_FRONTEND_BUILD=1 bash $REMOTE_APP/infra/vps/ci/apply-site.sh simulator"
 
   catch-up:
-    name: Rattrapage (runs reportés)
+    name: Catch-up (deferred runs)
     needs: plan
     if: needs.plan.outputs.catch_up == 'true'
     runs-on: ubuntu-latest
@@ -176,7 +176,7 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: bash infra/vps/ci/prepare-ssh.sh
-      - name: Synchroniser la sonde puis apply-pending
+      - name: Sync the probe then apply-pending
         run: |
           ssh -i "$VPS_SSH_IDENTITY" -o BatchMode=yes -o IdentitiesOnly=yes \
             "$VPS_HOST" "mkdir -p $REMOTE_APP/infra/vps/ci"

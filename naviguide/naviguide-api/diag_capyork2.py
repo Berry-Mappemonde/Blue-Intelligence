@@ -1,15 +1,15 @@
 """
-Diagnostic ciblé — trouver le bon intermédiaire pour casser l'arc Cape York.
+Targeted diagnostic — find the right intermediate to break the Cape York arc.
 
-Problème racine:
-  searoute donne l'arc (-14.7,145.4)→(-10.55,142.13) comme arête directe.
-  La géodésique de cet arc traverse la péninsule Cape York.
-  avoid_land insère un détour perpendiculaire à (-11.51,145.20) — mauvaise direction.
+Root problem:
+  searoute gives the arc (-14.7,145.4)→(-10.55,142.13) as a direct edge.
+  The geodesic of that arc crosses the Cape York peninsula.
+  avoid_land inserts a perpendicular detour at (-11.51,145.20) — wrong direction.
 
-Objectif: trouver un point intermédiaire P tel que:
-  seg1: (-14.7,145.4) → P  ne traverse pas de terre
-  seg2: P → (-10.55,142.13)  ne traverse pas de terre
-  et P est WATER
+Goal: find an intermediate point P such that:
+  seg1: (-14.7,145.4) → P  does not cross land
+  seg2: P → (-10.55,142.13)  does not cross land
+  and P is WATER
 """
 import sys; sys.path.insert(0, ".")
 import searoute as sr

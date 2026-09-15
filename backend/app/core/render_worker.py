@@ -66,7 +66,7 @@ def render_url_to_file(url: str, out: str, timeout_s: int = 45,
 def screenshot_url_to_file(url: str, out: str, timeout_s: int = 45,
                            settle_ms: int = 2500,
                            max_height: int = SCREENSHOT_MAX_HEIGHT) -> None:
-    """JPEG recadré (pas une page entière de 50 000 px)."""
+    """Cropped JPEG (not a 50,000 px full page)."""
     pw = browser = None
     try:
         pw, browser, page = _open_page(url, timeout_s, settle_ms)

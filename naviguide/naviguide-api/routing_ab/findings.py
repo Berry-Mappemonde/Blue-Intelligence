@@ -1,4 +1,4 @@
-"""Synthèse automatique à partir des lignes du banc A/B."""
+"""Automatic synthesis from the A/B bench rows."""
 
 from __future__ import annotations
 
@@ -35,25 +35,25 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
 
     bullets = [
-        "searoute 1.4 et 1.6 restent le même type de couloir cargo ; "
-        f"écart médian de longueur ≈ {_median(sr14_vs_16):.0f} nm.",
-        "scgraph marnet suit le même graphe que searoute "
-        f"(écart médian ≈ {_median(sr14_vs_marnet):.0f} nm) : ce n'est pas un nouveau chenal.",
+        "searoute 1.4 and 1.6 stay the same kind of cargo corridor; "
+        f"median length gap ≈ {_median(sr14_vs_16):.0f} nm.",
+        "scgraph marnet follows the same graph as searoute "
+        f"(median gap ≈ {_median(sr14_vs_marnet):.0f} nm): this is not a new channel.",
         (
-            "scgraph Oak Ridge allonge nettement : " + ", ".join(oak_worse) + "."
+            "scgraph Oak Ridge lengthens clearly: " + ", ".join(oak_worse) + "."
             if oak_worse
-            else "scgraph Oak Ridge reste comparable sur ces jambes."
+            else "scgraph Oak Ridge stays comparable on these legs."
         ),
         (
-            "Le graphe enrichi a encore des échecs (Corail / détour) : "
+            "The enriched graph still has failures (Coral / detour): "
             + ", ".join(enriched_fail)
             if enriched_fail
-            else "Après garde-fou, le graphe enrichi n'introduit plus de détour Corail."
+            else "After the guardrail, the enriched graph no longer introduces a Coral detour."
         ),
-        "Cayenne → Papeete : tous les graphes cargos bruts piquent la terre "
-        "(canaux / îles). Le pipeline /route (avoid_land) reste nécessaire.",
-        "GET /route de production n'est pas modifié. Prochaine étape : "
-        "portes voile validées une par une, puis décalage cargo hors détroits.",
+        "Cayenne → Papeete: every raw cargo graph pokes land "
+        "(canals / islands). The /route pipeline (avoid_land) remains required.",
+        "Production GET /route is unchanged. Next step: "
+        "validate sailing gates one by one, then offset cargo outside straits.",
     ]
     return {
         "sr14_vs_sr16_median_nm": round(_median(sr14_vs_16), 1),

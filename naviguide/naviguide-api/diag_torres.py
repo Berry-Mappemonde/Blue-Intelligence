@@ -1,6 +1,6 @@
 """
-Diagnostic complet — pipeline Nouméa → Cap York WP → Torres WP
-Trace chaque étape pour identifier l'origine exacte du détour Coral Sea.
+Full diagnostic — Nouméa → Cape York WP → Torres WP pipeline.
+Trace every step to identify the exact origin of the Coral Sea detour.
 """
 import sys, copy
 sys.path.insert(0, ".")

@@ -34,7 +34,7 @@ DOI = "10.48670/moi-00183"
 MS_TO_KN = 1.94384
 SECTORS = 8
 ACC_KEYS = ("lats", "lons", "count", "calm", "gale", "sec_n", "sec_spd", "u_sum", "v_sum")
-# CMEMS peut rester figé sur un HTTPS sans timeout ; on tue l'année et on reprend.
+# CMEMS can freeze on HTTPS without a timeout; kill the year and resume.
 YEAR_TIMEOUT_S = 40 * 60
 
 

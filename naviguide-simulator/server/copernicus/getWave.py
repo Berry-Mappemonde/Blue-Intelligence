@@ -1,6 +1,5 @@
 """
-Script pour récupérer les données de vague depuis Copernicus Marine
-pour une position géographique donnée
+Fetch wave data from Copernicus Marine for a given geographic position.
 """
 import math
 import pandas as pd
@@ -11,16 +10,16 @@ from datetime import datetime, timedelta
 
 def get_wave_data_at_position(latitude, longitude, username=None, password=None):
     """
-    Récupère les données de vague à une position donnée
+    Fetch wave data at a given position.
 
     Args:
-        latitude (float): Latitude (-90 à 90)
-        longitude (float): Longitude (-180 à 180)
-        username (str): Username Copernicus Marine
-        password (str): Password Copernicus Marine
+        latitude (float): latitude (-90 to 90)
+        longitude (float): longitude (-180 to 180)
+        username (str): Copernicus Marine username
+        password (str): Copernicus Marine password
 
     Returns:
-        dict: Données de vague (hauteur significative, période, direction)
+        dict: wave data (significant height, period, direction)
     """
     try:
         # Dataset ID for the global wave model
@@ -60,7 +59,7 @@ def get_wave_data_at_position(latitude, longitude, username=None, password=None)
             method="nearest"
         )
 
-        # Hauteur significative des vagues (m)
+        # Significant wave height (m)
         vhm0 = float(point_data['VHM0'].isel(time=-1).values)
         if math.isnan(vhm0):
             print("⚠️  VHM0 is NaN — point may be on land or outside dataset coverage")
@@ -80,7 +79,7 @@ def get_wave_data_at_position(latitude, longitude, username=None, password=None)
         except Exception:
             pass
 
-        # Direction moyenne (optionnel)
+        # Mean direction (optional)
         try:
             vmdr = float(point_data['VMDR'].isel(time=-1).values)
             if not math.isnan(vmdr):

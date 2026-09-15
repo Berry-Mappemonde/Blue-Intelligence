@@ -1,4 +1,4 @@
-"""Adaptateurs des moteurs comparés (searoute, scgraph, graphe enrichi)."""
+"""Adapters for the compared engines (searoute, scgraph, enriched graph)."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def _run_searoute_worker(python: str, start: LonLat, end: LonLat) -> list[list[f
 
 
 def ensure_searoute16_venv() -> Path:
-    """Crée un venv isolé avec searoute==1.6.0 si besoin."""
+    """Create an isolated venv with searoute==1.6.0 if needed."""
     python = SR16_VENV / "bin" / "python"
     if python.is_file():
         probe = subprocess.run(

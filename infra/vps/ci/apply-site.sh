@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Applique un site déjà rsyncé. À lancer SUR le VPS.
-# Usage : apply-site.sh blue-intelligence|naviguide|simulator
+# Apply a site that is already rsynced. Run this ON the VPS.
+# Usage: apply-site.sh blue-intelligence|naviguide|simulator
 #
-# FORCE_DEPLOY=1  — redémarre même si un run est en cours
-# SKIP_FRONTEND_BUILD=1 (défaut) — exige un dist/build déjà là
-# SHA=…           — commit GitHub, écrit dans l'état « déployé »
+# FORCE_DEPLOY=1  — restart even if a run is in progress
+# SKIP_FRONTEND_BUILD=1 (default) — require a dist/build already present
+# SHA=…           — GitHub commit, written into the "deployed" state
 set -euo pipefail
 
 SITE="${1:?usage: apply-site.sh blue-intelligence|naviguide|simulator}"
@@ -16,7 +16,7 @@ SHA="${SHA:-unknown}"
 PROBE="$APP/infra/vps/ci/prod_jobs_busy.py"
 export APP
 
-# Lot Review Proposer : GET /api/review/suggest/status exige X-Admin-Key.
+# Review Propose batch: GET /api/review/suggest/status requires X-Admin-Key.
 if [ -z "${ADMIN_KEY:-}" ] && [ -f "$APP/backend/.env" ]; then
   ADMIN_KEY="$(awk -F= '/^ADMIN_KEY=/{print substr($0,11); exit}' "$APP/backend/.env")"
   ADMIN_KEY="${ADMIN_KEY%\"}"; ADMIN_KEY="${ADMIN_KEY#\"}"
@@ -59,7 +59,7 @@ if ! venv_ok "$SITE"; then
 elif [ -n "$old_hash" ] && [ "$old_hash" != "$new_hash" ]; then
   need_pip=1
 fi
-# Premier passage CI : le venv prod existe, pas encore d'empreinte → pas de pip.
+# First CI pass: the prod venv exists, no fingerprint yet → skip pip.
 
 queue_pending() {
   cat > "$STATE/pending/$SITE" <<EOF

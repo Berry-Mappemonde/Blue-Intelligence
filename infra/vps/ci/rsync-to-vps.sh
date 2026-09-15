@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Copie le code d'un site vers le VPS (sans --delete dangereux à la racine).
-# Usage : rsync-to-vps.sh blue-intelligence|naviguide|simulator
-# Env : VPS_HOST, VPS_SSH_IDENTITY, REMOTE_APP
+# Copy one site's code to the VPS (no dangerous --delete at the root).
+# Usage: rsync-to-vps.sh blue-intelligence|naviguide|simulator
+# Env: VPS_HOST, VPS_SSH_IDENTITY, REMOTE_APP
 set -euo pipefail
 
 SITE="${1:?usage: rsync-to-vps.sh blue-intelligence|naviguide|simulator}"
@@ -23,7 +23,7 @@ rsync_to() {
 echo "→ rsync $SITE → $VPS:$REMOTE"
 remote "mkdir -p $REMOTE/infra/vps/ci $REMOTE/infra/vps/naviguide $REMOTE/backend $REMOTE/frontend $REMOTE/naviguide $REMOTE/naviguide-simulator"
 
-# Toujours envoyer la sonde et apply-*.sh (rattrapage + premier déploiement).
+# Always send the probe and apply-*.sh (catch-up + first deploy).
 rsync_to "$ROOT/infra/vps/ci/" "$VPS:$REMOTE/infra/vps/ci/"
 remote "chmod +x $REMOTE/infra/vps/ci/*.sh $REMOTE/infra/vps/ci/*.py || true"
 
@@ -94,7 +94,7 @@ case "$SITE" in
     ;;
 esac
 
-# nginx / www-data doivent pouvoir traverser ~ubuntu et le dépôt.
+# nginx / www-data must be able to traverse ~ubuntu and the repo.
 remote "chmod o+x \"\$HOME\" $REMOTE"
 
 echo "rsync $SITE OK"

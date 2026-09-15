@@ -1,6 +1,6 @@
 /**
  * If `toIdx` points at an intermediate (no flag), advance until
- * la prochaine escale obligatoire. Sinon laisse l'index tel quel.
+ * the next mandatory stopover. Otherwise leave the index as-is.
  */
 export function nextEscaleIndex(stops, toIdx) {
   if (!Array.isArray(stops) || !stops.length) return toIdx;

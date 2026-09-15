@@ -110,7 +110,7 @@ def _prefer_sovereign(zones: list[dict]) -> list[dict]:
 
 def resolve_slug(slug: str, name: str, zones: list[dict] | None = None,
                  overrides: dict[str, list[int]] | None = None) -> dict:
-    """Retourne {slug, name, mrgids, iso2, zone_names, method}."""
+    """Return {slug, name, mrgids, iso2, zone_names, method}."""
     zones = zones if zones is not None else load_eez_index()
     overrides = overrides if overrides is not None else load_overrides()
     by_mrgid = {int(z["mrgid"]): z for z in zones}

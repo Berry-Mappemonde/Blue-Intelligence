@@ -1,9 +1,9 @@
-"""Sac `ici()` — ce qu’il y a autour du bateau, pas toute la carte.
+"""`ici()` pack — what is around the boat, not the whole map.
 
-Étape 2 : ZEE (MarineRegions), PoE de cette ZEE, AMP / projets /
-marinas-capit-WPI / une poignée de fiches Science dans 20–30 nm.
-AMP = cache `/export/amp.geojson` (pas ProtectedSeas). Pas de Tavily,
-pas de LLM.
+Stage 2: EEZ (MarineRegions), PoE of that EEZ, MPA / projects /
+marinas-harbour-WPI / a handful of Science sheets within 20–30 nm.
+MPA = `/export/amp.geojson` cache (not ProtectedSeas). No Tavily,
+no LLM.
 """
 from __future__ import annotations
 
@@ -264,8 +264,8 @@ def pick_eez_record(records: list) -> dict | None:
 
 
 def eez_plausible(rec: dict | None, lat: float, lon: float) -> bool:
-    """Le gazetteer colle parfois une ZEE lointaine (bbox immense). On garde
-    seulement si le point représentatif est à portée d’une ZEE (~200 nm)."""
+    """The gazetteer sometimes sticks a distant EEZ (huge bbox). Keep it
+    only if the representative point is within reach of an EEZ (~200 nm)."""
     if not rec or _place_type(rec) != "EEZ":
         return False
     try:
@@ -313,9 +313,9 @@ def _first_plausible(records: list, lat: float, lon: float) -> dict | None:
 
 
 async def lookup_zee(client: httpx.AsyncClient, lat: float, lon: float) -> tuple[dict | None, str]:
-    """ZEE autour du bateau. Un point à quai n’est parfois pas dans le
-    polygone : on sonde alors 8 points à ~12 nm. Une ZEE trop loin
-    (gazetteer bavard) est refusée → haute mer."""
+    """EEZ around the boat. A point at the quay is sometimes not inside
+    the polygon: then probe 8 points at ~12 nm. An EEZ that is too far
+    (talkative gazetteer) is refused → high seas."""
     try:
         here = await _gazetteer_list(client, lat, lon)
         rec = _first_plausible(here, lat, lon)

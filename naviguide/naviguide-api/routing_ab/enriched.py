@@ -1,10 +1,10 @@
-"""Graphe enrichi voile : portes de catamaran + décalage hors couloirs.
+"""Enriched sailing graph: catamaran gates + offset off cargo corridors.
 
-Ce n'est PAS un nouveau réseau mondial. On prend un moteur cargo
-(searoute ou scgraph) et on :
-1. insère des portes (vias) dans les zones connues (Torres, Mentawai, ±180°) ;
-2. décale les longs segments océaniques hors des boîtes cargos, sauf
-   dans les détroits où il faut passer.
+This is NOT a new worldwide network. We take a cargo engine
+(searoute or scgraph) and:
+1. insert gates (vias) in known zones (Torres, Mentawai, ±180°);
+2. offset long ocean segments out of cargo boxes, except
+   in straits that must be crossed.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ GATES: tuple[SailingGate, ...] = (
             # No via at 142.8°E: searoute would then connect it via the Coral Sea
             # (same class of bug as test_torres.py).
             (142.135679, -10.543294),  # itinerary WP, Great North East Channel
-            (141.90, -10.70),          # sortie Prince of Wales
+            (141.90, -10.70),          # Prince of Wales exit
         ),
         lon_min=141.0,
         lat_min=-12.5,
@@ -48,7 +48,7 @@ GATES: tuple[SailingGate, ...] = (
     SailingGate(
         id="mentawai_west",
         vias=(
-            (96.50, -1.20),  # ouest de Siberut — un seul via, pas un arc de 900 nm
+            (96.50, -1.20),  # west of Siberut — one via, not a 900 nm arc
         ),
         lon_min=88.0,
         lat_min=-10.0,
@@ -81,7 +81,7 @@ def _leg_crosses_antimeridian(start: LonLat, end: LonLat) -> bool:
 
 
 def _along_track_fraction(start: LonLat, end: LonLat, via: LonLat) -> Optional[float]:
-    """Projection du via sur A→B. None si trop loin de l'arc ou hors ]0, 1[."""
+    """Project the via onto A→B. None if too far from the arc or outside (0, 1)."""
     ax, ay = start
     bx, by = end
     vx, vy = via
@@ -102,7 +102,7 @@ def _along_track_fraction(start: LonLat, end: LonLat, via: LonLat) -> Optional[f
 
 
 def gates_for_leg(start: LonLat, end: LonLat) -> list[SailingGate]:
-    """Portes dont au moins un via se projette sur A→B (ou antiméridien)."""
+    """Gates with at least one via that projects onto A→B (or the antimeridian)."""
     hits: list[SailingGate] = []
     for gate in GATES:
         if gate.antimeridian:
@@ -118,7 +118,7 @@ def gates_for_leg(start: LonLat, end: LonLat) -> list[SailingGate]:
 
 
 def vias_for_leg(start: LonLat, end: LonLat) -> list[LonLat]:
-    """Vias ordonnés le long de A→B, sans doubler un bout déjà égal à A ou B."""
+    """Vias ordered along A→B, without duplicating an end already equal to A or B."""
     chosen: list[tuple[float, LonLat]] = []
     seen: set[LonLat] = set()
     for gate in gates_for_leg(start, end):
@@ -137,13 +137,13 @@ def vias_for_leg(start: LonLat, end: LonLat) -> list[LonLat]:
 
 
 def stitch_via_route(route_fn: RouteFn, start: LonLat, end: LonLat) -> list[list[float]]:
-    """Enchaîne le moteur cargo sur start → vias → end."""
+    """Chain the cargo engine on start → vias → end."""
     waypoints = [start, *vias_for_leg(start, end), end]
     coords: list[list[float]] = []
     for a, b in zip(waypoints, waypoints[1:]):
         part = route_fn(a, b)
         if not part:
-            raise RuntimeError(f"sous-route vide {a} → {b}")
+            raise RuntimeError(f"empty sub-route {a} → {b}")
         if not coords:
             coords = [list(p[:2]) for p in part]
         else:
@@ -182,7 +182,7 @@ def offset_from_cargo(
     offset_nm: float = 30.0,
     min_run_nm: float = 180.0,
 ) -> list[list[float]]:
-    """Décale une course océanique entière hors d'un couloir, pas point par point."""
+    """Offset a whole ocean run off a corridor, not point by point."""
     if len(coords) < 3:
         return [list(p[:2]) for p in coords]
 

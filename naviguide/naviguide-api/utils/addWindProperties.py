@@ -3,16 +3,16 @@ from copernicus.getWave import overWave
 
 def add_wind_properties_to_route(route_geojson, username=None, password=None, sample_rate=10):
     """
-    Ajoute des points avec propriétés "highWind" pour chaque position où le vent > 35 nœuds
-    
+    Add points with "highWind" properties for every position where wind > 35 kn.
+
     Args:
-        route_geojson (dict): GeoJSON de la route retourné par searoute
-        username (str): Username Copernicus Marine
-        password (str): Password Copernicus Marine
-        sample_rate (int): Vérifier 1 point tous les N points (pour optimiser les appels API)
-    
+        route_geojson (dict): route GeoJSON returned by searoute
+        username (str): Copernicus Marine username
+        password (str): Copernicus Marine password
+        sample_rate (int): check 1 point every N points (to limit API calls)
+
     Returns:
-        dict: FeatureCollection avec la route originale + points de vent fort
+        dict: FeatureCollection with the original route + strong-wind points
     """
     
     alert_points = []

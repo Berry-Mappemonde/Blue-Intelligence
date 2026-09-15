@@ -11,10 +11,11 @@ Version **1.0** — 14 September 2026.
 [PLAN_IMPLEMENTATION_SIMULATION_B.md](./PLAN_IMPLEMENTATION_SIMULATION_B.md)
 (virtual boat, Follow mode, one-leg isochrone).
 
-**English :** not yet. The stage 1 film remains
-[PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md).
+This document is the English workshop plan.
 
-**Hackathon briefing (FR) :** [hackathon-nebius-nvidia.md](./hackathon-nebius-nvidia.md)
+**Stage 1 film:** [PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md](./PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.en.md).
+
+**Hackathon briefing (EN):** [hackathon-nebius-nvidia.en.md](./hackathon-nebius-nvidia.en.md)
 
 ---
 

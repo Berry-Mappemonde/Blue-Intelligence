@@ -1,4 +1,4 @@
-"""Persistance voyage_{id}.json — même esprit que polar_data/."""
+"""Persistence of voyage_{id}.json — same spirit as polar_data/."""
 from __future__ import annotations
 
 import json

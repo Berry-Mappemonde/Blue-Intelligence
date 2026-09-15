@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Télécharge 1–2 scènes Sentinel-2 L1C (SAFE zip) via CDSE OData.
+"""Download 1–2 Sentinel-2 L1C scenes (SAFE zip) via CDSE OData.
 
-ACOLITE refuse le L2A. Le manifeste doit lister des scènes MSIL1C.
-À lancer sur le Mac. Par défaut : 1 scène, dossier ~/Desktop/sentinel-pilot.
-N'imprime jamais le mot de passe.
+ACOLITE refuses L2A. The manifest must list MSIL1C scenes.
+Run this on the Mac. Default: 1 scene, folder ~/Desktop/sentinel-pilot.
+Never print the password.
 """
 from __future__ import annotations
 

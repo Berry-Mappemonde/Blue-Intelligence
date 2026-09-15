@@ -1,4 +1,4 @@
-"""Intégration du banc A/B — saute un moteur s'il n'est pas installé."""
+"""A/B bench integration — skip an engine if it is not installed."""
 
 from __future__ import annotations
 

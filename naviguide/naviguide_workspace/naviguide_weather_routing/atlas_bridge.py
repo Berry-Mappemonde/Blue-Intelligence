@@ -1,4 +1,4 @@
-"""Pont vers les snapshots BI (même fichiers, pas de couche carte)."""
+"""Bridge to BI snapshots (same files, no map layer)."""
 from __future__ import annotations
 
 import sys

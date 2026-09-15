@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare un GeoJSON pilote au DTM EMODnet (depth_sample).
+"""Compare a pilot GeoJSON to the EMODnet DTM (depth_sample).
 
-Pour un trait de côte : on note si les sommets sont près de 0 m.
-Pour une depth_area avec profondeur estimée : on calcule error_m.
-Sans ICESat-2 / sans profondeur estimée : on n'écrit pas de sondage.
+For a coastline: note whether vertices are near 0 m.
+For a depth_area with an estimated depth: compute error_m.
+Without ICESat-2 / without an estimated depth: do not write a sounding.
 """
 from __future__ import annotations
 

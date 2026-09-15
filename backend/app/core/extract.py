@@ -194,7 +194,7 @@ def url_looks_like_pdf(url: str | None) -> bool:
     return path.endswith(".pdf")
 
 
-# Ministères renommés / DNS NXDOMAIN connus (SCT mexicain → SICT, etc.).
+# Renamed ministries / known NXDOMAIN hosts (Mexican SCT → SICT, etc.).
 RETIRED_HOST_SUFFIXES = (
     "sct.gob.mx",
 )

@@ -122,7 +122,7 @@ def test_cyclones_geojson_september_has_tracks():
 
 
 def test_crossings_martinique_azores():
-    # Recette NAVIGUIDE n°4
+    # NAVIGUIDE recipe no. 4
     sept = _client().get("/api/climatology/crossings", params={
         "lat1": 14.6, "lon1": -61.0, "lat2": 38.7, "lon2": -27.2, "month": 9,
     }).json()
@@ -161,7 +161,7 @@ def test_current_to_uv_goes_to():
 
 
 # ---------------------------------------------------------------------------
-# IBTrACS recette A
+# IBTrACS recipe A
 # ---------------------------------------------------------------------------
 
 def test_ibtracs_basin_recipe():

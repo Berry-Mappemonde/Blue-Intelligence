@@ -1,4 +1,4 @@
-"""Moteur searoute + évitement des terres — extrait de naviguide-api/main.py."""
+"""Searoute engine + land avoidance — extracted from naviguide-api/main.py."""
 from __future__ import annotations
 
 import math
@@ -545,9 +545,9 @@ _route_cache: dict = {}
 
 def searoute_with_exact_end(start, end):
     """
-    Calcule une route maritime entre deux points et ajoute un segment géodésique
-    jusqu'à la destination exacte si searoute s'arrête trop tôt.
-    Gère correctement le passage de l'antiméridien (180°/-180°).
+    Compute a sea route between two points and add a geodesic segment
+    to the exact destination if searoute stops too early.
+    Handles the antimeridian crossing (180°/-180°) correctly.
 
     Bidirectional cache: if the reverse segment B→A was already computed, the
     cached coordinate list is reversed and returned immediately — ensuring that

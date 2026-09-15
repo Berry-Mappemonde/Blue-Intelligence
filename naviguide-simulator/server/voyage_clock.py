@@ -1,4 +1,4 @@
-"""Table d’horloge — même algo que src/engine/voyageClock.js (contrat A = B)."""
+"""Clock table — same algorithm as src/engine/voyageClock.js (contract A = B)."""
 from __future__ import annotations
 
 import math

@@ -1,6 +1,6 @@
-"""Conseil automatique : portes déjà là, GARDER/JETER, prochaine porte, 20 nm.
+"""Automatic advice: gates already present, KEEP/DROP, next gate, 20 nm.
 
-Usage (depuis naviguide-api/) :
+Usage (from naviguide-api/):
     python -m routing_ab.advise --out routing_ab/out
 """
 
@@ -57,7 +57,7 @@ def _measure_pair(start, end, vias: list, is_land):
     def route_fn(a, b):
         coords, e = _cargo_route(a, b)
         if e or not coords:
-            raise RuntimeError(e or "sous-route vide")
+            raise RuntimeError(e or "empty sub-route")
         return coords
 
     if vias:
@@ -84,7 +84,7 @@ def _stats(coords, is_land) -> dict:
 GATE_CASES = (
     {
         "id": "torres_gne_pow",
-        "title": "Torres (déjà dans l'itinéraire)",
+        "title": "Torres (already on the itinerary)",
         "start": NOUMEA,
         "end": TORRES_ITIN,
         "in_itinerary": True,
@@ -92,7 +92,7 @@ GATE_CASES = (
     },
     {
         "id": "mentawai_west",
-        "title": "Mentawai ouest (prototype, pas dans l'app)",
+        "title": "West Mentawai (prototype, not in the app)",
         "start": HAUT_AUS_2,
         "end": HAUT_AUS_3,
         "in_itinerary": False,
@@ -119,7 +119,7 @@ def advise_gates(is_land) -> list[dict]:
             rows.append({
                 **case,
                 "vias": vias,
-                "decision": {"verdict": "À MESURER", "why": err or "route vide"},
+                "decision": {"verdict": "À MESURER", "why": err or "empty route"},
             })
             continue
         cs, gs = _stats(cargo, is_land), _stats(gated or cargo, is_land)
@@ -141,7 +141,7 @@ def advise_gates(is_land) -> list[dict]:
 
 
 def advise_next_gate(is_land) -> dict:
-    """Cayenne → Papeete : 6000 nm sans plot Panama dans l'itinéraire."""
+    """Cayenne → Papeete: 6000 nm with no Panama plot on the itinerary."""
     cargo, err = _cargo_route(CAYENNE, PAPEETE)
     missing = missing_canals_on_path(cargo) if cargo else []
     return {
@@ -151,19 +151,19 @@ def advise_next_gate(is_land) -> dict:
         "missing_canals": missing,
         "error": err,
         "recommendation": (
-            f"Prochaine porte à poser : {missing[0]} "
-            "(le trait cargo traverse le canal, l'itinéraire n'a aucun plot dedans)."
+            f"Next gate to place: {missing[0]} "
+            "(the cargo line crosses the canal; the itinerary has no plot inside)."
             if missing else
-            "Aucun canal évident manquant sur Cayenne → Papeete."
+            "No obvious missing canal on Cayenne → Papeete."
         ),
     }
 
 
 def advise_ocean_offset(is_land) -> dict:
-    """Une jambe océan : 20 nm à côté du fil, milieu seulement."""
+    """One ocean leg: 20 nm beside the filament, mid-run only."""
     cargo, err = _cargo_route(CAP_VERDE, SAINTE_LUCIE)
     if err or not cargo:
-        return {"leg": "Cap-Vert → Sainte-Lucie", "error": err or "route vide"}
+        return {"leg": "Cap-Vert → Sainte-Lucie", "error": err or "empty route"}
     shifted = offset_from_filament(cargo, offset_nm=20.0, is_land=is_land)
     return {
         "leg": "Cap-Vert → Sainte-Lucie",
@@ -176,11 +176,11 @@ def advise_ocean_offset(is_land) -> dict:
         "shifted_coords": shifted,
         "error": err,
         "plain": (
-            "Sur cette jambe, le trait a été poussé d'environ 20 nm au milieu "
-            "de l'océan, sans bouger les approches. "
-            f"Écart moyen au fil cargo : "
+            "On this leg, the line was pushed about 20 nm in mid-ocean "
+            "without moving the approaches. "
+            f"Mean gap to the cargo filament: "
             f"{mean_dist_to_filament_nm(shifted, cargo):.1f} nm "
-            f"(avant : {mean_dist_to_filament_nm(cargo, cargo):.1f})."
+            f"(before: {mean_dist_to_filament_nm(cargo, cargo):.1f})."
         ),
     }
 
@@ -196,22 +196,22 @@ def build_advice() -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "plain": {
             "deja_la": (
-                "Oui : les portes du tour du monde sont déjà dans itineraryPoints.ts "
-                "(Torres, hauts Australie, cap de Bonne-Espérance, plots Corse / Atlantique). "
-                "L'app les envoie déjà à GET /route, une jambe après l'autre."
+                "Yes: the circumnavigation gates are already in itineraryPoints.ts "
+                "(Torres, Australia highs, Cape of Good Hope, Corsica / Atlantic plots). "
+                "The app already sends them to GET /route, one leg after another."
             ),
             "prototype": (
-                "À côté, routing_ab/enriched.py a 3 portes d'essai (Torres, Mentawai, "
-                "via 180°) qui ne sont PAS branchées sur l'app."
+                "Beside that, routing_ab/enriched.py has 3 trial gates (Torres, Mentawai, "
+                "via 180°) that are NOT wired into the app."
             ),
             "automatise": (
-                "Le programme mesure et propose GARDER / JETER / INUTILE. "
-                "Toi tu n'as qu'à dire si tu contredis une ligne — tu ne poses pas "
-                "les points à la main."
+                "The program measures and proposes GARDER / JETER / INUTILE. "
+                "You only say whether you override a line — you do not place "
+                "the points by hand."
             ),
             "main": (
-                "Tu n'as pas à imprimer la carte pour décider Mentawai ou Panama : "
-                "les chiffres le font. La carte sert seulement si tu n'es pas d'accord."
+                "You do not have to print the chart to decide Mentawai or Panama: "
+                "the numbers do it. The chart is only for when you disagree."
             ),
         },
         "itinerary_gates": [
@@ -237,13 +237,13 @@ def _offset_features(ocean: dict) -> list[dict]:
     if ocean.get("cargo_coords"):
         feats.append({
             "type": "Feature",
-            "properties": {"engine": "fil cargo", "color": "#2563eb"},
+            "properties": {"engine": "cargo filament", "color": "#2563eb"},
             "geometry": {"type": "LineString", "coordinates": ocean["cargo_coords"]},
         })
     if ocean.get("shifted_coords"):
         feats.append({
             "type": "Feature",
-            "properties": {"engine": "20 nm à côté", "color": "#16a34a"},
+            "properties": {"engine": "20 nm beside", "color": "#16a34a"},
             "geometry": {"type": "LineString", "coordinates": ocean["shifted_coords"]},
         })
     return feats
@@ -268,8 +268,8 @@ def _html(advice: dict) -> str:
     ocean = advice["ocean_offset"].get("plain", "")
     p = advice["plain"]
     return f"""<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"/>
-<title>NAVIGUIDE — conseil portes</title>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>NAVIGUIDE — gate advice</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
  body {{ font-family: Georgia, serif; margin: 0; background: #f6f3ee; color: #1c1917; }}
@@ -281,20 +281,20 @@ def _html(advice: dict) -> str:
  #map {{ height: 380px; margin-top: 1rem; }}
 </style></head>
 <body>
-<header><h1>Conseil automatique — portes et trafic</h1>
-<p>Tu n'as pas à tout faire à la main. Les portes Berry sont déjà dans l'itinéraire.</p></header>
+<header><h1>Automatic advice — gates and traffic</h1>
+<p>You do not have to do everything by hand. Berry gates are already on the itinerary.</p></header>
 <div class="wrap">
 <p>{p['deja_la']}</p>
 <p>{p['prototype']}</p>
 <p>{p['automatise']}</p>
-<h2>Portes déjà dans l'app</h2>
+<h2>Gates already in the app</h2>
 <ul>{itin}</ul>
-<h2>Verdicts automatiques</h2>
-<table><tr><th>Porte</th><th>Jambe</th><th>Verdict</th><th>Pourquoi</th></tr>
+<h2>Automatic verdicts</h2>
+<table><tr><th>Gate</th><th>Leg</th><th>Verdict</th><th>Why</th></tr>
 {dec_rows}</table>
-<h2>Prochaine porte</h2>
+<h2>Next gate</h2>
 <p>{nxt}</p>
-<h2>Trafic : 20 nm à côté du fil (Cap-Vert → Sainte-Lucie)</h2>
+<h2>Traffic: 20 nm beside the filament (Cap-Vert → Sainte-Lucie)</h2>
 <p>{ocean}</p>
 <div id="map"></div>
 </div>
@@ -321,12 +321,12 @@ def write_advice(advice: dict, out_dir: Path) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Conseil automatique portes / trafic")
+    parser = argparse.ArgumentParser(description="Automatic gate / traffic advice")
     parser.add_argument("--out", default="routing_ab/out")
     args = parser.parse_args(argv)
     advice = build_advice()
     write_advice(advice, Path(args.out))
-    print(f"écrit {args.out}/advise.html")
+    print(f"wrote {args.out}/advise.html")
     for d in advice["decisions"]:
         dec = d["decision"]
         print(f"  {dec.get('verdict','?'):<10} {d['title']} — {dec.get('why','')}")

@@ -1,5 +1,5 @@
 /**
- * Vent climatologique pour l'ETA NAVIGUIDE.
+ * Climatological wind for the NAVIGUIDE ETA.
  *
  * Zone fallback (same logic as climatology.py) until the CMEMS atlas
  * is loaded on the client. This is NOT a forecast.

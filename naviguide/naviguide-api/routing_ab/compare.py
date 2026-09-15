@@ -1,6 +1,6 @@
-"""Lance le banc A/B et écrit JSON / GeoJSON / HTML.
+"""Run the A/B bench and write JSON / GeoJSON / HTML.
 
-Usage (depuis naviguide-api/) :
+Usage (from naviguide-api/):
     python -m routing_ab.compare --out routing_ab/out
 """
 
@@ -29,9 +29,9 @@ ENGINE_COLORS = {
 ENGINE_LABELS = {
     "searoute_14": "searoute 1.4 (prod)",
     "searoute_16": "searoute 1.6",
-    "scgraph_marnet": "scgraph marnet (même graphe)",
+    "scgraph_marnet": "scgraph marnet (same graph)",
     "scgraph_oak_ridge": "scgraph Oak Ridge",
-    "enriched_sailing": "enrichi voile (portes + décalage)",
+    "enriched_sailing": "enriched sailing (gates + offset)",
 }
 
 
@@ -49,7 +49,7 @@ def run_comparison(
     core_only: bool = False,
     include_sr16: bool = True,
 ) -> dict:
-    """Exécute tous les moteurs sur toutes les jambes et retourne un rapport."""
+    """Run every engine on every leg and return a report."""
     legs: tuple[BenchmarkLeg, ...] = BENCHMARK_LEGS
     if core_only:
         legs = tuple(leg for leg in legs if leg.id in CORE_LEG_IDS)
@@ -113,8 +113,8 @@ def run_comparison(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "note": (
-            "Comparaison Problème A uniquement. GET /route de production "
-            "n'est pas modifié."
+            "Problem A comparison only. Production GET /route "
+            "is unchanged."
         ),
         "engines": engines,
         "legs": [leg.id for leg in legs],
@@ -132,10 +132,10 @@ def _html_report(report: dict) -> str:
     findings = report.get("findings", {})
     bullets = "".join(f"<li>{b}</li>" for b in findings.get("bullets", []))
     return f"""<!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>NAVIGUIDE — banc A/B routage mer</title>
+  <title>NAVIGUIDE — sea-routing A/B bench</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     body {{ font-family: Georgia, serif; margin: 0; background: #f6f3ee; color: #1c1917; }}
@@ -153,12 +153,12 @@ def _html_report(report: dict) -> str:
 </head>
 <body>
   <header>
-    <h1>Banc A/B — routage mer NAVIGUIDE</h1>
-    <p>Graphes cargos vs graphe enrichi voile. La route de production n'est pas changée.</p>
+    <h1>A/B bench — NAVIGUIDE sea routing</h1>
+    <p>Cargo graphs vs enriched sailing graph. Production route is unchanged.</p>
   </header>
   <div id="map"></div>
   <div class="wrap">
-    <h2>Ce que montre ce run</h2>
+    <h2>What this run shows</h2>
     <ul>{bullets}</ul>
     <p class="legend" id="legend"></p>
     <table id="tbl"></table>
@@ -190,7 +190,7 @@ def _html_report(report: dict) -> str:
     document.getElementById('legend').innerHTML = Object.keys(labels).map(id =>
       '<span style="background:' + colors[id] + '"></span>' + labels[id]
     ).join(' &nbsp; ');
-    const headers = ['Jambe','Moteur','Pts','nm','Ratio','ms','Corail','Terre','±180','Anti-trafic','OK'];
+    const headers = ['Leg','Engine','Pts','nm','Ratio','ms','Coral','Land','±180','Anti-traffic','OK'];
     const tbl = document.getElementById('tbl');
     tbl.innerHTML = '<tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr>' +
       rows.map(r => {{
@@ -198,7 +198,7 @@ def _html_report(report: dict) -> str:
         return '<tr class="' + (ok ? 'ok' : 'bad') + '">' +
           [r.leg_label, r.engine_label, r.n_points, r.length_nm, r.length_ratio,
            r.elapsed_ms, r.coral_sea_pts, r.land_hits, r.antimeridian_jumps,
-           r.anti_shipping, ok ? 'oui' : (r.error || 'non')].map(c => '<td>'+(c??'')+'</td>').join('') +
+           r.anti_shipping, ok ? 'yes' : (r.error || 'no')].map(c => '<td>'+(c??'')+'</td>').join('') +
         '</tr>';
       }}).join('');
   </script>
@@ -221,17 +221,17 @@ def write_report(report: dict, out_dir: Path) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Banc A/B routage mer NAVIGUIDE")
-    parser.add_argument("--out", default="routing_ab/out", help="Dossier de sortie")
+    parser = argparse.ArgumentParser(description="NAVIGUIDE sea-routing A/B bench")
+    parser.add_argument("--out", default="routing_ab/out", help="Output directory")
     parser.add_argument("--core-only", action="store_true")
-    parser.add_argument("--no-sr16", action="store_true", help="Ne pas installer searoute 1.6")
+    parser.add_argument("--no-sr16", action="store_true", help="Do not install searoute 1.6")
     args = parser.parse_args(argv)
     report = run_comparison(core_only=args.core_only, include_sr16=not args.no_sr16)
     write_report(report, Path(args.out))
-    print(f"écrit {args.out}/index.html  ({len(report['rows'])} lignes)")
+    print(f"wrote {args.out}/index.html  ({len(report['rows'])} rows)")
     fails = [r for r in report["rows"] if r.get("error")]
     if fails:
-        print(f"{len(fails)} erreur(s) moteur")
+        print(f"{len(fails)} engine error(s)")
         for row in fails:
             print(f"  {row['engine']} / {row['leg_id']}: {row['error']}")
     return 0

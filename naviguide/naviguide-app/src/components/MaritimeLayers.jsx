@@ -217,7 +217,7 @@ export function useMaritimeLayers(mapRef) {
     // Data
     portsData,
     // Loading flags
-    loadingZee: false,   // ZEE WMS = tuiles, pas de fetch
+    loadingZee: false,   // EEZ WMS = tiles, no fetch
     loadingPorts,
     loadingBalisage: false,
     // Error messages

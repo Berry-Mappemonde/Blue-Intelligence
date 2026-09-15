@@ -37,7 +37,7 @@ def score_port(port: dict, *,
                official_source: bool = False,
                listing_ports: list[dict] | None = None,
                multi_run: bool = False) -> dict:
-    """Retourne {confidence, parts, reasons, listing_role}."""
+    """Return {confidence, parts, reasons, listing_role}."""
     from app.core.run_rules import get_rule
     reasons: list[str] = []
     parts = {"source": 0, "reading": 0, "map": 0, "external": 0}

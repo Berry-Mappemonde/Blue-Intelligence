@@ -1,4 +1,4 @@
-"""Métriques comparables entre moteurs (distance, terre, Corail, trafic)."""
+"""Metrics comparable across engines (distance, land, Coral, traffic)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ LandFn = Callable[[float, float], bool]
 
 
 def haversine_nm(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    """Distance orthodromique en milles nautiques (sphère)."""
+    """Great-circle distance in nautical miles (sphere)."""
     r_nm = 3440.065
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -23,7 +23,7 @@ def haversine_nm(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
 
 
 def unwrap_lon(prev: float, lon: float) -> float:
-    """Rend la longitude continue par rapport au point précédent."""
+    """Make longitude continuous relative to the previous point."""
     while lon - prev > 180:
         lon -= 360
     while lon - prev < -180:
@@ -48,12 +48,12 @@ def geodesic_nm(start: Sequence[float], end: Sequence[float]) -> float:
 
 
 def coral_sea_points(coords: Sequence[Sequence[float]]) -> int:
-    """Même heuristique que test_regression.py (lat > -14 et lon > 147)."""
+    """Same heuristic as test_regression.py (lat > -14 and lon > 147)."""
     return sum(1 for p in coords if p[1] > -14 and p[0] > 147)
 
 
 def antimeridian_jumps(coords: Sequence[Sequence[float]]) -> int:
-    """Sauts |Δlon| > 180° entre deux points consécutifs (trait mal déroulé)."""
+    """Jumps |Δlon| > 180° between two consecutive points (badly unwrapped line)."""
     if len(coords) < 2:
         return 0
     jumps = 0
@@ -67,7 +67,7 @@ def land_hits(
     coords: Sequence[Sequence[float]],
     is_land: Optional[LandFn],
 ) -> int:
-    """Points intermédiaires sur terre. 0 si pas de masque disponible."""
+    """Intermediate points on land. 0 if no mask is available."""
     if is_land is None or len(coords) < 3:
         return 0
     hits = 0
@@ -81,7 +81,7 @@ def land_hits(
 
 
 def crosses_dateline(start: Sequence[float], end: Sequence[float]) -> bool:
-    """Vrai si A et B sont de part et d'autre du 180e (Pacifique)."""
+    """True if A and B sit on either side of the 180th (Pacific)."""
     lon1, lon2 = start[0], end[0]
     return abs(lon1 - lon2) > 180 or (lon1 > 150 and lon2 < -150) or (lon1 < -150 and lon2 > 150)
 
@@ -93,7 +93,7 @@ def measure(
     elapsed_ms: float,
     is_land: Optional[LandFn] = None,
 ) -> dict:
-    """Dictionnaire de métriques pour une polyligne [lon, lat]."""
+    """Metric dictionary for a [lon, lat] polyline."""
     length = path_length_nm(coords)
     direct = geodesic_nm(start, end)
     ratio = round(length / direct, 3) if direct > 0 else None

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Décide quels sites déployer (sortie GitHub Actions : clé=valeur)."""
+"""Decide which sites to deploy (GitHub Actions output: key=value)."""
 from __future__ import annotations
 
 import argparse
@@ -74,8 +74,8 @@ def decide(event_name: str, *, input_site: str | None = None,
             out["simulator"] = "true"
         return out
     result = classify(files or [])
-    # Un push qui ne touche que la sonde / apply-*.sh : envoyer les scripts
-    # sur le VPS sans redémarrer les sites.
+    # A push that only touches the probe / apply-*.sh: send the scripts
+    # to the VPS without restarting the sites.
     if (result["bi"] == "false" and result["naviguide"] == "false"
             and result["simulator"] == "false"
             and any((p or "").startswith("infra/vps/ci/") for p in (files or []))):
@@ -91,7 +91,7 @@ def _changed_files(before: str, sha: str) -> list[str]:
     proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         print(proc.stderr.strip() or "git diff failed", file=sys.stderr)
-        # En cas de doute (force-push), on déploie les trois.
+        # On doubt (force-push), deploy all three.
         return [
             "frontend/",
             "naviguide/",
