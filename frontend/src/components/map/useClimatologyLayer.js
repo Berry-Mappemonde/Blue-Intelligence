@@ -113,7 +113,9 @@ export default function useClimatologyLayer({
     let cancelled = false;
     const popupOpts = { ...POPUP_OPTS, maxWidth: 300 };
 
-    const silent = (fn) => fn().catch(() => undefined);
+    const loadSafe = (name, fn) => fn().catch((err) => {
+      console.error(`[climatology] ${name} layer failed`, err);
+    });
 
     const loadWind = async () => {
       const { data } = await api.get("/climatology/wind.geojson", { params: { month, spacing_deg: 4 } });
@@ -137,9 +139,15 @@ export default function useClimatologyLayer({
     };
 
     const loadWave = async () => {
-      const { data } = await api.get("/climatology/wave.geojson", {
-        params: { month, stat: waveStat, spacing_deg: 4 },
+      const fetchWave = (stat) => api.get("/climatology/wave.geojson", {
+        params: { month, stat, spacing_deg: 4 },
       });
+      let { data } = await fetchWave(waveStat);
+      // July (and any p50_p90 month) has no hs_mean — a leftover "mean"
+      // request paints nothing. Retry P90 so Hs is visible before meta flips.
+      if (!(data.features || []).length && waveStat === "mean") {
+        ({ data } = await fetchWave("p90"));
+      }
       if (cancelled) return;
       const group = L.layerGroup();
       (data.features || []).forEach((f) => {
@@ -205,10 +213,10 @@ export default function useClimatologyLayer({
 
     const load = async () => {
       const jobs = [];
-      if (filters && filters.wind) jobs.push(silent(loadWind));
-      if (filters && filters.wave) jobs.push(silent(loadWave));
-      if (filters && filters.current) jobs.push(silent(loadCurrent));
-      if (filters && filters.cyclones) jobs.push(silent(loadCyclones));
+      if (filters && filters.wind) jobs.push(loadSafe("wind", loadWind));
+      if (filters && filters.wave) jobs.push(loadSafe("wave", loadWave));
+      if (filters && filters.current) jobs.push(loadSafe("current", loadCurrent));
+      if (filters && filters.cyclones) jobs.push(loadSafe("cyclones", loadCyclones));
       await Promise.all(jobs);
     };
     load();
