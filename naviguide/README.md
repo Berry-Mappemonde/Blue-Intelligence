@@ -197,6 +197,10 @@ COPERNICUS_USER=your-email@example.com
 COPERNICUS_PASSWORD=your-password
 ```
 
+**LangSmith (Mac only, never the VPS):** step-by-step guide in
+[`docs/LANGSMITH_NAVIGUIDE.md`](../docs/LANGSMITH_NAVIGUIDE.md).
+The process refuses tracing unless `LANGSMITH_LOCAL=1` and the host is not production.
+
 ### Build & Start
 
 ```bash

@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "comment": "Trajets or pour le microscope LangSmith. Chaque leg = 1 trace si le tracing local est allumé. Les eval_cases se lancent plus tard, à la main.",
+  "legs": [
+    {
+      "id": "meteo-mayotte-reunion-janvier",
+      "project": "naviguide-meteo-dev",
+      "agent": "meteo",
+      "title": "Mayotte → La Réunion en janvier",
+      "look_for": [
+        "Nœud fetch_ibtracs : un entier de croisements (pas 'snapshot missing' si le snapshot backend est là).",
+        "Le prompt contient la phrase 'Cite this integer' et le compte IBTrACS.",
+        "La réponse LLM ne parle pas de 'saison cyclone' sans citer ce nombre."
+      ],
+      "inputs": {
+        "from_stop": "Dzaoudzi (Mayotte)",
+        "to_stop": "Saint-Gilles (La Réunion)",
+        "lat": -12.7871,
+        "lon": 45.275,
+        "dest_lat": -21.0594,
+        "dest_lon": 55.2242,
+        "month": 1,
+        "nm_remaining": 750,
+        "language": "fr"
+      }
+    },
+    {
+      "id": "meteo-canaries-capvert-juin",
+      "project": "naviguide-meteo-dev",
+      "agent": "meteo",
+      "title": "Canaries → Cap-Vert en juin",
+      "look_for": [
+        "IBTrACS : compte bas ou nul (pas l'océan Indien).",
+        "Le LLM ne invente pas une saison cyclone atlantique à la place du nombre."
+      ],
+      "inputs": {
+        "from_stop": "Îles Canaries",
+        "to_stop": "Cap-Vert",
+        "lat": 28.5521,
+        "lon": -16.1529,
+        "dest_lat": 14.9167,
+        "dest_lon": -23.5167,
+        "month": 6,
+        "nm_remaining": 850,
+        "language": "fr"
+      }
+    },
+    {
+      "id": "guard-aden-janvier",
+      "project": "naviguide-guard-dev",
+      "agent": "guard",
+      "title": "Golfe d'Aden — alerte sûreté",
+      "look_for": [
+        "Nœud fetch_piracy_data : flux IMB ou repli.",
+        "Le prompt / la réponse parlent de zones, pas d'une route inventée."
+      ],
+      "inputs": {
+        "from_stop": "Djibouti",
+        "to_stop": "Salalah",
+        "lat": 12.6,
+        "lon": 43.4,
+        "nm_remaining": 620,
+        "language": "fr"
+      }
+    },
+    {
+      "id": "custom-la-rochelle",
+      "project": "naviguide-custom-dev",
+      "agent": "custom",
+      "title": "Entrée La Rochelle — formalités",
+      "look_for": [
+        "Le vrai prompt envoyé (ports, VHF, douane).",
+        "Pas de coordonnées GPS inventées si le nœud n'en a pas."
+      ],
+      "inputs": {
+        "from_stop": "Lisbonne",
+        "to_stop": "La Rochelle",
+        "lat": 46.1591,
+        "lon": -1.152,
+        "nm_remaining": 12,
+        "language": "fr"
+      }
+    },
+    {
+      "id": "pirate-detroit-malacca",
+      "project": "naviguide-pirate-dev",
+      "agent": "pirate",
+      "title": "Détroit de Malacca — rumours communauté",
+      "look_for": [
+        "Nœud fetch_noonsite_rss présent.",
+        "Le LLM ne transforme pas un RSS manquant en 'attaque confirmée'."
+      ],
+      "inputs": {
+        "from_stop": "Belawan",
+        "to_stop": "Singapour",
+        "lat": 3.0,
+        "lon": 100.5,
+        "nm_remaining": 400,
+        "language": "fr"
+      }
+    },
+    {
+      "id": "orchestrator-rochelle-lisbonne",
+      "project": "naviguide-orchestrator-dev",
+      "agent": "orchestrator",
+      "title": "La Rochelle → Lisbonne (2 WP, pas le tour du monde)",
+      "optional": true,
+      "look_for": [
+        "Graphe parent : validate → agent1 → agent3 → briefing → generate_plan.",
+        "Si agent1 status = failed, agent3 ne doit pas avoir tourné (edge 'failed' → END).",
+        "Temps passé sur chaque nœud (searoute vs LLM)."
+      ],
+      "inputs": {
+        "language": "fr",
+        "waypoints": [
+          {"name": "La Rochelle", "lat": 46.1591, "lon": -1.152, "mandatory": true},
+          {"name": "Lisbonne", "lat": 38.7223, "lon": -9.1393, "mandatory": true}
+        ]
+      }
+    },
+    {
+      "id": "orchestrator-noumea-torres",
+      "project": "naviguide-orchestrator-dev",
+      "agent": "orchestrator",
+      "title": "Nouméa → détroit de Torres (arc or routage)",
+      "optional": true,
+      "look_for": [
+        "Agent 1 : le tracé ne part pas en détour mer de Corail.",
+        "Si parse_route error → END, pas de briefing fantôme."
+      ],
+      "inputs": {
+        "language": "fr",
+        "waypoints": [
+          {"name": "Nouméa (Nouvelle-Calédonie)", "lat": -22.2758, "lon": 166.4572, "mandatory": true},
+          {"name": "Torres Strait", "lat": -10.7, "lon": 141.9, "mandatory": true}
+        ]
+      }
+    }
+  ],
+  "eval_cases": [
+    {
+      "id": "eval-ibtracs-cite-integer",
+      "agent": "meteo",
+      "based_on": "meteo-mayotte-reunion-janvier",
+      "expect": "La réponse cite l'entier IBTrACS du prompt. Elle n'invente pas une saison cyclone."
+    },
+    {
+      "id": "eval-no-fake-kn-hs",
+      "agent": "meteo",
+      "based_on": "meteo-canaries-capvert-juin",
+      "expect": "Pas de vent/Hs chiffré hors bloc StormGlass ou mention [Climo]."
+    },
+    {
+      "id": "eval-agent1-fail-skips-agent3",
+      "agent": "orchestrator",
+      "based_on": "orchestrator-rochelle-lisbonne",
+      "expect": "Si agent1_status est failed, pas de risk_report rempli par l'agent 3."
+    }
+  ]
+}

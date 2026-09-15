@@ -87,7 +87,7 @@ blue-intelligence/
 │   └── models/         Trained local ML models (gatekeeper, SERP classifier, NER)
 ├── frontend/           React (CRA) + Leaflet + Tailwind
 │   └── src/components/ MapView, BatchHub (audit), SettingsPanel, per-mode panels
-├── docs/               PRD, Projects spec, Formalities (PoE) spec, Review spec, per-mode Review contracts, rules/parameters, architecture, NVIDIA LLM audit (`nvidia-llm-audit.md`), carto tracks plan (`PLAN_IMPLEMENTATION_FILIERES_CARTO.md`)
+├── docs/               PRD, Projects spec, Formalities (PoE) spec, Review spec, per-mode Review contracts, rules/parameters, architecture, NVIDIA LLM audit (`nvidia-llm-audit.md`), carto tracks plan (`PLAN_IMPLEMENTATION_FILIERES_CARTO.md`), LangSmith local microscope (`LANGSMITH_NAVIGUIDE.md`)
 ├── infra/              Self-hosted SearXNG (`searxng/`) + OVH VPS production deploy (`vps/`)
 ├── scripts/            Ops tooling (backup restore)
 ├── naviguide/          NAVIGUIDE — expedition route planner (standalone app, see `naviguide/README.md`)
@@ -111,7 +111,7 @@ The pipeline **never invents content**: every field not found in the sources sta
 
 The `naviguide/` folder hosts **NAVIGUIDE**, the Berry-Mappemonde expedition route planner (React Vite + MapLibre GL; FastAPI services: land-avoiding routing, Copernicus data, LangGraph multi-agent orchestrator, polars). The `naviguide-berry-mappemonde` repository was merged here with its full history, cleaned along the way (`naviguide-api/venv` removed from the entire history).
 
-- **Standalone app**: startup, dependencies and deploy are separate from Blue Intelligence — see `naviguide/README.md` (`naviguide/naviguide_workspace/start_local.sh` to run everything locally).
+- **Standalone app**: startup, dependencies and deploy are separate from Blue Intelligence — see `naviguide/README.md` (`naviguide/naviguide_workspace/start_local.sh` to run everything locally). LangSmith tracing is a Mac-only microscope: `docs/LANGSMITH_NAVIGUIDE.md`.
 - **Production**: [www.naviguide.fr](https://www.naviguide.fr), hosted on the same OVH VPS as blueintelligence.online — see `infra/vps/README.md` and `infra/vps/naviguide/`.
 - **Blue Intelligence layers**: the NAVIGUIDE map shows the 5 modes (Projects, Marinas, Harbour masters, Ports of Entry, MPA) via `GET /api/export/*` GeoJSON exports, consumed same-origin on the `/bi/*` path (Vite proxy in dev, nginx in production).
 
