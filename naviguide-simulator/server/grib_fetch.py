@@ -36,6 +36,16 @@ FETCH_TIMEOUT_S = 20.0
 _last_try: Dict[str, datetime] = {}
 
 
+def wrap_lon(lon: float) -> float:
+    """Open-Meteo n’accepte que [-180, 180]. Le film peut être à -186 près de 180°."""
+    x = float(lon)
+    while x > 180.0:
+        x -= 360.0
+    while x < -180.0:
+        x += 360.0
+    return x
+
+
 def auto_enabled() -> bool:
     if os.environ.get("NAVIGUIDE_GRIB_AUTO", "1").lower() in ("0", "false", "no"):
         return False
@@ -87,6 +97,7 @@ def _at(series: List[Any], index: Dict[str, int], iso: str) -> Optional[float]:
 
 
 def _fetch_gfs_point(client: httpx.Client, lat: float, lon: float) -> Optional[dict]:
+    lon = wrap_lon(lon)
     resp = client.get(
         "https://api.open-meteo.com/v1/forecast",
         params={
@@ -114,6 +125,7 @@ def _fetch_gfs_point(client: httpx.Client, lat: float, lon: float) -> Optional[d
 
 
 def _fetch_wave_point(client: httpx.Client, lat: float, lon: float) -> Optional[dict]:
+    lon = wrap_lon(lon)
     resp = client.get(
         "https://marine-api.open-meteo.com/v1/marine",
         params={

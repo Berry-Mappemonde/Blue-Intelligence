@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import grib_fetch
 import saildocs
-from grib_fetch import fetch_latest_payload, is_stale
+from grib_fetch import fetch_latest_payload, is_stale, wrap_lon
 from saildocs import last_ready_cycle, to_iso
 
 
@@ -18,6 +18,8 @@ class _Resp:
 
 
 class _Client:
+    last_lons = []
+
     def __init__(self, *args, **kwargs):
         pass
 
@@ -28,6 +30,8 @@ class _Client:
         return False
 
     def get(self, url, params=None):
+        if params and "longitude" in params:
+            _Client.last_lons.append(float(params["longitude"]))
         times = [
             "2026-09-15T12:00",
             "2026-09-15T18:00",
@@ -53,6 +57,12 @@ class _Client:
         })
 
 
+def test_wrap_lon_open_meteo():
+    assert wrap_lon(-186.04) == 173.96
+    assert wrap_lon(190) == -170
+    assert wrap_lon(-61.07) == -61.07
+
+
 def test_fetch_latest_payload_uses_gfs_and_wave(monkeypatch):
     monkeypatch.setattr(grib_fetch.httpx, "Client", _Client)
     when = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
@@ -71,6 +81,16 @@ def test_fetch_latest_payload_uses_gfs_and_wave(monkeypatch):
     assert any(s.get("pressHpa") == 1014.0 for s in payload["samples"])
     assert any(s.get("hs") == 1.4 for s in payload["samples"])
     assert payload["queries"][2]["query"].startswith("RTOFS:")
+
+
+def test_fetch_wraps_antimeridian_lon(monkeypatch):
+    _Client.last_lons = []
+    monkeypatch.setattr(grib_fetch.httpx, "Client", _Client)
+    when = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
+    fetch_latest_payload({"lat": -21.54, "lon": -186.04}, when)
+    assert _Client.last_lons
+    assert all(-180 <= lon <= 180 for lon in _Client.last_lons)
+    assert all(abs(lon - 173.96) < 0.02 for lon in _Client.last_lons)
 
 
 def test_stale_when_older_cycle():
