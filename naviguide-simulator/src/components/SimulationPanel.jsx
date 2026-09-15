@@ -88,6 +88,7 @@ export function SimulationPanel({
   forecastModel = null,
   onRecompute,
   canRecompute = false,
+  showRecompute = false,
   recomputeBusy = false,
   onGoLive,
 }) {
@@ -249,11 +250,11 @@ export function SimulationPanel({
         <div className="px-3 py-1.5 text-[9px] text-amber-200/80 bg-amber-950/30">{t("forecastUnavailable")}</div>
       )}
 
-      {canRecompute && (
+      {showRecompute && (
         <div className="px-2 pb-2">
           <button
             type="button"
-            disabled={recomputeBusy || forecastStatus === "pending"}
+            disabled={!canRecompute || recomputeBusy || forecastStatus === "pending"}
             onClick={onRecompute}
             className="w-full rounded-lg border border-cyan-500/40 bg-cyan-900/30 py-1.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-800/40 disabled:opacity-40"
           >

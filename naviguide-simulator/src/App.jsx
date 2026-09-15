@@ -52,6 +52,7 @@ import {
   lookupVoyageClock,
 } from "./engine/voyageClock.js";
 import { VIEW_SIMULATION, VIEW_SUIVRE } from "./constants/viewMode.js";
+import { filmBarInsets } from "./utils/filmBarLayout.js";
 import { summarizeRoute, featuresToSegments } from "./utils/geo.js";
 import { waypointsFromCollection } from "./utils/waypointsFromCollection.js";
 import { buildLocalCustomBriefing } from "./utils/customRouteBriefing.js";
@@ -128,8 +129,10 @@ export default function App() {
   const [cinemaMode, setCinemaMode] = useState(false);
   const [hideFilmBar, setHideFilmBar] = useState(false);
   const [stopAuto, setStopAuto] = useState(true);
+  const [userPreview, setUserPreview] = useState(false);
   const isSuivre = view === VIEW_SUIVRE;
   const isSimulation = view === VIEW_SIMULATION;
+  const barInsets = filmBarInsets({ sidebarOpen, toolsOpen });
   const [voyageFlat, setVoyageFlat] = useState(null);
   const [arrivalBanner, setArrivalBanner] = useState(null);
   const [liveKnots, setLiveKnots] = useState(null);
@@ -225,11 +228,7 @@ export default function App() {
     stopAuto: isSimulation && stopAuto,
   });
   const live = isSuivre ? official.live : vessel.live;
-  const previewing = Boolean(
-    isSuivre
-    && live
-    && (playback.playing || Math.abs(playback.nm - (Number(live.filmNm) || 0)) > 1.5),
-  );
+  const previewing = Boolean(isSuivre && live && userPreview);
   const clockSample = useMemo(() => {
     if (isSuivre && live && !previewing) return live;
     return lookupVoyageClock(officialClock, playback.nm, { atQuay: playback.holding });
@@ -387,17 +386,22 @@ export default function App() {
 
   const goLive = useCallback(() => {
     if (!live) return;
+    setUserPreview(false);
     playback.pause();
     playback.seek(Number(live.filmNm) || 0, { jump: true });
   }, [live, playback.pause, playback.seek]);
 
   useEffect(() => {
-    if (!isSuivre || !live || previewing) return;
+    if (isSuivre) setUserPreview(false);
+  }, [isSuivre]);
+
+  useEffect(() => {
+    if (!isSuivre || !live || userPreview) return;
     const target = Number(live.filmNm) || 0;
     if (Math.abs(playback.nm - target) > 2) {
       playback.seek(target, { jump: true });
     }
-  }, [isSuivre, live?.filmNm]); // seek only when live nm jumps
+  }, [isSuivre, live?.filmNm, userPreview]);
 
   const canRecompute = Boolean(
     isSimulation
@@ -420,16 +424,18 @@ export default function App() {
   const handleSimNext = useCallback(() => {
     lastArrivalKeyRef.current = "";
     setArrivalBanner(null);
+    if (isSuivre) setUserPreview(true);
     playback.pause();
     playback.seek(nextEscaleNm(escaleMarks, playheadNmRef.current), { jump: true });
-  }, [playback.pause, playback.seek, escaleMarks]);
+  }, [playback.pause, playback.seek, escaleMarks, isSuivre]);
 
   const handleSimPrev = useCallback(() => {
     lastArrivalKeyRef.current = "";
     setArrivalBanner(null);
+    if (isSuivre) setUserPreview(true);
     playback.pause();
     playback.seek(prevEscaleNm(escaleMarks, playheadNmRef.current), { jump: true });
-  }, [playback.pause, playback.seek, escaleMarks]);
+  }, [playback.pause, playback.seek, escaleMarks, isSuivre]);
 
   const handleCatamaranDrag = useCallback((pos) => {
     playback.pause();
@@ -1198,11 +1204,15 @@ export default function App() {
         profile={playback.profile}
         onProfile={playback.setProfile}
         playing={playback.playing}
-        onTogglePlay={playback.toggle}
+        onTogglePlay={() => {
+          if (isSuivre) setUserPreview(true);
+          playback.toggle();
+        }}
         marks={escaleMarks}
         onSeekNm={(nm) => {
           lastArrivalKeyRef.current = "";
           setArrivalBanner(null);
+          if (isSuivre) setUserPreview(true);
           playback.pause();
           playback.seek(nm, { jump: true });
         }}
@@ -1288,7 +1298,11 @@ export default function App() {
         </div>
       )}
 
-      <p className="absolute bottom-1 left-1/2 -translate-x-1/2 z-[1500] text-[9px] text-white/50 pointer-events-none">
+      <p
+        data-testid="nav-disclaimer"
+        className="absolute z-[2030] text-[10px] text-amber-100/85 pointer-events-none text-center"
+        style={{ left: barInsets.left, right: barInsets.right, bottom: 2 }}
+      >
         {t("creditsLine")}
       </p>
     </div>

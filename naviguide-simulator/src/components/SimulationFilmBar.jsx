@@ -85,7 +85,7 @@ export function SimulationFilmBar({
   if (hideBar) {
     return (
       <div
-        className="absolute bottom-2 z-[2020] pointer-events-auto"
+        className="absolute bottom-5 z-[2020] pointer-events-auto"
         style={{ left: insets.left, right: insets.right }}
       >
         <button
@@ -102,7 +102,7 @@ export function SimulationFilmBar({
   return (
     <div
       data-testid="film-bar"
-      className="absolute bottom-2 z-[2020] pointer-events-auto"
+      className="absolute bottom-5 z-[2020] pointer-events-auto"
       style={{ left: insets.left, right: insets.right }}
     >
       <div className="rounded-xl border border-white/15 bg-slate-950/92 shadow-2xl px-2.5 pt-1.5 pb-1.5 text-white backdrop-blur-sm">

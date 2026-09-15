@@ -263,6 +263,7 @@ export function Sidebar({
             forecastModel={forecastModel}
             onRecompute={onRecompute}
             canRecompute={canRecompute}
+            showRecompute={isSimulation}
             recomputeBusy={recomputeBusy}
             onGoLive={onGoLive}
           />
