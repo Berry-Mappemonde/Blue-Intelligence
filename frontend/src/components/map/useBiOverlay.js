@@ -39,6 +39,8 @@ export default function useBiOverlay({ mapObj, enabled, url }) {
             style: overlayStyle(href),
             pane: "bi-overlay",
             attribution: "© Blue Intelligence — overlay hebdomadaire",
+            // No background layer: an opaque GL clear hid Esri/Carto in every mode.
+            canvasContextAttributes: { alpha: true },
           });
         }
         try {
