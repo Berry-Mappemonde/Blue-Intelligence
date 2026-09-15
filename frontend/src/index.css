@@ -139,6 +139,8 @@ html, body, #root {
 
 /* Leaflet dark theme overrides */
 .leaflet-container { background: #020617; font-family: "Manrope", sans-serif; }
+/* Weekly overlay GL canvas must not paint an opaque black sheet over Hs / IBTrACS. */
+.leaflet-bi-overlay-pane canvas { background: transparent; }
 .leaflet-popup-content-wrapper {
   background: rgba(15, 23, 42, 0.95);
   color: #e2e8f0;

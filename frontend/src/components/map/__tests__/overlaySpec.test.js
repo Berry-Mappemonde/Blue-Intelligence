@@ -26,6 +26,11 @@ describe("overlaySpec", () => {
     const style = overlayStyle("pmtiles://https://bi.test/o.pmtiles");
     expect(style.version).toBe(8);
     expect(style.sources[BI_OVERLAY_SOURCE_ID].url).toMatch(/^pmtiles:\/\//);
+    expect(style.layers[0]).toMatchObject({
+      id: "bi-overlay-background",
+      type: "background",
+      paint: { "background-opacity": 0 },
+    });
     const ids = style.layers.map((l) => l["source-layer"]);
     expect(ids).toEqual(expect.arrayContaining([
       "route", "amp", "projects", "marinas", "anchorages", "capitaineries", "poe",

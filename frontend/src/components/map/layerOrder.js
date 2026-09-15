@@ -19,11 +19,12 @@ export const LEAFLET_BUILTIN_PANES = {
 export const PANES = [
   // Vector "Sea chart" basemap (MapLibre GL) — under raster tiles.
   { name: "basemap-gl", zIndex: 190 },
-  // 7th-mode atlas — lit only when mode === "climatology".
-  { name: "climatology-raster", zIndex: 250, pointerEvents: "none" },
-  { name: "climatology-vector", zIndex: 260, pointerEvents: "none" },
-  // Weekly tippecanoe overlay — above GL Seamap, under the route.
-  { name: "bi-overlay", zIndex: 270, pointerEvents: "none" },
+  // Weekly tippecanoe overlay — above GL Seamap, under the 7th-mode atlas.
+  // An opaque GL canvas here used to hide Hs / IBTrACS (those panes sat at 250/260).
+  { name: "bi-overlay", zIndex: 250, pointerEvents: "none" },
+  // 7th-mode atlas — above the weekly overlay so July Hs and cyclone tracks paint.
+  { name: "climatology-raster", zIndex: 280, pointerEvents: "none" },
+  { name: "climatology-vector", zIndex: 290, pointerEvents: "none" },
   // NAVIGUIDE route — under clusters and markers.
   { name: "route", zIndex: 380 },
   // MPA polygons — above overlayPane, under stopovers.

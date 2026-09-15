@@ -8,6 +8,11 @@ import { absoluteOverlayUrl, overlayPmtilesHref, overlayStyle, overlayUrlFromEnv
  * Weekly tippecanoe overlay — second GL context on the
  * `bi-overlay` pane (270), under the Leaflet route.
  */
+/** Weekly GL overlay hides the 7th-mode atlas if left on. */
+export function shouldShowBiOverlay({ overlayOn, nauticalAllowed, mode }) {
+  return Boolean(overlayOn && nauticalAllowed && mode !== "climatology");
+}
+
 export default function useBiOverlay({ mapObj, enabled, url }) {
   const glRef = useRef(null);
 
