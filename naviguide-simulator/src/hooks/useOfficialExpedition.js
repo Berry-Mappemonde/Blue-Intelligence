@@ -75,14 +75,23 @@ export function useOfficialExpedition({
   useEffect(() => {
     if (!enabled || !points?.length) return undefined;
     let cancelled = false;
-    putOfficial().then((body) => {
-      if (cancelled || !body) return;
-      fetch(`${API}/voyage/official/clock`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((ck) => { if (ck && !cancelled) setServerClock(ck); })
-        .catch(() => {});
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    const kick = () => {
+      putOfficial().then((body) => {
+        if (cancelled || !body) return;
+        fetch(`${API}/voyage/official/clock`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((ck) => { if (ck && !cancelled) setServerClock(ck); })
+          .catch(() => {});
+      }).catch(() => {});
+    };
+    kick();
+    const retry = setInterval(() => {
+      if (!putRef.current) kick();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(retry);
+    };
   }, [enabled, points, putOfficial]);
 
   const refreshGrib = useCallback(async ({ force = false } = {}) => {
@@ -94,7 +103,7 @@ export function useOfficialExpedition({
   }, []);
 
   useEffect(() => {
-    if (!enabled || !meta?.voyageId) return undefined;
+    if (!enabled) return undefined;
     let cancelled = false;
     setGribPending(true);
     refreshGrib({ force: true }).catch(() => {}).finally(() => {
