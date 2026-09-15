@@ -6,12 +6,11 @@
  *
  * Props:
  *   legContext   — LegContext object from the useLegContext hook
- *   onClose      — callback to leave simulation mode
  *   onAdvance    — callback to advance to the midpoint of the next segment
  *   canAdvance   — boolean, disables the button at the end of the route
  */
 
-import { Navigation, Clock, Compass, Map as MapIcon, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Navigation, Clock, Compass, Map as MapIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLang } from "../i18n/LangContext.jsx";
 
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -74,7 +73,6 @@ function PrevNextButtons({ onPrev, canPrev, onNext, canNext }) {
 
 export function SimulationPanel({
   legContext,
-  onClose,
   onPrev,
   canPrev,
   onNext,
@@ -84,7 +82,7 @@ export function SimulationPanel({
   kindLabel = "",
   atQuay = false,
   quayDays = 0,
-  follow = false,
+  liveFollow = false,
   previewing = false,
   forecastStatus = null,
   forecastModel = null,
@@ -92,7 +90,6 @@ export function SimulationPanel({
   canRecompute = false,
   recomputeBusy = false,
   onGoLive,
-  virtualBoat = false,
 }) {
   const { t } = useLang();
 
@@ -136,15 +133,6 @@ export function SimulationPanel({
             </>
           )}
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="text-white/30 hover:text-white/70 transition-colors flex-shrink-0 ml-1"
-            title={t("exitSimulation")}
-          >
-            <X size={12} />
-          </button>
-        )}
       </div>
 
       {/* Metrics grid */}
@@ -228,7 +216,7 @@ export function SimulationPanel({
         </div>
       )}
 
-      {follow && (
+      {liveFollow && (
         <div className="px-3 py-1.5 border-t border-white/5 flex items-center justify-between gap-2">
           <span className={`text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded ${
             previewing ? "bg-slate-600/40 text-slate-300" : "bg-emerald-500/20 text-emerald-300"
@@ -272,10 +260,6 @@ export function SimulationPanel({
             {recomputeBusy ? t("recomputeBusy") : t("recomputeButton")}
           </button>
         </div>
-      )}
-
-      {(virtualBoat || follow) && (
-        <p className="px-3 pb-2 text-[9px] text-white/40 leading-snug">{t("voyageForecastDisclaimer")}</p>
       )}
 
       {/* Previous / Next buttons */}
