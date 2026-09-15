@@ -24,9 +24,15 @@ function sampleNearBox(s, south, north, west, east) {
   return copies.some((lng) => lonNearBox(lng, west, east) || lonNearBox(lng, wrapLon(west), wrapLon(east)));
 }
 
+function cellKey(value) {
+  return value == null ? null : Math.round(Number(value) * 20) / 20;
+}
+
 /** Barbules OMM + disques Hs en stencil. Jamais un rectangle de couloir. */
 export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso, lat, lon }) {
   const groupRef = useRef(null);
+  const latCell = cellKey(lat);
+  const lonCell = cellKey(lon == null ? null : wrapLon(lon));
 
   useEffect(() => {
     const map = mapRef.current;
@@ -35,7 +41,7 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       groupRef.current = null;
     }
     if (!map || !mapReady || !visible || grib?.status !== "ready") return undefined;
-    const box = corridorForBoat(grib.bbox, lat, lon);
+    const box = corridorForBoat(grib.bbox, latCell, lonCell);
     if (!box) return undefined;
     const [south, north, west, east] = box;
 
@@ -43,18 +49,23 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
     groupRef.current = group;
 
     const near = (grib.samples || []).filter((s) => sampleNearBox(s, south, north, west, east));
-    const slice = gribDisplayPoints(near.length ? near : grib.samples, { lat, lon, whenIso });
+    const slice = gribDisplayPoints(near.length ? near : grib.samples, {
+      lat: latCell,
+      lon: lonCell,
+      whenIso,
+    });
+    const pane = map.getPane("boat") ? "boat" : "overlayPane";
     for (const s of slice) {
       const baseLon = wrapLon(s.lon);
       for (const lng of worldCopyLngs(baseLon)) {
         if (s.hs != null) {
           L.circleMarker([s.lat, lng], {
-            radius: 9,
+            radius: 10,
             color: waveHsColor(s.hs),
             fillColor: waveHsColor(s.hs),
-            fillOpacity: 0.32,
+            fillOpacity: 0.38,
             weight: 0,
-            pane: "overlayPane",
+            pane,
             interactive: false,
           }).addTo(group);
         }
@@ -66,6 +77,7 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
             iconSize: [36, 36],
             iconAnchor: [18, 18],
           }),
+          pane,
           interactive: false,
           keyboard: false,
         }).addTo(group);
@@ -75,5 +87,5 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       group.remove();
       groupRef.current = null;
     };
-  }, [mapRef, mapReady, visible, grib, whenIso, lat, lon]);
+  }, [mapRef, mapReady, visible, grib, whenIso, latCell, lonCell]);
 }
