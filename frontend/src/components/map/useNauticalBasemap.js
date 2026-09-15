@@ -116,9 +116,9 @@ export default function useNauticalBasemap({
               attribution: conf.attribution,
             });
           }
-          if (tileRef.current && m.hasLayer(tileRef.current)) {
-            m.removeLayer(tileRef.current);
-          }
+          // Keep raster tiles under the sea chart. Removing them left a black
+          // void when the GL canvas failed or painted an opaque ocean.
+          restoreRaster(m, tileRef);
           try {
             if (!m.hasLayer(glRef.current)) glRef.current.addTo(m);
           } catch (err) {
