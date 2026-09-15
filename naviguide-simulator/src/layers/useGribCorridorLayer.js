@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import { corridorBboxOk } from "../utils/gribCorridor.js";
+import { corridorForBoat } from "../utils/gribCorridor.js";
 
 function barbPoints(samples, whenIso) {
   const byKey = new Map();
@@ -29,8 +29,8 @@ function windColor(knots) {
   return "#fb7185";
 }
 
-/** Teinte + barbules sur le couloir GRIB. Pas un globe. */
-export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso }) {
+/** Teinte + barbules autour du bateau. Pas un globe. */
+export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso, lat, lon }) {
   const groupRef = useRef(null);
 
   useEffect(() => {
@@ -40,22 +40,26 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso 
       groupRef.current = null;
     }
     if (!map || !mapReady || !visible || grib?.status !== "ready") return undefined;
-    const bbox = grib.bbox;
-    if (!corridorBboxOk(bbox)) return undefined;
-    const [south, north, west, east] = bbox.map(Number);
+    const box = corridorForBoat(grib.bbox, lat, lon);
+    if (!box) return undefined;
+    const [south, north, west, east] = box;
 
     const group = L.layerGroup().addTo(map);
     groupRef.current = group;
     L.rectangle([[south, west], [north, east]], {
       color: "#38bdf8",
-      weight: 1,
+      weight: 2,
       fillColor: "#0ea5e9",
-      fillOpacity: 0.1,
+      fillOpacity: 0.16,
       pane: "overlayPane",
       interactive: false,
     }).addTo(group);
 
-    for (const s of barbPoints(grib.samples, whenIso)) {
+    const near = (grib.samples || []).filter((s) => (
+      s.lat != null && s.lat >= south - 1 && s.lat <= north + 1
+      && s.lon != null && s.lon >= west - 1 && s.lon <= east + 1
+    ));
+    for (const s of barbPoints(near.length ? near : grib.samples, whenIso)) {
       const going = ((Number(s.dirFromDeg) || 0) + 180) % 360;
       const rad = (going * Math.PI) / 180;
       const len = 0.18 + Math.min(0.35, (Number(s.windKnots) || 0) / 80);
@@ -71,5 +75,5 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso 
       group.remove();
       groupRef.current = null;
     };
-  }, [mapRef, mapReady, visible, grib, whenIso]);
+  }, [mapRef, mapReady, visible, grib, whenIso, lat, lon]);
 }

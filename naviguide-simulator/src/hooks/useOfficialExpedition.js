@@ -32,7 +32,7 @@ export function useOfficialExpedition({
 
   const putOfficial = useCallback(async () => {
     if (!points?.length) return null;
-    const fp = `${points.length}|${points[0]?.lat}|${points[points.length - 1]?.lat}`;
+    const fp = `${points.length}|${points[0]?.lat}|${points[points.length - 1]?.lat}|${expeditionId || ""}`;
     if (putRef.current === fp && meta?.voyageId === OFFICIAL_VOYAGE_ID) return meta;
     const res = await fetch(`${API}/voyage/official`, {
       method: "PUT",

@@ -323,6 +323,7 @@ def ensure_official(body: VoyageCreate, background: BackgroundTasks):
         raise HTTPException(400, "points requis")
     existing = load_voyage(OFFICIAL_VOYAGE_ID)
     if existing and existing.get("points"):
+        changed = False
         if (
             len(body.points) > len(existing["points"])
             and int(existing.get("routeRev") or 0) == 0
@@ -331,6 +332,11 @@ def ensure_official(body: VoyageCreate, background: BackgroundTasks):
             existing["marks"] = body.marks
             existing["t0"] = OFFICIAL_T0
             existing["official"] = True
+            changed = True
+        if body.expedition_id and body.expedition_id != existing.get("expedition_id"):
+            existing["expedition_id"] = body.expedition_id
+            changed = True
+        if changed:
             existing["clock"] = _climo_clock(existing)
             save_voyage(existing)
         background.add_task(_kick_official_grib)

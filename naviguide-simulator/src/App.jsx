@@ -691,6 +691,8 @@ export default function App() {
     mapReady,
     visible: isSuivre && official.gribStatus === "ready",
     whenIso: clockSample?.iso,
+    lat: isSuivre ? live?.lat : null,
+    lon: isSuivre ? live?.lon : null,
   });
 
   const applyBerryBriefing = useCallback(() => {
