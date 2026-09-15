@@ -61,6 +61,49 @@ export function worldCopyLngs(lon) {
   return [x, x + 360, x - 360];
 }
 
+const STENCIL_DEG = 0.4;
+
+function nearestSample(slice, lat, lon) {
+  if (!slice.length) return null;
+  if (lat == null || lon == null) return slice[0];
+  let best = slice[0];
+  let bestD = Infinity;
+  for (const s of slice) {
+    const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2;
+    if (d < bestD) {
+      best = s;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Assez de mailles réelles → on les pose.
+ * Sinon stencil 5×5 autour du bateau (une cellule GFS, comme les flèches climatologie).
+ */
+export function gribDisplayPoints(samples, { lat, lon, whenIso } = {}) {
+  const slice = pickGribSlice(samples, whenIso, 80);
+  const unique = new Set(slice.map((s) => `${Number(s.lat).toFixed(2)},${Number(s.lon).toFixed(2)}`));
+  if (unique.size >= 6) return slice;
+  const originLat = lat ?? slice[0]?.lat;
+  const originLon = lon ?? slice[0]?.lon;
+  const src = nearestSample(slice, originLat, originLon);
+  if (!src || originLat == null || originLon == null) return slice;
+  const out = [];
+  for (let di = -2; di <= 2; di++) {
+    for (let dj = -2; dj <= 2; dj++) {
+      out.push({
+        ...src,
+        lat: originLat + di * STENCIL_DEG,
+        lon: originLon + dj * STENCIL_DEG,
+        stencil: true,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Hampe OMM : pointe vers d’où vient le vent (dirFromDeg).
  * Disque central teinté Beaufort, comme le centre des roses climatologie.
@@ -71,9 +114,9 @@ export function gribBarbSvg(sample) {
   const color = beaufortColor(kn);
   const { pennants, longs, shorts, calm } = wmoBarbMarks(kn);
   if (calm) {
-    return `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="14" cy="14" r="5" fill="none" stroke="${color}" stroke-width="1.6"/>
-      <circle cx="14" cy="14" r="2.4" fill="${color}"/>
+    return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="18" cy="18" r="6" fill="none" stroke="${color}" stroke-width="1.8"/>
+      <circle cx="18" cy="18" r="3" fill="${color}"/>
     </svg>`;
   }
   const feathers = [];

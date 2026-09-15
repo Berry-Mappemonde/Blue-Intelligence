@@ -1,20 +1,30 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import { corridorForBoat } from "../utils/gribCorridor.js";
+import { wrapLon } from "../utils/geo.js";
 import {
   gribBarbSvg,
-  pickGribSlice,
+  gribDisplayPoints,
   waveHsColor,
   worldCopyLngs,
 } from "../utils/gribSymbols.js";
 
 function lonNearBox(lon, west, east) {
   const x = Number(lon);
-  if (west <= east) return x >= west - 1 && x <= east + 1;
-  return x >= west - 1 || x <= east + 1;
+  const w = Number(west);
+  const e = Number(east);
+  if (w <= e) return x >= w - 2 && x <= e + 2;
+  return x >= w - 2 || x <= e + 2;
 }
 
-/** Barbules OMM + disques Hs. Jamais un rectangle de couloir. */
+function sampleNearBox(s, south, north, west, east) {
+  if (s.lat == null || s.lon == null) return false;
+  if (s.lat < south - 1 || s.lat > north + 1) return false;
+  const copies = worldCopyLngs(s.lon).concat(wrapLon(s.lon));
+  return copies.some((lng) => lonNearBox(lng, west, east) || lonNearBox(lng, wrapLon(west), wrapLon(east)));
+}
+
+/** Barbules OMM + disques Hs en stencil. Jamais un rectangle de couloir. */
 export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso, lat, lon }) {
   const groupRef = useRef(null);
 
@@ -32,19 +42,17 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
     const group = L.layerGroup().addTo(map);
     groupRef.current = group;
 
-    const near = (grib.samples || []).filter((s) => (
-      s.lat != null && s.lat >= south - 1 && s.lat <= north + 1
-      && s.lon != null && lonNearBox(s.lon, west, east)
-    ));
-    const slice = pickGribSlice(near.length ? near : grib.samples, whenIso);
+    const near = (grib.samples || []).filter((s) => sampleNearBox(s, south, north, west, east));
+    const slice = gribDisplayPoints(near.length ? near : grib.samples, { lat, lon, whenIso });
     for (const s of slice) {
-      for (const lng of worldCopyLngs(s.lon)) {
+      const baseLon = wrapLon(s.lon);
+      for (const lng of worldCopyLngs(baseLon)) {
         if (s.hs != null) {
           L.circleMarker([s.lat, lng], {
-            radius: 7,
+            radius: 9,
             color: waveHsColor(s.hs),
             fillColor: waveHsColor(s.hs),
-            fillOpacity: 0.28,
+            fillOpacity: 0.32,
             weight: 0,
             pane: "overlayPane",
             interactive: false,
@@ -55,8 +63,8 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
           icon: L.divIcon({
             className: "grib-barb",
             html: gribBarbSvg(s),
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
           }),
           interactive: false,
           keyboard: false,

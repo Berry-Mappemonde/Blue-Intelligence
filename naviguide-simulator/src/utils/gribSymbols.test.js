@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   beaufortColor,
   gribBarbSvg,
+  gribDisplayPoints,
   pickGribSlice,
   waveHsColor,
   wmoBarbMarks,
@@ -48,6 +49,15 @@ describe("gribSymbols", () => {
 
   it("triple la longitude pour les copies monde", () => {
     assert.deepEqual(worldCopyLngs(166), [166, 526, -194]);
+  });
+
+  it("si une seule maille, pose un stencil 5×5 autour du bateau", () => {
+    const pts = gribDisplayPoints([
+      { lat: -21.6, lon: -186.2, t: "2026-09-15T18:00:00Z", windKnots: 14, dirFromDeg: 105, hs: 2.2 },
+    ], { lat: -21.6, lon: -186.2, whenIso: "2026-09-15T18:00:00Z" });
+    assert.equal(pts.length, 25);
+    assert.ok(pts.every((p) => p.windKnots === 14));
+    assert.ok(pts.some((p) => p.lat < -21.6 && p.lon < -186.2));
   });
 });
 
