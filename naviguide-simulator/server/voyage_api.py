@@ -309,8 +309,16 @@ def _build_official(body: VoyageCreate) -> dict:
     return voy
 
 
+def _kick_official_grib() -> None:
+    voy = load_voyage(OFFICIAL_VOYAGE_ID)
+    if not voy:
+        return
+    around = _grib_around_from_live(voy, _now())
+    maybe_refresh_official(OFFICIAL_VOYAGE_ID, around, _now(), force=True)
+
+
 @router.put("/voyage/official")
-def ensure_official(body: VoyageCreate):
+def ensure_official(body: VoyageCreate, background: BackgroundTasks):
     if not body.points:
         raise HTTPException(400, "points requis")
     existing = load_voyage(OFFICIAL_VOYAGE_ID)
@@ -325,8 +333,10 @@ def ensure_official(body: VoyageCreate):
             existing["official"] = True
             existing["clock"] = _climo_clock(existing)
             save_voyage(existing)
+        background.add_task(_kick_official_grib)
         return {**_public_meta(existing), "clock": existing.get("clock") or _climo_clock(existing)}
     voy = _build_official(body)
+    background.add_task(_kick_official_grib)
     return {**_public_meta(voy), "clock": voy["clock"]}
 
 
@@ -459,6 +469,16 @@ def post_official_grib(body: DailyGribIn):
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return public_grib(record, OFFICIAL_VOYAGE_ID, around or body.around, _now())
+
+
+@router.post("/voyage/official/grib/refresh")
+def refresh_official_grib():
+    voy = load_voyage(OFFICIAL_VOYAGE_ID)
+    around = _grib_around_from_live(voy, _now()) if voy else None
+    record = maybe_refresh_official(OFFICIAL_VOYAGE_ID, around, _now(), force=True)
+    if record is None and around:
+        record = scan_inbox(OFFICIAL_VOYAGE_ID, utc_day(), around)
+    return public_grib(record, OFFICIAL_VOYAGE_ID, around, _now())
 
 
 @router.post("/voyage/official/grib/scan")

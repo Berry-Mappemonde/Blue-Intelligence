@@ -18,6 +18,7 @@ export function useOfficialExpedition({
   const [meta, setMeta] = useState(null);
   const [serverClock, setServerClock] = useState(null);
   const [grib, setGrib] = useState(null);
+  const [gribPending, setGribPending] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const putRef = useRef("");
   const clockRef = useRef(clock);
@@ -84,24 +85,28 @@ export function useOfficialExpedition({
     return () => { cancelled = true; };
   }, [enabled, points, putOfficial]);
 
-  const refreshGrib = useCallback(async (lat, lon) => {
-    const res = await fetch(`${API}/voyage/official/grib`);
+  const refreshGrib = useCallback(async ({ force = false } = {}) => {
+    const url = force ? `${API}/voyage/official/grib/refresh` : `${API}/voyage/official/grib`;
+    const res = await fetch(url, force ? { method: "POST" } : undefined);
     const data = await res.json().catch(() => null);
     if (res.ok && data) setGrib(data);
     return data;
   }, []);
 
   useEffect(() => {
-    if (!enabled) return undefined;
-    const tick = () => {
-      const sample = clockRef.current
-        ? sampleClockAtTime(clockRef.current, new Date())
-        : null;
-      refreshGrib(sample?.lat, sample?.lon).catch(() => {});
+    if (!enabled || !meta?.voyageId) return undefined;
+    let cancelled = false;
+    setGribPending(true);
+    refreshGrib({ force: true }).catch(() => {}).finally(() => {
+      if (!cancelled) setGribPending(false);
+    });
+    const id = setInterval(() => {
+      refreshGrib().catch(() => {});
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
     };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
   }, [enabled, refreshGrib, meta?.voyageId]);
 
   const live = useMemo(() => {
@@ -145,13 +150,17 @@ export function useOfficialExpedition({
     clock: serverClock,
     live,
     grib,
-    gribStatus: grib?.status || (enabled ? "absent" : null),
+    gribStatus: grib?.status === "ready"
+      ? "ready"
+      : (enabled ? (gribPending || !grib ? "pending" : "absent") : null),
     gribModel: (grib?.products || [])
       .filter((p) => p.status === "ready")
       .map((p) => p.model)
       .filter(Boolean)
       .join(" · ") || grib?.model || null,
-    gribWarning: grib?.status === "ready" ? null : (enabled ? "dernière prévision absente" : null),
+    gribWarning: grib?.status === "ready" || gribPending || !grib
+      ? null
+      : (enabled ? "dernière prévision absente" : null),
     refreshGrib,
   };
 }

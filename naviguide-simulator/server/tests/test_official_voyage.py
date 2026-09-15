@@ -65,6 +65,13 @@ def test_official_september_has_moved(client):
     assert float(sample.get("tHours") or 0) > 24
 
 
+def test_grib_refresh_endpoint(client):
+    client.put("/voyage/official", json=_payload())
+    r = client.post("/voyage/official/grib/refresh")
+    assert r.status_code == 200
+    assert r.json()["status"] in ("absent", "ready")
+
+
 def test_grib_absent_keeps_dest_corridor(client):
     client.put("/voyage/official", json=_payload())
     grib = client.get("/voyage/official/grib").json()
@@ -110,6 +117,7 @@ def test_daily_grib_around_boat(client):
     body = r.json()
     assert body["status"] == "ready"
     assert body["model"] == "GFS"
+    assert body["samples"][0]["windKnots"] == 12
     south, north, _west, _east = body["bbox"]
     assert north - south < 12
     bad = client.post("/voyage/official/grib", json={
