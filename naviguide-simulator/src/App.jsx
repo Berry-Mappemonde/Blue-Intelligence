@@ -53,6 +53,7 @@ import {
 } from "./engine/voyageClock.js";
 import { VIEW_SIMULATION, VIEW_SUIVRE } from "./constants/viewMode.js";
 import { isRouteReady } from "./utils/routeReady.js";
+import { isSceneReady, playheadAligned } from "./utils/sceneGate.js";
 import { useGribCorridorLayer } from "./layers/useGribCorridorLayer.js";
 import { summarizeRoute, featuresToSegments } from "./utils/geo.js";
 import { waypointsFromCollection } from "./utils/waypointsFromCollection.js";
@@ -134,6 +135,7 @@ export default function App() {
   const isSuivre = view === VIEW_SUIVRE;
   const isSimulation = view === VIEW_SIMULATION;
   const [voyageFlat, setVoyageFlat] = useState(null);
+  const [cameraPlaced, setCameraPlaced] = useState(false);
   const [arrivalBanner, setArrivalBanner] = useState(null);
   const [liveKnots, setLiveKnots] = useState(null);
   const cinemaSavedRef = useRef({ sidebar: true, tools: true });
@@ -230,9 +232,21 @@ export default function App() {
   });
   const live = isSuivre ? official.live : vessel.live;
   const previewing = Boolean(isSuivre && live && userPreview);
-  const sceneReady = routeReady
-    && Boolean(flatRoute.points?.length)
-    && (!isSuivre || Boolean(live) || previewing);
+  const playheadReady = playheadAligned({
+    isSuivre,
+    previewing,
+    playbackNm: playback.nm,
+    liveFilmNm: live?.filmNm,
+  });
+  const sceneReady = isSceneReady({
+    routeReady,
+    hasRoute: Boolean(flatRoute.points?.length),
+    cameraPlaced,
+    playheadReady,
+    isSuivre,
+    hasLive: Boolean(live),
+    previewing,
+  });
   const clockSample = useMemo(() => {
     if (isSuivre && live && !previewing) return live;
     return lookupVoyageClock(officialClock, playback.nm, { atQuay: playback.holding });
@@ -405,13 +419,19 @@ export default function App() {
     if (isSuivre) setUserPreview(false);
   }, [isSuivre]);
 
+  const livePrimedRef = useRef(false);
   useEffect(() => {
-    if (!routeReady || !isSuivre || !live || userPreview) return;
+    if (!isSuivre) {
+      livePrimedRef.current = false;
+      return;
+    }
+    if (!routeReady || !live || userPreview) return;
     const target = Number(live.filmNm) || 0;
     if (Math.abs(playback.nm - target) > 2) {
-      playback.seek(target, { jump: true });
+      playback.seek(target, { jump: false });
     }
-  }, [routeReady, isSuivre, live?.filmNm, userPreview]);
+    livePrimedRef.current = true;
+  }, [routeReady, isSuivre, live?.filmNm, userPreview, playback.nm, playback.seek]);
 
   const simPrimedRef = useRef(false);
   useEffect(() => {
@@ -515,13 +535,25 @@ export default function App() {
     if (isSuivre) playback.setProfile("real");
   }, [isSuivre, playback.setProfile]);
 
-  const flewToLiveRef = useRef(false);
   useEffect(() => {
-    if (!routeReady || !isSuivre || !live || !mapRef.current || !mapReady) return;
-    if (flewToLiveRef.current) return;
-    flewToLiveRef.current = true;
-    mapRef.current.setView([live.lat, live.lon], 6.5, { animate: false });
-  }, [routeReady, isSuivre, live?.lat, live?.lon, mapReady, mapRef]);
+    const map = mapRef.current;
+    if (!map || !mapReady || !routeReady || !flatRoute.points?.length) {
+      setCameraPlaced(false);
+      return;
+    }
+    if (isSuivre) {
+      if (!live) {
+        setCameraPlaced(false);
+        return;
+      }
+      map.setView([live.lat, live.lon], 6.5, { animate: false });
+      setCameraPlaced(true);
+      return;
+    }
+    const start = flatRoute.points[0];
+    map.setView([start.lat, start.lon], 8, { animate: false });
+    setCameraPlaced(true);
+  }, [routeReady, isSuivre, live?.lat, live?.lon, mapReady, mapRef, flatRoute.points]);
 
   useEffect(() => {
     if (!isSimulation) return;
@@ -613,12 +645,12 @@ export default function App() {
     lat: isSuivre && live && !previewing ? live.lat : cast?.follow?.lat,
     lon: isSuivre && live && !previewing ? live.lon : cast?.follow?.lon,
     remainingNm: legContext?.remainingNm ?? playback.sailTotalNm,
-    playing: isSuivre && !previewing ? true : playback.playing,
-    jumpToken: playback.jumpToken,
+    playing: isSuivre && !previewing ? false : playback.playing,
+    jumpToken: isSuivre && !previewing ? 0 : playback.jumpToken,
     phase: cast?.phase,
     hopFrom: cast?.hopFrom,
     hopTo: cast?.hopTo,
-    resetKey: `${view}-${routeReady ? "ready" : "load"}`,
+    resetKey: `${view}-${sceneReady ? "ready" : "load"}`,
   });
 
   useAirHopLine(mapRef, {
@@ -1164,14 +1196,14 @@ export default function App() {
         routeSegmentCount={stats.segments}
       />
 
-      {loading && (
-        <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-[1500] pointer-events-none">
+      {!sceneReady && !drawingMode && (
+        <div data-testid="scene-load-mask" className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-[1500] pointer-events-none">
           <div className="w-10 h-10 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
           <div className="mt-4 text-white/90 text-sm font-medium">{t("calculatingRoutes")}</div>
         </div>
       )}
 
-      {!loading && segProgress.done < segProgress.total && (
+      {!sceneReady && !drawingMode && segProgress.done < segProgress.total && (
         <div className="absolute bottom-20 right-5 z-20 flex items-center gap-2 bg-slate-900/90 text-white text-xs font-medium px-3 py-2 rounded-full shadow-lg pointer-events-none">
           <div className="w-3.5 h-3.5 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
           <span>{t("routesProgress", { done: segProgress.done, total: segProgress.total })}</span>
@@ -1295,6 +1327,11 @@ export default function App() {
         toolsOpen={toolsOpen}
         gribLine={isSuivre && official.gribStatus !== "ready" && official.gribStatus !== "pending" ? t("gribMissing") : ""}
         clock={officialClock}
+        clockCurrent={clockSample ? {
+          filmNm: isSuivre && live && !previewing ? (Number(live.filmNm) || 0) : playback.nm,
+          sailNm: clockSample.sailNm,
+          seaHours: clockSample.seaHours,
+        } : null}
         disclaimer={t("creditsLine")}
       />
 

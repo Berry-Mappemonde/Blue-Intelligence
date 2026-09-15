@@ -69,7 +69,7 @@ export const ROUTE_MAIN_WEIGHT = 2.5;
 export const ROUTE_CASING_WEIGHT = 5;
 /** Accompli (wake) vs reste à parcourir. */
 export const WAKE_DONE_COLOR = "#7dd3fc";
-export const WAKE_REST_COLOR = "#1e3a8a";
+export const WAKE_REST_COLOR = "#1d4ed8";
 export const ESCALE_FILL = "#f8fafc";
 export const ESCALE_STROKE = "#0f172a";
 export const INTERMEDIATE_FILL = "#94a3b8";

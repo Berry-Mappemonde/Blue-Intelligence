@@ -13,8 +13,8 @@ const WAKE_STYLE = {
 
 const REST_STYLE = {
   color: WAKE_REST_COLOR,
-  weight: 3.5,
-  opacity: 0.9,
+  weight: 4,
+  opacity: 0.88,
   pane: "route",
   interactive: false,
 };

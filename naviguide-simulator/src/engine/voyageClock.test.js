@@ -245,13 +245,26 @@ describe("U0 horloge officielle", () => {
 });
 
 describe("clockTickLabelsFromClock", () => {
-  it("reprend nm et jours de l’horloge, pas un 2ᵉ barème", () => {
+  it("un seul J : celui du HUD, pas un milieu à 50 % du film", () => {
     const { clock } = clockFor(DEFAULT_T0_ISO);
-    const ticks = clockTickLabelsFromClock(clock, "fr");
-    assert.equal(ticks.length, 3);
     const last = lookupVoyageClock(clock, clock.vertices.at(-1).filmNm);
-    assert.match(ticks[2].label, new RegExp(`j${Math.floor(last.seaHours / 24)}`));
-    assert.match(ticks[0].label, /0 nm · j0/);
+    const midFilm = last.filmNm * 0.5;
+    const mid = lookupVoyageClock(clock, midFilm);
+    const live = lookupVoyageClock(clock, last.filmNm * 0.47);
+    const ticks = clockTickLabelsFromClock(clock, "fr", {
+      filmNm: live.filmNm,
+      sailNm: live.sailNm,
+      seaHours: live.seaHours,
+    });
+    assert.equal(ticks.length, 3);
+    assert.equal(ticks[0].label.includes("j"), false);
+    assert.equal(ticks[2].label.includes("j"), false);
+    const hudJ = `j${Math.floor(live.seaHours / 24)}`;
+    assert.match(ticks[1].label, new RegExp(hudJ));
+    const midJ = `j${Math.floor(mid.seaHours / 24)}`;
+    if (midJ !== hudJ) {
+      assert.equal(ticks[1].label.includes(midJ), false);
+    }
   });
 });
 
@@ -261,18 +274,23 @@ describe("filmBarTicks", () => {
     assert.deepEqual(filmBarTicks({ vertices: [] }), []);
   });
 
-  it("HUD et ticks partagent le même J — le fallback 7 kt diverge", () => {
+  it("HUD et tick courant partagent le même J — le fallback 7 kt diverge", () => {
     const { clock } = clockFor(DEFAULT_T0_ISO);
     const last = lookupVoyageClock(clock, clock.vertices.at(-1).filmNm);
-    const ticks = filmBarTicks(clock, "fr");
+    const live = lookupVoyageClock(clock, last.filmNm * 0.47);
+    const ticks = filmBarTicks(clock, "fr", {
+      filmNm: live.filmNm,
+      sailNm: live.sailNm,
+      seaHours: live.seaHours,
+    });
     const line = formatFilmClockLine({
-      sailNm: last.sailNm,
-      seaHours: last.seaHours,
-      iso: last.iso,
+      sailNm: live.sailNm,
+      seaHours: live.seaHours,
+      iso: live.iso,
       lang: "fr",
     });
-    const clockJ = `j${Math.floor(last.seaHours / 24)}`;
-    assert.match(ticks[2].label, new RegExp(clockJ));
+    const clockJ = `j${Math.floor(live.seaHours / 24)}`;
+    assert.match(ticks[1].label, new RegExp(clockJ));
     assert.match(line, new RegExp(clockJ));
     const fallback = clockTickLabels({
       playheadTotal: last.filmNm,
@@ -281,7 +299,7 @@ describe("filmBarTicks", () => {
       scale: "both",
     });
     const fallbackJ = fallback[2].label.match(/j(\d+)/)?.[1];
-    const clockDay = String(Math.floor(last.seaHours / 24));
+    const clockDay = String(Math.floor(live.seaHours / 24));
     assert.ok(fallbackJ);
     assert.notEqual(fallbackJ, clockDay);
   });

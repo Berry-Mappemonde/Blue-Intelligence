@@ -524,22 +524,42 @@ export function formatMonthName(month, lang = "fr") {
   return months[m - 1];
 }
 
-/** Graduations barre = la même horloge (pas un 2ᵉ compteur nm/j). */
-export function clockTickLabelsFromClock(clock, lang = "fr") {
+function clockDayLabel(seaHours) {
+  return `j${Math.max(0, Math.floor((Number(seaHours) || 0) / 24))}`;
+}
+
+function clockNmLabel(sailNm, lang = "fr") {
+  const loc = lang === "en" ? "en-US" : "fr-FR";
+  return `${Math.round(Number(sailNm) || 0).toLocaleString(loc)} nm`;
+}
+
+/**
+ * Graduations barre = la même horloge (pas un 2ᵉ compteur nm/j).
+ * `current` = échantillon HUD (live ou playhead). Un seul J, celui du HUD.
+ * Sans current : 0 / fin en nm seulement (pas un J milieu à 50 % du film).
+ */
+export function clockTickLabelsFromClock(clock, lang = "fr", current = null) {
   if (!clock?.vertices?.length) return [];
   const last = clock.vertices[clock.vertices.length - 1];
   const maxFilm = Number(last.filmNm) || 0;
   if (maxFilm <= 0) return [];
-  return [0, 0.5, 1].map((frac) => {
-    const sample = lookupVoyageClock(clock, maxFilm * frac);
-    const sail = Math.round(Number(sample?.sailNm) || 0);
-    const days = Math.max(0, Math.floor((Number(sample?.seaHours) || 0) / 24));
-    const loc = lang === "en" ? "en-US" : "fr-FR";
-    return {
-      filmNm: maxFilm * frac,
-      label: `${sail.toLocaleString(loc)} nm · j${days}`,
-    };
+  const end = lookupVoyageClock(clock, maxFilm);
+  const ticks = [{ filmNm: 0, label: clockNmLabel(0, lang) }];
+  const curFilm = Number(current?.filmNm);
+  if (Number.isFinite(curFilm) && curFilm > 1 && curFilm < maxFilm - 1) {
+    const sample = current.sailNm != null || current.seaHours != null
+      ? current
+      : lookupVoyageClock(clock, curFilm);
+    ticks.push({
+      filmNm: curFilm,
+      label: `${clockNmLabel(sample?.sailNm, lang)} · ${clockDayLabel(sample?.seaHours)}`,
+    });
+  }
+  ticks.push({
+    filmNm: maxFilm,
+    label: clockNmLabel(end?.sailNm, lang),
   });
+  return ticks;
 }
 
 /**
@@ -547,8 +567,8 @@ export function clockTickLabelsFromClock(clock, lang = "fr") {
  * Jamais `clockTickLabels` (nœuds instantanés / 2ᵉ J).
  * Sans horloge : aucune graduation, pas de fallback.
  */
-export function filmBarTicks(clock, lang = "fr") {
-  return clockTickLabelsFromClock(clock, lang);
+export function filmBarTicks(clock, lang = "fr", current = null) {
+  return clockTickLabelsFromClock(clock, lang, current);
 }
 
 export function formatFilmClockLine({ sailNm, seaHours, iso, lang = "fr" }) {

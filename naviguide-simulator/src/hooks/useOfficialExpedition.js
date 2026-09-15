@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_T0_ISO, OFFICIAL_VOYAGE_ID, sampleClockAtTime } from "../engine/voyageClock.js";
+import { officialGribStatus, officialGribWarning } from "./gribStatus.js";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
@@ -98,9 +99,8 @@ export function useOfficialExpedition({
     const sample = clockRef.current
       ? sampleClockAtTime(clockRef.current, new Date())
       : null;
-    const qs = sample?.lat != null && sample?.lon != null
-      ? `?lat=${encodeURIComponent(sample.lat)}&lon=${encodeURIComponent(sample.lon)}`
-      : "";
+    if (sample?.lat == null || sample?.lon == null) return null;
+    const qs = `?lat=${encodeURIComponent(sample.lat)}&lon=${encodeURIComponent(sample.lon)}`;
     const url = force ? `${API}/voyage/official/grib/refresh${qs}` : `${API}/voyage/official/grib${qs}`;
     const res = await fetch(url, force ? { method: "POST" } : undefined);
     const data = await res.json().catch(() => null);
@@ -110,6 +110,13 @@ export function useOfficialExpedition({
 
   useEffect(() => {
     if (!enabled) return undefined;
+    const sample = clock
+      ? sampleClockAtTime(clock, new Date())
+      : (serverClock ? sampleClockAtTime(serverClock, new Date()) : null);
+    if (sample?.lat == null) {
+      setGribPending(true);
+      return undefined;
+    }
     let cancelled = false;
     setGribPending(true);
     refreshGrib({ force: true }).catch(() => {}).finally(() => {
@@ -122,7 +129,7 @@ export function useOfficialExpedition({
       cancelled = true;
       clearInterval(id);
     };
-  }, [enabled, refreshGrib, meta?.voyageId]);
+  }, [enabled, refreshGrib, meta?.voyageId, clock, serverClock]);
 
   const live = useMemo(() => {
     const liveClock = clock || serverClock;
@@ -155,10 +162,21 @@ export function useOfficialExpedition({
       model: null,
       windKnots: null,
       dirFromDeg: null,
-      gribStatus: grib?.status || "absent",
-      gribWarning: "dernière prévision absente",
+      gribStatus: grib?.status === "ready" ? "ready" : (gribPending || !grib ? "pending" : "absent"),
+      gribWarning: null,
     };
-  }, [enabled, clock, serverClock, nowMs, grib]);
+  }, [enabled, clock, serverClock, nowMs, grib, gribPending]);
+
+  const positioned = Boolean(
+    (clock || serverClock)
+    && sampleClockAtTime(clock || serverClock, new Date(nowMs))?.lat != null,
+  );
+  const gribStatus = officialGribStatus({
+    enabled,
+    grib,
+    pending: gribPending,
+    positioned,
+  });
 
   return {
     voyageId: OFFICIAL_VOYAGE_ID,
@@ -166,17 +184,13 @@ export function useOfficialExpedition({
     clock: serverClock,
     live,
     grib,
-    gribStatus: grib?.status === "ready"
-      ? "ready"
-      : (enabled ? (gribPending || !grib ? "pending" : "absent") : null),
+    gribStatus,
     gribModel: (grib?.products || [])
       .filter((p) => p.status === "ready")
       .map((p) => p.model)
       .filter(Boolean)
       .join(" · ") || grib?.model || null,
-    gribWarning: grib?.status === "ready" || gribPending || !grib
-      ? null
-      : (enabled ? "dernière prévision absente" : null),
+    gribWarning: officialGribWarning({ enabled, status: gribStatus }),
     refreshGrib,
   };
 }

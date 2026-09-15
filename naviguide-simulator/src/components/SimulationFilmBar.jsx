@@ -57,9 +57,10 @@ export function SimulationFilmBar({
   toolsOpen = true,
   gribLine = "",
   clock = null,
+  clockCurrent = null,
   disclaimer = "",
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const insets = filmBarInsets({ sidebarOpen, toolsOpen });
   const barTotal = playheadTotal ?? totalNm;
   const barNm = playhead ?? nm;
@@ -71,7 +72,7 @@ export function SimulationFilmBar({
       : phase === "side-sail"
         ? t("filmPhaseSide")
         : "";
-  const ticks = filmBarTicks(clock);
+  const ticks = filmBarTicks(clock, lang, clockCurrent);
 
   const onBarClick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -145,7 +146,7 @@ export function SimulationFilmBar({
           </div>
         </div>
 
-        <div className="text-[11px] text-white/75 tabular-nums leading-tight mt-0.5 truncate">
+        <div data-testid="film-clock-line" className="text-[11px] text-white/75 tabular-nums leading-tight mt-0.5 truncate">
           {clockLine || `${Math.round(nm).toLocaleString()} nm`}
           {remainingNm > 0.5 && !finished && vehicle !== "plane"
             ? ` · ${t("nmRemaining")} ${Math.round(remainingNm).toLocaleString()} nm`
