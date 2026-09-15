@@ -89,8 +89,37 @@ ANTHROPIC_API_KEY=
 # ── Weather agent — StormGlass (optional) ──────────────────────────────────
 # Live weather data. Without a key, the weather agent uses LLM climatology.
 STORMGLASS_API_KEY=
+# ── LangSmith — microscope LOCAL only (docs/LANGSMITH_NAVIGUIDE.md) ────────
+# Never copy this block to the VPS. Tracing stays off until you flip
+# LANGSMITH_TRACING=true and paste your key.
+LANGSMITH_LOCAL=1
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=naviguide-meteo-dev
+LANGSMITH_TRACING_SAMPLING_RATE=1
 ENVEOF
 warn "naviguide-api/.env créé — renseigner COPERNICUS_USERNAME/PASSWORD et une clé LLM (NVIDIA_API_KEY…)"
+fi
+
+if [ -f "$API_DIR/.env" ] && ! grep -q '^LANGSMITH_LOCAL=' "$API_DIR/.env"; then
+    cat >> "$API_DIR/.env" <<'ENVEOF'
+
+# ── LangSmith — microscope LOCAL only (docs/LANGSMITH_NAVIGUIDE.md) ────────
+LANGSMITH_LOCAL=1
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=naviguide-meteo-dev
+LANGSMITH_TRACING_SAMPLING_RATE=1
+ENVEOF
+    warn "Bloc LangSmith ajouté à naviguide-api/.env (tracing encore off)"
+fi
+
+# Expose naviguide-api/.env to every Python service (orchestrator included).
+if [ -f "$API_DIR/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$API_DIR/.env"
+    set +a
 fi
 API_LOG="$LOG_DIR/naviguide-api.log"
 (cd "$API_DIR" && nohup $PYTHON main.py > "$API_LOG" 2>&1) &

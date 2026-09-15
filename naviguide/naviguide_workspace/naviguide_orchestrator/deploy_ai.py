@@ -4,9 +4,19 @@ NAVIGUIDE Orchestrator — Deploy AI Communication Module
 
 import os
 import requests
+import sys
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+_NAVIGUIDE_ROOT = str(Path(__file__).resolve().parents[2])
+if _NAVIGUIDE_ROOT not in sys.path:
+    sys.path.insert(0, _NAVIGUIDE_ROOT)
+from langsmith_local import apply_langsmith_guard  # noqa: E402
+
+apply_langsmith_guard()
 
 AUTH_URL = "https://api-auth.dev.deploy.ai/oauth2/token"
 API_URL  = "https://core-api.dev.deploy.ai"

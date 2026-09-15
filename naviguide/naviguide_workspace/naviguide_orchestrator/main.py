@@ -27,6 +27,20 @@ _WS_ROOT = str(Path(__file__).resolve().parents[1])
 if _WS_ROOT not in sys.path:
     sys.path.insert(0, _WS_ROOT)
 
+_NAVIGUIDE_ROOT = Path(__file__).resolve().parents[2]
+if str(_NAVIGUIDE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_NAVIGUIDE_ROOT))
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(_WS_ROOT) / ".env")
+    load_dotenv(_NAVIGUIDE_ROOT / ".env")
+    load_dotenv(_NAVIGUIDE_ROOT / "naviguide-api" / ".env")
+except ImportError:
+    pass
+from langsmith_local import apply_langsmith_guard  # noqa: E402
+
+apply_langsmith_guard()
+
 from .graph  import build_orchestrator
 from .state  import OrchestratorState
 from naviguide_agent1.router    import BerryMappemondeRouter

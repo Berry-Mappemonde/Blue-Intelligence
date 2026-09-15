@@ -26,6 +26,10 @@ _NAVIGUIDE_ROOT = str(Path(__file__).resolve().parents[2])
 if _NAVIGUIDE_ROOT not in sys.path:
     sys.path.insert(0, _NAVIGUIDE_ROOT)
 
+from langsmith_local import apply_langsmith_guard  # noqa: E402
+
+apply_langsmith_guard()
+
 from llm_cascade import complete as _cascade_complete  # noqa: E402
 from llm_cascade import stream as _cascade_stream  # noqa: E402
 

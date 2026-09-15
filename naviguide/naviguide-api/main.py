@@ -2,6 +2,7 @@ import os
 import re
 import math
 import json
+import sys
 import time
 import asyncio
 from typing import Optional, Union, List
@@ -90,6 +91,13 @@ def _is_land_hires(lat: float, lon: float) -> bool:
 
 # Load environment variables
 load_dotenv()
+
+_NAVIGUIDE_ROOT = str(pathlib.Path(__file__).resolve().parents[1])
+if _NAVIGUIDE_ROOT not in sys.path:
+    sys.path.insert(0, _NAVIGUIDE_ROOT)
+from langsmith_local import apply_langsmith_guard  # noqa: E402
+
+apply_langsmith_guard()
 
 COPERNICUS_USERNAME = os.getenv("COPERNICUS_USERNAME")
 COPERNICUS_PASSWORD = os.getenv("COPERNICUS_PASSWORD")
