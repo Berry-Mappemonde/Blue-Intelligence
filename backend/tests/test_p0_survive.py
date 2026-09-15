@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core import extract, geo  # noqa: E402
+from app.core.html_worker import main as html_worker_main  # noqa: E402
 from app.core.pdf_worker import extract_pdf_file, main as pdf_worker_main  # noqa: E402
 from app.services import poe_pipeline as poe  # noqa: E402
 
@@ -69,6 +70,57 @@ class TestPdfIsolation:
         inp.write_bytes(_tiny_pdf_bytes("Port Delta"))
         extract_pdf_file(str(inp), str(out), 5)
         assert "Delta" in out.read_text(encoding="utf-8")
+
+
+class TestHtmlIsolation:
+    def test_extract_module_mentions_html_worker(self):
+        src = inspect.getsource(extract)
+        assert "app.core.html_worker" in src
+        assert "parse_html_pair_safe" in src
+
+    def test_worker_extracts_article(self, tmp_path):
+        inp = tmp_path / "in.html"
+        out = tmp_path / "out.json"
+        inp.write_text(
+            "<html><head><title>Ports</title></head><body><article>"
+            + "<p>The official ports of entry are Alpha Harbour and Beta Marina. "
+              "Foreign yachts must clear customs on arrival.</p>" * 12
+            + "</article></body></html>",
+            encoding="utf-8",
+        )
+        assert html_worker_main([str(inp), str(out)]) == 0
+        data = json.loads(out.read_text(encoding="utf-8"))
+        blob = (data.get("n1") or "") + " " + (data.get("n2_text") or "")
+        assert "Alpha Harbour" in blob
+
+    def test_worker_crash_is_confined(self, monkeypatch):
+        def boom(*_a, **_k):
+            raise RuntimeError("html_worker exit -6: abort")
+
+        monkeypatch.setattr(extract, "_run_html_worker", boom)
+        monkeypatch.setattr(extract, "HTML_WORKER_MIN_BYTES", 0)
+        pair = extract.parse_html_pair_safe("<html><p>x</p></html>")
+        assert pair == {"n1": "", "n2_text": "", "title": ""}
+
+    def test_small_html_stays_local_when_threshold_high(self, monkeypatch):
+        monkeypatch.setattr(extract, "HTML_WORKER_MIN_BYTES", 10_000_000)
+
+        def boom(*_a, **_k):
+            raise AssertionError("html worker should not run")
+
+        monkeypatch.setattr(extract, "_run_html_worker", boom)
+        html = ("<html><head><title>Ports</title></head><body><article>"
+                + "<p>The official ports of entry are Alpha Harbour.</p>" * 8
+                + "</article></body></html>")
+        pair = extract.parse_html_pair_safe(html)
+        blob = pair["n1"] + " " + pair["n2_text"]
+        assert "Alpha Harbour" in blob
+
+    def test_page_metadata_truncates_huge_html(self):
+        huge = "<html><head><title>Z</title></head><body>" + ("<p>x</p>" * 80_000)
+        huge += "</body></html>"
+        meta = extract.page_metadata(huge, "https://example.test/z")
+        assert meta["title"] == "Z"
 
 
 class _FakeResp:

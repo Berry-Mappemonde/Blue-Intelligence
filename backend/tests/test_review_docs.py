@@ -1,5 +1,6 @@
 """Review Formalités : documents, pin mrgid, extract, juge local ∥ LLM."""
 import asyncio
+import inspect
 import sys
 from pathlib import Path
 
@@ -81,6 +82,17 @@ def test_review_chain_and_chat_payload_vision():
     assert content[0]["type"] == "text"
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_get_browser_never_launches_chromium():
+    import app.core.render as render
+
+    logs = []
+    out = asyncio.run(render._get_browser(logs.append))
+    assert out is None
+    assert any("interdit" in m for m in logs)
+    src = inspect.getsource(render._get_browser)
+    assert "chromium.launch" not in src
 
 
 def test_render_screenshot_skips_retired_host_without_browser(monkeypatch):

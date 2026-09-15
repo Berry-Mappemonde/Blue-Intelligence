@@ -124,25 +124,14 @@ def _run_screenshot_worker(url: str, timeout_s: int, settle_ms: int,
 
 
 async def _get_browser(log):
-    """Ancien navigateur partagé — plus utilisé pour les captures Review."""
-    global _pw, _browser, _unavailable
-    if _unavailable:
-        return None
-    async with _lock:
-        if _browser is not None and _browser.is_connected():
-            return _browser
-        try:
-            from playwright.async_api import async_playwright
-            if _pw is None:
-                _pw = await async_playwright().start()
-            _browser = await _pw.chromium.launch(
-                headless=True, args=["--no-sandbox", "--disable-dev-shm-usage",
-                                     "--disable-gpu", "--renderer-process-limit=1"])
-            return _browser
-        except Exception as e:
-            _unavailable = True
-            log(f"render: Playwright indisponible ({type(e).__name__}: {str(e)[:80]}) — rendu désactivé")
-            return None
+    """Ancien navigateur partagé — interdit dans le process API.
+
+    Un Chromium in-process a déjà corrompu le tas (``free(): invalid
+    pointer``). Les rendus passent par ``render_worker``.
+    """
+    log = log or (lambda m: None)
+    log("render: Chromium in-process interdit — utiliser render_worker")
+    return None
 
 
 async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=None) -> str | None:

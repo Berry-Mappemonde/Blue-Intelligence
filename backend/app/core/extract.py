@@ -6,7 +6,9 @@ Porte d'entrée : ``read_url`` / ``read_urls``. Même question partout
 
   N1/N2 (gratuit, ms)    : httpx direct + DOUBLE PARSING comparé
                            trafilatura ∥ Readability/BS4 (le plus riche gagne,
-                           la similarité entre les deux est un signal de qualité)
+                           la similarité entre les deux est un signal de qualité).
+                           Au-delà de ~200 Ko (miroirs Jina), le couple tourne
+                           dans ``html_worker`` : un ABRT lxml ne tue plus l'API.
                            PDF : magie %PDF- / Content-Type / Content-Disposition,
                            puis PyMuPDF (+ OCR si scan).
   N3 (gratuit, local)    : rendu navigateur Playwright/Chromium (render_core)
@@ -32,6 +34,7 @@ import asyncio
 import difflib
 import hashlib
 import html
+import json
 import os
 import re
 import shutil
@@ -63,6 +66,15 @@ PDF_CACHE_DIR = DATA_DIR / "cached_pdfs"
 PDF_SUBPROCESS_TIMEOUT_S = 90
 PDF_MAX_CONCURRENT = 3
 _pdf_slots = threading.Semaphore(PDF_MAX_CONCURRENT)
+
+# lxml/trafilatura dans le process API a déjà produit
+# ``free(): invalid pointer`` après un lot de ~9 h. Seuil 0 = toujours
+# hors process. Les tests peuvent monter ``BI_HTML_WORKER_MIN``.
+HTML_WORKER_MIN_BYTES = int(os.environ.get("BI_HTML_WORKER_MIN", "0"))
+HTML_SUBPROCESS_TIMEOUT_S = 60
+HTML_MAX_CONCURRENT = 2
+HTML_METADATA_MAX_CHARS = 400_000
+_html_slots = threading.Semaphore(HTML_MAX_CONCURRENT)
 
 UA_BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 # r.jina.ai renvoie 403 (Cloudflare) si on se présente comme Chrome ; un UA lecteur suffit.
@@ -526,6 +538,88 @@ def parse_html_n2(html: str) -> dict:
     return {"text": text, "title": title}
 
 
+def _parse_html_pair_local(html: str) -> dict:
+    try:
+        n1 = (parse_html_n1(html) or "").strip()
+    except Exception:
+        n1 = ""
+    try:
+        n2 = parse_html_n2(html)
+    except Exception:
+        n2 = {"text": "", "title": ""}
+    return {
+        "n1": n1,
+        "n2_text": (n2.get("text") or "").strip(),
+        "title": (n2.get("title") or "").strip(),
+    }
+
+
+def _run_html_worker(html: str) -> dict:
+    """Spawn ``app.core.html_worker`` — hookable depuis les tests."""
+    fd, inp = tempfile.mkstemp(suffix=".html")
+    out = inp + ".json"
+    try:
+        os.write(fd, html.encode("utf-8", "replace"))
+        os.close(fd)
+        fd = -1
+        proc = subprocess.run(
+            [sys.executable, "-m", "app.core.html_worker", inp, out],
+            timeout=HTML_SUBPROCESS_TIMEOUT_S,
+            capture_output=True,
+            env=_pdf_worker_env(),
+            cwd=str(BACKEND_DIR),
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or b"").decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"html_worker exit {proc.returncode}: {err}")
+        raw = Path(out).read_text(encoding="utf-8")
+        data = json.loads(raw or "{}")
+        if not isinstance(data, dict):
+            raise RuntimeError("html_worker: JSON inattendu")
+        return {
+            "n1": str(data.get("n1") or ""),
+            "n2_text": str(data.get("n2_text") or ""),
+            "title": str(data.get("title") or ""),
+        }
+    finally:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        for p in (inp, out):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def parse_html_pair_safe(html: str) -> dict:
+    """Parse N1/N2. Gros HTML (ou seuil 0) → sous-processus.
+
+    Un crash lxml ne remonte pas dans l'API : on rend un couple vide
+    plutôt que de retomber sur le parse in-process (c'est lui qui tue).
+    """
+    html = html or ""
+    if not html.strip():
+        return {"n1": "", "n2_text": "", "title": ""}
+    nbytes = len(html.encode("utf-8", "replace"))
+    if nbytes < HTML_WORKER_MIN_BYTES:
+        return _parse_html_pair_local(html)
+    with _html_slots:
+        try:
+            return _run_html_worker(html)
+        except Exception:
+            return {"n1": "", "n2_text": "", "title": ""}
+
+
+def _html_for_bs4(html: str, limit: int = HTML_METADATA_MAX_CHARS) -> str:
+    html = html or ""
+    if len(html) <= limit:
+        return html
+    return html[:limit]
+
+
 def _parse_similarity(a: str, b: str) -> float:
     """Similarité entre les textes des deux parseurs (signal de qualité)."""
     if not a or not b:
@@ -545,20 +639,10 @@ async def dual_parse_html(html: str) -> dict:
     Le texte le plus riche gagne ; la similarité entre les deux est conservée
     comme signal (accord fort = extraction robuste, divergence = à inspecter).
     Retourne {text, level, title, n1_chars, n2_chars, similarity, agree}."""
-    async def _n1():
-        try:
-            return (await asyncio.to_thread(parse_html_n1, html)).strip()
-        except Exception:
-            return ""
-
-    async def _n2():
-        try:
-            return await asyncio.to_thread(parse_html_n2, html)
-        except Exception:
-            return {"text": "", "title": ""}
-
-    t1, n2 = await asyncio.gather(_n1(), _n2())
-    t2, title2 = (n2.get("text") or "").strip(), (n2.get("title") or "").strip()
+    pair = await asyncio.to_thread(parse_html_pair_safe, html or "")
+    t1 = (pair.get("n1") or "").strip()
+    t2 = (pair.get("n2_text") or "").strip()
+    title2 = (pair.get("title") or "").strip()
     sim = _parse_similarity(t1, t2)
     if len(t1) >= len(t2):
         text, level = t1, "N1-trafilatura"
@@ -573,7 +657,7 @@ async def dual_parse_html(html: str) -> dict:
 
 def page_metadata(html: str, url: str) -> dict:
     """Titre, meta description, image principale, liens externes (BS4)."""
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(_html_for_bs4(html), "html.parser")
     title = (soup.title.get_text().strip() if soup.title else "") or ""
     meta = soup.find("meta", attrs={"name": "description"}) or \
         soup.find("meta", attrs={"property": "og:description"})
@@ -610,7 +694,7 @@ def page_metadata(html: str, url: str) -> dict:
 
 def internal_followups(html: str, base_url: str, patterns=FOLLOWUP_PATTERNS, limit: int = 3) -> list[str]:
     """Depth=2 sélectif : liens internes de type /annuaire, /contacts, /clearance…"""
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(_html_for_bs4(html), "html.parser")
     base_host = urlparse(base_url).netloc
     out, seen = [], set()
     for a in soup.find_all("a", href=True):
