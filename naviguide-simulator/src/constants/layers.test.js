@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_LAYER_CONFIG } from "./layers.js";
+import { ALL_LAYER_CONFIG, DEFAULT_SHOW_ZEE } from "./layers.js";
 
 describe("ALL_LAYER_CONFIG", () => {
   it("replaces Science with the 8 charts, without a single chip", () => {
@@ -13,5 +13,9 @@ describe("ALL_LAYER_CONFIG", () => {
       "climatology",
     ]);
     assert.equal(keys.includes("science"), false);
+  });
+
+  it("ZEE off au premier pixel", () => {
+    assert.equal(DEFAULT_SHOW_ZEE, false);
   });
 });
