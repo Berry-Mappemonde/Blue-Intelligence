@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -7,11 +7,14 @@ from saildocs import (
     MAX_BBOX_LAT_SPAN,
     assert_corridor_not_globe,
     bbox_around,
+    bbox_from_around,
     ingest_daily,
     saildocs_query,
+    track_from_clock,
     utc_day,
     wind_at_daily,
 )
+from voyage_clock import build_voyage_clock, sample_clock_at_time
 
 
 def test_bbox_is_corridor_not_globe():
@@ -30,6 +33,50 @@ def test_saildocs_query_around_boat():
     assert "WIND" in q
     assert "180W" not in q
     assert "90N" not in q
+
+
+def test_saildocs_query_covers_dest_at_next_download():
+    dest = {"lat": 40.0, "lon": -15.0, "t": "2026-09-16T12:00:00Z"}
+    q_disk = saildocs_query(46.15, -1.16)
+    q_track = saildocs_query(46.15, -1.16, dest=dest)
+    assert q_disk != q_track
+    south, north, west, east = bbox_from_around({
+        "lat": 46.15,
+        "lon": -1.16,
+        "dest": dest,
+    })
+    assert south <= dest["lat"] <= north
+    assert west <= dest["lon"] <= east
+    assert north - south <= MAX_BBOX_LAT_SPAN
+
+
+def test_track_from_clock_dest_is_eta_next_download():
+    t0 = datetime(2026, 5, 15, 8, tzinfo=timezone.utc)
+    clock = build_voyage_clock(
+        [
+            {"lat": 46.15, "lon": -1.16, "cumNm": 0, "filmCum": 0, "jump": False, "nonMaritime": False},
+            {"lat": 40.0, "lon": -15.0, "cumNm": 650, "filmCum": 650, "jump": False, "nonMaritime": False},
+            {"lat": 14.6, "lon": -61.07, "cumNm": 3350, "filmCum": 3350, "jump": False, "nonMaritime": False},
+        ],
+        [
+            {"name": "La Rochelle", "nm": 0, "filmNm": 0, "lat": 46.15, "lon": -1.16, "index": 0},
+            {"name": "Fort-de-France (Martinique)", "nm": 3350, "filmNm": 3350, "lat": 14.6, "lon": -61.07, "index": 2},
+        ],
+        t0,
+        start_at="la-rochelle",
+    )
+    when = t0 + timedelta(hours=48)
+    around = track_from_clock(clock, when)
+    assert around is not None
+    later = sample_clock_at_time(clock, when + timedelta(hours=24))
+    assert later is not None
+    assert abs(around["dest"]["lat"] - later["lat"]) < 0.05
+    assert abs(around["dest"]["lon"] - later["lon"]) < 0.05
+    assert around["horizonHours"] == 24
+    south, north, west, east = bbox_from_around(around)
+    assert south <= around["dest"]["lat"] <= north
+    assert west <= around["dest"]["lon"] <= east
+    assert (around["lat"], around["lon"]) != (around["dest"]["lat"], around["dest"]["lon"])
 
 
 def test_ingest_and_sample(tmp_path, monkeypatch):

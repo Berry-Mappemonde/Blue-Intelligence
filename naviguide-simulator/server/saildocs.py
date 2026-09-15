@@ -1,7 +1,8 @@
 """GRIB2 journalier autour du bateau (Saildocs). Pas un GRIB globe.
 
-Le skipper dépose le fichier du jour (inbox ou POST). Fenêtre : ~200 nm
-autour de la position actuelle, quelques jours, modèle nommé (GFS).
+Le skipper dépose le fichier du jour (inbox ou POST). Fenêtre : couloir
+~200 nm autour du trait horloge entre maintenant et le prochain
+téléchargement (typiquement now + 24 h), modèle nommé (GFS).
 """
 from __future__ import annotations
 
@@ -9,15 +10,17 @@ import json
 import math
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from voyage_clock import OFFICIAL_VOYAGE_ID, parse_iso, to_iso
+from voyage_clock import OFFICIAL_VOYAGE_ID, parse_iso, sample_clock_at_time, to_iso
 
 DAILY_RADIUS_NM = 200.0
 DAILY_LEAD_HOURS = 72
 DAILY_STEP_HOURS = 6
+NEXT_DOWNLOAD_HOURS = 24
+TRACK_STEP_HOURS = 6
 MAX_BBOX_LAT_SPAN = 12.0
 MAX_BBOX_LON_SPAN = 20.0
 GRIB_MISSING = "prévision du jour absente"
@@ -39,16 +42,178 @@ def utc_day(when: Optional[datetime] = None) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
 
 
-def bbox_around(lat: float, lon: float, radius_nm: float = DAILY_RADIUS_NM) -> Tuple[float, float, float, float]:
-    """(south, north, west, east) — couloir, pas le globe."""
+def _unwrap_lon(lon: float, ref: float) -> float:
+    while lon - ref > 180:
+        lon -= 360
+    while lon - ref < -180:
+        lon += 360
+    return lon
+
+
+def _wrap_lon(lon: float) -> float:
+    while lon > 180:
+        lon -= 360
+    while lon < -180:
+        lon += 360
+    return lon
+
+
+def _disk_delta(lat: float, radius_nm: float) -> Tuple[float, float]:
     dlat = radius_nm / 60.0
     cos_lat = max(0.2, math.cos(math.radians(lat)))
     dlon = radius_nm / (60.0 * cos_lat)
+    return dlat, dlon
+
+
+def bbox_around(lat: float, lon: float, radius_nm: float = DAILY_RADIUS_NM) -> Tuple[float, float, float, float]:
+    """(south, north, west, east) — disque autour d’un point, pas le globe."""
+    dlat, dlon = _disk_delta(lat, radius_nm)
     south = max(-90.0, lat - dlat)
     north = min(90.0, lat + dlat)
     west = lon - dlon
     east = lon + dlon
     return (round(south, 4), round(north, 4), round(west, 4), round(east, 4))
+
+
+def _clamp_span(
+    lo: float,
+    hi: float,
+    core_lo: float,
+    core_hi: float,
+    max_span: float,
+) -> Tuple[float, float]:
+    if hi - lo <= max_span:
+        return lo, hi
+    core_span = core_hi - core_lo
+    if core_span >= max_span:
+        mid = (core_lo + core_hi) / 2.0
+        return mid - max_span / 2.0, mid + max_span / 2.0
+    pad = (max_span - core_span) / 2.0
+    return core_lo - pad, core_hi + pad
+
+
+def _as_latlon(item: Any) -> Optional[Tuple[float, float]]:
+    if item is None:
+        return None
+    if isinstance(item, dict):
+        if item.get("lat") is None or item.get("lon") is None:
+            return None
+        return (float(item["lat"]), float(item["lon"]))
+    if isinstance(item, (list, tuple)) and len(item) >= 2:
+        return (float(item[0]), float(item[1]))
+    return None
+
+
+def points_from_around(around: Optional[dict]) -> List[Tuple[float, float]]:
+    if not around:
+        return []
+    pts: List[Tuple[float, float]] = []
+    here = _as_latlon(around)
+    if here:
+        pts.append(here)
+    for raw in around.get("waypoints") or []:
+        pt = _as_latlon(raw)
+        if pt:
+            pts.append(pt)
+    dest = _as_latlon(around.get("dest"))
+    if dest:
+        pts.append(dest)
+    return pts
+
+
+def bbox_along_track(
+    points: Sequence[Tuple[float, float]],
+    radius_nm: float = DAILY_RADIUS_NM,
+) -> Tuple[float, float, float, float]:
+    """Union des disques autour du trait (ici → demain), pas le globe."""
+    if not points:
+        raise ValueError("bbox ou around requis")
+    if len(points) == 1:
+        return bbox_around(points[0][0], points[0][1], radius_nm)
+
+    ref_lon = points[0][1]
+    souths: List[float] = []
+    norths: List[float] = []
+    wests: List[float] = []
+    easts: List[float] = []
+    raw_lats: List[float] = []
+    raw_lons: List[float] = []
+    for lat, lon in points:
+        dlat, dlon = _disk_delta(lat, radius_nm)
+        unwrapped = _unwrap_lon(lon, ref_lon)
+        souths.append(lat - dlat)
+        norths.append(lat + dlat)
+        wests.append(unwrapped - dlon)
+        easts.append(unwrapped + dlon)
+        raw_lats.append(lat)
+        raw_lons.append(unwrapped)
+
+    south, north = _clamp_span(
+        max(-90.0, min(souths)),
+        min(90.0, max(norths)),
+        min(raw_lats),
+        max(raw_lats),
+        MAX_BBOX_LAT_SPAN,
+    )
+    west_u, east_u = _clamp_span(
+        min(wests),
+        max(easts),
+        min(raw_lons),
+        max(raw_lons),
+        MAX_BBOX_LON_SPAN,
+    )
+    return (
+        round(south, 4),
+        round(north, 4),
+        round(_wrap_lon(west_u), 4),
+        round(_wrap_lon(east_u), 4),
+    )
+
+
+def bbox_from_around(
+    around: dict,
+    radius_nm: float = DAILY_RADIUS_NM,
+) -> Tuple[float, float, float, float]:
+    return bbox_along_track(points_from_around(around), radius_nm)
+
+
+def track_from_clock(
+    clock: Optional[dict],
+    when: datetime,
+    *,
+    horizon_hours: int = NEXT_DOWNLOAD_HOURS,
+    step_hours: int = TRACK_STEP_HOURS,
+) -> Optional[Dict[str, Any]]:
+    """Position horloge maintenant + échantillons jusqu’au prochain download."""
+    if not clock:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    samples: List[Dict[str, Any]] = []
+    hours = 0
+    while hours <= horizon_hours:
+        t = when + timedelta(hours=hours)
+        sample = sample_clock_at_time(clock, t)
+        if sample and sample.get("lat") is not None and sample.get("lon") is not None:
+            samples.append({
+                "lat": float(sample["lat"]),
+                "lon": float(sample["lon"]),
+                "t": to_iso(t),
+            })
+        hours += step_hours
+    if not samples:
+        return None
+    dest = samples[-1]
+    waypoints = samples[1:-1] if len(samples) > 2 else []
+    return {
+        "lat": samples[0]["lat"],
+        "lon": samples[0]["lon"],
+        "at": samples[0]["t"],
+        "dest": {"lat": dest["lat"], "lon": dest["lon"], "t": dest["t"]},
+        "waypoints": waypoints,
+        "nextDownloadAt": dest["t"],
+        "horizonHours": horizon_hours,
+    }
 
 
 def lon_span(west: float, east: float) -> float:
@@ -78,13 +243,16 @@ def saildocs_query(
     lat: float,
     lon: float,
     *,
+    dest: Any = None,
+    waypoints: Optional[Iterable[Any]] = None,
     radius_nm: float = DAILY_RADIUS_NM,
     model: str = "GFS",
     hours: int = DAILY_LEAD_HOURS,
     step: int = DAILY_STEP_HOURS,
 ) -> str:
-    """Requête Saildocs skipper : vent autour du bateau, pas le monde."""
-    south, north, west, east = bbox_around(lat, lon, radius_nm)
+    """Requête Saildocs skipper : vent sur le couloir ici → demain, pas le monde."""
+    around = {"lat": lat, "lon": lon, "dest": dest, "waypoints": list(waypoints or [])}
+    south, north, west, east = bbox_from_around(around, radius_nm)
     assert_corridor_not_globe((south, north, west, east))
     window = f"0,{step}..{hours}"
     return (
@@ -171,8 +339,9 @@ def wind_at_daily(record: Optional[dict], lat: float, lon: float, when: datetime
 def _parse_bbox(raw: Any, around: Optional[dict], radius_nm: float) -> Tuple[float, float, float, float]:
     if raw and len(raw) == 4:
         return (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
-    if around and around.get("lat") is not None and around.get("lon") is not None:
-        return bbox_around(float(around["lat"]), float(around["lon"]), radius_nm)
+    pts = points_from_around(around)
+    if pts:
+        return bbox_along_track(pts, radius_nm)
     raise ValueError("bbox ou around requis")
 
 
@@ -192,7 +361,14 @@ def ingest_daily(
     model = str(payload.get("model") or "GFS")
     query = payload.get("query")
     if not query and here:
-        query = saildocs_query(float(here["lat"]), float(here["lon"]), radius_nm=radius, model=model)
+        query = saildocs_query(
+            float(here["lat"]),
+            float(here["lon"]),
+            dest=here.get("dest"),
+            waypoints=here.get("waypoints"),
+            radius_nm=radius,
+            model=model,
+        )
     record = {
         "voyageId": voyage_id,
         "day": day,
@@ -203,6 +379,9 @@ def ingest_daily(
         "bbox": list(bbox),
         "radiusNm": radius,
         "around": here,
+        "dest": (here or {}).get("dest") if here else None,
+        "nextDownloadAt": (here or {}).get("nextDownloadAt") if here else None,
+        "horizonHours": (here or {}).get("horizonHours") if here else None,
         "query": query,
         "samples": payload.get("samples") or [],
         "warning": None,
@@ -215,8 +394,13 @@ def absent_payload(voyage_id: str, day: Optional[str] = None, around: Optional[d
     query = None
     bbox = None
     if here.get("lat") is not None and here.get("lon") is not None:
-        bbox = list(bbox_around(float(here["lat"]), float(here["lon"])))
-        query = saildocs_query(float(here["lat"]), float(here["lon"]))
+        bbox = list(bbox_from_around(here))
+        query = saildocs_query(
+            float(here["lat"]),
+            float(here["lon"]),
+            dest=here.get("dest"),
+            waypoints=here.get("waypoints"),
+        )
     return {
         "voyageId": voyage_id,
         "day": day or utc_day(),
@@ -226,6 +410,9 @@ def absent_payload(voyage_id: str, day: Optional[str] = None, around: Optional[d
         "bbox": bbox,
         "radiusNm": DAILY_RADIUS_NM,
         "around": here or None,
+        "dest": here.get("dest") or None,
+        "nextDownloadAt": here.get("nextDownloadAt"),
+        "horizonHours": here.get("horizonHours"),
         "query": query,
         "samples": [],
         "warning": GRIB_MISSING,
@@ -248,6 +435,9 @@ def public_grib(record: Optional[dict], voyage_id: str = OFFICIAL_VOYAGE_ID,
             "bbox": record.get("bbox"),
             "radiusNm": record.get("radiusNm") or DAILY_RADIUS_NM,
             "around": record.get("around") or around,
+            "dest": record.get("dest") or (around or {}).get("dest") if around else record.get("dest"),
+            "nextDownloadAt": record.get("nextDownloadAt") or (around or {}).get("nextDownloadAt"),
+            "horizonHours": record.get("horizonHours") or (around or {}).get("horizonHours"),
             "query": record.get("query"),
             "warning": record.get("warning"),
         }

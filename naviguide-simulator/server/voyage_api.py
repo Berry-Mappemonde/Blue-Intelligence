@@ -28,6 +28,7 @@ from saildocs import (
     public_grib,
     saildocs_query,
     scan_inbox,
+    track_from_clock,
     utc_day,
     wind_at_daily,
 )
@@ -345,13 +346,26 @@ def get_official_clock():
 
 
 def _grib_around_from_live(voy: Optional[dict], when: datetime) -> Optional[dict]:
+    """Couloir horloge : ici → position à l’ETA du prochain téléchargement."""
     if not voy:
         return None
     clock = voy.get("clock") or _climo_clock(voy)
+    around = track_from_clock(clock, when)
+    if around:
+        return around
     sample = sample_clock_at_time(clock, when)
     if not sample:
         return None
     return {"lat": sample.get("lat"), "lon": sample.get("lon")}
+
+
+def _saildocs_query_from_around(around: dict) -> str:
+    return saildocs_query(
+        float(around["lat"]),
+        float(around["lon"]),
+        dest=around.get("dest"),
+        waypoints=around.get("waypoints"),
+    )
 
 
 @router.get("/voyage/official/at")
@@ -439,10 +453,12 @@ def official_saildocs_query(
     if not around:
         raise HTTPException(400, "position bateau inconnue")
     return {
-        "query": saildocs_query(float(around["lat"]), float(around["lon"])),
+        "query": _saildocs_query_from_around(around),
         "around": around,
         "radiusNm": DAILY_RADIUS_NM,
         "model": "GFS",
+        "nextDownloadAt": around.get("nextDownloadAt"),
+        "horizonHours": around.get("horizonHours"),
     }
 
 
