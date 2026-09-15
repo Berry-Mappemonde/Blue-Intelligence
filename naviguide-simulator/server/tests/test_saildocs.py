@@ -4,11 +4,16 @@ import pytest
 
 from saildocs import (
     GRIB_MISSING,
+    GRIB_PRODUCTS,
     MAX_BBOX_LAT_SPAN,
     assert_corridor_not_globe,
     bbox_around,
     bbox_from_around,
+    dest_eta_at_next_download,
     ingest_daily,
+    last_ready_cycle,
+    next_download_at,
+    saildocs_queries,
     saildocs_query,
     track_from_clock,
     utc_day,
@@ -31,8 +36,29 @@ def test_saildocs_query_around_boat():
     q = saildocs_query(46.15, -1.16)
     assert q.startswith("GFS:")
     assert "WIND" in q
+    assert "PRMSL" in q
+    assert "RAIN" in q
     assert "180W" not in q
     assert "90N" not in q
+
+
+def test_saildocs_queries_three_noaa_products():
+    items = saildocs_queries(46.15, -1.16, dest={"lat": 40.0, "lon": -15.0})
+    codes = [i["query"].split(":")[0] for i in items]
+    assert codes == ["GFS", "WW3", "RTOFS"]
+    assert any("WIND,PRMSL,RAIN" in i["query"] for i in items)
+    assert any("HTSGW" in i["query"] for i in items)
+    assert any("CURRENT" in i["query"] for i in items)
+    assert len(GRIB_PRODUCTS) == 3
+
+
+def test_gfs_cycle_next_download():
+    when = datetime(2026, 9, 15, 13, 48, tzinfo=timezone.utc)
+    assert last_ready_cycle(when) == datetime(2026, 9, 15, 6, tzinfo=timezone.utc)
+    assert next_download_at(when) == datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
+    assert dest_eta_at_next_download(when) == datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
+    soon = datetime(2026, 9, 15, 15, 50, tzinfo=timezone.utc)
+    assert dest_eta_at_next_download(soon) == datetime(2026, 9, 15, 22, tzinfo=timezone.utc)
 
 
 def test_saildocs_query_covers_dest_at_next_download():
@@ -68,11 +94,12 @@ def test_track_from_clock_dest_is_eta_next_download():
     when = t0 + timedelta(hours=48)
     around = track_from_clock(clock, when)
     assert around is not None
-    later = sample_clock_at_time(clock, when + timedelta(hours=24))
+    dest_t = dest_eta_at_next_download(when)
+    later = sample_clock_at_time(clock, dest_t)
     assert later is not None
     assert abs(around["dest"]["lat"] - later["lat"]) < 0.05
     assert abs(around["dest"]["lon"] - later["lon"]) < 0.05
-    assert around["horizonHours"] == 24
+    assert around["horizonHours"] == int(round((dest_t - when).total_seconds() / 3600.0))
     south, north, west, east = bbox_from_around(around)
     assert south <= around["dest"]["lat"] <= north
     assert west <= around["dest"]["lon"] <= east
@@ -114,4 +141,4 @@ def test_globe_ingest_rejected(tmp_path, monkeypatch):
 
 
 def test_missing_label():
-    assert GRIB_MISSING == "prévision du jour absente"
+    assert GRIB_MISSING == "dernière prévision absente"
