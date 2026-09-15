@@ -44,6 +44,14 @@ export function overlayStyle(pmtilesHref) {
     },
     layers: [
       {
+        id: "bi-overlay-background",
+        type: "background",
+        paint: {
+          "background-color": "#000000",
+          "background-opacity": 0,
+        },
+      },
+      {
         id: "bi-overlay-route",
         type: "line",
         source: BI_OVERLAY_SOURCE_ID,
