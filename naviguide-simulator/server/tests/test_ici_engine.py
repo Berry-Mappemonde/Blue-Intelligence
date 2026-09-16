@@ -23,6 +23,13 @@ from ici_layers import (
     aton_from_overpass,
     climatology_rose,
     empty_satellites,
+    fetch_review,
+    fetch_rtofs_current,
+    fetch_satellite_scene,
+    geo_from_hycom,
+    hycom_lon,
+    rtofs_from_uv,
+    rtofs_is_fill,
     slim_stac_scene,
 )
 
@@ -385,7 +392,7 @@ def test_fill_dossier_la_rochelle_mocked():
     assert d["weather"]["wind"]["speedKnots"] == 12.4
     assert d["weather"]["wave"]["hs"] == 1.1
     assert d["weather"]["current"] is None
-    assert d["weather"]["current_reason"] == "rtofs_not_ingested"
+    assert (d["weather"]["current_reason"] or "").startswith("rtofs_unavailable")
     assert d["emodnet"]["bathy"]["depth_m"] == 18.4
     assert d["emodnet"]["seabed"]["label"] == "sand"
     assert d["emodnet"]["cables"]["nearby"] is False
@@ -694,3 +701,148 @@ def test_fill_dossier_aton_us_uses_noaa():
     d = asyncio.run(run())
     assert d["aton"]["nearby"][0]["name"] == "Chesapeake Light"
     assert d["aton"]["source"] == "noaa-enc"
+
+
+def test_rtofs_hycom_wrap_and_fill():
+    assert abs(hycom_lon(-30.0) - 330.0) < 1e-6
+    assert abs(hycom_lon(0.0) - 360.0) < 1e-6
+    assert abs(hycom_lon(179.8) - 179.8) < 1e-6
+    assert abs(hycom_lon(-180.0) - 180.0) < 1e-6
+    assert abs(geo_from_hycom(330.0) + 30.0) < 1e-6
+    assert rtofs_is_fill(1.2676506e30)
+    assert rtofs_is_fill(None)
+    assert not rtofs_is_fill(0.12)
+    cur = rtofs_from_uv(0.15, -0.08, issued="2026-09-16T00:00:00Z")
+    assert cur["kind"] == "forecast"
+    assert cur["source"] == "noaa-rtofs"
+    assert cur["speedKnots"] > 0
+    assert 0 <= cur["dirToDeg"] < 360
+
+
+def test_fetch_rtofs_listing_404_is_unavailable_not_not_ingested():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": str(request.url)})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_rtofs_current(client, 0.0, -30.0)
+
+    current, reason = asyncio.run(run())
+    assert current is None
+    assert reason.startswith("rtofs_unavailable")
+    assert "not_ingested" not in reason
+
+
+def test_fill_dossier_rtofs_forecast_when_model_answers(monkeypatch):
+    reset_caches()
+
+    async def fake_rtofs(client, lat, lon):
+        return {
+            "kind": "forecast",
+            "source": "noaa-rtofs",
+            "speedKnots": 0.58,
+            "dirToDeg": 247.0,
+            "issued": "2026-09-16T00:00:00Z",
+            "product": "rtofs_glo_2ds_n000_prog.nc",
+        }, None
+
+    monkeypatch.setattr("ici_layers.fetch_rtofs_current", fake_rtofs)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as client:
+            return await fill_dossier(0.0, -30.0, client=client)
+
+    d = asyncio.run(run())
+    assert d["weather"]["current"]["kind"] == "forecast"
+    assert d["weather"]["current"]["source"] == "noaa-rtofs"
+    assert d["weather"]["current"]["speedKnots"] == 0.58
+    assert d["weather"]["current_reason"] is None
+
+
+def test_fill_dossier_rtofs_off_grid(monkeypatch):
+    reset_caches()
+
+    async def fake_rtofs(client, lat, lon):
+        return None, "off_grid"
+
+    monkeypatch.setattr("ici_layers.fetch_rtofs_current", fake_rtofs)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as client:
+            return await fill_dossier(46.15, -1.16, client=client)
+
+    d = asyncio.run(run())
+    assert d["weather"]["current"] is None
+    assert d["weather"]["current_reason"] == "off_grid"
+    assert d["weather"]["wind"]["speedKnots"] == 12.4
+
+
+def test_stac_200_empty_is_not_catalog_mute():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "stac.dataspace.copernicus.eu" in str(request.url):
+            return httpx.Response(200, json={"type": "FeatureCollection", "features": []})
+        return httpx.Response(404)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_satellite_scene(client, 0.0, -30.0)
+
+    bag = asyncio.run(run())
+    assert bag["http_status"] == 200
+    assert bag["url"] == "https://stac.dataspace.copernicus.eu/v1/search"
+    assert bag["scene"] is None
+    assert bag["reason"] == "no_scene_in_bbox"
+    assert "unavailable" not in (bag["reason"] or "")
+
+
+def test_stac_down_records_status_and_url():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"detail": "down"})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_satellite_scene(client, 24.0, 36.5)
+
+    bag = asyncio.run(run())
+    assert bag["scene"] is None
+    assert bag["http_status"] == 503
+    assert bag["url"] == "https://stac.dataspace.copernicus.eu/v1/search"
+    assert "cdse_stac_unavailable:503" in (bag["reason"] or "")
+
+
+def test_review_401_is_admin_not_no_eez():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"detail": "Admin key required"})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_review(
+                client,
+                "https://blueintelligence.online/api",
+                {"name": "French Exclusive Economic Zone", "mrgid": 5677},
+                None,
+            )
+
+    bag = asyncio.run(run())
+    assert bag["zee"] is None
+    assert bag["reason"] == "review_requires_admin"
+    assert bag["http_status"] == 401
+    assert bag["url"]
+    assert "no_entity" not in (bag["reason"] or "")
+
+
+def test_review_high_seas_no_entity_without_fiche():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(401, json={"detail": "Admin key required"})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_review(client, "https://blueintelligence.online/api", {"name": "Haute mer", "mrgid": None}, None)
+
+    bag = asyncio.run(run())
+    assert bag["reason"] == "no_entity"
+    assert bag["zee"] is None
+    assert not any("review/fiche" in url for url in seen)

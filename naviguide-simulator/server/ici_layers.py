@@ -6,7 +6,11 @@ Jamais d’invention : null + source/reason si le produit manque.
 """
 from __future__ import annotations
 
+import asyncio
+import math
 import os
+import re
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -25,6 +29,15 @@ CDSE_TOKEN_URL = (
 COPERNICUS_BROWSER = "https://browser.dataspace.copernicus.eu/"
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_MARINE = "https://marine-api.open-meteo.com/v1/marine"
+RTOFS_PROD = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/"
+RTOFS_FILL = 1.0e20
+RTOFS_PROG_NAMES = (
+    "rtofs_glo_2ds_n000_prog.nc",
+    "rtofs_glo_2ds_f000_prog.nc",
+)
+RTOFS_HYCOM_WEST = 74.0
+RTOFS_HYCOM_EAST = 434.0
+RTOFS_MS_TO_KN = 1.943844
 EMODNET_DEPTH = "https://rest.emodnet-bathymetry.eu/depth_sample"
 EMODNET_BATHY_WMS = "https://ows.emodnet-bathymetry.eu/wms"
 EMODNET_SEABED_WMS = "https://drive.emodnet-geology.eu/geoserver/gtk/wms"
@@ -83,6 +96,8 @@ def empty_satellites() -> dict:
         "scenes": [],
         "bbox": None,
         "link": None,
+        "url": STAC_SEARCH,
+        "http_status": None,
         "derived": {k: dict(v) for k, v in DERIVED_NULL.items()},
     }
 
@@ -97,7 +112,7 @@ def empty_weather() -> dict:
         "wind": None,
         "wave": None,
         "current": None,
-        "current_reason": "rtofs_not_ingested",
+        "current_reason": None,
     }
 
 
@@ -126,6 +141,8 @@ def empty_review() -> dict:
         "amp": None,
         "source": None,
         "reason": None,
+        "http_status": None,
+        "url": None,
     }
 
 
@@ -231,14 +248,13 @@ async def fetch_satellite_scene(
     bbox = scene_bbox(lat, lon)
     bag["bbox"] = bbox
     bag["link"] = _browser_link(lat, lon)
-    body = {
-        "collections": [STAC_COLLECTION],
-        "bbox": bbox,
-        "datetime": f"2025-01-01T00:00:00Z/{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
-        "limit": MAX_SCENES,
-        "sortby": [{"field": "properties.datetime", "direction": "desc"}],
-        "query": {"eo:cloud_cover": {"lt": 40}},
-    }
+    bag["url"] = STAC_SEARCH
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    attempts = (
+        {"cloud": 40, "nm": 8.0, "start": "2025-01-01T00:00:00Z"},
+        {"cloud": 80, "nm": 16.0, "start": "2024-01-01T00:00:00Z"},
+        {"cloud": None, "nm": 30.0, "start": "2020-01-01T00:00:00Z"},
+    )
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": "application/geo+json, application/json",
@@ -247,30 +263,59 @@ async def fetch_satellite_scene(
     token = await _cdse_token(client)
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    try:
-        r = await client.post(STAC_SEARCH, json=body, headers=headers, timeout=10.0)
-        r.raise_for_status()
-        payload = r.json() if r.content else {}
-    except Exception as exc:
-        bag["reason"] = f"cdse_stac_unavailable:{type(exc).__name__}"
-        bag["source"] = "cdse-stac"
-        return bag
-    features = payload.get("features") if isinstance(payload, dict) else []
-    scenes = []
-    for feat in features or []:
-        item = slim_stac_scene(feat, lat, lon)
-        if item:
-            scenes.append(item)
-    if scenes:
-        bag["scene"] = scenes[0]
-        bag["scenes"] = scenes
-        bag["source"] = "cdse-stac"
-        bag["reason"] = None
-        bag["link"] = scenes[0].get("link") or bag["link"]
-        bag["bbox"] = scenes[0].get("bbox") or bbox
-    else:
-        bag["source"] = "cdse-stac"
+    catalog_ok = False
+    last_err = None
+    for spec in attempts:
+        bbox = scene_bbox(lat, lon, spec["nm"])
+        body = {
+            "collections": [STAC_COLLECTION],
+            "bbox": bbox,
+            "datetime": f"{spec['start']}/{now}",
+            "limit": max(MAX_SCENES, 5),
+            "sortby": [{"field": "properties.datetime", "direction": "desc"}],
+        }
+        if spec["cloud"] is not None:
+            body["query"] = {"eo:cloud_cover": {"lt": spec["cloud"]}}
+        try:
+            r = await client.post(STAC_SEARCH, json=body, headers=headers, timeout=12.0)
+            bag["http_status"] = r.status_code
+            if r.status_code >= 400:
+                last_err = f"HTTP {r.status_code}"
+                continue
+            catalog_ok = True
+            payload = r.json() if r.content else {}
+        except httpx.HTTPStatusError as exc:
+            bag["http_status"] = exc.response.status_code if exc.response is not None else None
+            last_err = f"HTTP {bag['http_status']}"
+            continue
+        except Exception as exc:
+            last_err = type(exc).__name__
+            continue
+        features = payload.get("features") if isinstance(payload, dict) else []
+        scenes = []
+        for feat in features or []:
+            item = slim_stac_scene(feat, lat, lon)
+            if item:
+                scenes.append(item)
+        scenes.sort(key=lambda s: (
+            999.0 if s.get("cloud_cover") is None else float(s["cloud_cover"]),
+            s.get("datetime") or "",
+        ))
+        if scenes:
+            bag["scene"] = scenes[0]
+            bag["scenes"] = scenes[:MAX_SCENES]
+            bag["source"] = "cdse-stac"
+            bag["reason"] = None
+            bag["link"] = scenes[0].get("link") or bag["link"]
+            bag["bbox"] = scenes[0].get("bbox") or bbox
+            return bag
+    bag["source"] = "cdse-stac"
+    if catalog_ok:
         bag["reason"] = "no_scene_in_bbox"
+    elif bag.get("http_status"):
+        bag["reason"] = f"cdse_stac_unavailable:{bag['http_status']}"
+    else:
+        bag["reason"] = f"cdse_stac_unavailable:{last_err or 'error'}"
     return bag
 
 
@@ -304,6 +349,324 @@ def attach_derived_from_science(satellites: dict, science_items: list | None) ->
     return out
 
 
+def hycom_lon(lon: float) -> float:
+    """Wrap geographic longitude into the RTOFS/HYCOM 74–434 range."""
+    x = float(lon)
+    while x < RTOFS_HYCOM_WEST:
+        x += 360.0
+    while x >= RTOFS_HYCOM_EAST:
+        x -= 360.0
+    return x
+
+
+def geo_from_hycom(h_lon: float) -> float:
+    x = float(h_lon)
+    while x > 180.0:
+        x -= 360.0
+    while x < -180.0:
+        x += 360.0
+    return x
+
+
+def rtofs_is_fill(value: Any) -> bool:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return True
+    return (not math.isfinite(v)) or abs(v) >= RTOFS_FILL
+
+
+def rtofs_from_uv(u_ms: float, v_ms: float, issued: str | None = None) -> dict:
+    speed_kn = math.hypot(float(u_ms), float(v_ms)) * RTOFS_MS_TO_KN
+    dir_to = (math.degrees(math.atan2(float(u_ms), float(v_ms))) + 360.0) % 360.0
+    return {
+        "kind": "forecast",
+        "source": "noaa-rtofs",
+        "speedKnots": round(speed_kn, 2),
+        "dirToDeg": round(dir_to, 1),
+        "u_ms": round(float(u_ms), 4),
+        "v_ms": round(float(v_ms), 4),
+        "issued": issued,
+    }
+
+
+class _HttpRangeIO:
+    """File-like HTTP Range reader so h5py can open a remote NetCDF4."""
+
+    def __init__(self, url: str, size: int, headers: dict | None = None):
+        self.name = url
+        self.url = url
+        self._size = int(size)
+        self._headers = dict(headers or {})
+        self._pos = 0
+        self._chunk = 256 * 1024
+        self._cache: dict[int, bytes] = {}
+        self._cache_order: list[int] = []
+        self._client = httpx.Client(
+            timeout=30.0,
+            headers=self._headers,
+            follow_redirects=True,
+        )
+
+    def close(self) -> None:
+        try:
+            self._client.close()
+        except Exception:
+            pass
+
+    def seekable(self) -> bool:
+        return True
+
+    def readable(self) -> bool:
+        return True
+
+    def tell(self) -> int:
+        return self._pos
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        if whence == 0:
+            self._pos = int(offset)
+        elif whence == 1:
+            self._pos += int(offset)
+        else:
+            self._pos = self._size + int(offset)
+        return self._pos
+
+    def _chunk_bytes(self, idx: int) -> bytes:
+        if idx in self._cache:
+            return self._cache[idx]
+        c0 = idx * self._chunk
+        c1 = min(c0 + self._chunk, self._size) - 1
+        r = self._client.get(
+            self.url,
+            headers={**self._headers, "Range": f"bytes={c0}-{c1}"},
+        )
+        if r.status_code not in (200, 206):
+            r.raise_for_status()
+        data = r.content
+        self._cache[idx] = data
+        self._cache_order.append(idx)
+        while len(self._cache_order) > 80:
+            old = self._cache_order.pop(0)
+            self._cache.pop(old, None)
+        return data
+
+    def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            n = self._size - self._pos
+        if n <= 0 or self._pos >= self._size:
+            return b""
+        start = self._pos
+        end = min(self._pos + int(n), self._size)
+        out = bytearray()
+        pos = start
+        while pos < end:
+            idx = pos // self._chunk
+            chunk = self._chunk_bytes(idx)
+            off = pos - idx * self._chunk
+            take = min(len(chunk) - off, end - pos)
+            if take <= 0:
+                break
+            out.extend(chunk[off:off + take])
+            pos += take
+        self._pos = end
+        return bytes(out)
+
+
+_rtofs_lock = threading.Lock()
+_rtofs_h5: dict[str, Any] = {
+    "url": None,
+    "io": None,
+    "file": None,
+    "lat_col": None,
+    "nj": None,
+    "ni": None,
+}
+
+
+def reset_rtofs_cache() -> None:
+    with _rtofs_lock:
+        _close_rtofs_unlocked()
+
+
+def _close_rtofs_unlocked() -> None:
+    fh = _rtofs_h5.get("file")
+    io = _rtofs_h5.get("io")
+    try:
+        if fh is not None:
+            fh.close()
+    except Exception:
+        pass
+    try:
+        if io is not None:
+            io.close()
+    except Exception:
+        pass
+    _rtofs_h5.update({
+        "url": None,
+        "io": None,
+        "file": None,
+        "lat_col": None,
+        "nj": None,
+        "ni": None,
+    })
+
+
+def _rtofs_file_size(url: str, headers: dict) -> int:
+    with httpx.Client(timeout=20.0, headers=headers, follow_redirects=True) as client:
+        try:
+            r = client.head(url)
+            if r.status_code < 400:
+                size = int(r.headers.get("content-length") or 0)
+                if size > 0:
+                    return size
+        except Exception:
+            pass
+        r = client.get(url, headers={**headers, "Range": "bytes=0-0"})
+        if r.status_code not in (200, 206):
+            r.raise_for_status()
+        cr = r.headers.get("content-range") or ""
+        m = re.search(r"/(\d+)\s*$", cr)
+        if m:
+            return int(m.group(1))
+        size = int(r.headers.get("content-length") or 0)
+        if size > 1:
+            return size
+    raise RuntimeError("rtofs_size_unknown")
+
+
+def _open_rtofs_unlocked(url: str):
+    if _rtofs_h5.get("url") == url and _rtofs_h5.get("file") is not None:
+        return _rtofs_h5["file"]
+    try:
+        import h5py
+    except ImportError as exc:
+        raise RuntimeError("h5py_missing") from exc
+    _close_rtofs_unlocked()
+    headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+    size = _rtofs_file_size(url, headers)
+    io = _HttpRangeIO(url, size, headers)
+    fh = h5py.File(io, "r")
+    lat = fh["Latitude"]
+    nj, ni = int(lat.shape[0]), int(lat.shape[1])
+    mid = ni // 2
+    lat_col = lat[:, mid][()]
+    _rtofs_h5.update({
+        "url": url,
+        "io": io,
+        "file": fh,
+        "lat_col": lat_col,
+        "nj": nj,
+        "ni": ni,
+    })
+    return fh
+
+
+def _nearest_index(axis, value: float) -> int:
+    import numpy as np
+    arr = np.asarray(axis)
+    if arr.size == 0:
+        return 0
+    if arr[0] > arr[-1]:
+        idx = int(arr.size - 1 - np.searchsorted(arr[::-1], value))
+    else:
+        idx = int(np.searchsorted(arr, value))
+    return max(0, min(int(arr.size) - 1, idx))
+
+
+def _rtofs_lookup_sync(url: str, lat: float, lon: float) -> tuple[float, float] | None:
+    with _rtofs_lock:
+        fh = _open_rtofs_unlocked(url)
+        lat_col = _rtofs_h5["lat_col"]
+        nj = _rtofs_h5["nj"]
+        ni = _rtofs_h5["ni"]
+        j0 = _nearest_index(lat_col, lat)
+        lon_row = fh["Longitude"][j0, :][()]
+        target = hycom_lon(lon)
+        i0 = _nearest_index(lon_row, target)
+        j1 = max(0, j0 - 3)
+        j2 = min(nj, j0 + 4)
+        i1 = max(0, i0 - 3)
+        i2 = min(ni, i0 + 4)
+        lat_w = fh["Latitude"][j1:j2, i1:i2][()]
+        lon_w = fh["Longitude"][j1:j2, i1:i2][()]
+        u_w = fh["u_velocity"][0, 0, j1:j2, i1:i2][()]
+        v_w = fh["v_velocity"][0, 0, j1:j2, i1:i2][()]
+    best = None
+    best_d = None
+    best_uv = None
+    for jj in range(lat_w.shape[0]):
+        for ii in range(lat_w.shape[1]):
+            u = float(u_w[jj, ii])
+            v = float(v_w[jj, ii])
+            if rtofs_is_fill(u) or rtofs_is_fill(v):
+                continue
+            dlat = float(lat_w[jj, ii]) - lat
+            dlon = geo_from_hycom(float(lon_w[jj, ii])) - lon
+            while dlon > 180:
+                dlon -= 360
+            while dlon < -180:
+                dlon += 360
+            dist = dlat * dlat + dlon * dlon
+            if best_d is None or dist < best_d:
+                best_d = dist
+                best = (j1 + jj, i1 + ii)
+                best_uv = (u, v)
+    if best_uv is None:
+        return None
+    return best_uv
+
+
+async def _rtofs_latest_url(client: httpx.AsyncClient) -> tuple[str, str, str]:
+    headers = {"User-Agent": USER_AGENT, "Accept": "text/html, */*"}
+    r = await client.get(RTOFS_PROD, headers=headers, timeout=10.0)
+    r.raise_for_status()
+    dates = sorted(set(re.findall(r"rtofs\.(\d{8})", r.text)))
+    if not dates:
+        raise RuntimeError("rtofs_no_cycle")
+    for day in reversed(dates[-3:]):
+        listing = f"{RTOFS_PROD}rtofs.{day}/"
+        try:
+            lr = await client.get(listing, headers=headers, timeout=10.0)
+            if lr.status_code >= 400:
+                continue
+            text = lr.text
+        except Exception:
+            continue
+        for name in RTOFS_PROG_NAMES:
+            if name in text:
+                issued = f"{day[:4]}-{day[4:6]}-{day[6:]}T00:00:00Z"
+                return f"{listing}{name}", issued, name
+    raise RuntimeError("rtofs_no_prog")
+
+
+async def fetch_rtofs_current(
+    client: httpx.AsyncClient,
+    lat: float,
+    lon: float,
+) -> tuple[dict | None, str | None]:
+    try:
+        url, issued, name = await _rtofs_latest_url(client)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        return None, f"rtofs_unavailable:{status or type(exc).__name__}"
+    except Exception as exc:
+        detail = str(exc) if str(exc) in {"rtofs_no_cycle", "rtofs_no_prog", "h5py_missing"} else type(exc).__name__
+        return None, f"rtofs_unavailable:{detail}"
+    try:
+        uv = await asyncio.to_thread(_rtofs_lookup_sync, url, lat, lon)
+    except RuntimeError as exc:
+        return None, f"rtofs_unavailable:{exc}"
+    except Exception as exc:
+        return None, f"rtofs_unavailable:{type(exc).__name__}"
+    if uv is None:
+        return None, "off_grid"
+    bag = rtofs_from_uv(uv[0], uv[1], issued=issued)
+    bag["product"] = name
+    bag["url"] = url
+    return bag, None
+
+
 async def fetch_weather_forecast(
     client: httpx.AsyncClient,
     lat: float,
@@ -314,6 +677,7 @@ async def fetch_weather_forecast(
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     wind = None
     wave = None
+    wind_err = None
     try:
         r = await client.get(
             OPEN_METEO_FORECAST,
@@ -339,8 +703,7 @@ async def fetch_weather_forecast(
                 "time": cur.get("time"),
             }
     except Exception as exc:
-        bag["reason"] = f"openmeteo_unavailable:{type(exc).__name__}"
-        return bag
+        wind_err = f"openmeteo_unavailable:{type(exc).__name__}"
     try:
         r = await client.get(
             OPEN_METEO_MARINE,
@@ -367,20 +730,30 @@ async def fetch_weather_forecast(
             }
     except Exception:
         wave = None
-    if not wind and not wave:
-        bag["reason"] = "openmeteo_empty"
-        bag["source"] = "openmeteo"
+    current, current_reason = await fetch_rtofs_current(client, lat, lon)
+    if not wind and not wave and current is None:
+        bag["reason"] = wind_err or "openmeteo_empty"
+        bag["source"] = "openmeteo" if wind_err else "noaa-rtofs"
+        bag["current"] = None
+        bag["current_reason"] = current_reason
         return bag
+    models = []
+    if wind or wave:
+        models.append("GFS 0.25° / GFS-Wave 0.25° (Open-Meteo)")
+    if current:
+        models.append("RTOFS Global 1/12°")
     bag.update({
         "kind": "forecast",
-        "source": "openmeteo-gfs",
+        "source": "openmeteo-gfs+noaa-rtofs" if (wind or wave) and current else (
+            "noaa-rtofs" if current else "openmeteo-gfs"
+        ),
         "reason": None,
         "issued": issued,
-        "model": "GFS 0.25° / GFS-Wave 0.25° (Open-Meteo)",
+        "model": " + ".join(models) if models else "Open-Meteo",
         "wind": wind,
         "wave": wave,
-        "current": None,
-        "current_reason": "rtofs_not_ingested",
+        "current": current,
+        "current_reason": current_reason,
     })
     return bag
 
@@ -760,7 +1133,12 @@ async def fetch_review(
             )
             if r.status_code == 401:
                 bag["reason"] = "review_requires_admin"
+                bag["http_status"] = 401
+                bag["url"] = str(r.url)
+                bag["source"] = "review_fiche"
                 return bag
+            bag["http_status"] = r.status_code
+            bag["url"] = str(r.url)
             if r.status_code == 404:
                 bag["zee"] = {
                     "gold_on": None,

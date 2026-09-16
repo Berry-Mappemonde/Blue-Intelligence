@@ -32,6 +32,7 @@ from ici_layers import (
     fetch_review,
     fetch_satellite_scene,
     fetch_weather_forecast,
+    reset_rtofs_cache,
 )
 
 ICI_RADIUS_NM = 30
@@ -92,6 +93,7 @@ def reset_caches() -> None:
     _wpi_cache["data"] = None
     _wpi_cache["ts"] = 0.0
     reset_gebco_cache()
+    reset_rtofs_cache()
 
 
 def bi_base() -> str:

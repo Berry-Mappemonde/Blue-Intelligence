@@ -265,7 +265,12 @@ function weatherSentence(dossier, lang) {
       : `vent ${wind.speedKnots} kn / ${wind.dirFromDeg}°`);
   }
   if (wave?.hs != null) bits.push(`Hs ${wave.hs} m`);
-  if (w.current == null && w.current_reason) {
+  if (w.current && w.current.speedKnots != null) {
+    const dir = w.current.dirToDeg;
+    bits.push(en
+      ? `current ${w.current.speedKnots} kn / ${dir}° (RTOFS, kind forecast)`
+      : `courant ${w.current.speedKnots} kn / ${dir}° (RTOFS, kind forecast)`);
+  } else if (w.current == null && w.current_reason) {
     bits.push(en
       ? `current null (${w.current_reason})`
       : `courant null (${w.current_reason})`);

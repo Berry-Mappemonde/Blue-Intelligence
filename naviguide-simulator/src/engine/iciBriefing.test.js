@@ -220,8 +220,8 @@ describe("narrateIci", () => {
         model: "GFS 0.25° / GFS-Wave 0.25° (Open-Meteo)",
         wind: { kind: "forecast", speedKnots: 12.4, dirFromDeg: 280 },
         wave: { kind: "forecast", hs: 1.1 },
-        current: null,
-        current_reason: "rtofs_not_ingested",
+        current: { kind: "forecast", source: "noaa-rtofs", speedKnots: 0.58, dirToDeg: 247 },
+        current_reason: null,
       },
       emodnet: {
         kind: "observation",
@@ -255,7 +255,7 @@ describe("narrateIci", () => {
     assert.match(text, /not_generated/);
     assert.match(text, /kind forecast/);
     assert.match(text, /12\.4 kn/);
-    assert.match(text, /rtofs_not_ingested/);
+    assert.match(text, /0\.58 kn \/ 247° \(RTOFS, kind forecast\)/);
     assert.match(text, /EMODnet/);
     assert.match(text, /18\.4/);
     assert.match(text, /rose 8 secteurs/);
@@ -284,6 +284,23 @@ describe("narrateIci", () => {
     assert.match(text, /cdse_stac_unavailable/);
     assert.match(text, /kind forecast/);
     assert.doesNotMatch(text, /Sentinel-2 L2A 20/);
+    assert.doesNotMatch(text, FORBIDDEN);
+  });
+
+  it("says current null only when RTOFS is dead or off-grid", () => {
+    const text = narrateIci({
+      zee: { name: "Haute mer", mrgid: null, gold: false },
+      nearby: { marinas: [], capitaineries: [], wpi: [], anchorages: [] },
+      weather: {
+        kind: "forecast",
+        wind: { kind: "forecast", speedKnots: 8, dirFromDeg: 90 },
+        current: null,
+        current_reason: "off_grid",
+      },
+      sources: { zee: "marineregions" },
+    }, "fr");
+    assert.match(text, /courant null \(off_grid\)/);
+    assert.doesNotMatch(text, /rtofs_not_ingested/);
     assert.doesNotMatch(text, FORBIDDEN);
   });
 });
