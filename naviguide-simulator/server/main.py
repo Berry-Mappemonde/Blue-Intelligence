@@ -29,7 +29,7 @@ from mem_limits import (
     lru_set,
     too_large,
 )
-from ici_engine import ICI_RADIUS_NM, fetch_wpi_features, fill_dossier
+from ici_engine import ICI_RADIUS_NM, fetch_wpi_features, fill_dossier, wrap_lon
 from polar_api import router as polar_router
 from route_engine import searoute_with_exact_end
 from voyage_api import router as voyage_router
@@ -90,7 +90,8 @@ async def get_ici(
     lon: float = Query(...),
     radius_nm: float = Query(ICI_RADIUS_NM, ge=5, le=40),
 ):
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+    lon = wrap_lon(lon)
+    if not (-90 <= lat <= 90):
         raise HTTPException(400, "lat/lon hors limites")
     return await fill_dossier(lat, lon, radius_nm)
 

@@ -115,7 +115,7 @@ export function SimulationPanel({
   } = legContext;
 
   return (
-    <div className="bg-slate-800/70 rounded-lg border border-blue-600/30 overflow-hidden">
+    <div className="bg-slate-800/70 overflow-hidden">
 
       <div className="flex items-center justify-between px-2 py-1 bg-blue-900/30 border-b border-blue-700/20">
         <div className="flex items-center gap-1 min-w-0 flex-wrap">

@@ -234,9 +234,9 @@ export function Sidebar({
           ) : null}
         </div>
 
-        <div className="flex-1 overflow-y-auto sidebar-scroll px-2.5 py-1.5 space-y-1.5">
+        <div className="flex-1 overflow-y-auto sidebar-scroll px-2 py-1 space-y-1">
           {isSuivre && (
-            <p className="text-[10px] text-sky-100/80 border border-white/10 rounded-md px-2 py-1">
+            <p className="text-[10px] text-sky-100/80 border border-white/10 rounded-md px-2 py-0.5">
               {t("officialDepartureLocked")}
             </p>
           )}
@@ -248,6 +248,7 @@ export function Sidebar({
               onStartAt={onDepartureStartAt}
             />
           )}
+          <div className="rounded-lg border border-white/10 bg-slate-900/50 overflow-hidden space-y-0">
           <SimulationPanel
             legContext={legContext}
             onPrev={onPrev}
@@ -272,45 +273,42 @@ export function Sidebar({
           <EscaleLegend marks={escaleMarks} filmNm={filmNm} onSeek={onSeekEscale} />
 
           {officialFallback && (
-            <p className="text-[10px] text-amber-300/90 border border-amber-500/30 rounded-md px-2 py-1">
+            <p className="text-[10px] text-amber-300/90 border border-amber-500/30 rounded-md px-2 py-0.5">
               {t("searouteUnavailable")}
             </p>
           )}
 
           {!isCockpit && !plan && !briefingLoading && !isDrawing && (
-            <div className="rounded-lg border border-blue-700/30 bg-blue-950/20 p-2">
-              <div className="text-[10px] font-semibold text-blue-300 mb-1">{t("gettingStarted")}</div>
+            <div className="px-2 py-1 border-t border-white/5">
+              <div className="text-[10px] font-semibold text-blue-300 mb-0.5">{t("gettingStarted")}</div>
               <p className="text-[11px] text-slate-400 leading-snug">{t("gettingStartedText")}</p>
             </div>
           )}
 
           {isDrawing && (
-            <div>
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="px-2 py-1 border-t border-white/5">
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                 <Shield size={11} className="text-blue-400" />
                 {t("briefing")}
               </div>
-              <div className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/50">
-                <p className="text-[11px] text-slate-300 leading-snug whitespace-pre-line">{t("briefingDrawHint")}</p>
-              </div>
+              <p className="text-[11px] text-slate-300 leading-snug whitespace-pre-line">{t("briefingDrawHint")}</p>
             </div>
           )}
 
           {!isDrawing && (isCockpit || briefing || briefingLoading) && (
-            <div>
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="px-2 py-1 border-t border-white/5">
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                 <Shield size={11} className="text-blue-400" />
                 {t("briefing")}
               </div>
-              <div className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/50">
-                <p className="text-[11px] text-slate-300 leading-snug whitespace-pre-line">
-                  {briefingLoading
-                    ? t("iciBriefingLoading")
-                    : (briefing || t("iciBriefingFallback"))}
-                </p>
-              </div>
+              <p className="text-[11px] text-slate-300 leading-snug whitespace-pre-line">
+                {briefingLoading
+                  ? t("iciBriefingLoading")
+                  : (briefing || t("iciBriefingFallback"))}
+              </p>
             </div>
           )}
+          </div>
         </div>
       </div>
     </>

@@ -74,13 +74,19 @@ function formatEta(hours, lang) {
   return `${h} h ${String(m).padStart(2, "0")}`;
 }
 
+export function isHighSeas(dossier) {
+  const zee = dossier?.zee;
+  if (zee?.ashore || String(zee?.name || "").startsWith("À terre")) return false;
+  return !zee || !zee.mrgid || zee.name === "Haute mer";
+}
+
 function zeeSentence(dossier, lang) {
   const en = isEn(lang);
   const zee = dossier?.zee;
-  if (!zee) {
+  if (isHighSeas(dossier)) {
     return en
-      ? "Here the boat is on the high seas — no exclusive economic zone, no port of entry to clear."
-      : "Ici, le bateau est en haute mer — aucune ZEE, pas de port d’entrée à déclarer.";
+      ? "Here the boat is on the high seas — no EEZ."
+      : "Ici, le bateau est en haute mer — aucune ZEE";
   }
   if (zee.ashore || String(zee.name || "").startsWith("À terre")) {
     const extra = String(zee.name || "").startsWith("À terre")
@@ -89,11 +95,6 @@ function zeeSentence(dossier, lang) {
     return en
       ? `Here the boat is ashore${extra ? ` ${extra}` : ""}, outside any EEZ.`
       : `Ici, le bateau est à terre${extra ? ` ${extra}` : ""}, hors ZEE.`;
-  }
-  if (!zee.mrgid || zee.name === "Haute mer") {
-    return en
-      ? "Here the boat is on the high seas — no exclusive economic zone, no port of entry to clear."
-      : "Ici, le bateau est en haute mer — aucune ZEE, pas de port d’entrée à déclarer.";
   }
   const territory = TERRITORY[en ? "en" : "fr"][zee.territory];
   const where = territory
@@ -231,6 +232,9 @@ function sourceSentence(dossier, lang) {
 
 export function narrateIci(dossier, lang = "fr") {
   if (!dossier) return "";
+  if (isHighSeas(dossier)) {
+    return [zeeSentence(dossier, lang), legSentence(dossier, lang)].filter(Boolean).join("\n\n");
+  }
   const parts = [
     [zeeSentence(dossier, lang), poeSentence(dossier, lang)].filter(Boolean).join(" "),
     aroundSentence(dossier, lang),

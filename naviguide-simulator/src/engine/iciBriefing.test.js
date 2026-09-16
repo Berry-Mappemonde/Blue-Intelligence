@@ -73,9 +73,12 @@ describe("narrateIci", () => {
       nearby: { marinas: [], capitaineries: [], wpi: [] },
       sources: { zee: "error", bi: "ok" },
     }, "fr");
-    assert.match(text, /haute mer/i);
+    assert.match(text, /Ici, le bateau est en haute mer — aucune ZEE/);
+    assert.doesNotMatch(text, /pas de port/);
     assert.doesNotMatch(text, /pas pu nommer/);
     assert.doesNotMatch(text, /MarineRegions n’a pas répondu/);
+    assert.doesNotMatch(text, /Blue Intelligence/);
+    assert.doesNotMatch(text, /Rien de notable/);
   });
 
   it("says high seas without inventing ports of entry", () => {
@@ -87,7 +90,7 @@ describe("narrateIci", () => {
       nearby: { marinas: [], capitaineries: [], wpi: [] },
       sources: { zee: "marineregions", bi: "ok" },
     }, "fr");
-    assert.match(text, /haute mer/i);
+    assert.equal(text, "Ici, le bateau est en haute mer — aucune ZEE");
     assert.doesNotMatch(text, /ports d’entrée officiels les plus proches/);
     assert.doesNotMatch(text, FORBIDDEN);
   });
@@ -138,7 +141,7 @@ describe("narrateIci", () => {
 
   it("cites GEBCO when an offshore sounding is in the bag", () => {
     const text = narrateIci({
-      zee: { name: "Haute mer", mrgid: null, gold: false },
+      zee: { name: "French Exclusive Economic Zone", mrgid: 5677, gold: true },
       poe: [],
       nearby: { marinas: [], capitaineries: [], wpi: [] },
       depthOffshore: -3200,
@@ -147,7 +150,7 @@ describe("narrateIci", () => {
     assert.match(text, /GEBCO/);
     assert.match(text, /3200/);
     const silent = narrateIci({
-      zee: { name: "Haute mer", mrgid: null, gold: false },
+      zee: { name: "French Exclusive Economic Zone", mrgid: 5677, gold: true },
       nearby: { marinas: [], capitaineries: [], wpi: [] },
       depthOffshore: 0,
       sources: { zee: "marineregions", bi: "ok" },

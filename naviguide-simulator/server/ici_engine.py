@@ -123,6 +123,15 @@ def parse_coord(value: Any) -> float | None:
     return decimal
 
 
+def wrap_lon(lon: float) -> float:
+    x = float(lon)
+    while x > 180:
+        x -= 360.0
+    while x < -180:
+        x += 360.0
+    return x
+
+
 def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     def rad(d: float) -> float:
         return d * math.pi / 180.0
@@ -316,6 +325,7 @@ async def lookup_zee(client: httpx.AsyncClient, lat: float, lon: float) -> tuple
     """ZEE autour du bateau. Un point à quai n’est parfois pas dans le
     polygone : on sonde alors 8 points à ~12 nm. Une ZEE trop loin
     (gazetteer bavard) est refusée → haute mer."""
+    lon = wrap_lon(lon)
     try:
         here = await _gazetteer_list(client, lat, lon)
         rec = _first_plausible(here, lat, lon)
@@ -324,6 +334,8 @@ async def lookup_zee(client: httpx.AsyncClient, lat: float, lon: float) -> tuple
         if eez_records(here):
             return zee_from_record(None), "marineregions"
         ashore = _ashore_from_records(here)
+        if not ashore:
+            return zee_from_record(None), "marineregions"
         step = 0.2
         probes = [
             (lat, lon - step), (lat, lon + step),
@@ -464,6 +476,7 @@ async def fill_dossier(
     radius_nm: float = ICI_RADIUS_NM,
     client: httpx.AsyncClient | None = None,
 ) -> dict:
+    lon = wrap_lon(lon)
     d = empty_dossier(lat, lon, radius_nm)
     bi = bi_base()
 

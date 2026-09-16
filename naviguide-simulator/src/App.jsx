@@ -55,7 +55,7 @@ import { VIEW_SIMULATION, VIEW_SUIVRE } from "./constants/viewMode.js";
 import { isRouteReady } from "./utils/routeReady.js";
 import { isSceneReady, playheadAligned } from "./utils/sceneGate.js";
 import { useGribCorridorLayer } from "./layers/useGribCorridorLayer.js";
-import { summarizeRoute, featuresToSegments } from "./utils/geo.js";
+import { summarizeRoute, featuresToSegments, wrapLon } from "./utils/geo.js";
 import { waypointsFromCollection } from "./utils/waypointsFromCollection.js";
 import { buildLocalCustomBriefing } from "./utils/customRouteBriefing.js";
 import {
@@ -293,7 +293,7 @@ export default function App() {
     sailNm: isSuivre && official.live && !previewing
       ? (official.live.sailNm ?? 0)
       : (cast?.sailNm ?? 0),
-    enabled: sceneReady && !drawingMode && !customRoute,
+    enabled: sceneReady && !customRoute,
     mapReady,
   });
 
@@ -574,7 +574,7 @@ export default function App() {
         return;
       }
       armProgrammaticNav();
-      map.setView([live.lat, live.lon], 6.5, { animate: false });
+      map.setView([live.lat, wrapLon(live.lon)], 6.5, { animate: false });
       placedRef.current = true;
       setCameraPlaced(true);
       return;
@@ -688,17 +688,17 @@ export default function App() {
   useFilmCamera({
     mapRef,
     mapReady,
-    enabled: sceneReady && cameraFollow && Boolean(cast?.follow || (isSuivre && live)),
+    enabled: sceneReady && cinemaMode && cameraFollow && Boolean(cast?.follow || (isSuivre && live)),
     lat: isSuivre && live && !previewing ? live.lat : cast?.follow?.lat,
     lon: isSuivre && live && !previewing ? live.lon : cast?.follow?.lon,
     remainingNm: legContext?.remainingNm ?? playback.sailTotalNm,
-    playing: cameraFollow && (isSuivre && !previewing ? true : playback.playing),
+    playing: cinemaMode && cameraFollow && (isSuivre && !previewing ? true : playback.playing),
     jumpToken: isSuivre && !previewing ? 0 : playback.jumpToken,
     phase: cast?.phase,
     hopFrom: cast?.hopFrom,
     hopTo: cast?.hopTo,
-    resetKey: `${view}-${sceneReady ? "ready" : "load"}-${cinemaRecapture}`,
-    follow: cameraFollow,
+    resetKey: `${view}-${sceneReady ? "ready" : "load"}`,
+    follow: cinemaMode && cameraFollow,
     recaptureToken: cinemaRecapture,
     onProgrammaticMove: armProgrammaticNav,
   });
@@ -1103,8 +1103,11 @@ export default function App() {
     const map = mapRef.current;
     if (!map || !mapReady) return undefined;
     const group = L.layerGroup().addTo(map);
-    const src = drawingMode ? drawnPoints.map((p, i) => ({ ...p, name: p.name || `${i + 1}`, flag: "" })) : (customRoute ? [] : points);
+    const src = drawingMode
+      ? drawnPoints.map((p, i) => ({ ...p, name: p.name || `${i + 1}`, flag: "" }))
+      : (customRoute ? [] : points);
     src.forEach((p, i) => {
+      if (drawingMode && p.flag) return;
       if (!p.flag && !drawingMode) return;
       const off = markerOffsets[i] || [0, 0];
       const html = p.flag
@@ -1219,11 +1222,13 @@ export default function App() {
 
       <ToolsSidebar
         segments={statsSegs}
-        points={customRoute
-          ? (customRoute.features || []).filter((f) => f.geometry?.type === "Point").map((f) => ({
-            name: f.properties?.name || "", lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], flag: "",
-          }))
-          : points}
+        points={drawingMode
+          ? []
+          : customRoute
+            ? (customRoute.features || []).filter((f) => f.geometry?.type === "Point").map((f) => ({
+              name: f.properties?.name || "", lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], flag: "",
+            }))
+            : points}
         open={toolsOpen}
         onToggle={() => setToolsOpen((o) => !o)}
         isLightMode={isLightMode}

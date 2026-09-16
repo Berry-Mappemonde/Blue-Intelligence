@@ -58,6 +58,8 @@ describe("gribSymbols", () => {
     assert.equal(pts.length, 25);
     assert.ok(pts.every((p) => p.windKnots === 14));
     assert.ok(pts.some((p) => p.lat < -21.6 && p.lon < -186.2));
+    const span = Math.max(...pts.map((p) => p.lat)) - Math.min(...pts.map((p) => p.lat));
+    assert.ok(span >= 4.7);
   });
 });
 

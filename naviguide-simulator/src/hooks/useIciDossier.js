@@ -66,16 +66,10 @@ export function useIciDossier({
         })
         .catch(() => {
           if (ctrl.signal.aborted && lastFetchRef.current) return;
-          if (ctrl.signal.aborted && !lastFetchRef.current) {
-            setRemote({
-              ...emptyDossier(lat, lon),
-              sources: { zee: "error", bi: "unavailable" },
-            });
-            return;
-          }
           setRemote({
             ...emptyDossier(lat, lon),
-            sources: { zee: "error", bi: "unavailable" },
+            zee: { name: "Haute mer", mrgid: null, territory: null, gold: false },
+            sources: { zee: "unavailable", bi: null, gebco: null },
           });
         })
         .finally(() => {

@@ -61,7 +61,7 @@ export function worldCopyLngs(lon) {
   return [x, x + 360, x - 360];
 }
 
-const STENCIL_DEG = 0.4;
+const STENCIL_DEG = 1.2;
 
 function nearestSample(slice, lat, lon) {
   if (!slice.length) return null;

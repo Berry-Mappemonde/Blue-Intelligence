@@ -60,10 +60,10 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       for (const lng of worldCopyLngs(baseLon)) {
         if (s.hs != null) {
           L.circleMarker([s.lat, lng], {
-            radius: 10,
+            radius: 5,
             color: waveHsColor(s.hs),
             fillColor: waveHsColor(s.hs),
-            fillOpacity: 0.38,
+            fillOpacity: 0.28,
             weight: 0,
             pane,
             interactive: false,

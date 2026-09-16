@@ -395,6 +395,32 @@ def test_lookup_zee_rejects_distant_gazetteer_eez():
     assert zee["mrgid"] is None
 
 
+def test_lookup_zee_high_seas_does_not_probe():
+    reset_caches()
+    hits = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hits["n"] += 1
+        return httpx.Response(200, json=[])
+
+    async def run():
+        from ici_engine import lookup_zee
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await lookup_zee(client, -21.87, 172.68)
+
+    zee, src = asyncio.run(run())
+    assert src == "marineregions"
+    assert zee["name"] == "Haute mer"
+    assert zee["mrgid"] is None
+    assert hits["n"] == 1
+
+
+def test_wrap_lon_antimeridian():
+    from ici_engine import wrap_lon
+    assert wrap_lon(-187.32) == 172.68
+    assert wrap_lon(190) == -170
+
+
 def test_fill_dossier_haute_mer():
     reset_caches()
 

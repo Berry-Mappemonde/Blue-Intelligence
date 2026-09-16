@@ -16,11 +16,11 @@ export function EscaleLegend({ marks, filmNm, onSeek }) {
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-slate-800/50 overflow-hidden">
-      <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+    <div className="border-t border-white/10 bg-slate-800/40 overflow-hidden">
+      <div className="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
         {t("escalesList")}
       </div>
-      <ul className="max-h-36 overflow-y-auto sidebar-scroll">
+      <ul className="max-h-24 overflow-y-auto sidebar-scroll">
         {list.map((m, i) => {
           const at = markAt(m);
           const active = i === current;
@@ -30,7 +30,7 @@ export function EscaleLegend({ marks, filmNm, onSeek }) {
                 type="button"
                 onClick={() => onSeek?.(at, { jump: true })}
                 title={t("escalesJump", { name: m.name })}
-                className={`w-full text-left px-2 py-1 text-[11px] border-t border-white/5 ${
+                className={`w-full text-left px-2 py-0.5 text-[11px] border-t border-white/5 ${
                   active
                     ? "bg-cyan-700/40 text-white"
                     : "text-white/70 hover:bg-white/5 hover:text-white"

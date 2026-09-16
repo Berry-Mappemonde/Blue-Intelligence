@@ -60,13 +60,16 @@ export function useFilmCamera({
     const prev = lastPos.current;
     const movedNm = prev ? haversineNm(prev.lat, prev.lon, lat, lon) : 0;
     lastPos.current = { lat, lon };
+    const recapture = recaptureToken !== lastRecapture.current;
+    if (recapture) lastRecapture.current = recaptureToken;
+    if (!follow) return;
+
     const z = zoomForRemaining(remainingNm);
     const tokenJump = jumpToken && jumpToken !== lastJump.current;
     if (tokenJump) lastJump.current = jumpToken;
     const phaseChanged = phase && phase !== lastPhase.current;
     if (phase) lastPhase.current = phase;
-    const recapture = recaptureToken !== lastRecapture.current;
-    if (recapture) lastRecapture.current = recaptureToken;
+    const keepZoom = map.getZoom();
 
     const move = (fn) => {
       onProgrammaticMove?.();
@@ -74,7 +77,7 @@ export function useFilmCamera({
     };
 
     if (isAirPhase(phase) && hopFrom && hopTo) {
-      if (follow && (phaseChanged || tokenJump || recapture)) {
+      if (phaseChanged || tokenJump || recapture) {
         const lonA = unwrapPair(followLon.current, hopFrom.lon);
         const lonB = unwrapPair(lonA, hopTo.lon);
         followLon.current = lonB;
@@ -92,16 +95,14 @@ export function useFilmCamera({
     }
 
     if (recapture || prev == null) {
-      move(() => map.setView([lat, lonCam], z, { animate: false }));
+      move(() => map.setView([lat, lonCam], recapture ? keepZoom : z, { animate: false }));
       lastFollow.current = Date.now();
       return;
     }
 
-    if (!follow) return;
-
     const teleport = tokenJump || phaseChanged || movedNm >= TELEPORT_NM;
     if (teleport) {
-      move(() => map.flyTo([lat, lonCam], z, { duration: movedNm >= TELEPORT_NM || phaseChanged ? 0.7 : 1.05 }));
+      move(() => map.setView([lat, lonCam], keepZoom, { animate: false }));
       lastFollow.current = Date.now();
       return;
     }
@@ -110,8 +111,6 @@ export function useFilmCamera({
     const now = Date.now();
     if (now - lastFollow.current < 700) return;
     lastFollow.current = now;
-    const cur = map.getZoom();
-    const zoom = Math.abs(cur - z) >= 1.25 ? z : cur;
-    move(() => map.setView([lat, lonCam], zoom, { animate: true, duration: 0.55 }));
+    move(() => map.setView([lat, lonCam], keepZoom, { animate: true, duration: 0.55 }));
   }, [mapRef, mapReady, enabled, lat, lon, remainingNm, playing, jumpToken, phase, hopFrom?.lat, hopFrom?.lon, hopTo?.lat, hopTo?.lon, resetKey, follow, recaptureToken, onProgrammaticMove]);
 }

@@ -48,3 +48,18 @@ def test_ici_route_exists(monkeypatch):
 def test_ici_rejects_bad_coords():
     r = client.get("/ici", params={"lat": 120, "lon": 0})
     assert r.status_code == 400
+
+
+def test_ici_wraps_antimeridian_lon(monkeypatch):
+    async def fake(lat, lon, radius_nm=30, client=None):
+        return {
+            "version": 1,
+            "at": {"lat": lat, "lon": lon},
+            "radiusNm": radius_nm,
+            "zee": {"name": "Haute mer", "mrgid": None, "gold": False},
+        }
+
+    monkeypatch.setattr("main.fill_dossier", fake)
+    r = client.get("/ici", params={"lat": -21.87, "lon": -187.32})
+    assert r.status_code == 200
+    assert abs(r.json()["at"]["lon"] - 172.68) < 0.01
