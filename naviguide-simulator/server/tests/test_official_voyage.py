@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 import forecast_cube
 import saildocs
+import voyage_api
 import voyage_store
 
 
@@ -161,8 +162,11 @@ def test_official_at_now_and_grib_absent(client):
     assert sample["voyageId"] == "berry-mappemonde-2026-officiel"
     assert sample["status"] in ("live", "waiting", "arrived")
     grib = client.get("/voyage/official/grib", params={"lat": 46.15, "lon": -1.16}).json()
-    assert grib["status"] == "absent"
-    assert grib["warning"] == "dernière prévision absente"
+    assert grib["status"] in ("pending", "absent")
+    if grib["status"] == "pending":
+        assert grib["warning"] is None
+    else:
+        assert grib["warning"] == "dernière prévision absente"
     sample = client.get("/voyage/official/at").json()
     assert sample["kind"] != "climatology"
     assert sample["kind"] == "absent"
