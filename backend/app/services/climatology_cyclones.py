@@ -17,7 +17,6 @@ from app.services.climatology_common import (
     parse_month,
     point_to_segment_nm,
     rule,
-    wrap_lon,
 )
 
 NCEI_STORM_URL = "https://www.ncei.noaa.gov/products/international-best-track-archive"
@@ -64,21 +63,24 @@ def storms_for_month(month: int, *, min_kn: float | None = None) -> list[dict]:
     return out
 
 
-def _split_antimeridian(coords: list[list[float]]) -> list[list[list[float]]]:
-    if len(coords) < 2:
-        return [coords] if coords else []
-    parts: list[list[list[float]]] = []
-    cur = [coords[0]]
-    for prev, pt in zip(coords, coords[1:]):
-        if abs(pt[0] - prev[0]) > 180:
-            if len(cur) >= 2:
-                parts.append(cur)
-            cur = [pt]
-        else:
-            cur.append(pt)
-    if len(cur) >= 2:
-        parts.append(cur)
-    return parts
+def _unwrap_lon(prev: float, lon: float) -> float:
+    x = float(lon)
+    while x - prev > 180.0:
+        x -= 360.0
+    while x - prev < -180.0:
+        x += 360.0
+    return x
+
+
+def _unwrap_coords(coords: list[list[float]]) -> list[list[float]]:
+    """170 → −170 becomes 170 → 190. One storm stays one continuous line."""
+    clean = [c for c in coords if len(c) >= 2]
+    if not clean:
+        return []
+    out = [[float(clean[0][0]), float(clean[0][1])]]
+    for pt in clean[1:]:
+        out.append([_unwrap_lon(out[-1][0], float(pt[0])), float(pt[1])])
+    return out
 
 
 def _color(max_wind: float) -> str:
@@ -93,26 +95,25 @@ def tracks_geojson(month: int) -> dict:
     month = parse_month(month)
     features = []
     for s in storms_for_month(month):
-        coords = [[wrap_lon(p[0]), p[1]] for p in (s.get("coords") or []) if len(p) >= 2]
-        for part in _split_antimeridian(coords):
-            if len(part) < 2:
-                continue
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "LineString", "coordinates": part},
-                "properties": {
-                    "kind": KIND,
-                    "sid": s.get("sid"),
-                    "name": s.get("name"),
-                    "season": s.get("season"),
-                    "basin": s.get("basin"),
-                    "month": month,
-                    "max_wind_kn": s.get("max_wind_kn"),
-                    "wind_source": s.get("wind_source"),
-                    "color": _color(float(s.get("max_wind_kn") or 0)),
-                    "url": f"{NCEI_STORM_URL}",
-                },
-            })
+        coords = _unwrap_coords(s.get("coords") or [])
+        if len(coords) < 2:
+            continue
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coords},
+            "properties": {
+                "kind": KIND,
+                "sid": s.get("sid"),
+                "name": s.get("name"),
+                "season": s.get("season"),
+                "basin": s.get("basin"),
+                "month": month,
+                "max_wind_kn": s.get("max_wind_kn"),
+                "wind_source": s.get("wind_source"),
+                "color": _color(float(s.get("max_wind_kn") or 0)),
+                "url": f"{NCEI_STORM_URL}",
+            },
+        })
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -168,7 +169,7 @@ def crossings(
             continue
         if not _in_dayrange(s, month, day, window):
             continue
-        coords = s.get("coords") or []
+        coords = _unwrap_coords(s.get("coords") or [])
         near = False
         for pt in coords:
             if len(pt) < 2:
@@ -177,10 +178,7 @@ def crossings(
                 near = True
                 break
         if not near and len(coords) >= 2:
-            # Track segment vs leg (samples)
             for a, b in zip(coords, coords[1:]):
-                if abs(a[0] - b[0]) > 180:
-                    continue
                 if (
                     point_to_segment_nm(lat1, lon1, a[1], a[0], b[1], b[0]) <= radius
                     or point_to_segment_nm(lat2, lon2, a[1], a[0], b[1], b[0]) <= radius

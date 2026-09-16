@@ -112,9 +112,21 @@ export default function MapView({
   useEffect(() => {
     if (mapObj.current) return;
     const WORLD = [[-85, -180], [85, 180]];
+    const recette = (() => {
+      try {
+        const q = new URLSearchParams(window.location.search);
+        const lat = Number(q.get("clat"));
+        const lon = Number(q.get("clon"));
+        const z = Number(q.get("z"));
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return { lat, lon, z: Number.isFinite(z) ? z : 2 };
+      } catch {
+        return null;
+      }
+    })();
     const map = L.map(mapRef.current, {
-      center: [22, 5],
-      zoom: 2,
+      center: recette ? [recette.lat, recette.lon] : [22, 5],
+      zoom: recette ? recette.z : 2,
       zoomSnap: 0.25,
       minZoom: minZoom || 2,
       maxZoom: 18,

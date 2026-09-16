@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
 import { POPUP_OPTS } from "./points";
+import { cycloneLatLngCopies, groupCycloneFeatures } from "./cycloneTracks";
 
 const COLOR = "#2dd4bf";
 
@@ -193,19 +194,21 @@ export default function useClimatologyLayer({
       const { data } = await api.get("/climatology/cyclones.geojson", { params: { month } });
       if (cancelled) return;
       const group = L.layerGroup();
-      (data.features || []).forEach((f) => {
-        const coords = (f.geometry?.coordinates || []).map(([ln, lt]) => [lt, ln]);
-        if (coords.length < 2) return;
-        const p = f.properties || {};
-        const line = L.polyline(coords, {
-          pane: "climatology-vector",
-          color: p.color || COLOR,
-          weight: 1.6,
-          opacity: 0.75,
-          interactive: false,
+      groupCycloneFeatures(data.features || []).forEach((storm) => {
+        const copies = cycloneLatLngCopies(storm.coords);
+        const p = storm.properties || {};
+        copies.forEach((latlngs) => {
+          if (latlngs.length < 2) return;
+          const line = L.polyline(latlngs, {
+            pane: "climatology-vector",
+            color: p.color || COLOR,
+            weight: 1.6,
+            opacity: 0.75,
+            interactive: false,
+          });
+          line.bindPopup(() => popupHtml("cyclones", p, tRef.current), popupOpts);
+          group.addLayer(line);
         });
-        line.bindPopup(() => popupHtml("cyclones", p, tRef.current), popupOpts);
-        group.addLayer(line);
       });
       layersRef.current.cyclones = group;
       group.addTo(map);

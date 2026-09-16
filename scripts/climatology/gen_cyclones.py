@@ -3,6 +3,9 @@
 
 Does not copy the OpenCPN C++. TRACK_TYPE == main. Wind: USA_WIND else
 WMO_WIND (1 min / 10 min mix documented in wind_source).
+
+Longitudes stay unwrapped (170 → 185 → 190). IBTrACS often uses lon>180
+east of the date line — do not clip to ±180, that cuts the track.
 """
 from __future__ import annotations
 
@@ -37,6 +40,15 @@ def _f(raw: str) -> float | None:
         return float(raw)
     except ValueError:
         return None
+
+
+def _unwrap_lon(prev: float, lon: float) -> float:
+    x = float(lon)
+    while x - prev > 180.0:
+        x -= 360.0
+    while x - prev < -180.0:
+        x += 360.0
+    return x
 
 
 def _simplify(points: list[list[float]]) -> list[list[float]]:
@@ -85,7 +97,7 @@ def parse_csv(path: Path) -> list[dict]:
             lon = _f(col(row, "LON"))
             if lat is None or lon is None:
                 continue
-            if abs(lat) > 90 or abs(lon) > 180:
+            if abs(lat) > 90 or abs(lon) > 540:
                 continue
             iso = col(row, "ISO_TIME").strip()
             usa = _f(col(row, "USA_WIND"))
@@ -125,6 +137,8 @@ def parse_csv(path: Path) -> list[dict]:
             if wind is not None and wind > rec["max_wind_kn"]:
                 rec["max_wind_kn"] = wind
                 rec["wind_source"] = src or rec["wind_source"]
+            if rec["coords"]:
+                lon = _unwrap_lon(rec["coords"][-1][0], lon)
             rec["coords"].append([round(lon, 2), round(lat, 2)])
 
     out = []
