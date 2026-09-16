@@ -1365,10 +1365,10 @@ export default function App() {
           {t("climatologyOn", { month: monthLabel || String(climoMonth) })}
           {climoLayer.counts && (
             <span className="ml-2 opacity-80" data-testid="climatology-overlay-ready">
-              {`· roses ${climoLayer.counts.wind || 0} · P50 ${climoLayer.counts.waveP50 || 0} · P90 ${climoLayer.counts.waveP90 || 0} · courant ${climoLayer.counts.current || 0} · IBTrACS ${climoLayer.counts.cyclones || 0}`}
+              {`· roses ${climoLayer.counts.wind || 0} · P50 ${climoLayer.counts.waveP50 || 0} · P90 ${climoLayer.counts.waveP90 || 0}${climoLayer.counts.waveMean ? ` · Hs mean ${climoLayer.counts.waveMean}` : ""} · courant ${climoLayer.counts.current || 0} · IBTrACS ${climoLayer.counts.cyclones || 0}`}
             </span>
           )}
-          {(climoLayer.error || atlas.alive === false) && (
+          {climoLayer.error === "atlas_empty" && atlas.alive === false && (
             <span className="ml-2 text-amber-200">{t("climatologyAtlasDown")}</span>
           )}
         </div>

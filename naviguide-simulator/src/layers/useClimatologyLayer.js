@@ -42,7 +42,7 @@ export function useClimatologyLayer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [counts, setCounts] = useState(null);
-  const layersRef = useRef({ wind: null, waveP50: null, waveP90: null, current: null, cyclones: null });
+  const layersRef = useRef({ wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null });
   const tRef = useRef(t);
   tRef.current = t;
   const onPointRef = useRef(onPoint);
@@ -58,7 +58,7 @@ export function useClimatologyLayer({
     Object.values(layersRef.current).forEach((lyr) => {
       if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
     });
-    layersRef.current = { wind: null, waveP50: null, waveP90: null, current: null, cyclones: null };
+    layersRef.current = { wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null };
 
     if (!enabled) {
       setLoading(false);
@@ -126,7 +126,8 @@ export function useClimatologyLayer({
         c.bindPopup(() => layerPopupHtml("wave", p, tRef.current), popupOpts);
         return c;
       });
-      layersRef.current[stat === "p50" ? "waveP50" : "waveP90"] = group;
+      const key = stat === "p50" ? "waveP50" : stat === "p90" ? "waveP90" : "waveMean";
+      layersRef.current[key] = group;
       group.addTo(map);
       return (data.features || []).length;
     };
@@ -180,11 +181,15 @@ export function useClimatologyLayer({
       loadSafe("wave-p90", () => loadWave("p90")),
       loadSafe("current", loadCurrent),
       loadSafe("cyclones", loadCyclones),
-    ]).then((nums) => {
+    ]).then(async (nums) => {
       if (cancelled) return;
-      const [wind, waveP50, waveP90, current, cyclones] = nums;
-      setCounts({ wind, waveP50, waveP90, current, cyclones });
-      if (nums.every((n) => !n)) setError("atlas_empty");
+      let [wind, waveP50, waveP90, current, cyclones] = nums;
+      let waveMean = 0;
+      if (!waveP50 && !waveP90) {
+        waveMean = await loadSafe("wave-mean", () => loadWave("mean"));
+      }
+      setCounts({ wind, waveP50, waveP90, waveMean, current, cyclones });
+      if (![wind, waveP50, waveP90, waveMean, current, cyclones].some(Boolean)) setError("atlas_empty");
     }).catch((err) => {
       if (!cancelled) setError(String(err.message || err));
     }).finally(() => {
@@ -214,7 +219,7 @@ export function useClimatologyLayer({
       Object.values(layersRef.current).forEach((lyr) => {
         if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
       });
-      layersRef.current = { wind: null, waveP50: null, waveP90: null, current: null, cyclones: null };
+      layersRef.current = { wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null };
     };
   }, [mapRef, mapReady, enabled, m]);
 

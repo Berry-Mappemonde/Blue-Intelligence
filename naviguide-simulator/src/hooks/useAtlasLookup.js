@@ -109,7 +109,8 @@ export function useAtlasLookup({
         .catch((err) => {
           if (ctrl.signal.aborted) return;
           if (!CACHE.has(key)) CACHE.set(key, { point: null, wind: null, source: "zone_fallback" });
-          if (alive !== false && String(err.message || "").includes("atlas")) setAlive(false);
+          const msg = String(err.message || err);
+          if (/Failed to fetch|NetworkError|atlas 5\d\d/.test(msg)) setAlive(false);
         })
         .finally(() => {
           INFLIGHT.delete(key);
