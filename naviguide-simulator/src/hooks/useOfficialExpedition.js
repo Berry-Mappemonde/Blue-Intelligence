@@ -14,7 +14,6 @@ export function useOfficialExpedition({
   points,
   marks,
   expeditionId,
-  clock,
 }) {
   const [meta, setMeta] = useState(null);
   const [serverClock, setServerClock] = useState(null);
@@ -22,9 +21,7 @@ export function useOfficialExpedition({
   const [gribPending, setGribPending] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const putRef = useRef("");
-  const clockRef = useRef(clock);
   const serverClockRef = useRef(serverClock);
-  clockRef.current = clock;
   serverClockRef.current = serverClock;
 
   useEffect(() => {

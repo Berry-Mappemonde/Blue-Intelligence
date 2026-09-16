@@ -13,6 +13,7 @@ describe("useOfficialExpedition — position officielle", () => {
   it("attend et emploie l’horloge serveur, jamais l’horloge cliente mutable", () => {
     assert.match(source, /const liveClock = serverClock;/);
     assert.match(source, /if \(!enabled \|\| !liveClock\) return null;/);
+    assert.doesNotMatch(source, /clock \|\| serverClock/);
     assert.match(
       source,
       /serverClock\s*&&\s*sampleClockAtTime\(serverClock, new Date\(nowMs\)\)\?\.lat != null/,
