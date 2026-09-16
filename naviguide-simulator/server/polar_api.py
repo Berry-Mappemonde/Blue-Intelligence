@@ -159,7 +159,7 @@ async def upload_polar(
     try:
         data = await run_in_threadpool(_serialize_polar, polar, expedition_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Grid generation error: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Polar serialization error: {exc}") from exc
 
     dest = _polar_path(expedition_id)
     try:
