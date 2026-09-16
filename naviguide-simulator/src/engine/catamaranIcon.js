@@ -5,16 +5,19 @@ export function catamaranTransform(bearing) {
 }
 
 function hullPath(cx) {
-  const left = cx - 6.2;
-  const right = cx + 6.2;
+  const l = cx - 6.6;
+  const r = cx + 6.6;
   return [
-    `M ${cx} 5.5`,
-    `C ${cx + 3.2} 6.2, ${right} 11, ${right} 16`,
-    `L ${right - 0.4} 50`,
-    `C ${right} 54.5, ${cx + 3.4} 57.2, ${cx} 58`,
-    `C ${cx - 3.4} 57.2, ${left} 54.5, ${left + 0.4} 50`,
-    `L ${left} 16`,
-    `C ${left} 11, ${cx - 3.2} 6.2, ${cx} 5.5`,
+    `M ${cx} 4.2`,
+    `C ${cx + 2.1} 4.6, ${r - 0.2} 9.5, ${r} 15`,
+    `L ${r - 0.15} 49`,
+    `C ${r} 53.2, ${cx + 3.8} 56.4, ${cx + 2.4} 58.2`,
+    `L ${cx + 2.4} 59.4`,
+    `L ${cx - 2.4} 59.4`,
+    `L ${cx - 2.4} 58.2`,
+    `C ${cx - 3.8} 56.4, ${l} 53.2, ${l + 0.15} 49`,
+    `L ${l} 15`,
+    `C ${l + 0.2} 9.5, ${cx - 2.1} 4.6, ${cx} 4.2`,
     "Z",
   ].join(" ");
 }
@@ -23,23 +26,28 @@ function hullPath(cx) {
 export function catamaranSvg(bearing, { size = 64 } = {}) {
   const deg = ((Number(bearing) || 0) % 360 + 360) % 360;
   const transform = catamaranTransform(deg);
-  const port = hullPath(19);
-  const starboard = hullPath(45);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64" aria-label="catamaran" data-bow="north" data-heading="${deg}" style="display:block;transform:${transform};transform-origin:50% 50%;transition:transform 0.35s ease;">
-  <ellipse cx="32" cy="34" rx="20" ry="22" fill="#0f172a" opacity="0.18"/>
-  <path d="M24 14 L40 14 L41 48 L23 48 Z" fill="#0e7490" opacity="0.38"/>
-  <path d="M25 10 L39 10 L40 18 L24 18 Z" fill="#67e8f9" opacity="0.28"/>
-  <rect x="22" y="19" width="20" height="2.4" rx="1.1" fill="#cbd5e1"/>
-  <rect x="22" y="43.5" width="20" height="2.4" rx="1.1" fill="#cbd5e1"/>
-  <rect x="25.5" y="26" width="13" height="13" rx="2.6" fill="#155e75" stroke="#22d3ee" stroke-width="0.9"/>
-  <rect x="27.5" y="28.2" width="4.2" height="4.6" rx="0.7" fill="#67e8f9" opacity="0.55"/>
-  <rect x="32.4" y="28.2" width="4.2" height="4.6" rx="0.7" fill="#67e8f9" opacity="0.35"/>
-  <circle cx="32" cy="24.2" r="2.15" fill="#f8fafc" stroke="#0f172a" stroke-width="0.7"/>
-  <path d="${port}" fill="#f8fafc" stroke="#0f172a" stroke-width="1.15" stroke-linejoin="round"/>
-  <path d="${starboard}" fill="#f8fafc" stroke="#0f172a" stroke-width="1.15" stroke-linejoin="round"/>
-  <path d="M18.2 13 L19.8 13 L20.4 49 L17.6 49 Z" fill="#22d3ee" opacity="0.55"/>
-  <path d="M44.2 13 L45.8 13 L46.4 49 L43.6 49 Z" fill="#22d3ee" opacity="0.55"/>
-  <path d="M32 3.2 L36.4 11.6 L27.6 11.6 Z" fill="#22d3ee" stroke="#0f172a" stroke-width="0.7" stroke-linejoin="round"/>
-  <circle cx="32" cy="55.4" r="1.15" fill="#64748b"/>
+  <ellipse cx="32" cy="33" rx="21" ry="26" fill="#082f49"/>
+  <path d="M23 11 L41 11 L42.2 21 L21.8 21 Z" fill="#0e7490"/>
+  <path d="M24.2 12.2 L39.8 12.2 L40.4 19.6 L23.6 19.6 Z" fill="#155e75"/>
+  <path d="M25 13.4 L28 13.4 L28 18.6 L25.4 18.6 Z" fill="#67e8f9" opacity="0.35"/>
+  <path d="M30 13.4 L34 13.4 L34 18.6 L30 18.6 Z" fill="#67e8f9" opacity="0.25"/>
+  <path d="M36 13.4 L39 13.4 L38.6 18.6 L36 18.6 Z" fill="#67e8f9" opacity="0.35"/>
+  <rect x="21.5" y="20.5" width="21" height="2.2" rx="1" fill="#94a3b8"/>
+  <rect x="22" y="22.4" width="20" height="22.2" rx="3.2" fill="#134e4a"/>
+  <rect x="23.4" y="24" width="17.2" height="12.4" rx="2.2" fill="#155e75" stroke="#22d3ee" stroke-width="0.85"/>
+  <rect x="25" y="26" width="5.4" height="5" rx="0.8" fill="#a5f3fc" opacity="0.7"/>
+  <rect x="33.6" y="26" width="5.4" height="5" rx="0.8" fill="#a5f3fc" opacity="0.45"/>
+  <rect x="25" y="32.2" width="14" height="2.6" rx="0.6" fill="#0f766e"/>
+  <rect x="24.2" y="38.2" width="15.6" height="5.4" rx="1.2" fill="#0f766e"/>
+  <rect x="21.5" y="44.6" width="21" height="2.2" rx="1" fill="#94a3b8"/>
+  <circle cx="32" cy="21.6" r="2.35" fill="#f8fafc" stroke="#0f172a" stroke-width="0.75"/>
+  <line x1="32" y1="21.6" x2="32" y2="36.5" stroke="#e2e8f0" stroke-width="1.05"/>
+  <path d="${hullPath(19.2)}" fill="#f8fafc" stroke="#0f172a" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="${hullPath(44.8)}" fill="#f8fafc" stroke="#0f172a" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M17.4 12.5 L20.8 12.5 L21.3 50.5 L16.9 50.5 Z" fill="#22d3ee" opacity="0.62"/>
+  <path d="M43.2 12.5 L46.6 12.5 L47.1 50.5 L42.7 50.5 Z" fill="#22d3ee" opacity="0.62"/>
+  <path d="M32 2.4 L37.2 11.2 L26.8 11.2 Z" fill="#22d3ee" stroke="#0f172a" stroke-width="0.75" stroke-linejoin="round"/>
+  <circle cx="32" cy="56.6" r="1.2" fill="#64748b"/>
 </svg>`;
 }
