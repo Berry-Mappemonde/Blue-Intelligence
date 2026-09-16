@@ -54,7 +54,7 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       lon: camLon,
       whenIso,
     });
-    const pane = map.getPane("boat") ? "boat" : "overlayPane";
+    const pane = map.getPane("grib") ? "grib" : "overlayPane";
     const cam = Number.isFinite(camLon) ? camLon : map.getCenter()?.lng;
     for (const s of slice) {
       for (const lng of markerWorldLngs(s.lon, cam)) {

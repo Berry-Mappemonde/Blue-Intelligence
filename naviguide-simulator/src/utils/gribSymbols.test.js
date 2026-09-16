@@ -81,5 +81,7 @@ describe("couche GRIB", () => {
     assert.equal(src.includes("gribBarbSvg"), true);
     assert.equal(src.includes("markerWorldLngs"), true);
     assert.equal(src.includes("cameraLngForBoat"), true);
+    assert.equal(src.includes('getPane("grib")'), true);
+    assert.equal(src.includes('getPane("boat")'), false);
   });
 });
