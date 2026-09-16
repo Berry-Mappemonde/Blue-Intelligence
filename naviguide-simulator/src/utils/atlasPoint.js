@@ -3,6 +3,7 @@
  * kind: climatology. Never relabel as forecast / GRIB2.
  */
 
+import { wrapLon } from "./geo.js";
 import { zoneWindAt } from "./climatologyWind.js";
 
 const viteEnv = (typeof import.meta !== "undefined" && import.meta.env) || {};
@@ -33,12 +34,12 @@ export function cellKey(lat, lon, month) {
 export function atlasPointUrl({ lat, lon, month, destLat, destLon, day }) {
   const q = new URLSearchParams({
     lat: String(lat),
-    lon: String(lon),
+    lon: String(wrapLon(Number(lon))),
     month: String(clampMonth(month)),
   });
   if (Number.isFinite(Number(destLat)) && Number.isFinite(Number(destLon))) {
     q.set("dest_lat", String(destLat));
-    q.set("dest_lon", String(destLon));
+    q.set("dest_lon", String(wrapLon(Number(destLon))));
   }
   if (Number.isFinite(Number(day))) q.set("day", String(day));
   return `${BI_BASE}/climatology/point?${q.toString()}`;
@@ -47,9 +48,9 @@ export function atlasPointUrl({ lat, lon, month, destLat, destLon, day }) {
 export function atlasCrossingsUrl({ lat1, lon1, lat2, lon2, month, day }) {
   const q = new URLSearchParams({
     lat1: String(lat1),
-    lon1: String(lon1),
+    lon1: String(wrapLon(Number(lon1))),
     lat2: String(lat2),
-    lon2: String(lon2),
+    lon2: String(wrapLon(Number(lon2))),
     month: String(clampMonth(month)),
   });
   if (Number.isFinite(Number(day))) q.set("day", String(day));

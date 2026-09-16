@@ -121,6 +121,14 @@ def test_cyclones_geojson_september_has_tracks():
     assert all(f["properties"]["kind"] == KIND for f in data["features"][:5])
 
 
+def test_point_accepts_unwrapped_longitude():
+    data = _client().get("/api/climatology/point", params={
+        "lat": 50.0, "lon": 186.0, "month": 9,
+    }).json()
+    assert data["kind"] == KIND
+    assert data["coordinates"]["longitude"] == -174.0
+
+
 def test_unwrap_coords_keeps_one_line_past_180():
     pts = cyc._unwrap_coords([
         [170.0, -15.0], [179.0, -16.0], [-179.0, -17.0], [-170.0, -18.0],

@@ -56,6 +56,7 @@ describe("atlasPoint", () => {
     assert.match(point, /^\/bi\/climatology\/point\?/);
     assert.match(point, /month=6/);
     assert.match(point, /dest_lat=14\.6/);
+    assert.match(atlasPointUrl({ lat: 15, lon: 186, month: 9 }), /lon=-174/);
     assert.equal(atlasLayerUrl("wave", 6, { stat: "p90", spacing_deg: "4" }).includes("stat=p90"), true);
     assert.equal(cellKey(15.1, -25.1, 6), cellKey(15.2, -25.2, 6));
     assert.equal(civilMonth("2026-07-15T08:00:00.000Z"), 7);
