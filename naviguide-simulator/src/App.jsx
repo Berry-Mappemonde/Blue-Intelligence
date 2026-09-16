@@ -210,7 +210,13 @@ export default function App() {
     setMaritimeLayerState(layers);
   }, []);
   const handleClimatologyState = useCallback((state) => {
-    setClimoLayer(state);
+    setClimoLayer((previous) => (
+      previous.loading === state.loading
+      && previous.error === state.error
+      && previous.counts === state.counts
+        ? previous
+        : state
+    ));
   }, []);
   const handleCoordinatesCopied = useCallback((text) => {
     navigator.clipboard.writeText(text).then(() => {
