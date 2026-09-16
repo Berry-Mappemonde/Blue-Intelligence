@@ -60,6 +60,8 @@ import { isRouteReady } from "./utils/routeReady.js";
 import {
   isSceneReady,
   playheadAligned,
+  sceneMaskKey,
+  shouldKeepSceneVisible,
   shouldPlaceInitialCamera,
   shouldResnapCamera,
 } from "./utils/sceneGate.js";
@@ -149,6 +151,7 @@ export default function App() {
   const isSimulation = view === VIEW_SIMULATION;
   const [voyageFlat, setVoyageFlat] = useState(null);
   const [cameraPlaced, setCameraPlaced] = useState(false);
+  const [sceneRevealed, setSceneRevealed] = useState(false);
   const [liveKnots, setLiveKnots] = useState(null);
   const cinemaSavedRef = useRef({ sidebar: true, tools: true });
   const drawRestoreRef = useRef({ view: VIEW_SUIVRE, center: null, zoom: null });
@@ -242,6 +245,7 @@ export default function App() {
     points: routeReady ? flatRoute.points : undefined,
     marks: routeReady ? escaleMarks : [],
     expeditionId: polarData?.expedition_id,
+    clock: voyage.clock,
   });
   const vessel = useVirtualVessel({
     enabled: isSimulation && routeReady,
@@ -272,14 +276,20 @@ export default function App() {
     playbackNm: playback.nm,
     liveFilmNm: live?.filmNm,
   });
-  const sceneReady = isSceneReady({
+  const hasRoute = Boolean(flatRoute.points?.length);
+  const gateReady = isSceneReady({
     routeReady,
-    hasRoute: Boolean(flatRoute.points?.length),
+    hasRoute,
     cameraPlaced,
     playheadReady,
     isSuivre,
     hasLive: Boolean(live),
     previewing,
+  });
+  const sceneReady = gateReady || shouldKeepSceneVisible({
+    revealed: sceneRevealed,
+    routeReady,
+    hasRoute,
   });
   const clockSample = useMemo(() => {
     if (isSuivre && live && !previewing) return live;
@@ -516,6 +526,13 @@ export default function App() {
     }
     livePrimedRef.current = true;
   }, [routeReady, isSuivre, live?.filmNm, userPreview, playback.nm, playback.seek]);
+
+  useEffect(() => {
+    if (gateReady) setSceneRevealed(true);
+  }, [gateReady]);
+  useEffect(() => {
+    if (!routeReady) setSceneRevealed(false);
+  }, [routeReady]);
 
   const simPrimedRef = useRef(false);
   useEffect(() => {
@@ -1442,7 +1459,7 @@ export default function App() {
       {!sceneReady && !drawingMode && (
         <div data-testid="scene-load-mask" className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-[1500] pointer-events-none">
           <div className="w-10 h-10 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
-          <div className="mt-4 text-white/90 text-sm font-medium">{t("calculatingRoutes")}</div>
+          <div className="mt-4 text-white/90 text-sm font-medium">{t(sceneMaskKey({ routeReady }))}</div>
         </div>
       )}
 
