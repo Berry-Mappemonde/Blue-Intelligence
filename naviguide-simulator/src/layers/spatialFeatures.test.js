@@ -33,6 +33,14 @@ describe("spatialFeatures", () => {
     assert.equal(result.features.length, 2);
   });
 
+  it("aligne les points de la copie monde affichée", () => {
+    const result = visibleFeatureCollection(
+      { type: "FeatureCollection", features: [point(175, 0, "Fidji")] },
+      { west: -200, south: -10, east: -160, north: 10 },
+    );
+    assert.equal(result.features[0].geometry.coordinates[0], -185);
+  });
+
   it("borne les marqueurs par agrégation écran", () => {
     const features = Array.from({ length: 100 }, (_, index) => point(index / 100, index / 100));
     const aggregated = aggregatePointFeatures(features, (lon, lat) => ({ x: lon * 100, y: lat * 100 }), {

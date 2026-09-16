@@ -13,13 +13,19 @@ function mapBounds(bounds) {
   return bounds;
 }
 
+function visibleLongitude(lon, bounds) {
+  const copies = [lon - 360, lon, lon + 360];
+  if (bounds.west <= bounds.east) {
+    return copies.find((value) => value >= bounds.west && value <= bounds.east);
+  }
+  return copies.find((value) => value >= bounds.west || value <= bounds.east);
+}
+
 export function pointInBounds(lon, lat, rawBounds) {
   const bounds = mapBounds(rawBounds);
   if (!bounds || !Number.isFinite(lon) || !Number.isFinite(lat)) return false;
   if (lat < bounds.south || lat > bounds.north) return false;
-  return bounds.west <= bounds.east
-    ? lon >= bounds.west && lon <= bounds.east
-    : lon >= bounds.west || lon <= bounds.east;
+  return visibleLongitude(lon, bounds) != null;
 }
 
 function lineTouchesBounds(coords, bounds) {
@@ -36,13 +42,23 @@ function lineTouchesBounds(coords, bounds) {
 export function visibleFeatureCollection(fc, bounds) {
   return {
     type: "FeatureCollection",
-    features: (fc?.features || []).filter((feature) => {
+    features: (fc?.features || []).flatMap((feature) => {
       const geometry = feature?.geometry || {};
       if (geometry.type === "Point") {
-        return pointInBounds(Number(geometry.coordinates?.[0]), Number(geometry.coordinates?.[1]), bounds);
+        const lon = Number(geometry.coordinates?.[0]);
+        const lat = Number(geometry.coordinates?.[1]);
+        const normalizedBounds = mapBounds(bounds);
+        if (!normalizedBounds) return [];
+        const copy = visibleLongitude(lon, normalizedBounds);
+        if (copy == null || !pointInBounds(lon, lat, bounds)) return [];
+        if (copy === lon) return [feature];
+        return [{
+          ...feature,
+          geometry: { ...geometry, coordinates: [copy, lat] },
+        }];
       }
-      if (geometry.type === "LineString") return lineTouchesBounds(geometry.coordinates, bounds);
-      return false;
+      if (geometry.type === "LineString") return lineTouchesBounds(geometry.coordinates, bounds) ? [feature] : [];
+      return [];
     }),
   };
 }
