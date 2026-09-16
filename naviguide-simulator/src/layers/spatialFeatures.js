@@ -18,7 +18,7 @@ function visibleLongitude(lon, bounds) {
   if (bounds.west <= bounds.east) {
     return copies.find((value) => value >= bounds.west && value <= bounds.east);
   }
-  return copies.find((value) => value >= bounds.west || value <= bounds.east);
+  return copies.find((value) => value >= bounds.west && value <= bounds.east + 360);
 }
 
 export function pointInBounds(lon, lat, rawBounds) {
