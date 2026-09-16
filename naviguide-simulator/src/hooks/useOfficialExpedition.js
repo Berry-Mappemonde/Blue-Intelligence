@@ -6,7 +6,7 @@ const API = import.meta.env.VITE_API_URL ?? "";
 
 /**
  * Voyage officiel unique. Pas de localStorage visiteur.
- * Position = horloge locale à maintenant (1 s = 1 s).
+ * Position = horloge serveur à maintenant (1 s = 1 s).
  * Dernier GRIB = overlay vent, jamais un nouveau trait, jamais de climatologie.
  */
 export function useOfficialExpedition({
