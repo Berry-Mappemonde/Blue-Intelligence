@@ -24,8 +24,9 @@ describe("couloir GRIB", () => {
     assert.equal(pointInBbox(unwrapped, -22.7, 168.84), true);
     const wrapped = [-25, -20, 165, 172];
     assert.equal(pointInBbox(wrapped, -22.7, -191.16), true);
-    const local = corridorForBoat([-3, 3, -103, -96], -22.7, -191.16);
-    assert.ok(Math.abs(local[2] - 168.84) < 4);
-    assert.ok(local[2] > 0 && local[3] < 180);
+    const aroundClock = corridorForBoat([-3, 3, -103, -96], -22.7, -191.16);
+    assert.ok(Math.abs(aroundClock[2] + 191.16) < 4);
+    const aroundCam = corridorForBoat([-3, 3, -103, -96], -22.7, 168.84);
+    assert.ok(Math.abs(aroundCam[2] - 168.84) < 4);
   });
 });

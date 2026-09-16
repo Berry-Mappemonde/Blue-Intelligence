@@ -26,6 +26,5 @@ export function pointInBbox(bbox, lat, lon) {
 export function corridorForBoat(bbox, lat, lon) {
   if (pointInBbox(bbox, lat, lon)) return bbox.map(Number);
   if (lat == null || lon == null) return corridorBboxOk(bbox) ? bbox.map(Number) : null;
-  const cam = wrapLon(lon);
-  return [lat - 3, lat + 3, cam - 3.5, cam + 3.5];
+  return [lat - 3, lat + 3, lon - 3.5, lon + 3.5];
 }

@@ -30,9 +30,8 @@ function cellKey(value) {
 /** Barbules OMM + disques Hs en stencil. Jamais un rectangle de couloir. */
 export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso, lat, lon }) {
   const groupRef = useRef(null);
-  const displayLon = lon == null ? null : cameraLngForBoat(lon);
   const latCell = cellKey(lat);
-  const lonCell = cellKey(displayLon);
+  const lonCell = cellKey(lon);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -41,7 +40,8 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       groupRef.current = null;
     }
     if (!map || !mapReady || !visible || grib?.status !== "ready") return undefined;
-    const box = corridorForBoat(grib.bbox, latCell, lonCell);
+    const camLon = cameraLngForBoat(lonCell, map.getCenter()?.lng);
+    const box = corridorForBoat(grib.bbox, latCell, camLon);
     if (!box) return undefined;
     const [south, north, west, east] = box;
 
@@ -51,11 +51,11 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
     const near = (grib.samples || []).filter((s) => sampleNearBox(s, south, north, west, east));
     const slice = gribDisplayPoints(near.length ? near : grib.samples, {
       lat: latCell,
-      lon: lonCell,
+      lon: camLon,
       whenIso,
     });
     const pane = map.getPane("boat") ? "boat" : "overlayPane";
-    const cam = Number.isFinite(lonCell) ? lonCell : map.getCenter()?.lng;
+    const cam = Number.isFinite(camLon) ? camLon : map.getCenter()?.lng;
     for (const s of slice) {
       for (const lng of markerWorldLngs(s.lon, cam)) {
         if (s.hs != null) {

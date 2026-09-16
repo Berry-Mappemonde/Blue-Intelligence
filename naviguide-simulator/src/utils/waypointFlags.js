@@ -40,12 +40,16 @@ export function lonOnCameraCopy(lon, cameraLng) {
   if (!Number.isFinite(x)) return lon;
   const copies = uniqLngs([...worldCopyLngs(x), wrapLon(x)]);
   if (!copies.length) return x;
+  if (cameraLng == null || cameraLng === "") return x;
   const cam = Number(cameraLng);
-  if (!Number.isFinite(cam)) return wrapLon(x);
+  if (!Number.isFinite(cam)) return x;
   return copies.reduce((best, v) => (Math.abs(v - cam) < Math.abs(best - cam) ? v : best));
 }
 
-/** Premier paint / reset : lon enveloppée. Ensuite : même copie que la caméra. */
+/**
+ * Même lon que le sillage (horloge, éventuellement dépliée) tant qu’on n’a pas
+ * de centre carte. Dès qu’il y en a un, on colle à cette copie (après jump).
+ */
 export function cameraLngForBoat(lon, prevCameraLng) {
   return lonOnCameraCopy(lon, prevCameraLng);
 }
