@@ -30,10 +30,13 @@ describe("recette A–G (contrats source)", () => {
     assert.match(read("./cinemaHotkey.js"), /metaKey \|\| e\.ctrlKey/);
   });
 
-  it("E — GRIB2 branché, pas allumé en dur hors config", () => {
+  it("E — GRIB2 branché, même lon enveloppée que le bateau", () => {
     const app = read("../App.jsx");
     assert.match(app, /maritimeLayers\.showGrib && isSuivre/);
     assert.match(read("../layers/useToggleLayers.js"), /DEFAULT_SHOW_GRIB/);
+    const grib = read("../layers/useGribCorridorLayer.js");
+    assert.match(grib, /markerWorldLngs/);
+    assert.match(grib, /cameraLngForBoat/);
   });
 
   it("F — Annuler Draw + bateau après 1er segment", () => {

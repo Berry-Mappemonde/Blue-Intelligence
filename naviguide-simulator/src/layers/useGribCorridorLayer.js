@@ -1,13 +1,12 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import { corridorForBoat } from "../utils/gribCorridor.js";
-import { wrapLon } from "../utils/geo.js";
 import {
   gribBarbSvg,
   gribDisplayPoints,
   waveHsColor,
-  worldCopyLngs,
 } from "../utils/gribSymbols.js";
+import { cameraLngForBoat, markerWorldLngs, wrapLon } from "../utils/waypointFlags.js";
 
 function lonNearBox(lon, west, east) {
   const x = Number(lon);
@@ -20,7 +19,7 @@ function lonNearBox(lon, west, east) {
 function sampleNearBox(s, south, north, west, east) {
   if (s.lat == null || s.lon == null) return false;
   if (s.lat < south - 1 || s.lat > north + 1) return false;
-  const copies = worldCopyLngs(s.lon).concat(wrapLon(s.lon));
+  const copies = markerWorldLngs(s.lon);
   return copies.some((lng) => lonNearBox(lng, west, east) || lonNearBox(lng, wrapLon(west), wrapLon(east)));
 }
 
@@ -31,8 +30,9 @@ function cellKey(value) {
 /** Barbules OMM + disques Hs en stencil. Jamais un rectangle de couloir. */
 export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso, lat, lon }) {
   const groupRef = useRef(null);
+  const displayLon = lon == null ? null : cameraLngForBoat(lon);
   const latCell = cellKey(lat);
-  const lonCell = cellKey(lon == null ? null : wrapLon(lon));
+  const lonCell = cellKey(displayLon);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -55,9 +55,9 @@ export function useGribCorridorLayer(mapRef, { grib, mapReady, visible, whenIso,
       whenIso,
     });
     const pane = map.getPane("boat") ? "boat" : "overlayPane";
+    const cam = Number.isFinite(lonCell) ? lonCell : map.getCenter()?.lng;
     for (const s of slice) {
-      const baseLon = wrapLon(s.lon);
-      for (const lng of worldCopyLngs(baseLon)) {
+      for (const lng of markerWorldLngs(s.lon, cam)) {
         if (s.hs != null) {
           L.circleMarker([s.lat, lng], {
             radius: 10,

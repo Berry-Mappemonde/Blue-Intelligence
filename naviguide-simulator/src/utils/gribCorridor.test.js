@@ -17,4 +17,15 @@ describe("couloir GRIB", () => {
     assert.ok(local[0] < -22.3 && local[1] > -22.3);
     assert.ok(Math.abs(local[2] - 166.4) < 4);
   });
+
+  it("Pacific : bbox et bateau sur des copies ±360°", () => {
+    const unwrapped = [-25, -20, -194, -188];
+    assert.equal(pointInBbox(unwrapped, -22.7, -191.16), true);
+    assert.equal(pointInBbox(unwrapped, -22.7, 168.84), true);
+    const wrapped = [-25, -20, 165, 172];
+    assert.equal(pointInBbox(wrapped, -22.7, -191.16), true);
+    const local = corridorForBoat([-3, 3, -103, -96], -22.7, -191.16);
+    assert.ok(Math.abs(local[2] - 168.84) < 4);
+    assert.ok(local[2] > 0 && local[3] < 180);
+  });
 });
