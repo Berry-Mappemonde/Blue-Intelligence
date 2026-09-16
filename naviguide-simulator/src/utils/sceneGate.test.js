@@ -8,6 +8,7 @@ import {
   pickOfficialLiveClock,
   playheadAligned,
   sceneMaskKey,
+  shouldFocusSimulationJump,
   shouldKeepSceneVisible,
   shouldPlaceInitialCamera,
   shouldResnapCamera,
@@ -126,6 +127,14 @@ describe("shouldPlaceInitialCamera", () => {
   it("laisse l’utilisateur garder sa vue s’il a déjà navigué", () => {
     assert.equal(shouldPlaceInitialCamera({ userNavigated: false }), true);
     assert.equal(shouldPlaceInitialCamera({ userNavigated: true }), false);
+  });
+});
+
+describe("shouldFocusSimulationJump", () => {
+  it("recentre seulement un saut arrêté en Simulation", () => {
+    assert.equal(shouldFocusSimulationJump({ isSimulation: true, playing: false }), true);
+    assert.equal(shouldFocusSimulationJump({ isSimulation: true, playing: true }), false);
+    assert.equal(shouldFocusSimulationJump({ isSimulation: false, playing: false }), false);
   });
 });
 
