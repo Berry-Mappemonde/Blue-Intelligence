@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { atlasLayerUrl, atlasPointUrl, clampMonth } from "../utils/atlasPoint.js";
+import { wrapLon } from "../utils/geo.js";
 import { POPUP_OPTS } from "./points.js";
 import {
   CLIMO_COLOR,
@@ -10,6 +11,7 @@ import {
   roseSvg,
   waveColor,
 } from "./climatologyPaint.js";
+import { climoPointLngs, cycloneLatLngCopies } from "./climatologyWorld.js";
 
 function currentIcon(p) {
   return L.divIcon({
@@ -26,14 +28,19 @@ async function fetchJson(url, signal) {
   return r.json();
 }
 
+const EMPTY_LAYERS = { wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null };
+
 /**
- * Same four BI atlas layers: wind roses, Hs P50 + P90, current arrows, IBTrACS.
- * Month = civil month of the Simulation clock (or live).
+ * Four atlas maps (wind / wave / current / cyclones), each optional.
+ * Points and IBTrACS tracks are painted on the three world copies.
  */
 export function useClimatologyLayer({
   mapRef,
   mapReady = 0,
-  enabled = false,
+  showWind = false,
+  showWave = false,
+  showCurrent = false,
+  showCyclones = false,
   month = 1,
   drawing = false,
   t = (k) => k,
@@ -42,7 +49,7 @@ export function useClimatologyLayer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [counts, setCounts] = useState(null);
-  const layersRef = useRef({ wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null });
+  const layersRef = useRef({ ...EMPTY_LAYERS });
   const tRef = useRef(t);
   tRef.current = t;
   const onPointRef = useRef(onPoint);
@@ -50,6 +57,7 @@ export function useClimatologyLayer({
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
   const m = clampMonth(month);
+  const anyOn = showWind || showWave || showCurrent || showCyclones;
 
   useEffect(() => {
     const map = mapRef.current;
@@ -58,9 +66,9 @@ export function useClimatologyLayer({
     Object.values(layersRef.current).forEach((lyr) => {
       if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
     });
-    layersRef.current = { wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null };
+    layersRef.current = { ...EMPTY_LAYERS };
 
-    if (!enabled) {
+    if (!anyOn) {
       setLoading(false);
       setError(null);
       setCounts(null);
@@ -82,8 +90,10 @@ export function useClimatologyLayer({
         const [lon, lat] = f.geometry?.coordinates || [];
         if (lat == null || lon == null) return;
         const p = f.properties || {};
-        const lyr = makeLayer([lat, lon], p);
-        if (lyr) group.addLayer(lyr);
+        for (const lng of climoPointLngs(lon)) {
+          const lyr = makeLayer([lat, lng], p);
+          if (lyr) group.addLayer(lyr);
+        }
       });
       return group;
     };
@@ -155,18 +165,20 @@ export function useClimatologyLayer({
       if (cancelled) return 0;
       const group = L.layerGroup();
       (data.features || []).forEach((f) => {
-        const coords = (f.geometry?.coordinates || []).map(([ln, lt]) => [lt, ln]);
-        if (coords.length < 2) return;
+        const copies = cycloneLatLngCopies(f.geometry?.coordinates || []);
         const p = f.properties || {};
-        const line = L.polyline(coords, {
-          pane: "climatology-vector",
-          color: p.color || CLIMO_COLOR,
-          weight: 1.6,
-          opacity: 0.75,
-          interactive: false,
+        copies.forEach((latlngs) => {
+          if (latlngs.length < 2) return;
+          const line = L.polyline(latlngs, {
+            pane: "climatology-vector",
+            color: p.color || CLIMO_COLOR,
+            weight: 1.6,
+            opacity: 0.75,
+            interactive: false,
+          });
+          line.bindPopup(() => layerPopupHtml("cyclones", p, tRef.current), popupOpts);
+          group.addLayer(line);
         });
-        line.bindPopup(() => layerPopupHtml("cyclones", p, tRef.current), popupOpts);
-        group.addLayer(line);
       });
       layersRef.current.cyclones = group;
       group.addTo(map);
@@ -175,21 +187,32 @@ export function useClimatologyLayer({
 
     setLoading(true);
     setError(null);
-    Promise.all([
-      loadSafe("wind", loadWind),
-      loadSafe("wave-p50", () => loadWave("p50")),
-      loadSafe("wave-p90", () => loadWave("p90")),
-      loadSafe("current", loadCurrent),
-      loadSafe("cyclones", loadCyclones),
-    ]).then(async (nums) => {
+    const jobs = [];
+    if (showWind) jobs.push(loadSafe("wind", loadWind));
+    if (showWave) {
+      jobs.push(loadSafe("wave-p50", () => loadWave("p50")));
+      jobs.push(loadSafe("wave-p90", () => loadWave("p90")));
+    }
+    if (showCurrent) jobs.push(loadSafe("current", loadCurrent));
+    if (showCyclones) jobs.push(loadSafe("cyclones", loadCyclones));
+
+    Promise.all(jobs).then(async (nums) => {
       if (cancelled) return;
-      let [wind, waveP50, waveP90, current, cyclones] = nums;
-      let waveMean = 0;
-      if (!waveP50 && !waveP90) {
-        waveMean = await loadSafe("wave-mean", () => loadWave("mean"));
+      const next = { wind: 0, waveP50: 0, waveP90: 0, waveMean: 0, current: 0, cyclones: 0 };
+      let i = 0;
+      if (showWind) next.wind = nums[i++] || 0;
+      if (showWave) {
+        next.waveP50 = nums[i++] || 0;
+        next.waveP90 = nums[i++] || 0;
+        if (!next.waveP50 && !next.waveP90) {
+          next.waveMean = await loadSafe("wave-mean", () => loadWave("mean"));
+        }
       }
-      setCounts({ wind, waveP50, waveP90, waveMean, current, cyclones });
-      if (![wind, waveP50, waveP90, waveMean, current, cyclones].some(Boolean)) setError("atlas_empty");
+      if (showCurrent) next.current = nums[i++] || 0;
+      if (showCyclones) next.cyclones = nums[i++] || 0;
+      setCounts(next);
+      const painted = Object.values(next).some(Boolean);
+      if (!painted) setError("atlas_empty");
     }).catch((err) => {
       if (!cancelled) setError(String(err.message || err));
     }).finally(() => {
@@ -200,7 +223,7 @@ export function useClimatologyLayer({
       if (drawingRef.current) return;
       const { lat, lng } = ev.latlng || {};
       if (lat == null) return;
-      fetchJson(atlasPointUrl({ lat, lon: lng, month: m }))
+      fetchJson(atlasPointUrl({ lat, lon: wrapLon(lng), month: m }))
         .then((data) => {
           onPointRef.current?.(data);
           L.popup({ ...popupOpts, className: "bi-climatology-popup" })
@@ -219,9 +242,9 @@ export function useClimatologyLayer({
       Object.values(layersRef.current).forEach((lyr) => {
         if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
       });
-      layersRef.current = { wind: null, waveP50: null, waveP90: null, waveMean: null, current: null, cyclones: null };
+      layersRef.current = { ...EMPTY_LAYERS };
     };
-  }, [mapRef, mapReady, enabled, m]);
+  }, [mapRef, mapReady, anyOn, showWind, showWave, showCurrent, showCyclones, m]);
 
   return { loading, error, counts };
 }

@@ -313,11 +313,26 @@ export default function App() {
   const climoLayer = useClimatologyLayer({
     mapRef,
     mapReady,
-    enabled: maritimeLayers.showClimatology,
+    showWind: maritimeLayers.showClimoWind,
+    showWave: maritimeLayers.showClimoWave,
+    showCurrent: maritimeLayers.showClimoCurrent,
+    showCyclones: maritimeLayers.showClimoCyclones,
     month: climoMonth,
     drawing: drawingMode,
     t,
   });
+  const climoAnyOn = Boolean(
+    maritimeLayers.showClimoWind
+    || maritimeLayers.showClimoWave
+    || maritimeLayers.showClimoCurrent
+    || maritimeLayers.showClimoCyclones,
+  );
+  const climoMapsLabel = [
+    maritimeLayers.showClimoWind && t("layerClimoWind"),
+    maritimeLayers.showClimoWave && t("layerClimoWave"),
+    maritimeLayers.showClimoCurrent && t("layerClimoCurrent"),
+    maritimeLayers.showClimoCyclones && t("layerClimoCyclones"),
+  ].filter(Boolean).join(" · ");
 
   const expeditionSpeed = useExpeditionSpeed({
     polarData,
@@ -1256,7 +1271,10 @@ export default function App() {
         polarData={polarData}
         maritimeLayers={{
           ...maritimeLayers,
-          loadingClimatology: climoLayer.loading,
+          loadingClimoWind: climoLayer.loading && maritimeLayers.showClimoWind,
+          loadingClimoWave: climoLayer.loading && maritimeLayers.showClimoWave,
+          loadingClimoCurrent: climoLayer.loading && maritimeLayers.showClimoCurrent,
+          loadingClimoCyclones: climoLayer.loading && maritimeLayers.showClimoCyclones,
           errorClimatology: climoLayer.error,
         }}
         briefingLoading={iciPack.loading || briefingLoading}
@@ -1357,15 +1375,22 @@ export default function App() {
         </div>
       )}
 
-      {maritimeLayers.showClimatology && (
+      {climoAnyOn && (
         <div
           data-testid="climatology-banner"
           className="absolute left-1/2 -translate-x-1/2 z-20 bg-sky-950/90 border border-sky-400/40 text-sky-100 text-xs px-4 py-2 rounded-full bottom-48 pointer-events-none"
         >
-          {t("climatologyOn", { month: monthLabel || String(climoMonth) })}
+          {t("climatologyOn", { month: monthLabel || String(climoMonth), maps: climoMapsLabel })}
           {climoLayer.counts && (
             <span className="ml-2 opacity-80" data-testid="climatology-overlay-ready">
-              {`· roses ${climoLayer.counts.wind || 0} · P50 ${climoLayer.counts.waveP50 || 0} · P90 ${climoLayer.counts.waveP90 || 0}${climoLayer.counts.waveMean ? ` · Hs mean ${climoLayer.counts.waveMean}` : ""} · courant ${climoLayer.counts.current || 0} · IBTrACS ${climoLayer.counts.cyclones || 0}`}
+              {[
+                maritimeLayers.showClimoWind && `roses ${climoLayer.counts.wind || 0}`,
+                maritimeLayers.showClimoWave && `P50 ${climoLayer.counts.waveP50 || 0}`,
+                maritimeLayers.showClimoWave && `P90 ${climoLayer.counts.waveP90 || 0}`,
+                maritimeLayers.showClimoWave && climoLayer.counts.waveMean ? `Hs mean ${climoLayer.counts.waveMean}` : null,
+                maritimeLayers.showClimoCurrent && `courant ${climoLayer.counts.current || 0}`,
+                maritimeLayers.showClimoCyclones && `IBTrACS ${climoLayer.counts.cyclones || 0}`,
+              ].filter(Boolean).join(" · ")}
             </span>
           )}
           {climoLayer.error === "atlas_empty" && atlas.alive === false && (

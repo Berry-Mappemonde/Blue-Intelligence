@@ -81,11 +81,16 @@ describe("recette A–G (contrats source)", () => {
     assert.match(app, /useAtlasLookup/);
     assert.match(app, /climatology-banner/);
     assert.doesNotMatch(app, /overlay climatologie à l’étape 6/);
-    assert.match(read("../layers/useToggleLayers.js"), /showClimatology/);
+    assert.match(read("../layers/useToggleLayers.js"), /showClimoWind/);
+    assert.match(read("../layers/useToggleLayers.js"), /showClimoWave/);
+    assert.match(read("../layers/useToggleLayers.js"), /showClimoCurrent/);
+    assert.match(read("../layers/useToggleLayers.js"), /showClimoCyclones/);
     assert.match(read("../layers/useClimatologyLayer.js"), /waveP50/);
     assert.match(read("../layers/useClimatologyLayer.js"), /waveP90/);
     assert.match(read("../layers/useClimatologyLayer.js"), /wave-mean/);
     assert.match(read("../layers/useClimatologyLayer.js"), /cyclones/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /climoPointLngs/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /cycloneLatLngCopies/);
     assert.match(read("../layers/layerOrder.js"), /climatology-raster/);
     assert.match(read("../utils/atlasPoint.js"), /kind !== "climatology"/);
     assert.match(read("../engine/voyageClock.js"), /windAt/);
