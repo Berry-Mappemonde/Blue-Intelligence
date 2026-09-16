@@ -50,6 +50,8 @@ const MODES = ["projects", "marinas", "capitaineries", "formalities", "amp", "sc
 // Read the persisted mode on boot. Default = "projects". (7 modes)
 const readInitialMode = () => {
   try {
+    const fromUrl = new URLSearchParams(window.location.search).get("mode");
+    if (MODES.includes(fromUrl)) return fromUrl;
     const v = localStorage.getItem("bi.mode");
     if (MODES.includes(v)) return v;
   } catch (_) {
@@ -141,6 +143,16 @@ export default function App() {
   const [climoMonth, setClimoMonth] = useState(() => new Date().getMonth() + 1);
   const [climoFilters, setClimoFilters] = useState(() => {
     try {
+      const only = new URLSearchParams(window.location.search).get("climo");
+      if (only) {
+        const parts = only.toLowerCase().split(/[,+\s]+/);
+        return {
+          wind: parts.includes("wind"),
+          wave: parts.includes("wave"),
+          current: parts.includes("current"),
+          cyclones: parts.includes("cyclones"),
+        };
+      }
       const raw = localStorage.getItem("bi.climoFilters.v2");
       if (raw) return { wind: true, wave: true, current: true, cyclones: true, ...JSON.parse(raw) };
     } catch (_) { /* ignore */ }

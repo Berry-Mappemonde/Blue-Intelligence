@@ -30,6 +30,7 @@ import { useAirHopLine } from "./hooks/useAirHopLine.js";
 import { useRouteLayer } from "./layers/useRouteLayer.js";
 import { useAltRouteLayer } from "./layers/useAltRouteLayer.js";
 import { useToggleLayers } from "./layers/useToggleLayers.js";
+import { recetteMapView, recetteMonth } from "./utils/recetteQuery.js";
 import {
   flattenRoute,
   interpolateAtNm,
@@ -294,7 +295,7 @@ export default function App() {
     () => chapterAtNm(escaleMarks, cast?.sailNm ?? playback.nm)?.to,
     [escaleMarks, cast?.sailNm, playback.nm],
   );
-  const climoMonth = clockSample?.month || monthOfT0(voyage.t0, 0);
+  const climoMonth = recetteMonth() || clockSample?.month || monthOfT0(voyage.t0, 0);
   const atlas = useAtlasLookup({
     enabled: routeReady,
     t0: voyage.t0,
@@ -628,6 +629,14 @@ export default function App() {
     const map = mapRef.current;
     if (!map || !mapReady || !routeReady || !flatRoute.points?.length) {
       setCameraPlaced(false);
+      return;
+    }
+    const recette = recetteMapView();
+    if (recette) {
+      armProgrammaticNav();
+      map.setView([recette.lat, recette.lon], recette.z, { animate: false });
+      placedRef.current = true;
+      setCameraPlaced(true);
       return;
     }
     if (isSuivre) {
