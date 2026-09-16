@@ -29,6 +29,7 @@ from app.services.climatology_common import (
     parse_month,
     product_meta,
     snapshot_status,
+    wrap_lon,
 )
 from app.services.climatology_current import current_at, current_geojson
 from app.services.climatology_cyclones import crossings as cyclone_crossings
@@ -46,9 +47,15 @@ def _month(month: int) -> int:
         raise HTTPException(400, str(exc)) from exc
 
 
-def _coord(lat: float, lon: float) -> None:
-    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+def _coord(lat: float, lon: float) -> tuple[float, float]:
+    """Accept unwrapped longitudes (186, −190) and fold them into ±180 for the grids."""
+    if not (-90.0 <= lat <= 90.0):
         raise HTTPException(400, "lat/lon out of range")
+    try:
+        lon_w = wrap_lon(lon)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "lat/lon out of range") from exc
+    return float(lat), float(lon_w)
 
 
 @router.get("/climatology/meta")
@@ -89,7 +96,7 @@ async def climatology_point(
     dest_lon: float | None = Query(None),
     day: int | None = Query(None, ge=1, le=31),
 ):
-    _coord(lat, lon)
+    lat, lon = _coord(lat, lon)
     month = _month(month)
     land = is_land(lat, lon)
     blocks = empty_blocks()
@@ -103,7 +110,7 @@ async def climatology_point(
         "crossings_if_leg": None,
     }
     if dest_lat is not None and dest_lon is not None:
-        _coord(dest_lat, dest_lon)
+        dest_lat, dest_lon = _coord(dest_lat, dest_lon)
         blocks["cyclone"]["crossings_if_leg"] = cyclone_crossings(
             lat, lon, dest_lat, dest_lon, month, day=day,
         )
@@ -140,8 +147,8 @@ async def climatology_crossings(
     day: int | None = Query(None, ge=1, le=31),
     dayrange: int | None = Query(None, ge=7, le=45),
 ):
-    _coord(lat1, lon1)
-    _coord(lat2, lon2)
+    lat1, lon1 = _coord(lat1, lon1)
+    lat2, lon2 = _coord(lat2, lon2)
     return cyclone_crossings(lat1, lon1, lat2, lon2, _month(month), day=day, dayrange=dayrange)
 
 
