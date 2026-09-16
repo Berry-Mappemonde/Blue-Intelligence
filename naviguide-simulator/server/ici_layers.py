@@ -6,6 +6,7 @@ Jamais d’invention : null + source/reason si le produit manque.
 """
 from __future__ import annotations
 
+import atexit
 import asyncio
 import math
 import os
@@ -156,10 +157,19 @@ def bbox_intersects_us(bbox: tuple[float, float, float, float]) -> bool:
 
 def scene_bbox(lat: float, lon: float, nm: float = 8.0) -> list[float]:
     dlat = nm / 60.0
-    import math
     clat = max(0.2, abs(math.cos(math.radians(lat))))
     dlon = nm / (60.0 * clat)
-    return [lon - dlon, lat - dlat, lon + dlon, lat + dlat]
+    west = lon - dlon
+    east = lon + dlon
+    # STAC bbox must stay inside [-180, 180]; do not cross the antimeridian.
+    west = max(-180.0, west)
+    east = min(180.0, east)
+    if west >= east:
+        if lon >= 0:
+            west, east = max(180.0 - max(0.05, dlon), -180.0), 180.0
+        else:
+            west, east = -180.0, min(-180.0 + max(0.05, dlon), 180.0)
+    return [west, max(-90.0, lat - dlat), east, min(90.0, lat + dlat)]
 
 
 def _browser_link(lat: float, lon: float, when: str | None = None) -> str:
@@ -278,10 +288,12 @@ async def fetch_satellite_scene(
             body["query"] = {"eo:cloud_cover": {"lt": spec["cloud"]}}
         try:
             r = await client.post(STAC_SEARCH, json=body, headers=headers, timeout=12.0)
-            bag["http_status"] = r.status_code
             if r.status_code >= 400:
+                if bag.get("http_status") is None:
+                    bag["http_status"] = r.status_code
                 last_err = f"HTTP {r.status_code}"
                 continue
+            bag["http_status"] = r.status_code
             catalog_ok = True
             payload = r.json() if r.content else {}
         except httpx.HTTPStatusError as exc:
@@ -487,6 +499,9 @@ _rtofs_h5: dict[str, Any] = {
 def reset_rtofs_cache() -> None:
     with _rtofs_lock:
         _close_rtofs_unlocked()
+
+
+atexit.register(reset_rtofs_cache)
 
 
 def _close_rtofs_unlocked() -> None:

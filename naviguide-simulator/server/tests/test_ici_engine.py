@@ -30,6 +30,7 @@ from ici_layers import (
     hycom_lon,
     rtofs_from_uv,
     rtofs_is_fill,
+    scene_bbox,
     slim_stac_scene,
 )
 
@@ -701,6 +702,17 @@ def test_fill_dossier_aton_us_uses_noaa():
     d = asyncio.run(run())
     assert d["aton"]["nearby"][0]["name"] == "Chesapeake Light"
     assert d["aton"]["source"] == "noaa-enc"
+
+
+def test_scene_bbox_does_not_cross_antimeridian():
+    box = scene_bbox(0.0, 179.8, 30.0)
+    assert box[0] >= -180.0
+    assert box[2] <= 180.0
+    assert box[0] < box[2]
+    west = scene_bbox(0.0, -179.8, 30.0)
+    assert west[0] >= -180.0
+    assert west[2] <= 180.0
+    assert west[0] < west[2]
 
 
 def test_rtofs_hycom_wrap_and_fill():
