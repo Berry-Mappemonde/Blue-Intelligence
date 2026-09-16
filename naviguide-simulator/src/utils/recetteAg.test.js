@@ -91,6 +91,10 @@ describe("recette A–G (contrats source)", () => {
     assert.match(read("../layers/useClimatologyLayer.js"), /cyclones/);
     assert.match(read("../layers/useClimatologyLayer.js"), /climoPointLngs/);
     assert.match(read("../layers/useClimatologyLayer.js"), /cycloneLatLngCopies/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /groupCycloneFeatures/);
+    assert.match(read("../layers/climatologyWorld.js"), /splitCycloneAtMeridian/);
+    assert.match(read("../layers/climatologyWorld.js"), /unwrapCycloneCoords/);
+    assert.match(read("../../../frontend/src/components/map/useClimatologyLayer.js"), /cycloneLatLngCopies/);
     assert.match(read("../layers/layerOrder.js"), /climatology-raster/);
     assert.match(read("../utils/atlasPoint.js"), /kind !== "climatology"/);
     assert.match(read("../engine/voyageClock.js"), /windAt/);

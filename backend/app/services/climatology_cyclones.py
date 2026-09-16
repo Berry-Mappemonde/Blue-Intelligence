@@ -64,18 +64,59 @@ def storms_for_month(month: int, *, min_kn: float | None = None) -> list[dict]:
     return out
 
 
+def _unwrap_lon(prev: float, lon: float) -> float:
+    x = float(lon)
+    while x - prev > 180.0:
+        x -= 360.0
+    while x - prev < -180.0:
+        x += 360.0
+    return x
+
+
+def _meridians_between(x0: float, x1: float) -> list[float]:
+    if x0 == x1:
+        return []
+    lo, hi = (x0, x1) if x0 < x1 else (x1, x0)
+    found: list[float] = []
+    k = int((lo - 180.0) // 360.0) + 1
+    while True:
+        m = 180.0 + 360.0 * k
+        if m >= hi:
+            break
+        if m > lo:
+            found.append(m)
+        k += 1
+        if len(found) > 8:
+            break
+    return found if x0 < x1 else list(reversed(found))
+
+
 def _split_antimeridian(coords: list[list[float]]) -> list[list[list[float]]]:
-    if len(coords) < 2:
-        return [coords] if coords else []
+    """Cut at 180°. Both sides get the interpolated meridian (no 358° hop)."""
+    clean = [c for c in coords if len(c) >= 2]
+    if len(clean) < 2:
+        return [clean] if clean else []
+    uw = [[float(clean[0][0]), float(clean[0][1])]]
+    for pt in clean[1:]:
+        uw.append([_unwrap_lon(uw[-1][0], float(pt[0])), float(pt[1])])
     parts: list[list[list[float]]] = []
-    cur = [coords[0]]
-    for prev, pt in zip(coords, coords[1:]):
-        if abs(pt[0] - prev[0]) > 180:
+    cur: list[list[float]] = [[wrap_lon(uw[0][0]), uw[0][1]]]
+    for prev, pt in zip(uw, uw[1:]):
+        cuts = _meridians_between(prev[0], pt[0])
+        if not cuts:
+            cur.append([wrap_lon(pt[0]), pt[1]])
+            continue
+        px, py = prev[0], prev[1]
+        x1, y1 = pt[0], pt[1]
+        for m in cuts:
+            t = 1.0 if x1 == px else (m - px) / (x1 - px)
+            y = py + (y1 - py) * t
+            cur.append([180.0, y])
             if len(cur) >= 2:
                 parts.append(cur)
-            cur = [pt]
-        else:
-            cur.append(pt)
+            cur = [[-180.0, y]]
+            px, py = m, y
+        cur.append([wrap_lon(x1), y1])
     if len(cur) >= 2:
         parts.append(cur)
     return parts

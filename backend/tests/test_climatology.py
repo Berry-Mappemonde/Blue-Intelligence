@@ -121,6 +121,18 @@ def test_cyclones_geojson_september_has_tracks():
     assert all(f["properties"]["kind"] == KIND for f in data["features"][:5])
 
 
+def test_split_antimeridian_cuts_179_to_minus_179():
+    parts = cyc._split_antimeridian([
+        [170.0, -15.0], [179.0, -16.0], [-179.0, -17.0], [-170.0, -18.0],
+    ])
+    assert len(parts) == 2
+    assert parts[0][-1][0] == 180.0
+    assert parts[1][0][0] == -180.0
+    for part in parts:
+        for a, b in zip(part, part[1:]):
+            assert abs(a[0] - b[0]) <= 180.0
+
+
 def test_crossings_martinique_azores():
     # Recette NAVIGUIDE n°4
     sept = _client().get("/api/climatology/crossings", params={

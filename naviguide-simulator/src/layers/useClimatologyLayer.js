@@ -11,7 +11,7 @@ import {
   roseSvg,
   waveColor,
 } from "./climatologyPaint.js";
-import { climoPointLngs, cycloneLatLngCopies } from "./climatologyWorld.js";
+import { climoPointLngs, cycloneLatLngCopies, groupCycloneFeatures } from "./climatologyWorld.js";
 
 function currentIcon(p) {
   return L.divIcon({
@@ -164,9 +164,9 @@ export function useClimatologyLayer({
       const data = await fetchJson(atlasLayerUrl("cyclones", m), ctrl.signal);
       if (cancelled) return 0;
       const group = L.layerGroup();
-      (data.features || []).forEach((f) => {
-        const copies = cycloneLatLngCopies(f.geometry?.coordinates || []);
-        const p = f.properties || {};
+      groupCycloneFeatures(data.features || []).forEach((storm) => {
+        const copies = cycloneLatLngCopies(storm.coords);
+        const p = storm.properties || {};
         copies.forEach((latlngs) => {
           if (latlngs.length < 2) return;
           const line = L.polyline(latlngs, {
