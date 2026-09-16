@@ -24,6 +24,7 @@ describe("MapScene boundary", () => {
     assert.match(controller, /renderDynamic/);
     assert.match(controller, /syncWake/);
     assert.match(controller, /syncMarkers/);
+    assert.match(playback, /SCENE_INTERVAL_MS = 125/);
     assert.match(playback, /HUD_INTERVAL_MS = 250/);
     assert.match(playback, /onFrame/);
     assert.match(playback, /onPublish/);

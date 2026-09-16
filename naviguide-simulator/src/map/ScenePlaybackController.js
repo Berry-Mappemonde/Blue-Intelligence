@@ -3,6 +3,7 @@ import { airHopSeconds, nmPerSecond } from "../engine/playSpeeds.js";
 import { edgeAtFilmNm, filmLength } from "../engine/filmCast.js";
 import { dwellMsForProfile, shouldPauseAtStop, stepPlayback } from "../engine/stationDwell.js";
 
+const SCENE_INTERVAL_MS = 125;
 const HUD_INTERVAL_MS = 250;
 
 function playheadLength(flat) {
@@ -56,6 +57,7 @@ export class ScenePlaybackController {
     this.skipDwell = false;
     this.lastTs = 0;
     this.lastAir = false;
+    this.lastFrameAt = -Infinity;
     this.lastPublishAt = -Infinity;
     this.raf = null;
   }
@@ -89,13 +91,13 @@ export class ScenePlaybackController {
       this.dwellMsLeft = 0;
       this.state.holdingStation = null;
     }
-    this.emitFrame();
+    this.emitFrame(true);
     this.publish(true);
   }
 
   setProfile(profile) {
     this.state.profile = profile || "normal";
-    this.emitFrame();
+    this.emitFrame(true);
     this.publish(true);
   }
 
@@ -111,7 +113,7 @@ export class ScenePlaybackController {
     this.dwellMsLeft = 0;
     this.state.holdingStation = null;
     this.stopLoop();
-    this.emitFrame();
+    this.emitFrame(true);
     this.publish(true);
   }
 
@@ -128,7 +130,7 @@ export class ScenePlaybackController {
       this.state.holdingStation = null;
       this.skipDwell = true;
       this.state.jumpToken += 1;
-      this.emitFrame();
+      this.emitFrame(true);
     }
     this.play();
   }
@@ -143,7 +145,7 @@ export class ScenePlaybackController {
       this.state.jumpToken += 1;
     }
     if (play) this.state.playing = true;
-    this.emitFrame();
+    this.emitFrame(true);
     this.publish(true);
     if (this.state.playing) this.startLoop();
   }
@@ -194,23 +196,26 @@ export class ScenePlaybackController {
     if (shouldPauseAtStop(stopAuto, stepped.arrived)) {
       this.state.playing = false;
       this.state.holdingStation = stepped.arrived;
-      this.emitFrame();
+      this.emitFrame(true);
       this.publish(true);
       return;
     }
     this.state.holdingStation = stepped.arrived || (stepped.holding ? this.state.holdingStation : null);
-    this.emitFrame();
+    this.emitFrame(false, ts);
     this.publish(false, ts);
     if (this.state.nm >= total && !stepped.holding) {
       this.state.playing = false;
       this.state.holdingStation = null;
+      this.emitFrame(true, ts);
       this.publish(true, ts);
       return;
     }
     this.startLoop();
   }
 
-  emitFrame() {
+  emitFrame(force = false, now = performance.now()) {
+    if (!force && now - this.lastFrameAt < SCENE_INTERVAL_MS) return;
+    this.lastFrameAt = now;
     this.onFrame(this.snapshot());
   }
 
