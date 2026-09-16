@@ -6,9 +6,13 @@ import { filterScienceFeatures } from "./scienceSource.js";
 import { SCIENCE_WMS_LAYERS } from "./scienceWms.js";
 import { DEFAULT_SHOW_GRIB, DEFAULT_SHOW_ZEE } from "../constants/layers.js";
 import { recetteClimoFlags } from "../utils/recetteQuery.js";
+import { quantizedViewportBbox, visibleFeatures } from "./viewportFeatures.js";
 
 const BI_BASE = import.meta.env.VITE_BI_BASE ?? "/bi";
 const EMPTY = { type: "FeatureCollection", features: [] };
+const AMP_DEBOUNCE_MS = 420;
+const AMP_CAMERA_DEBOUNCE_MS = 1400;
+const VIEWPORT_DEBOUNCE_MS = 180;
 
 function useFetchLayer(url, { lazy = true } = {}) {
   const [show, setShow] = useState(false);
@@ -88,11 +92,86 @@ function useLazyJson(enabled, url) {
   return { data, loading, error };
 }
 
+function useViewportVersion(mapRef, mapReady) {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return undefined;
+    let timer = 0;
+    const onMove = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setVersion((value) => value + 1), VIEWPORT_DEBOUNCE_MS);
+    };
+    map.on("moveend", onMove);
+    return () => {
+      window.clearTimeout(timer);
+      map.off("moveend", onMove);
+    };
+  }, [mapRef, mapReady]);
+  return version;
+}
+
+function useViewportFetchLayer(mapRef, mapReady, url, viewportVersion) {
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [data, setData] = useState(null);
+  const cacheRef = useRef(new Map());
+  const requestRef = useRef({ id: 0, controller: null });
+  const bbox = useMemo(
+    () => quantizedViewportBbox(mapRef.current?.getBounds?.()),
+    [mapRef, mapReady, viewportVersion],
+  );
+  const toggle = useCallback((fn) => {
+    setShow((value) => (typeof fn === "function" ? fn(value) : !value));
+  }, []);
+
+  useEffect(() => {
+    if (!show || !url || !bbox) return undefined;
+    const cached = cacheRef.current.get(bbox);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      return undefined;
+    }
+    const previous = requestRef.current;
+    previous.controller?.abort();
+    const controller = new AbortController();
+    const id = previous.id + 1;
+    requestRef.current = { id, controller };
+    setLoading(true);
+    setError(null);
+    fetch(`${url}?bbox=${encodeURIComponent(bbox)}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((json) => {
+        if (requestRef.current.id !== id) return;
+        cacheRef.current.set(bbox, json);
+        if (cacheRef.current.size > 8) cacheRef.current.delete(cacheRef.current.keys().next().value);
+        setData(json);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted && requestRef.current.id === id) setError(String(err.message || err));
+      })
+      .finally(() => {
+        if (requestRef.current.id === id) {
+          requestRef.current.controller = null;
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [show, url, bbox]);
+
+  return { show, setShow: toggle, loading, error, data };
+}
+
 function addPointLayer(map, fc, color, kind, onFeature) {
   const group = makePointGroup();
   const zoom = map.getZoom();
   const renderer = group._biRenderer;
-  (fc?.features || []).forEach((f) => {
+  (visibleFeatures(fc, map.getBounds())?.features || []).forEach((f) => {
     if (f.geometry?.type !== "Point") return;
     const [lon, lat] = f.geometry.coordinates;
     const m = L.circleMarker([lat, lon], circleOpts(color, { zoom, renderer }));
@@ -107,7 +186,7 @@ function addPointLayer(map, fc, color, kind, onFeature) {
 }
 
 function addScienceSourceLayer(map, fc, source, color, onFeature) {
-  const filtered = filterScienceFeatures(fc, source);
+  const filtered = visibleFeatures(filterScienceFeatures(fc, source), map.getBounds());
   const group = makePointGroup();
   const zoom = map.getZoom();
   const renderer = group._biRenderer;
@@ -146,14 +225,17 @@ function addScienceSourceLayer(map, fc, source, color, onFeature) {
   return group;
 }
 
-export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
+export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef, {
+  cameraFollowing = false,
+} = {}) {
   const zee = useFetchLayer(null);
   const [showZee, setShowZee] = useState(DEFAULT_SHOW_ZEE);
   const [loadingZee] = useState(false);
   const [errorZee, setErrorZee] = useState(null);
   const [showGrib, setShowGrib] = useState(DEFAULT_SHOW_GRIB);
 
-  const ports = useFetchLayer("/proxy/ports");
+  const viewportVersion = useViewportVersion(mapRef, mapReady);
+  const ports = useViewportFetchLayer(mapRef, mapReady, "/proxy/ports", viewportVersion);
   const projects = useFetchLayer(`${BI_BASE}/export/geojson`);
   const marinas = useFetchLayer(`${BI_BASE}/export/marinas.geojson`);
   const capitaineries = useFetchLayer(`${BI_BASE}/export/capitaineries.geojson`);
@@ -197,6 +279,7 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
 
   const layersRef = useRef({});
   const ampRequestRef = useRef({ id: 0, controller: null });
+  const ampCacheRef = useRef(new Map());
 
   useEffect(() => {
     const map = mapRef.current;
@@ -270,35 +353,35 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
     if (!map || !mapReady || !ports.show || !ports.data) return undefined;
     const g = addPointLayer(map, ports.data, "#f59e0b", "port", onFeature);
     return () => map.removeLayer(g);
-  }, [mapRef, mapReady, ports.show, ports.data, onFeature]);
+  }, [mapRef, mapReady, ports.show, ports.data, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !projects.show || !projects.data) return undefined;
     const g = addPointLayer(map, projects.data, "#06b6d4", "project", onFeature);
     return () => map.removeLayer(g);
-  }, [mapRef, mapReady, projects.show, projects.data, onFeature]);
+  }, [mapRef, mapReady, projects.show, projects.data, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !marinas.show || !marinas.data) return undefined;
     const g = addPointLayer(map, marinas.data, "#ef4444", "marina", onFeature);
     return () => map.removeLayer(g);
-  }, [mapRef, mapReady, marinas.show, marinas.data, onFeature]);
+  }, [mapRef, mapReady, marinas.show, marinas.data, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !capitaineries.show || !capitaineries.data) return undefined;
     const g = addPointLayer(map, capitaineries.data, "#7dd3fc", "capitainerie", onFeature);
     return () => map.removeLayer(g);
-  }, [mapRef, mapReady, capitaineries.show, capitaineries.data, onFeature]);
+  }, [mapRef, mapReady, capitaineries.show, capitaineries.data, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !poe.show || !poe.data) return undefined;
     const g = addPointLayer(map, poe.data, "#d97706", "poe", onFeature);
     return () => map.removeLayer(g);
-  }, [mapRef, mapReady, poe.show, poe.data, onFeature]);
+  }, [mapRef, mapReady, poe.show, poe.data, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -316,7 +399,7 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
       added.push(addScienceSourceLayer(map, scienceCatalog.data, source, color, onFeature));
     });
     return () => added.forEach((g) => map.removeLayer(g));
-  }, [mapRef, mapReady, scienceCatalog.data, showSextant, showArgo, showOdatis, showEdmed, showCsr, onFeature]);
+  }, [mapRef, mapReady, scienceCatalog.data, showSextant, showArgo, showOdatis, showEdmed, showCsr, onFeature, viewportVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -346,22 +429,33 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
     if (!map || !mapReady || !showAmp) return undefined;
     let debounce = null;
     const load = () => {
-      const b = map.getBounds();
-      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(",");
+      const bbox = quantizedViewportBbox(map.getBounds(), 0.5);
+      if (!bbox) return;
+      const cached = ampCacheRef.current.get(bbox);
+      if (cached) {
+        setAmpData(cached);
+        setLoadingAmp(false);
+        return;
+      }
       const previous = ampRequestRef.current;
+      if (previous.bbox === bbox && previous.controller) return;
       previous.controller?.abort();
       const controller = new AbortController();
       const id = previous.id + 1;
-      ampRequestRef.current = { id, controller };
+      ampRequestRef.current = { id, controller, bbox };
       setLoadingAmp(true);
       setErrorAmp(null);
-      fetch(`${BI_BASE}/amp?bbox=${bbox}`, { signal: controller.signal })
+      fetch(`${BI_BASE}/amp?bbox=${encodeURIComponent(bbox)}`, { signal: controller.signal })
         .then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();
         })
         .then((json) => {
-          if (ampRequestRef.current.id === id) setAmpData(json);
+          if (ampRequestRef.current.id === id) {
+            ampCacheRef.current.set(bbox, json);
+            if (ampCacheRef.current.size > 8) ampCacheRef.current.delete(ampCacheRef.current.keys().next().value);
+            setAmpData(json);
+          }
         })
         .catch((err) => {
           if (!controller.signal.aborted && ampRequestRef.current.id === id) {
@@ -377,9 +471,9 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
     };
     const onMove = () => {
       clearTimeout(debounce);
-      debounce = setTimeout(load, 420);
+      debounce = setTimeout(load, cameraFollowing ? AMP_CAMERA_DEBOUNCE_MS : AMP_DEBOUNCE_MS);
     };
-    debounce = setTimeout(load, 420);
+    debounce = setTimeout(load, cameraFollowing ? AMP_CAMERA_DEBOUNCE_MS : AMP_DEBOUNCE_MS);
     map.on("moveend", onMove);
     return () => {
       clearTimeout(debounce);
@@ -388,7 +482,7 @@ export function useToggleLayers(mapRef, onFeature, mapReady = 0, gateRef) {
       ampRequestRef.current.controller?.abort();
       ampRequestRef.current.controller = null;
     };
-  }, [mapRef, mapReady, showAmp]);
+  }, [mapRef, mapReady, showAmp, cameraFollowing]);
 
   useEffect(() => {
     const map = mapRef.current;

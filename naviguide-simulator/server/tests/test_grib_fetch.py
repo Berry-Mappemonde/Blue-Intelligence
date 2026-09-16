@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
+from threading import Event
 
 import grib_fetch
 import saildocs
-from grib_fetch import fetch_latest_payload, is_stale, wrap_lon
+from grib_fetch import fetch_latest_payload, is_stale, schedule_official_refresh, wrap_lon
 from saildocs import last_ready_cycle, to_iso
 
 
@@ -106,6 +107,31 @@ def test_stale_when_older_cycle():
     assert is_stale(old, when) is True
     assert is_stale(fresh, when) is False
     assert is_stale(None, when) is True
+
+
+def test_refresh_scheduler_shares_one_background_task(monkeypatch):
+    started = Event()
+    release = Event()
+    voyage_id = "scheduler-test"
+    grib_fetch._refresh_threads.pop(voyage_id, None)
+    grib_fetch._last_try.pop(voyage_id, None)
+    monkeypatch.setattr(grib_fetch, "auto_enabled", lambda: True)
+    monkeypatch.setattr(grib_fetch, "load_latest", lambda _voyage_id: None)
+
+    def refresh(*_args, **_kwargs):
+        started.set()
+        release.wait(1)
+        return None
+
+    monkeypatch.setattr(grib_fetch, "maybe_refresh_official", refresh)
+    around = {"lat": 46.15, "lon": -1.16}
+    assert schedule_official_refresh(voyage_id, around) is True
+    assert started.wait(1)
+    assert schedule_official_refresh(voyage_id, around) is True
+    assert len(grib_fetch._refresh_threads) == 1
+    release.set()
+    grib_fetch._refresh_threads[voyage_id].join(1)
+    assert voyage_id not in grib_fetch._refresh_threads
 
 
 def test_save_latest_overwrites(tmp_path, monkeypatch):

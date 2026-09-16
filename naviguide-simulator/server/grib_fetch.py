@@ -5,8 +5,10 @@ reste prête ; le courant n’entre que s’il est déposé (inbox / POST).
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -32,8 +34,11 @@ FORECAST_HOURS = 72
 STEP_HOURS = 6
 STALE_RETRY_S = 10 * 60
 FETCH_TIMEOUT_S = 20.0
+MAX_PARALLEL_REQUESTS = 6
 
 _last_try: Dict[str, datetime] = {}
+_refresh_lock = threading.Lock()
+_refresh_threads: Dict[str, threading.Thread] = {}
 
 
 def wrap_lon(lon: float) -> float:
@@ -156,6 +161,11 @@ def _lead_times(when: datetime) -> List[str]:
     return [to_iso(start + timedelta(hours=h)) for h in range(0, FORECAST_HOURS + 1, STEP_HOURS)]
 
 
+def _fetch_point(fetcher, lat: float, lon: float) -> Optional[dict]:
+    with httpx.Client(timeout=FETCH_TIMEOUT_S) as client:
+        return fetcher(client, lat, lon)
+
+
 def fetch_latest_payload(around: dict, when: Optional[datetime] = None) -> Dict[str, Any]:
     now = when or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -167,49 +177,58 @@ def fetch_latest_payload(around: dict, when: Optional[datetime] = None) -> Dict[
     samples: List[dict] = []
     gfs_ok = False
     wave_ok = False
-    with httpx.Client(timeout=FETCH_TIMEOUT_S) as client:
-        for lat, lon in pts:
-            gfs = None
-            wave = None
+    point_data: List[Dict[str, Optional[dict]]] = [
+        {"gfs": None, "wave": None} for _ in pts
+    ]
+    # Deux appels externes par maille, plafonnés pour ne pas saturer Open-Meteo
+    # ni le pool du serveur lorsque plusieurs visiteurs ouvrent le simulateur.
+    with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_REQUESTS, len(pts) * 2)) as pool:
+        futures = {}
+        for index, (lat, lon) in enumerate(pts):
+            futures[pool.submit(_fetch_point, _fetch_gfs_point, lat, lon)] = (index, "gfs", lat, lon)
+            futures[pool.submit(_fetch_point, _fetch_wave_point, lat, lon)] = (index, "wave", lat, lon)
+        for future in as_completed(futures):
+            index, kind, lat, lon = futures[future]
             try:
-                gfs = _fetch_gfs_point(client, lat, lon)
+                point_data[index][kind] = future.result()
             except Exception as exc:
-                log.warning("GFS Open-Meteo %s,%s: %s", lat, lon, exc)
-            try:
-                wave = _fetch_wave_point(client, lat, lon)
-            except Exception as exc:
-                log.warning("GFS-Wave Open-Meteo %s,%s: %s", lat, lon, exc)
+                label = "GFS-Wave" if kind == "wave" else "GFS"
+                log.warning("%s Open-Meteo %s,%s: %s", label, lat, lon, exc)
+
+    for (lat, lon), data in zip(pts, point_data):
+        gfs = data["gfs"]
+        wave = data["wave"]
+        if gfs:
+            gfs_ok = True
+        if wave:
+            wave_ok = True
+        g_idx = _index_times(gfs["times"]) if gfs else {}
+        w_idx = _index_times(wave["times"]) if wave else {}
+        for iso in leads:
+            row: Dict[str, Any] = {"lat": lat, "lon": lon, "t": iso}
             if gfs:
-                gfs_ok = True
+                spd = _at(gfs["speedKnots"], g_idx, iso)
+                direc = _at(gfs["dirFromDeg"], g_idx, iso)
+                if spd is not None:
+                    row["windKnots"] = round(spd, 2)
+                if direc is not None:
+                    row["dirFromDeg"] = round(direc, 1)
+                press = _at(gfs["pressHpa"], g_idx, iso)
+                rain = _at(gfs["rainMm"], g_idx, iso)
+                if press is not None:
+                    row["pressHpa"] = round(press, 1)
+                if rain is not None:
+                    row["rainMm"] = round(rain, 2)
             if wave:
-                wave_ok = True
-            g_idx = _index_times(gfs["times"]) if gfs else {}
-            w_idx = _index_times(wave["times"]) if wave else {}
-            for iso in leads:
-                row: Dict[str, Any] = {"lat": lat, "lon": lon, "t": iso}
-                if gfs:
-                    spd = _at(gfs["speedKnots"], g_idx, iso)
-                    direc = _at(gfs["dirFromDeg"], g_idx, iso)
-                    if spd is not None:
-                        row["windKnots"] = round(spd, 2)
-                    if direc is not None:
-                        row["dirFromDeg"] = round(direc, 1)
-                    press = _at(gfs["pressHpa"], g_idx, iso)
-                    rain = _at(gfs["rainMm"], g_idx, iso)
-                    if press is not None:
-                        row["pressHpa"] = round(press, 1)
-                    if rain is not None:
-                        row["rainMm"] = round(rain, 2)
-                if wave:
-                    hs = _at(wave["hs"], w_idx, iso)
-                    wdir = _at(wave["waveDirDeg"], w_idx, iso)
-                    if hs is not None:
-                        row["hs"] = round(hs, 2)
-                        row["waveModel"] = WAVE_MODEL_NAME
-                    if wdir is not None:
-                        row["waveDirDeg"] = round(wdir, 1)
-                if "windKnots" in row or "hs" in row:
-                    samples.append(row)
+                hs = _at(wave["hs"], w_idx, iso)
+                wdir = _at(wave["waveDirDeg"], w_idx, iso)
+                if hs is not None:
+                    row["hs"] = round(hs, 2)
+                    row["waveModel"] = WAVE_MODEL_NAME
+                if wdir is not None:
+                    row["waveDirDeg"] = round(wdir, 1)
+            if "windKnots" in row or "hs" in row:
+                samples.append(row)
     if not gfs_ok:
         raise RuntimeError("GFS Open-Meteo indisponible")
     products = []
@@ -292,3 +311,54 @@ def maybe_refresh_official(
     except Exception as exc:
         log.warning("refresh GRIB officiel: %s", exc)
         return latest
+
+
+def refresh_in_progress(voyage_id: str) -> bool:
+    with _refresh_lock:
+        task = _refresh_threads.get(voyage_id)
+        return bool(task and task.is_alive())
+
+
+def schedule_official_refresh(
+    voyage_id: str,
+    around: Optional[dict],
+    when: Optional[datetime] = None,
+    *,
+    force: bool = False,
+) -> bool:
+    """Lance au plus un rafraîchissement GRIB par voyage, sans bloquer un GET."""
+    latest = load_latest(voyage_id)
+    if not around or around.get("lat") is None:
+        around = (latest or {}).get("around")
+    if not around or around.get("lat") is None or not auto_enabled():
+        return False
+    now = when or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    if not force:
+        if latest and not is_stale(latest, now):
+            return False
+        previous = _last_try.get(voyage_id)
+        if previous and (now - previous).total_seconds() < STALE_RETRY_S:
+            return refresh_in_progress(voyage_id)
+
+    with _refresh_lock:
+        existing = _refresh_threads.get(voyage_id)
+        if existing and existing.is_alive():
+            return True
+
+        def refresh() -> None:
+            try:
+                maybe_refresh_official(voyage_id, around, now, force=force)
+            finally:
+                with _refresh_lock:
+                    _refresh_threads.pop(voyage_id, None)
+
+        task = threading.Thread(
+            target=refresh,
+            name=f"naviguide-grib-{voyage_id}",
+            daemon=True,
+        )
+        _refresh_threads[voyage_id] = task
+        task.start()
+    return True

@@ -61,6 +61,18 @@ export function worldCopyLngs(lon) {
   return [x, x + 360, x - 360];
 }
 
+/** Clé stable d'une primitive Leaflet GRIB, y compris sa maille temporelle. */
+export function gribRenderKey(sample, lng, world = 0) {
+  const lat = Number(sample?.lat);
+  const lon = Number(lng);
+  const time = String(sample?.t || sample?.iso || "");
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+  if (sample?.stencil) {
+    return `stencil:${sample.stencilRow},${sample.stencilColumn}:${world}@${time}`;
+  }
+  return `${lat.toFixed(4)},${lon.toFixed(4)}@${time}`;
+}
+
 const STENCIL_DEG = 0.4;
 
 function lonDelta(a, b) {
@@ -106,6 +118,8 @@ export function gribDisplayPoints(samples, { lat, lon, whenIso } = {}) {
         lat: originLat + di * STENCIL_DEG,
         lon: originLon + dj * STENCIL_DEG,
         stencil: true,
+        stencilRow: di,
+        stencilColumn: dj,
       });
     }
   }

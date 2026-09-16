@@ -1,10 +1,12 @@
 """NAVIGUIDE simulator API — searoute, polar (sans chat), proxies, vent."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import math
 import os
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional, Union
@@ -77,6 +79,35 @@ def _startup_official_grib():
 class PositionRequest(BaseModel):
     latitude: float
     longitude: float
+
+
+_WEATHER_CACHE_TTL = 5 * 60
+_WEATHER_CELL_DEG = 0.25
+_weather_cache: dict[tuple[str, float, float], dict] = {}
+_weather_cache_lock = threading.Lock()
+_TILE_CACHE_HEADERS = {"Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"}
+
+
+def _weather_cell(value: float) -> float:
+    return round(float(value) / _WEATHER_CELL_DEG) * _WEATHER_CELL_DEG
+
+
+def _weather_key(kind: str, lat: float, lon: float) -> tuple[str, float, float]:
+    canonical_lon = ((float(lon) + 180) % 360) - 180
+    return kind, _weather_cell(lat), _weather_cell(canonical_lon)
+
+
+def _cached_weather(kind: str, request: PositionRequest, loader) -> dict:
+    key = _weather_key(kind, request.latitude, request.longitude)
+    now = time.monotonic()
+    with _weather_cache_lock:
+        hit = _weather_cache.get(key)
+        if hit and now - hit["at"] < _WEATHER_CACHE_TTL:
+            return dict(hit["data"])
+    data = loader(request.latitude, request.longitude)
+    with _weather_cache_lock:
+        _weather_cache[key] = {"at": now, "data": dict(data)}
+    return data
 
 
 @app.get("/")
@@ -187,12 +218,12 @@ def _sim_current(lat: float, lon: float) -> dict:
 
 
 @app.post("/wind")
-def get_wind(request: PositionRequest):
+def _wind_at_position(latitude: float, longitude: float) -> dict:
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD and get_wind_data_at_position:
             wind_data = get_wind_data_at_position(
-                latitude=request.latitude,
-                longitude=request.longitude,
+                latitude=latitude,
+                longitude=longitude,
                 username=COPERNICUS_USERNAME,
                 password=COPERNICUS_PASSWORD,
             )
@@ -200,16 +231,15 @@ def get_wind(request: PositionRequest):
                 return wind_data
     except Exception:
         pass
-    return _sim_wind(request.latitude, request.longitude)
+    return _sim_wind(latitude, longitude)
 
 
-@app.post("/wave")
-def get_wave(request: PositionRequest):
+def _wave_at_position(latitude: float, longitude: float) -> dict:
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD and get_wave_data_at_position:
             wave_data = get_wave_data_at_position(
-                latitude=request.latitude,
-                longitude=request.longitude,
+                latitude=latitude,
+                longitude=longitude,
                 username=COPERNICUS_USERNAME,
                 password=COPERNICUS_PASSWORD,
             )
@@ -217,16 +247,15 @@ def get_wave(request: PositionRequest):
                 return wave_data
     except Exception:
         pass
-    return _sim_wave(request.latitude, request.longitude)
+    return _sim_wave(latitude, longitude)
 
 
-@app.post("/current")
-def get_current(request: PositionRequest):
+def _current_at_position(latitude: float, longitude: float) -> dict:
     try:
         if COPERNICUS_USERNAME and COPERNICUS_PASSWORD and get_current_data_at_position:
             current_data = get_current_data_at_position(
-                latitude=request.latitude,
-                longitude=request.longitude,
+                latitude=latitude,
+                longitude=longitude,
                 username=COPERNICUS_USERNAME,
                 password=COPERNICUS_PASSWORD,
             )
@@ -234,7 +263,36 @@ def get_current(request: PositionRequest):
                 return current_data
     except Exception:
         pass
-    return _sim_current(request.latitude, request.longitude)
+    return _sim_current(latitude, longitude)
+
+
+@app.post("/wind")
+def get_wind(request: PositionRequest):
+    return _cached_weather("wind", request, _wind_at_position)
+
+
+@app.post("/wave")
+def get_wave(request: PositionRequest):
+    return _cached_weather("wave", request, _wave_at_position)
+
+
+@app.post("/current")
+def get_current(request: PositionRequest):
+    return _cached_weather("current", request, _current_at_position)
+
+
+@app.post("/satellite")
+def get_satellite(request: PositionRequest):
+    """Un seul aller-retour navigateur, calcul météo borné à trois workers."""
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        wind = pool.submit(_cached_weather, "wind", request, _wind_at_position)
+        wave = pool.submit(_cached_weather, "wave", request, _wave_at_position)
+        current = pool.submit(_cached_weather, "current", request, _current_at_position)
+        return {
+            "wind": wind.result(),
+            "wave": wave.result(),
+            "current": current.result(),
+        }
 
 
 _WPI_CACHE_TTL = 86_400
@@ -290,7 +348,7 @@ async def proxy_zee_wms(request: Request):
             resp = await client.get(_VLIZ_WMS, params=params)
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"VLIZ WMS HTTP {resp.status_code}")
-            return Response(content=resp.content, media_type="image/png")
+            return Response(content=resp.content, media_type="image/png", headers=_TILE_CACHE_HEADERS)
     except HTTPException:
         raise
     except Exception as exc:
@@ -339,13 +397,44 @@ async def proxy_zee(
         raise HTTPException(status_code=502, detail=f"ZEE upstream error: {exc}") from exc
 
 
+def _parse_port_bbox(raw: str) -> tuple[float, float, float, float]:
+    try:
+        west, south, east, north = (float(part) for part in raw.split(","))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "bbox invalide (west,south,east,north)") from exc
+    if not (-180 <= west <= 180 and -180 <= east <= 180 and -90 <= south <= 90 and -90 <= north <= 90):
+        raise HTTPException(400, "bbox hors limites")
+    if south > north:
+        raise HTTPException(400, "bbox latitude invalide")
+    return west, south, east, north
+
+
+def _port_in_bbox(feature: dict, bbox: tuple[float, float, float, float]) -> bool:
+    geometry = feature.get("geometry") or {}
+    coords = geometry.get("coordinates") or []
+    if geometry.get("type") != "Point" or len(coords) < 2:
+        return False
+    lon, lat = float(coords[0]), float(coords[1])
+    west, south, east, north = bbox
+    return south <= lat <= north and (west <= lon <= east if west <= east else lon >= west or lon <= east)
+
+
 @app.get("/proxy/ports")
-async def proxy_ports():
+async def proxy_ports(
+    bbox: Optional[str] = Query(None),
+    maxFeatures: int = Query(800, ge=1, le=2000),
+):
     try:
         features = await fetch_wpi_features()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"WPI upstream error: {exc}") from exc
-    return JSONResponse(content={"type": "FeatureCollection", "features": features})
+    if bbox:
+        parsed = _parse_port_bbox(bbox)
+        features = [feature for feature in features if _port_in_bbox(feature, parsed)]
+    return JSONResponse(
+        content={"type": "FeatureCollection", "features": features[:maxFeatures]},
+        headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=3600"},
+    )
 
 
 _OPENSEAMAP_HOSTS = ["tiles.openseamap.org", "t1.openseamap.org"]
@@ -386,7 +475,7 @@ async def proxy_seamark(z: int, x: int, y: str):
             try:
                 resp = await client.get(url)
                 if resp.status_code == 200:
-                    return Response(content=resp.content, media_type="image/png")
+                    return Response(content=resp.content, media_type="image/png", headers=_TILE_CACHE_HEADERS)
             except Exception:
                 continue
-    return Response(content=_get_transparent_tile(), media_type="image/png")
+    return Response(content=_get_transparent_tile(), media_type="image/png", headers=_TILE_CACHE_HEADERS)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { computeMarkerOffsets, projectRouteSegments } from "../utils/markerOffsets";
 
-const DEBOUNCE_MS = 120;
+const CAMERA_IDLE_MS = 1000;
 
 export function useMarkerOffsets(points, mapRef, routeCoords = []) {
   const [offsets, setOffsets] = useState(() => points.map(() => [0, 0]));
@@ -20,15 +20,19 @@ export function useMarkerOffsets(points, mapRef, routeCoords = []) {
 
   useEffect(() => {
     if (!points.length) return undefined;
-    const schedule = () => {
+    const scheduleAfterCameraStops = () => {
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(compute, DEBOUNCE_MS);
+      timerRef.current = setTimeout(compute, CAMERA_IDLE_MS);
+    };
+    const scheduleZoom = () => {
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(compute, 0);
     };
     const attach = () => {
       const map = mapRef.current;
       if (!map) return false;
-      map.on("zoomend", schedule);
-      map.on("moveend", schedule);
+      map.on("zoomend", scheduleZoom);
+      map.on("moveend", scheduleAfterCameraStops);
       compute();
       return true;
     };
@@ -45,8 +49,8 @@ export function useMarkerOffsets(points, mapRef, routeCoords = []) {
       clearTimeout(timerRef.current);
       const map = mapRef.current;
       if (map) {
-        map.off("zoomend", schedule);
-        map.off("moveend", schedule);
+        map.off("zoomend", scheduleZoom);
+        map.off("moveend", scheduleAfterCameraStops);
       }
     };
   }, [compute, mapRef, points]);

@@ -7,6 +7,7 @@ import {
   beaufortColor,
   gribBarbSvg,
   gribDisplayPoints,
+  gribRenderKey,
   pickGribSlice,
   waveHsColor,
   wmoBarbMarks,
@@ -51,6 +52,18 @@ describe("gribSymbols", () => {
     assert.deepEqual(worldCopyLngs(166), [166, 526, -194]);
   });
 
+  it("indexe les primitives par position, copie monde et heure", () => {
+    const key = gribRenderKey(
+      { lat: -21.6, lon: -186.2, t: "2026-09-15T18:00:00Z" },
+      173.8,
+    );
+    assert.equal(key, "-21.6000,173.8000@2026-09-15T18:00:00Z");
+    assert.equal(
+      gribRenderKey({ lat: 0, lon: 0, t: "2026-09-15T18:00:00Z", stencil: true, stencilRow: -2, stencilColumn: 1 }, -1, 2),
+      "stencil:-2,1:2@2026-09-15T18:00:00Z",
+    );
+  });
+
   it("si une seule maille, pose un stencil 5×5 autour du bateau", () => {
     const pts = gribDisplayPoints([
       { lat: -21.6, lon: -186.2, t: "2026-09-15T18:00:00Z", windKnots: 14, dirFromDeg: 105, hs: 2.2 },
@@ -83,5 +96,7 @@ describe("couche GRIB", () => {
     assert.equal(src.includes("cameraLngForBoat"), true);
     assert.equal(src.includes('getPane("grib")'), true);
     assert.equal(src.includes('getPane("boat")'), false);
+    assert.match(src, /entriesRef/);
+    assert.match(src, /groupRef\.current = L\.layerGroup\(\)\.addTo\(map\)/);
   });
 });

@@ -1,10 +1,18 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import { catamaranSvg } from "../engine/catamaranIcon.js";
+import { catamaranSvg, catamaranTransform } from "../engine/catamaranIcon.js";
 import { markerWorldLngs, wrapLon } from "../utils/waypointFlags.js";
 
-function buildIconHtml(bearing) {
-  return catamaranSvg(bearing);
+function buildIconHtml() {
+  return catamaranSvg(0);
+}
+
+function patchHeading(marker, bearing) {
+  const svg = marker.getElement()?.querySelector('svg[data-bow="north"]');
+  if (!svg) return;
+  const heading = ((Number(bearing) || 0) % 360 + 360) % 360;
+  svg.dataset.heading = String(heading);
+  svg.style.transform = catamaranTransform(heading);
 }
 
 export function useCatamaranMarker(mapRef, {
@@ -33,7 +41,7 @@ export function useCatamaranMarker(mapRef, {
 
     const makeIcon = () => L.divIcon({
       className,
-      html: buildIconHtml(bearing),
+      html: buildIconHtml(),
       iconSize: [64, 64],
       iconAnchor: [32, 32],
     });
@@ -60,12 +68,11 @@ export function useCatamaranMarker(mapRef, {
           }
           return m;
         });
-      } else {
-        markersRef.current.forEach((m, i) => {
-          m.setLatLng([lat, lngs[i]]);
-          m.setIcon(makeIcon());
-        });
       }
+      markersRef.current.forEach((m, i) => {
+        m.setLatLng([lat, lngs[i]]);
+        patchHeading(m, bearing);
+      });
     };
 
     sync();
