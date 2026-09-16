@@ -38,6 +38,9 @@ describe("recette A–G (contrats source)", () => {
     const grib = read("../layers/useGribCorridorLayer.js");
     assert.match(grib, /markerWorldLngs/);
     assert.match(grib, /cameraLngForBoat/);
+    assert.match(grib, /getPane\("grib"\)/);
+    assert.doesNotMatch(grib, /getPane\("boat"\)/);
+    assert.match(read("../layers/layerOrder.js"), /name:\s*"grib"/);
   });
 
   it("F — Annuler Draw + bateau après 1er segment", () => {
@@ -54,5 +57,15 @@ describe("recette A–G (contrats source)", () => {
     assert.doesNotMatch(panel, /Open-Meteo/);
     assert.match(read("../App.jsx"), /buildWeatherLine\(/);
     assert.match(read("../components/SimulationFilmBar.jsx"), /weather-line/);
+  });
+
+  it("H — GRIB sous le bateau, catamaran SVG proue = cap", () => {
+    const icon = read("../engine/catamaranIcon.js");
+    const marker = read("../components/CatamaranMarker.jsx");
+    assert.match(icon, /data-bow="north"/);
+    assert.match(icon, /rotate\(\$\{/);
+    assert.match(marker, /catamaranSvg/);
+    assert.doesNotMatch(marker, /catamaran\.jpg/);
+    assert.doesNotMatch(icon, /scaleX/);
   });
 });

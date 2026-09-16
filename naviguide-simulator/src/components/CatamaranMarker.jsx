@@ -1,12 +1,10 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import catamaranImg from "../assets/img/catamaran.jpg";
-import { catamaranTransform } from "../engine/catamaranIcon.js";
+import { catamaranSvg } from "../engine/catamaranIcon.js";
 import { markerWorldLngs, wrapLon } from "../utils/waypointFlags.js";
 
-function buildIconHtml(bearing, png) {
-  const src = png || catamaranImg;
-  return `<img src="${src}" alt="catamaran" style="width:56px;height:56px;object-fit:contain;transform:${catamaranTransform(bearing)};transition:transform 0.35s ease;" />`;
+function buildIconHtml(bearing) {
+  return catamaranSvg(bearing);
 }
 
 export function useCatamaranMarker(mapRef, {
@@ -36,8 +34,8 @@ export function useCatamaranMarker(mapRef, {
     const makeIcon = () => L.divIcon({
       className,
       html: buildIconHtml(bearing),
-      iconSize: [56, 56],
-      iconAnchor: [28, 28],
+      iconSize: [64, 64],
+      iconAnchor: [32, 32],
     });
 
     const sync = () => {
