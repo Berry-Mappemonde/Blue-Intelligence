@@ -42,7 +42,7 @@ def test_ports_proxy_filters_the_requested_bbox(monkeypatch):
         ]
 
     monkeypatch.setattr(main, "fetch_wpi_features", fake_ports)
-    response = asyncio.run(main.proxy_ports(bbox="-2,45,0,47"))
+    response = asyncio.run(main.proxy_ports(bbox="-2,45,0,47", maxFeatures=800))
     body = json.loads(response.body)
 
     assert [feature["properties"]["name"] for feature in body["features"]] == ["La Rochelle"]
