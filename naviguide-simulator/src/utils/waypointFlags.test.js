@@ -4,11 +4,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  cameraLngForBoat,
   flagIconMetrics,
   flagMarkerHtml,
   lonOnCameraCopy,
+  markerWorldLngs,
   waypointFlagSrcs,
   worldCopyLngs,
+  wrapLon,
 } from "./waypointFlags.js";
 
 describe("waypointFlagSrcs", () => {
@@ -35,6 +38,27 @@ describe("lonOnCameraCopy / worldCopyLngs", () => {
     assert.equal(lonOnCameraCopy(166.4, 170), 166.4);
     assert.equal(lonOnCameraCopy(166.4, 520), 526.4);
     assert.equal(lonOnCameraCopy(166.4, -190), -193.6);
+  });
+
+  it("Mata-Utu → Nouméa : caméra et marqueur partagent la lon enveloppée", () => {
+    const clockLon = -191.15750951788723;
+    const apiLon = 168.835844780904;
+    assert.equal(wrapLon(clockLon), clockLon + 360);
+    assert.ok(Math.abs(wrapLon(clockLon) - apiLon) < 0.02);
+    assert.equal(cameraLngForBoat(clockLon, null), wrapLon(clockLon));
+    assert.equal(cameraLngForBoat(clockLon, undefined), wrapLon(clockLon));
+    const cam = cameraLngForBoat(clockLon, null);
+    const lngs = markerWorldLngs(clockLon, cam);
+    assert.equal(lngs[0], cam);
+    assert.ok(lngs.some((lng) => Math.abs(lng - clockLon) < 1e-6));
+    assert.ok(lngs.some((lng) => Math.abs(lng - wrapLon(clockLon)) < 1e-6));
+    assert.equal(lonOnCameraCopy(clockLon, cam), cam);
+    assert.equal(cameraLngForBoat(clockLon, cam), cam);
+  });
+
+  it("sans centre caméra, ne pose pas le primaire sur la copie −360°", () => {
+    assert.equal(lonOnCameraCopy(-191.16, null), wrapLon(-191.16));
+    assert.equal(markerWorldLngs(-191.16, null)[0], wrapLon(-191.16));
   });
 });
 

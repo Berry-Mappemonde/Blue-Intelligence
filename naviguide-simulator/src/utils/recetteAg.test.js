@@ -8,10 +8,13 @@ const root = dirname(fileURLToPath(import.meta.url));
 const read = (rel) => readFileSync(join(root, rel), "utf8");
 
 describe("recette A–G (contrats source)", () => {
-  it("A — bateau et drapeaux sur worldCopyLngs", () => {
-    assert.match(read("../components/CatamaranMarker.jsx"), /worldCopyLngs/);
-    assert.match(read("../components/PlaneMarker.jsx"), /worldCopyLngs/);
-    assert.match(read("../App.jsx"), /worldCopyLngs/);
+  it("A — bateau et drapeaux sur la même lon enveloppée que la caméra", () => {
+    assert.match(read("../components/CatamaranMarker.jsx"), /markerWorldLngs/);
+    assert.match(read("../components/PlaneMarker.jsx"), /markerWorldLngs/);
+    assert.match(read("../App.jsx"), /cameraLngForBoat/);
+    assert.match(read("../App.jsx"), /markerWorldLngs/);
+    assert.match(read("../hooks/useFilmCamera.js"), /cameraLngForBoat/);
+    assert.doesNotMatch(read("../hooks/useFilmCamera.js"), /unwrapLon/);
   });
 
   it("C — plus d’ArrivalCard ni d’effect banner", () => {

@@ -69,7 +69,7 @@ import {
 import { loadOfficialBerryRoute } from "./utils/routeFromOfficial.js";
 import { isCinemaKey } from "./utils/cinemaHotkey.js";
 import { weatherLine as buildWeatherLine } from "./utils/weatherLine.js";
-import { flagIconMetrics, flagMarkerHtml, waypointFlagSrcs, worldCopyLngs } from "./utils/waypointFlags.js";
+import { cameraLngForBoat, flagIconMetrics, flagMarkerHtml, markerWorldLngs, waypointFlagSrcs } from "./utils/waypointFlags.js";
 import L from "leaflet";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -565,14 +565,14 @@ export default function App() {
         return;
       }
       armProgrammaticNav();
-      map.setView([live.lat, live.lon], 6.5, { animate: false });
+      map.setView([live.lat, cameraLngForBoat(live.lon)], 6.5, { animate: false });
       placedRef.current = true;
       setCameraPlaced(true);
       return;
     }
     const start = flatRoute.points[0];
     armProgrammaticNav();
-    map.setView([start.lat, start.lon], 8, { animate: false });
+    map.setView([start.lat, cameraLngForBoat(start.lon)], 8, { animate: false });
     placedRef.current = true;
     setCameraPlaced(true);
   }, [routeReady, isSuivre, live?.lat, live?.lon, mapReady, mapRef, flatRoute.points, view, armProgrammaticNav]);
@@ -1116,7 +1116,7 @@ export default function App() {
         ? flagMarkerHtml(srcs, off)
         : `<div style="width:10px;height:10px;border-radius:50%;background:${i === 0 ? "#22c55e" : "#e2e8f0"};border:2px solid #0f172a"></div>`;
       const metrics = srcs.length ? flagIconMetrics(srcs) : { iconSize: [24, 24], iconAnchor: [12, 12] };
-      for (const lng of worldCopyLngs(p.lon)) {
+      for (const lng of markerWorldLngs(p.lon)) {
         const m = L.marker([p.lat, lng], {
           icon: L.divIcon({ className: "flag-divicon", html, iconSize: metrics.iconSize, iconAnchor: metrics.iconAnchor }),
           interactive: true,
