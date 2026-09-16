@@ -49,7 +49,7 @@ describe("recette A–G (contrats source)", () => {
   it("F — Annuler Draw + bateau après 1er segment", () => {
     const app = read("../App.jsx");
     assert.match(app, /handleDrawCancel/);
-    assert.match(app, /drawnSegments\.length >= 1/);
+    assert.match(read("../map/MapSceneController.js"), /drawnSegments\?\.length >= 1/);
     assert.match(read("../components/Sidebar.jsx"), /onDrawCancel/);
   });
 
