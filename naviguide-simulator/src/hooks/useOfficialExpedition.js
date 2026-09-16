@@ -145,7 +145,7 @@ export function useOfficialExpedition({
   }, [enabled, refreshGrib, meta?.voyageId, serverClock]);
 
   const live = useMemo(() => {
-    const liveClock = clock || serverClock;
+    const liveClock = serverClock;
     if (!enabled || !liveClock) return null;
     const sample = sampleClockAtTime(liveClock, new Date(nowMs));
     if (!sample) return null;
@@ -178,11 +178,11 @@ export function useOfficialExpedition({
       gribStatus: grib?.status === "ready" ? "ready" : (gribPending || !grib ? "pending" : "absent"),
       gribWarning: null,
     };
-  }, [enabled, clock, serverClock, nowMs, grib, gribPending]);
+  }, [enabled, serverClock, nowMs, grib, gribPending]);
 
   const positioned = Boolean(
-    (clock || serverClock)
-    && sampleClockAtTime(clock || serverClock, new Date(nowMs))?.lat != null,
+    serverClock
+    && sampleClockAtTime(serverClock, new Date(nowMs))?.lat != null,
   );
   const gribStatus = officialGribStatus({
     enabled,
