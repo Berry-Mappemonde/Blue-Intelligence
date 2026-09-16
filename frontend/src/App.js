@@ -84,14 +84,9 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-<<<<<<< HEAD
-  // Admin mode — Console and Review are visible only after the backend
-  // validates the key (?admin=<key> in the URL, stored by api.js).
-=======
   const [isReportPoEOpen, setIsReportPoEOpen] = useState(false);
-  // Mode admin — Console et Review ne sont visibles qu'après validation de la
-  // clé (?admin=<clé> dans l'URL, mémorisée par api.js) par le backend.
->>>>>>> cd4c89b (feat: add Port of Entry reporting button and modal)
+  // Admin mode - Console and Review are visible only after the backend
+  // validates the key (?admin=<key> in the URL, stored by api.js).
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
     if (!hasAdminKey()) return;
