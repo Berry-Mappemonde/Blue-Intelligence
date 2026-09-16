@@ -74,4 +74,25 @@ describe("recette A–G (contrats source)", () => {
     assert.doesNotMatch(marker, /catamaran\.jpg/);
     assert.doesNotMatch(icon, /scaleX/);
   });
+
+  it("I — atlas climatologie peint + moteur, distinct du GRIB2", () => {
+    const app = read("../App.jsx");
+    assert.match(app, /useClimatologyLayer/);
+    assert.match(app, /useAtlasLookup/);
+    assert.match(app, /climatology-banner/);
+    assert.doesNotMatch(app, /overlay climatologie à l’étape 6/);
+    assert.match(read("../layers/useToggleLayers.js"), /showClimatology/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /waveP50/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /waveP90/);
+    assert.match(read("../layers/useClimatologyLayer.js"), /cyclones/);
+    assert.match(read("../layers/layerOrder.js"), /climatology-raster/);
+    assert.match(read("../utils/atlasPoint.js"), /kind !== "climatology"/);
+    assert.match(read("../engine/voyageClock.js"), /windAt/);
+    assert.match(read("../engine/ici.js"), /climatology: null/);
+    assert.match(read("../engine/iciBriefing.js"), /kind climatology/);
+    assert.match(read("../hooks/useIciDossier.js"), /dest_lat/);
+    const grib = read("../layers/useGribCorridorLayer.js");
+    assert.match(grib, /status !== "ready"/);
+    assert.doesNotMatch(grib, /climatology\/point/);
+  });
 });

@@ -23,6 +23,8 @@ import { useVirtualVessel } from "./hooks/useVirtualVessel.js";
 import { useOfficialExpedition } from "./hooks/useOfficialExpedition.js";
 import { useWakeLayer } from "./hooks/useWakeLayer.js";
 import { useIciDossier } from "./hooks/useIciDossier.js";
+import { useAtlasLookup } from "./hooks/useAtlasLookup.js";
+import { useClimatologyLayer } from "./layers/useClimatologyLayer.js";
 import { useFilmCamera } from "./hooks/useFilmCamera.js";
 import { useAirHopLine } from "./hooks/useAirHopLine.js";
 import { useRouteLayer } from "./layers/useRouteLayer.js";
@@ -36,17 +38,20 @@ import {
   nextEscaleNm,
   prevEscaleNm,
   filmLegContext,
+  chapterAtNm,
 } from "./engine/routePlayhead.js";
 import { detectAirEpisodes, interpolateCast, isAirPhase, mergeEpisodeMarks, sailNmToFilmNm } from "./engine/filmCast.js";
 import { expeditionBoatKnots } from "./engine/playSpeeds.js";
 import {
   DEFAULT_START_AT,
   DEFAULT_T0_ISO,
+  buildVoyageClock,
   etaHoursToFilmNm,
   formatCivilDate,
   formatFilmClockLine,
   formatMonthName,
   lookupVoyageClock,
+  monthOfT0,
 } from "./engine/voyageClock.js";
 import { VIEW_SIMULATION, VIEW_SUIVRE } from "./constants/viewMode.js";
 import { isRouteReady } from "./utils/routeReady.js";
@@ -194,12 +199,22 @@ export default function App() {
     [activeStops, flatRoute],
   );
   const cruiseKnots = useMemo(() => expeditionBoatKnots(polarData), [polarData]);
+  const atlasWindRef = useRef(null);
+  const [atlasRev, setAtlasRev] = useState(0);
+  const atlasWindAt = useCallback((lat, lon, month) => {
+    if (typeof atlasWindRef.current === "function") {
+      return atlasWindRef.current(lat, lon, month);
+    }
+    return null;
+  }, []);
   const voyage = useVoyageClock({
     flat: flatRoute,
     marks: escaleMarks,
     polarRaw: polarData?.raw || null,
     enabled: Boolean(flatRoute.points?.length) && routeReady,
     stops: activeStops,
+    windAt: atlasWindAt,
+    atlasRev,
   });
   const official = useOfficialExpedition({
     enabled: isSuivre,
@@ -274,6 +289,35 @@ export default function App() {
       jump: isAirPhase(cast.phase),
     };
   }, [cast, flatRoute, playback.nm]);
+
+  const destMark = useMemo(
+    () => chapterAtNm(escaleMarks, cast?.sailNm ?? playback.nm)?.to,
+    [escaleMarks, cast?.sailNm, playback.nm],
+  );
+  const climoMonth = clockSample?.month || monthOfT0(voyage.t0, 0);
+  const atlas = useAtlasLookup({
+    enabled: routeReady,
+    t0: voyage.t0,
+    points: flatRoute.points,
+    boatLat: sample?.lat,
+    boatLon: sample?.lon,
+    destLat: destMark?.lat,
+    destLon: destMark?.lon,
+    month: climoMonth,
+  });
+  useEffect(() => {
+    atlasWindRef.current = atlas.windAt;
+    if (atlas.revision !== atlasRev) setAtlasRev(atlas.revision);
+  }, [atlas.windAt, atlas.revision, atlasRev]);
+
+  const climoLayer = useClimatologyLayer({
+    mapRef,
+    mapReady,
+    enabled: maritimeLayers.showClimatology,
+    month: climoMonth,
+    drawing: drawingMode,
+    t,
+  });
 
   const expeditionSpeed = useExpeditionSpeed({
     polarData,
@@ -458,6 +502,20 @@ export default function App() {
     polarMeta: polarData,
     jambe,
     lang,
+    month: climoMonth,
+    destLat: destMark?.lat,
+    destLon: destMark?.lon,
+    climatology: atlas.boatPoint
+      ? {
+        kind: "climatology",
+        source: "atlas",
+        month: climoMonth,
+        period: atlas.boatPoint.period,
+        doi: atlas.boatPoint.doi,
+        point: atlas.boatPoint,
+        crossings: atlas.boatPoint.crossings || atlas.boatPoint.cyclone?.crossings_if_leg,
+      }
+      : null,
   });
 
   const playheadNmRef = useRef(0);
@@ -1196,7 +1254,11 @@ export default function App() {
         canFinishDraw={drawnPoints.length >= 2 && !drawingLoading}
         isCockpit={false}
         polarData={polarData}
-        maritimeLayers={maritimeLayers}
+        maritimeLayers={{
+          ...maritimeLayers,
+          loadingClimatology: climoLayer.loading,
+          errorClimatology: climoLayer.error,
+        }}
         briefingLoading={iciPack.loading || briefingLoading}
         officialFallback={officialFallback}
         iciBriefing={iciPack.briefing}
@@ -1296,8 +1358,19 @@ export default function App() {
       )}
 
       {maritimeLayers.showClimatology && (
-        <div className="absolute left-1/2 -translate-x-1/2 z-20 bg-sky-950/90 border border-sky-400/40 text-sky-100 text-xs px-4 py-2 rounded-full bottom-48">
-          {t("climatologyStub")}
+        <div
+          data-testid="climatology-banner"
+          className="absolute left-1/2 -translate-x-1/2 z-20 bg-sky-950/90 border border-sky-400/40 text-sky-100 text-xs px-4 py-2 rounded-full bottom-48 pointer-events-none"
+        >
+          {t("climatologyOn", { month: monthLabel || String(climoMonth) })}
+          {climoLayer.counts && (
+            <span className="ml-2 opacity-80" data-testid="climatology-overlay-ready">
+              {`· roses ${climoLayer.counts.wind || 0} · P50 ${climoLayer.counts.waveP50 || 0} · P90 ${climoLayer.counts.waveP90 || 0} · courant ${climoLayer.counts.current || 0} · IBTrACS ${climoLayer.counts.cyclones || 0}`}
+            </span>
+          )}
+          {(climoLayer.error || atlas.alive === false) && (
+            <span className="ml-2 text-amber-200">{t("climatologyAtlasDown")}</span>
+          )}
         </div>
       )}
 
