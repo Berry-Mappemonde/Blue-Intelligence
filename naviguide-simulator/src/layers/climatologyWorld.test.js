@@ -2,11 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   climoPointLngs,
-  closeCycloneAtDateLine,
   cycloneLatLngCopies,
   groupCycloneFeatures,
-  meridiansBetween,
-  splitCycloneAtMeridian,
   unwrapCycloneCoords,
 } from "./climatologyWorld.js";
 
@@ -31,64 +28,36 @@ describe("climatologyWorld antimeridian", () => {
     ]);
   });
 
-  it("snaps a stub that dies at 178.5° onto 180°", () => {
-    const closed = closeCycloneAtDateLine([
-      [153.7, 10.1],
-      [178.5, 41.0],
-    ]);
-    assert.equal(closed[closed.length - 1][0], 180);
-    assert.equal(closed[closed.length - 1][1], 41.0);
-  });
-
-  it("lists the 180° meridian between 179 and 181", () => {
-    assert.deepEqual(meridiansBetween(179, 181), [180]);
-    assert.deepEqual(meridiansBetween(181, 179), [180]);
-    assert.deepEqual(meridiansBetween(-181, -179), [-180]);
-    assert.deepEqual(meridiansBetween(170, 179), []);
-  });
-
-  it("splits a crossing track at 180° and keeps the meridian on both parts", () => {
-    const parts = splitCycloneAtMeridian([
-      [170, -15],
-      [179, -16],
-      [-179, -17],
-      [-170, -18],
-    ]);
-    assert.equal(parts.length, 2);
-    assert.equal(parts[0][parts[0].length - 1][0], 180);
-    assert.equal(parts[1][0][0], 180);
-    assert.ok(parts[1].some(([lon]) => lon > 180));
-  });
-
-  it("paints world copies that meet at 180°, never a 358° hop", () => {
+  it("paints one polyline per world copy, crossing 180° without a cut", () => {
     const copies = cycloneLatLngCopies([
       [170, -15],
       [179, -16],
       [-179, -17],
       [-170, -18],
     ]);
-    assert.ok(copies.length >= 6);
+    assert.equal(copies.length, 3);
+    assert.deepEqual(copies[0].map((ll) => ll[1]), [170, 179, 181, 190]);
+    assert.deepEqual(copies[1].map((ll) => ll[1]), [530, 539, 541, 550]);
+    assert.deepEqual(copies[2].map((ll) => ll[1]), [-190, -181, -179, -170]);
     for (const part of copies) {
       assert.ok(part.length >= 2);
       for (let i = 1; i < part.length; i++) {
         assert.ok(Math.abs(part[i][1] - part[i - 1][1]) <= 180);
       }
     }
-    const lngs = copies.flat().map((ll) => ll[1]);
-    assert.ok(lngs.some((lng) => Math.abs(lng - 180) < 1e-6));
-    assert.ok(lngs.some((lng) => lng > 360));
-    assert.ok(lngs.some((lng) => lng < -180));
   });
 
-  it("rejoins backend-split parts of the same sid before unwrap", () => {
+  it("rejoins backend-split parts of the same sid then unwraps to one line", () => {
     const groups = groupCycloneFeatures([
       { properties: { sid: "A", name: "TEST" }, geometry: { coordinates: [[170, -15], [179, -16]] } },
       { properties: { sid: "A" }, geometry: { coordinates: [[-179, -17], [-170, -18]] } },
     ]);
     assert.equal(groups.length, 1);
-    const parts = splitCycloneAtMeridian(groups[0].coords);
-    assert.equal(parts.length, 2);
-    assert.equal(parts[0].at(-1)[0], 180);
-    assert.equal(parts[1][0][0], 180);
+    assert.deepEqual(unwrapCycloneCoords(groups[0].coords), [
+      [170, -15],
+      [179, -16],
+      [181, -17],
+      [190, -18],
+    ]);
   });
 });

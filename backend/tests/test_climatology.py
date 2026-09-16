@@ -121,15 +121,30 @@ def test_cyclones_geojson_september_has_tracks():
     assert all(f["properties"]["kind"] == KIND for f in data["features"][:5])
 
 
-def test_split_antimeridian_cuts_179_to_minus_179():
-    parts = cyc._split_antimeridian([
+def test_unwrap_coords_keeps_one_line_past_180():
+    pts = cyc._unwrap_coords([
         [170.0, -15.0], [179.0, -16.0], [-179.0, -17.0], [-170.0, -18.0],
     ])
-    assert len(parts) == 2
-    assert parts[0][-1][0] == 180.0
-    assert parts[1][0][0] == -180.0
-    for part in parts:
-        for a, b in zip(part, part[1:]):
+    assert pts == [
+        [170.0, -15.0], [179.0, -16.0], [181.0, -17.0], [190.0, -18.0],
+    ]
+    for a, b in zip(pts, pts[1:]):
+        assert abs(a[0] - b[0]) <= 180.0
+
+
+def test_cyclones_geojson_one_unwrapped_line_per_storm():
+    data = _client().get("/api/climatology/cyclones.geojson", params={"month": 9}).json()
+    sids = [f["properties"]["sid"] for f in data["features"]]
+    assert len(sids) == len(set(sids))
+    past = [
+        f for f in data["features"]
+        if any(abs(c[0]) > 180 for c in f["geometry"]["coordinates"])
+    ]
+    assert past, "IBTrACS must continue past 180°, not stop at the date line"
+    for f in data["features"]:
+        coords = f["geometry"]["coordinates"]
+        assert f["geometry"]["type"] == "LineString"
+        for a, b in zip(coords, coords[1:]):
             assert abs(a[0] - b[0]) <= 180.0
 
 

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
 import { POPUP_OPTS } from "./points";
-import { cycloneLatLngCopies } from "./cycloneTracks";
+import { cycloneLatLngCopies, groupCycloneFeatures } from "./cycloneTracks";
 
 const COLOR = "#2dd4bf";
 
@@ -194,9 +194,9 @@ export default function useClimatologyLayer({
       const { data } = await api.get("/climatology/cyclones.geojson", { params: { month } });
       if (cancelled) return;
       const group = L.layerGroup();
-      (data.features || []).forEach((f) => {
-        const copies = cycloneLatLngCopies(f.geometry?.coordinates || []);
-        const p = f.properties || {};
+      groupCycloneFeatures(data.features || []).forEach((storm) => {
+        const copies = cycloneLatLngCopies(storm.coords);
+        const p = storm.properties || {};
         copies.forEach((latlngs) => {
           if (latlngs.length < 2) return;
           const line = L.polyline(latlngs, {

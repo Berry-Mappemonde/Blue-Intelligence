@@ -17,7 +17,6 @@ from app.services.climatology_common import (
     parse_month,
     point_to_segment_nm,
     rule,
-    wrap_lon,
 )
 
 NCEI_STORM_URL = "https://www.ncei.noaa.gov/products/international-best-track-archive"
@@ -73,53 +72,15 @@ def _unwrap_lon(prev: float, lon: float) -> float:
     return x
 
 
-def _meridians_between(x0: float, x1: float) -> list[float]:
-    if x0 == x1:
-        return []
-    lo, hi = (x0, x1) if x0 < x1 else (x1, x0)
-    found: list[float] = []
-    k = int((lo - 180.0) // 360.0) + 1
-    while True:
-        m = 180.0 + 360.0 * k
-        if m >= hi:
-            break
-        if m > lo:
-            found.append(m)
-        k += 1
-        if len(found) > 8:
-            break
-    return found if x0 < x1 else list(reversed(found))
-
-
-def _split_antimeridian(coords: list[list[float]]) -> list[list[list[float]]]:
-    """Cut at 180°. Both sides get the interpolated meridian (no 358° hop)."""
+def _unwrap_coords(coords: list[list[float]]) -> list[list[float]]:
+    """170 → −170 becomes 170 → 190. One storm stays one continuous line."""
     clean = [c for c in coords if len(c) >= 2]
-    if len(clean) < 2:
-        return [clean] if clean else []
-    uw = [[float(clean[0][0]), float(clean[0][1])]]
+    if not clean:
+        return []
+    out = [[float(clean[0][0]), float(clean[0][1])]]
     for pt in clean[1:]:
-        uw.append([_unwrap_lon(uw[-1][0], float(pt[0])), float(pt[1])])
-    parts: list[list[list[float]]] = []
-    cur: list[list[float]] = [[wrap_lon(uw[0][0]), uw[0][1]]]
-    for prev, pt in zip(uw, uw[1:]):
-        cuts = _meridians_between(prev[0], pt[0])
-        if not cuts:
-            cur.append([wrap_lon(pt[0]), pt[1]])
-            continue
-        px, py = prev[0], prev[1]
-        x1, y1 = pt[0], pt[1]
-        for m in cuts:
-            t = 1.0 if x1 == px else (m - px) / (x1 - px)
-            y = py + (y1 - py) * t
-            cur.append([180.0, y])
-            if len(cur) >= 2:
-                parts.append(cur)
-            cur = [[-180.0, y]]
-            px, py = m, y
-        cur.append([wrap_lon(x1), y1])
-    if len(cur) >= 2:
-        parts.append(cur)
-    return parts
+        out.append([_unwrap_lon(out[-1][0], float(pt[0])), float(pt[1])])
+    return out
 
 
 def _color(max_wind: float) -> str:
@@ -134,26 +95,25 @@ def tracks_geojson(month: int) -> dict:
     month = parse_month(month)
     features = []
     for s in storms_for_month(month):
-        coords = [[wrap_lon(p[0]), p[1]] for p in (s.get("coords") or []) if len(p) >= 2]
-        for part in _split_antimeridian(coords):
-            if len(part) < 2:
-                continue
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "LineString", "coordinates": part},
-                "properties": {
-                    "kind": KIND,
-                    "sid": s.get("sid"),
-                    "name": s.get("name"),
-                    "season": s.get("season"),
-                    "basin": s.get("basin"),
-                    "month": month,
-                    "max_wind_kn": s.get("max_wind_kn"),
-                    "wind_source": s.get("wind_source"),
-                    "color": _color(float(s.get("max_wind_kn") or 0)),
-                    "url": f"{NCEI_STORM_URL}",
-                },
-            })
+        coords = _unwrap_coords(s.get("coords") or [])
+        if len(coords) < 2:
+            continue
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coords},
+            "properties": {
+                "kind": KIND,
+                "sid": s.get("sid"),
+                "name": s.get("name"),
+                "season": s.get("season"),
+                "basin": s.get("basin"),
+                "month": month,
+                "max_wind_kn": s.get("max_wind_kn"),
+                "wind_source": s.get("wind_source"),
+                "color": _color(float(s.get("max_wind_kn") or 0)),
+                "url": f"{NCEI_STORM_URL}",
+            },
+        })
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -209,7 +169,7 @@ def crossings(
             continue
         if not _in_dayrange(s, month, day, window):
             continue
-        coords = s.get("coords") or []
+        coords = _unwrap_coords(s.get("coords") or [])
         near = False
         for pt in coords:
             if len(pt) < 2:
@@ -218,10 +178,7 @@ def crossings(
                 near = True
                 break
         if not near and len(coords) >= 2:
-            # Track segment vs leg (samples)
             for a, b in zip(coords, coords[1:]):
-                if abs(a[0] - b[0]) > 180:
-                    continue
                 if (
                     point_to_segment_nm(lat1, lon1, a[1], a[0], b[1], b[0]) <= radius
                     or point_to_segment_nm(lat2, lon2, a[1], a[0], b[1], b[0]) <= radius
