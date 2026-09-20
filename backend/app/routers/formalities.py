@@ -2,6 +2,7 @@
 app.routers.formalities — Formalities mode FastAPI endpoints [EEZ -> Ports of Entry].
 """
 import asyncio
+import os
 import time
 
 from fastapi import APIRouter, HTTPException
@@ -36,11 +37,23 @@ GENERATE_GONE = (
 # ---------------------------------------------------------------------------
 REFRESH_AFTER_DAYS = 30
 ERROR_RETRY_DAYS = 7
-CYCLE_EVERY_H = 12
-MAX_PER_CYCLE = 60
+CYCLE_EVERY_H = float(os.getenv("POE_AUTO_REFRESH_EVERY_H", "12"))
+MAX_PER_CYCLE = int(os.getenv("POE_AUTO_REFRESH_MAX", "10"))
+
+# 20 sept. 2026 : un cycle a bloqué la boucle asyncio du serveur pendant des
+# heures (generate_zone_poe fait du travail synchrone — extraction, PDF,
+# TF-IDF — que wait_for ne peut pas interrompre) : le site entier ne répondait
+# plus. Désactivé par défaut tant que le pipeline n'est pas rendu non bloquant
+# (to_thread / worker séparé). Réactiver : POE_AUTO_REFRESH=1 dans backend/.env.
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() not in ("0", "false", "off", "no")
+
 
 AUTO_STATE = {
-    "enabled": True,
+    "enabled": _env_flag("POE_AUTO_REFRESH", False),
     "cycle_running": False,
     "last_cycle_at": None,
     "next_check_at": None,
@@ -123,6 +136,10 @@ async def _auto_refresh_cycle():
 
 async def _auto_refresh_loop():
     await asyncio.sleep(90)  # let the app start
+    # Pas de cycle au démarrage : le premier vient après CYCLE_EVERY_H, sinon
+    # chaque redémarrage relance aussitôt le travail qui a bloqué le serveur.
+    if AUTO_STATE["last_cycle_at"] is None:
+        AUTO_STATE["last_cycle_at"] = time.time()
     while True:
         due = (AUTO_STATE["last_cycle_at"] or 0) + CYCLE_EVERY_H * 3600 <= time.time()
         busy = REF_STATE.running
