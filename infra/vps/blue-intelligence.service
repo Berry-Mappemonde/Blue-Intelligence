@@ -14,6 +14,8 @@ RestartSec=3
 TimeoutStartSec=180
 MemoryHigh=2G
 MemoryMax=3G
+# Soft 1024 (Ubuntu default) + climatology burst → EMFILE / nginx 500 / CF 525.
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
