@@ -7,7 +7,7 @@ GET /api/climatology/{wind|wave|current|cyclones}.geojson?month=
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.core.export_meta import DISCLAIMER_EN, DISCLAIMER_FR, versioned_fc
 from app.services.climatology_common import (
@@ -38,6 +38,13 @@ from app.services.climatology_wave import wave_at, wave_geojson
 from app.services.climatology_wind import atlas_at, wind_geojson
 
 router = APIRouter(prefix="/api")
+
+# The atlas (1980-2020) is immutable: browsers, nginx and Cloudflare may keep
+# a point for a month. Handlers below are plain ``def`` on purpose: the
+# cyclone maths is CPU-bound Python and used to run inside the event loop
+# (incident 2026-09-21 — one slow request froze every other route).
+CACHE_CONTROL_POINT = "public, max-age=2592000"
+CACHE_CONTROL_LAYER = "public, max-age=86400"
 
 
 def _month(month: int) -> int:
@@ -88,7 +95,8 @@ async def climatology_meta(month: int = Query(1, ge=1, le=12)):
 
 
 @router.get("/climatology/point")
-async def climatology_point(
+def climatology_point(
+    response: Response,
     lat: float = Query(...),
     lon: float = Query(...),
     month: int = Query(..., ge=1, le=12),
@@ -96,6 +104,7 @@ async def climatology_point(
     dest_lon: float | None = Query(None),
     day: int | None = Query(None, ge=1, le=31),
 ):
+    response.headers["Cache-Control"] = CACHE_CONTROL_POINT
     lat, lon = _coord(lat, lon)
     month = _month(month)
     land = is_land(lat, lon)
@@ -138,7 +147,8 @@ async def climatology_point(
 
 
 @router.get("/climatology/crossings")
-async def climatology_crossings(
+def climatology_crossings(
+    response: Response,
     lat1: float = Query(...),
     lon1: float = Query(...),
     lat2: float = Query(...),
@@ -147,6 +157,7 @@ async def climatology_crossings(
     day: int | None = Query(None, ge=1, le=31),
     dayrange: int | None = Query(None, ge=7, le=45),
 ):
+    response.headers["Cache-Control"] = CACHE_CONTROL_POINT
     lat1, lon1 = _coord(lat1, lon1)
     lat2, lon2 = _coord(lat2, lon2)
     return cyclone_crossings(lat1, lon1, lat2, lon2, _month(month), day=day, dayrange=dayrange)
@@ -167,34 +178,41 @@ def _export(fc: dict, dataset: str, license_note: str):
 
 
 @router.get("/climatology/wind.geojson")
-async def climatology_wind_geojson(
+def climatology_wind_geojson(
+    response: Response,
     month: int = Query(..., ge=1, le=12),
     spacing_deg: float = Query(1.0, ge=0.5, le=4.0),
 ):
+    response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
     return _export(wind_geojson(_month(month), spacing_deg=spacing_deg),
                    "climatology-wind", LICENSE_CMEMS)
 
 
 @router.get("/climatology/wave.geojson")
-async def climatology_wave_geojson(
+def climatology_wave_geojson(
+    response: Response,
     month: int = Query(..., ge=1, le=12),
     stat: str = Query("p90"),
     spacing_deg: float = Query(1.0, ge=0.5, le=4.0),
 ):
+    response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
     return _export(wave_geojson(_month(month), stat=stat, spacing_deg=spacing_deg),
                    "climatology-wave", LICENSE_CMEMS)
 
 
 @router.get("/climatology/current.geojson")
-async def climatology_current_geojson(
+def climatology_current_geojson(
+    response: Response,
     month: int = Query(..., ge=1, le=12),
     spacing_deg: float = Query(1.0, ge=0.5, le=4.0),
 ):
+    response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
     return _export(current_geojson(_month(month), spacing_deg=spacing_deg),
                    "climatology-current", LICENSE_CMEMS)
 
 
 @router.get("/climatology/cyclones.geojson")
-async def climatology_cyclones_geojson(month: int = Query(..., ge=1, le=12)):
+def climatology_cyclones_geojson(response: Response, month: int = Query(..., ge=1, le=12)):
+    response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
     return _export(tracks_geojson(_month(month)),
                    "climatology-cyclones", LICENSE_IBTRACS)
