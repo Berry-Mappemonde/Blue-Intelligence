@@ -62,6 +62,14 @@ jobs:
           python3 scripts/audit_tags.py --geojson dist/*.geojson \
             --out "dist/audit-tags-$STAMP.md"
 
+      - name: Vérification URLs fiches (exports téléchargés, rapport informatif)
+        continue-on-error: true
+        run: |
+          python3 scripts/verify_fiche_urls.py --geojson dist/*.geojson \
+            --concurrency 6 --timeout 25 --retries 1 \
+            --out "dist/audit-fiche-urls-$STAMP.md" \
+            --json-out "dist/audit-fiche-urls-$STAMP.json"
+
       - name: Installer tippecanoe (épinglé)
         run: |
           sudo apt-get update -qq
