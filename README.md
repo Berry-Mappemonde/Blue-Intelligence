@@ -61,6 +61,7 @@ The repository also follows seamap engineering practices:
 - **Tag catalogue** — `docs/CATALOGUE_SEAMARK.md` +
   `backend/data/seamark_catalog.json`; audit via `scripts/audit_tags.py`
   (reports in `docs/audits/`).
+- **Fiche URL health** — `scripts/verify_fiche_urls.py` (`docs/VERIFY_FICHE_URLS.md`).
 - **Locked layer order** — `frontend/src/components/map/layerOrder.js`
   is frozen by a jest test (`npm test`).
 

@@ -144,6 +144,15 @@ jobs:
       - name: Audit des tags (mode GeoJSON, sans Mongo)
         run: python3 scripts/audit_tags.py --geojson seed/projects.geojson seed/ports_of_entry.geojson
 
+      - name: Smoke vérification URLs fiches (extraction seeds)
+        run: python3 scripts/verify_fiche_urls.py --geojson seed/projects.geojson seed/ports_of_entry.geojson --dry-run
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests unitaires vérification URLs fiches
+        run: python3 backend/tests/test_verify_fiche_urls.py
+
   deploy-gate:
     runs-on: ubuntu-latest
     steps:
