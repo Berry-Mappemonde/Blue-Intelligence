@@ -1,3 +1,5 @@
+> **Archivé le 22 septembre 2026 — réalisé.** Mémoire : catalogue `candidat` pas encore dans un pipeline. Index : [docs/README.md](../README.md).
+
 # Implementation plan — Cartographic tracks (control, map, hydro, satellite)
 
 Framing document. It puts back in order a pile of useful but
@@ -14,9 +16,9 @@ Version **1.0** — 14 September 2026.
 Inherits from: `README.md` (Seamap basemaps, exports, catalogue),
 `docs/CATALOGUE_SEAMARK.md`, `docs/CONTRATS_MODES.md`,
 `docs/CONTRATS_REVIEW_PAR_MODE.md`, `docs/CAHIER_DES_CHARGES_REVIEW.md`,
-`docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md`,
-`docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`,
-`docs/hackathon-nebius-nvidia.md`, `infra/vps/seamap/README.md`.
+`docs/archives/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md`,
+`docs/archives/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`,
+`docs/archives/hackathon-nebius-nvidia.md`, `infra/vps/seamap/README.md`.
 
 **Contents**
 
@@ -205,7 +207,7 @@ is the **only** format that crosses the four tracks.
 ## 7. Blue Intelligence / NAVIGUIDE simulator split
 
 Same spirit as “BI shows the atlas. NAVIGUIDE uses it”
-(`docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` §6). Here:
+(`docs/archives/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` §6). Here:
 
 ```
               Versioned GeoJSON + sha256
@@ -245,7 +247,7 @@ Same spirit as “BI shows the atlas. NAVIGUIDE uses it”
 
 **Simulator rule.** Stage 1 is Leaflet, without MapLibre, without
 file import/export, prod untouched
-(`docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`). This plan
+(`docs/archives/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md`). This plan
 **does not cancel** that. The simulator mainly benefits from the
 **exports**, **Gold**, the **judge**, **EMODnet as pills**, and later
 **one** satellite object in `ici()`. It does not receive Seamap
@@ -797,9 +799,9 @@ has its own in §13.
 | `docs/CONTRATS_MODES.md` | 7 modes; Science = structured APIs; geocoding = names |
 | `docs/CONTRATS_REVIEW_PAR_MODE.md` | Gold meta-contract; “Show the review”; no Science/Climat |
 | `docs/CAHIER_DES_CHARGES_REVIEW.md` | Formalities human queue |
-| `docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` | BI shows / NAVIGUIDE uses; off VPS; honest `null` |
-| `docs/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md` | Leaflet; prod untouched; pills; `ici()` |
-| `docs/hackathon-nebius-nvidia.md` | Gold + Tavily + Ultra; Science = 0 or 1 local; disclaimer |
+| `docs/archives/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md` | BI shows / NAVIGUIDE uses; off VPS; honest `null` |
+| `docs/archives/PLAN_IMPLEMENTATION_NAVIGUIDE_SIMULATOR_ETAPE1.md` | Leaflet; prod untouched; pills; `ici()` |
+| `docs/archives/hackathon-nebius-nvidia.md` | Gold + Tavily + Ultra; Science = 0 or 1 local; disclaimer |
 | `infra/vps/seamap/README.md` | PMTiles mirror; Monday cron; no Seamap GPL |
 | `.github/workflows/weekly-data-build.yml` | Overlay already built |
 

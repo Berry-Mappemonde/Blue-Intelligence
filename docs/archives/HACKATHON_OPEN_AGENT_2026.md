@@ -1,3 +1,5 @@
+> **Archivé le 22 septembre 2026 — autre hackathon.** Conservé pour la mémoire. Index : [docs/README.md](../README.md).
+
 # Open Agent Hackathon 2026 — synthesis and Blue Intelligence plan
 
 Internal working document. Synthesis of the research on the
