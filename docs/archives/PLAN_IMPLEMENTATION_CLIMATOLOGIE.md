@@ -1,3 +1,5 @@
+> **Archivé le 22 septembre 2026 — réalisé.** Atlas livré. Mémoire : houle climatologique (« swell not shipped »). Index : [docs/README.md](../README.md).
+
 # Implementation plan — Climatology mode (7th Blue Intelligence mode)
 
 Framing and workshop document. It records the September 2026 decisions:
@@ -622,11 +624,11 @@ unchanged).
 - OpenCPN plugin `climatology_pi` (manual, `gendata/`, `ClimatologyOverlayFactory.h`)
   and `weather_routing_pi` (MOST_LIKELY, crossings).
 - `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/PRD.md`.
-- `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
+- `docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
   satellite: jobs distinct from the monthly atlas.
-- `docs/PLAN_IMPLEMENTATION_SIMULATION_A.md` — simulator-film ETA
+- `docs/archives/PLAN_IMPLEMENTATION_SIMULATION_A.md` — simulator-film ETA
   by month, fixed searoute line.
-- `docs/PLAN_IMPLEMENTATION_SIMULATION_B.md` — `kind: forecast` 0–10 d
+- `docs/archives/PLAN_IMPLEMENTATION_SIMULATION_B.md` — `kind: forecast` 0–10 d
   + Follow + one-leg isochrone, **inside** `naviguide-simulator/`.
 - Code: `getWind.py`, `getWave.py`, `getCurrent.py`, `climatology.py`,
   `isochrone.py`, `useScienceWms.js`, `layerOrder.js`, `MaritimeLayers.jsx`,

@@ -1,6 +1,6 @@
 # Cartographic tracks diagnostic — 14 September 2026
 
-Wave 0 of the plan `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+Wave 0 of the plan `docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 No secret. Reading of the public Seamap `style.json` and the NOAA ENC
 Direct MapServer.
 
