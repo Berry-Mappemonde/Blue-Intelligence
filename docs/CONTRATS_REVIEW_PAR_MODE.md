@@ -423,7 +423,7 @@ No “Formalities exclusive publication” regime. No “Projects skipper filter
 | `docs/CAHIER_DES_CHARGES_PROJETS.md` | Project object, phase D, snapped/fallback. |
 | `docs/CONTRATS_MODES.md` | Five **pipeline** contracts (not Review). |
 | `docs/REGLES_PARAMETRES.md` | Rules that Review choices must be able to **write**. |
-| `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` | Review / Gold = **control** stream; not a basemap. |
+| `docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` | Review / Gold = **control** stream; not a basemap. |
 | This document §0.1 / §3.7 / §4.7 / §5.7 / §6.7 | What we copy from Formalities **before** writing a Propose elsewhere. |
 
 ## 12. Review report
