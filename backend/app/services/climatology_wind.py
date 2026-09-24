@@ -18,11 +18,15 @@ from app.services.climatology_common import (
     SOURCE_IDS,
     WIND_PERIOD,
     climatology_dir,
+    grid_step,
     is_land,
+    iter_cells,
     parse_month,
     product_meta,
     rule,
     sector_index,
+    tile_bbox,
+    tile_step_deg,
     wind_from_uv,
     wrap_lon,
 )
@@ -211,6 +215,49 @@ def wind_at(lat: float, lon: float, month: int, mode: str = "most_likely") -> tu
     return float(block["speed_knots"]), float(block["dir_deg"])
 
 
+def _wind_feature(month: int, lat: float, lon: float, rose: dict, *, light: bool) -> dict:
+    shown = rose["most_likely"] or rose["vector_mean"]
+    if light:
+        props = {
+            "speed_knots": shown["speed_knots"],
+            "dir_from_deg": shown["dir_deg"],
+            "calm_pct": rose["calm_pct"],
+            "gale_pct": rose["gale_pct"],
+        }
+    else:
+        props = {
+            "kind": KIND,
+            "month": month,
+            "stat": rose.get("stat") or "rose",
+            "wind_speed_knots": shown["speed_knots"],
+            "wind_direction_from_deg": shown["dir_deg"],
+            "calm_pct": rose["calm_pct"],
+            "gale_pct": rose["gale_pct"],
+            "sample_count": rose["sample_count"],
+            "vector_mean_knots": rose["vector_mean"]["speed_knots"],
+            "vector_mean_from_deg": rose["vector_mean"]["dir_deg"],
+            "directions_from": rose["directions_from"],
+        }
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
+        "properties": props,
+    }
+
+
+def _wind_features(month: int, bundle: dict, bbox, step: int, *, light: bool) -> list[dict]:
+    features: list[dict] = []
+    for _i, _j, lat, lon in iter_cells(bundle, bbox, step):
+        cell = _sample_cell(bundle, lat, lon)
+        if cell is None:
+            continue
+        rose = _rose_from_cell(cell)
+        if not rose:
+            continue
+        features.append(_wind_feature(month, lat, lon, rose, light=light))
+    return features
+
+
 def wind_geojson(month: int, spacing_deg: float = 1.0) -> dict:
     """MOST_LIKELY points for the vector pane. Empty collection if the snapshot is missing."""
     month = parse_month(month)
@@ -219,39 +266,7 @@ def wind_geojson(month: int, spacing_deg: float = 1.0) -> dict:
     if np is not None and has_snapshot(month):
         bundle = _load_month(month)
         if bundle is not None:
-            lats = bundle["lats"]
-            lons = bundle["lons"]
-            step = max(1, int(round(spacing / max(0.25, float(abs(lats[1] - lats[0]) if len(lats) > 1 else 0.5)))))
-            for i in range(0, len(lats), step):
-                for j in range(0, len(lons), step):
-                    lat = float(lats[i])
-                    lon = float(lons[j])
-                    if is_land(lat, lon):
-                        continue
-                    cell = _sample_cell(bundle, lat, lon)
-                    if cell is None:
-                        continue
-                    rose = _rose_from_cell(cell)
-                    if not rose:
-                        continue
-                    shown = rose["most_likely"] or rose["vector_mean"]
-                    features.append({
-                        "type": "Feature",
-                        "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
-                        "properties": {
-                            "kind": KIND,
-                            "month": month,
-                            "stat": rose.get("stat") or "rose",
-                            "wind_speed_knots": shown["speed_knots"],
-                            "wind_direction_from_deg": shown["dir_deg"],
-                            "calm_pct": rose["calm_pct"],
-                            "gale_pct": rose["gale_pct"],
-                            "sample_count": rose["sample_count"],
-                            "vector_mean_knots": rose["vector_mean"]["speed_knots"],
-                            "vector_mean_from_deg": rose["vector_mean"]["dir_deg"],
-                            "directions_from": rose["directions_from"],
-                        },
-                    })
+            features = _wind_features(month, bundle, None, grid_step(bundle, spacing), light=False)
     prod = product_meta("wind")
     side = atlas_sidecar(month) or {}
     stat = side.get("stat") or ("rose" if has_snapshot(month) else None)
@@ -271,6 +286,20 @@ def wind_geojson(month: int, spacing_deg: float = 1.0) -> dict:
         "attribution": f"{LICENSE_CMEMS} · {product_meta('wind')['provenance']}",
         "_climatology": meta_extra,
     }
+
+
+def wind_tile(month: int, z: int, x: int, y: int) -> dict:
+    """Light wind FeatureCollection for one XYZ tile. Empty if the snapshot is missing."""
+    month = parse_month(month)
+    bbox = tile_bbox(z, x, y)
+    features: list[dict] = []
+    if np is not None and has_snapshot(month):
+        bundle = _load_month(month)
+        if bundle is not None:
+            features = _wind_features(
+                month, bundle, bbox, grid_step(bundle, tile_step_deg(z)), light=True,
+            )
+    return {"type": "FeatureCollection", "features": features}
 
 
 def atlas_sidecar(month: int) -> dict[str, Any] | None:

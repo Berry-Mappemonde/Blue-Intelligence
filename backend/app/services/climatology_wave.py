@@ -10,10 +10,14 @@ from app.services.climatology_common import (
     SOURCE_IDS,
     WAVE_PERIOD,
     climatology_dir,
+    grid_step,
     is_land,
+    iter_cells,
     parse_month,
     product_meta,
     rule,
+    tile_bbox,
+    tile_step_deg,
     wrap_lon,
 )
 
@@ -145,6 +149,45 @@ def is_wave_hazard(lat: float, lon: float, month: int) -> bool | None:
     return w["hs_p90_m"] > nogo
 
 
+def _wave_field(bundle: dict, want: str) -> tuple[str | None, object | None]:
+    snapshot_stat = str(bundle["stat"][0]) if "stat" in bundle else None
+    field_name = {"p50": "hs_p50", "p90": "hs_p90", "mean": "hs_mean"}[want]
+    # Never serve a mean under the name P90.
+    if want == "p90" and (field_name not in bundle or snapshot_stat == "mean"):
+        field_name = None
+    return snapshot_stat, (bundle.get(field_name) if field_name else None)
+
+
+def _wave_features(month: int, bundle: dict, bbox, step: int, want: str, *, light: bool) -> tuple[list[dict], str | None]:
+    snapshot_stat, arr = _wave_field(bundle, want)
+    features: list[dict] = []
+    if arr is None:
+        return features, snapshot_stat
+    shown_stat = want if want != "p90" or snapshot_stat != "mean" else "mean"
+    for i, j, lat, lon in iter_cells(bundle, bbox, step):
+        v = float(arr[i, j])
+        if np.isnan(v) or v <= 0:
+            continue
+        dir_deg = _round(_val_cell(bundle.get("dir"), i, j))
+        if light:
+            props = {"hs_m": round(v, 2), "stat": shown_stat, "dir": dir_deg}
+        else:
+            props = {
+                "kind": KIND,
+                "month": month,
+                "stat": shown_stat,
+                "hs_m": round(v, 2),
+                "period_s": _round(_val_cell(bundle.get("period"), i, j)),
+                "dir_deg": dir_deg,
+            }
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
+            "properties": props,
+        })
+    return features, snapshot_stat
+
+
 def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dict:
     month = parse_month(month)
     want = (stat or "p90").lower()
@@ -156,41 +199,9 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
     if np is not None and has_snapshot(month):
         bundle = _bundle(month)
         if bundle is not None:
-            snapshot_stat = str(bundle["stat"][0]) if "stat" in bundle else None
-            lats, lons = bundle["lats"], bundle["lons"]
-            step = max(1, int(round(spacing / max(0.25, float(abs(lats[1] - lats[0]) if len(lats) > 1 else 0.5)))))
-            field_name = {
-                "p50": "hs_p50",
-                "p90": "hs_p90",
-                "mean": "hs_mean",
-            }[want]
-            # Never serve a mean under the name P90.
-            if want == "p90" and (field_name not in bundle or snapshot_stat == "mean"):
-                field_name = None
-            arr = bundle.get(field_name) if field_name else None
-            if arr is not None:
-                for i in range(0, len(lats), step):
-                    for j in range(0, len(lons), step):
-                        lat, lon = float(lats[i]), float(lons[j])
-                        if is_land(lat, lon):
-                            continue
-                        v = float(arr[i, j])
-                        if np.isnan(v) or v <= 0:
-                            continue
-                        period_s = _round(_val_cell(bundle.get("period"), i, j))
-                        dir_deg = _round(_val_cell(bundle.get("dir"), i, j))
-                        features.append({
-                            "type": "Feature",
-                            "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
-                            "properties": {
-                                "kind": KIND,
-                                "month": month,
-                                "stat": want if want != "p90" or snapshot_stat != "mean" else "mean",
-                                "hs_m": round(v, 2),
-                                "period_s": period_s,
-                                "dir_deg": dir_deg,
-                            },
-                        })
+            features, snapshot_stat = _wave_features(
+                month, bundle, None, grid_step(bundle, spacing), want, light=False,
+            )
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -207,3 +218,20 @@ def wave_geojson(month: int, stat: str = "p90", spacing_deg: float = 1.0) -> dic
             "snapshot_stat": snapshot_stat,
         },
     }
+
+
+def wave_tile(month: int, z: int, x: int, y: int, stat: str = "p90") -> dict:
+    """Light wave FeatureCollection for one XYZ tile. Empty if the snapshot is missing."""
+    month = parse_month(month)
+    want = (stat or "p90").lower()
+    if want not in ("p50", "p90", "mean"):
+        want = "p90"
+    features: list[dict] = []
+    if np is not None and has_snapshot(month):
+        bundle = _bundle(month)
+        if bundle is not None:
+            features, _stat = _wave_features(
+                month, bundle, tile_bbox(z, x, y), grid_step(bundle, tile_step_deg(z)),
+                want, light=True,
+            )
+    return {"type": "FeatureCollection", "features": features}
