@@ -11,10 +11,14 @@ from app.services.climatology_common import (
     CURRENT_PERIOD,
     climatology_dir,
     current_to_uv,
+    grid_step,
     is_land,
+    iter_cells,
     parse_month,
     product_meta,
     rule,
+    tile_bbox,
+    tile_step_deg,
     wrap_lon,
 )
 
@@ -88,6 +92,35 @@ def current_at(lat: float, lon: float, month: int) -> dict | None:
     }
 
 
+def _current_features(month: int, bundle: dict, bbox, step: int, *, light: bool) -> list[dict]:
+    features: list[dict] = []
+    for _i, _j, lat, lon in iter_cells(bundle, bbox, step):
+        rec = current_at(lat, lon, month)
+        if rec is None:
+            continue
+        if light:
+            if rec["below_threshold"]:
+                continue
+            props = {
+                "speed_knots": rec["speed_knots"],
+                "direction_to_deg": rec["direction_to_deg"],
+            }
+        else:
+            props = {
+                "kind": KIND,
+                "month": month,
+                "speed_knots": rec["speed_knots"],
+                "direction_to_deg": rec["direction_to_deg"],
+                "below_threshold": rec["below_threshold"],
+            }
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
+            "properties": props,
+        })
+    return features
+
+
 def current_geojson(month: int, spacing_deg: float = 1.0) -> dict:
     month = parse_month(month)
     spacing = max(0.5, min(4.0, float(spacing_deg)))
@@ -95,27 +128,7 @@ def current_geojson(month: int, spacing_deg: float = 1.0) -> dict:
     if np is not None and has_snapshot(month):
         bundle = _load_month(month)
         if bundle is not None:
-            lats, lons = bundle["lats"], bundle["lons"]
-            step = max(1, int(round(spacing / max(0.25, float(abs(lats[1] - lats[0]) if len(lats) > 1 else 0.5)))))
-            for i in range(0, len(lats), step):
-                for j in range(0, len(lons), step):
-                    lat, lon = float(lats[i]), float(lons[j])
-                    if is_land(lat, lon):
-                        continue
-                    rec = current_at(lat, lon, month)
-                    if rec is None:
-                        continue
-                    features.append({
-                        "type": "Feature",
-                        "geometry": {"type": "Point", "coordinates": [round(lon, 4), round(lat, 4)]},
-                        "properties": {
-                            "kind": KIND,
-                            "month": month,
-                            "speed_knots": rec["speed_knots"],
-                            "direction_to_deg": rec["direction_to_deg"],
-                            "below_threshold": rec["below_threshold"],
-                        },
-                    })
+            features = _current_features(month, bundle, None, grid_step(bundle, spacing), light=False)
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -130,3 +143,17 @@ def current_geojson(month: int, spacing_deg: float = 1.0) -> dict:
             "snapshot_present": has_snapshot(month),
         },
     }
+
+
+def current_tile(month: int, z: int, x: int, y: int) -> dict:
+    """Light current FeatureCollection for one XYZ tile. Empty if the snapshot is missing."""
+    month = parse_month(month)
+    features: list[dict] = []
+    if np is not None and has_snapshot(month):
+        bundle = _load_month(month)
+        if bundle is not None:
+            features = _current_features(
+                month, bundle, tile_bbox(z, x, y), grid_step(bundle, tile_step_deg(z)),
+                light=True,
+            )
+    return {"type": "FeatureCollection", "features": features}
