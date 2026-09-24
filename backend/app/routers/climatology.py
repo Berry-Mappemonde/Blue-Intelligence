@@ -4,6 +4,7 @@ GET /api/climatology/meta
 GET /api/climatology/point?lat=&lon=&month=
 GET /api/climatology/crossings?lat1=&lon1=&lat2=&lon2=&month=
 GET /api/climatology/{wind|wave|current|cyclones}.geojson?month=
+GET /api/climatology/{wind|wave|current}/tiles/{z}/{x}/{y}.json?month=
 """
 from __future__ import annotations
 
@@ -31,11 +32,11 @@ from app.services.climatology_common import (
     snapshot_status,
     wrap_lon,
 )
-from app.services.climatology_current import current_at, current_geojson
+from app.services.climatology_current import current_at, current_geojson, current_tile
 from app.services.climatology_cyclones import crossings as cyclone_crossings
 from app.services.climatology_cyclones import nearby_count, tracks_geojson, tracks_in_month
-from app.services.climatology_wave import wave_at, wave_geojson
-from app.services.climatology_wind import atlas_at, wind_geojson
+from app.services.climatology_wave import wave_at, wave_geojson, wave_tile
+from app.services.climatology_wind import atlas_at, wind_geojson, wind_tile
 
 router = APIRouter(prefix="/api")
 
@@ -216,3 +217,31 @@ def climatology_cyclones_geojson(response: Response, month: int = Query(..., ge=
     response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
     return _export(tracks_geojson(_month(month)),
                    "climatology-cyclones", LICENSE_IBTRACS)
+
+
+@router.get("/climatology/{kind}/tiles/{z}/{x}/{y}.json")
+def climatology_tile(
+    response: Response,
+    kind: str,
+    z: int,
+    x: int,
+    y: int,
+    month: int = Query(..., ge=1, le=12),
+    stat: str = Query("p90"),
+):
+    """XYZ Web Mercator tile. Empty FeatureCollection (200) if out of range, land, or no snapshot."""
+    response.headers["Cache-Control"] = CACHE_CONTROL_LAYER
+    if kind not in ("wind", "wave", "current"):
+        raise HTTPException(404, "unknown climatology kind")
+    month = _month(month)
+    empty = {"type": "FeatureCollection", "features": []}
+    if z < 0 or z > 12 or x < 0 or y < 0:
+        return empty
+    n = 1 << int(z)
+    if x >= n or y >= n:
+        return empty
+    if kind == "wind":
+        return wind_tile(month, z, x, y)
+    if kind == "wave":
+        return wave_tile(month, z, x, y, stat=stat)
+    return current_tile(month, z, x, y)

@@ -27,6 +27,8 @@ from app.services.climatology_common import (
     KIND,
     current_to_uv,
     is_land,
+    tile_bbox,
+    tile_step_deg,
     wind_from_uv,
 )
 
@@ -573,3 +575,136 @@ def test_meteo_agent_cites_ibtracs_integer():
     assert "IBTrACS" in prompt
     assert str(count) in prompt
     assert "hurricane season" in prompt.lower() or "Cite this integer" in prompt
+
+
+# ---------------------------------------------------------------------------
+# XYZ tiles (lot RD8)
+# ---------------------------------------------------------------------------
+
+def test_tile_bbox_four_known_leaflet_tiles():
+    w, s, e, n = tile_bbox(0, 0, 0)
+    assert w == pytest.approx(-180.0)
+    assert e == pytest.approx(180.0)
+    assert n == pytest.approx(85.0)
+    assert s == pytest.approx(-85.0)
+
+    w, s, e, n = tile_bbox(1, 0, 0)
+    assert (w, e) == pytest.approx((-180.0, 0.0))
+    assert s == pytest.approx(0.0, abs=1e-9)
+    assert n == pytest.approx(85.0)
+
+    w, s, e, n = tile_bbox(1, 1, 1)
+    assert (w, e) == pytest.approx((0.0, 180.0))
+    assert n == pytest.approx(0.0, abs=1e-9)
+    assert s == pytest.approx(-85.0)
+
+    w, s, e, n = tile_bbox(2, 2, 1)
+    assert (w, e) == pytest.approx((0.0, 90.0))
+    assert s == pytest.approx(0.0, abs=1e-9)
+    assert n == pytest.approx(66.5132604431, abs=0.01)
+
+
+def test_tile_step_deg_by_zoom():
+    assert tile_step_deg(0) == 4.0
+    assert tile_step_deg(1) == 4.0
+    assert tile_step_deg(2) == 4.0
+    assert tile_step_deg(3) == 2.0
+    assert tile_step_deg(4) == 1.0
+    assert tile_step_deg(6) == 1.0
+
+
+def test_empty_tile_is_200_without_snapshot(no_cmems_snapshots):
+    r = _client().get("/api/climatology/wind/tiles/4/0/0.json", params={"month": 3})
+    assert r.status_code == 200
+    assert r.json() == {"type": "FeatureCollection", "features": []}
+    assert "max-age=86400" in r.headers["cache-control"]
+    land = _client().get("/api/climatology/wave/tiles/6/32/20.json", params={"month": 7, "stat": "p90"})
+    assert land.status_code == 200
+    assert land.json()["features"] == []
+    unknown = _client().get("/api/climatology/cyclones/tiles/1/0/0.json", params={"month": 9})
+    assert unknown.status_code == 404
+
+
+def test_wind_tile_light_props_stay_inside_bbox(tmp_path, monkeypatch):
+    wind_dir = tmp_path / "wind"
+    wind_dir.mkdir()
+    # 1° grid covering tile 4/6/7 (lon −45–−22.5, lat 0–~21.9) plus outsiders.
+    lats = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 30.0])
+    lons = np.array([-50.0, -40.0, -30.0, -25.0, -20.0, -10.0, 0.0])
+    ny, nx = len(lats), len(lons)
+    pct = np.zeros((ny, nx, 8), dtype=float)
+    spd = np.zeros((ny, nx, 8), dtype=float)
+    pct[:, :, 1] = 55.0
+    spd[:, :, 1] = 16.0
+    _write_grid(
+        wind_dir / "wind-03.npz",
+        lats=lats, lons=lons,
+        sector_pct=pct, sector_spd=spd,
+        calm_pct=np.full((ny, nx), 4.0),
+        gale_pct=np.full((ny, nx), 1.0),
+        u_mean=np.full((ny, nx), -2.0),
+        v_mean=np.full((ny, nx), -4.0),
+        sample_count=np.full((ny, nx), 1800, dtype=int),
+        sea_mask=np.ones((ny, nx), dtype=bool),
+    )
+    monkeypatch.setattr(wind_mod, "wind_dir", lambda: wind_dir)
+    wind_mod._load_month.cache_clear()
+    west, south, east, north = tile_bbox(4, 6, 7)
+    fc = wind_mod.wind_tile(3, 4, 6, 7)
+    assert fc["features"]
+    allowed = {"speed_knots", "dir_from_deg", "calm_pct", "gale_pct"}
+    for feat in fc["features"]:
+        lon, lat = feat["geometry"]["coordinates"]
+        assert south <= lat <= north
+        assert west <= lon <= east
+        assert set(feat["properties"]) == allowed
+        assert "directions_from" not in feat["properties"]
+    geo = wind_mod.wind_geojson(3, spacing_deg=0.5)
+    assert geo["features"]
+    assert "directions_from" in geo["features"][0]["properties"]
+    assert geo["features"][0]["properties"]["wind_speed_knots"] == 16.0
+
+
+def test_wave_and_current_tiles_are_light(tmp_path, monkeypatch):
+    wave_dir = tmp_path / "wave"
+    wave_dir.mkdir()
+    lats = np.array([0.0, 5.0, 10.0, 15.0, 20.0])
+    lons = np.array([-40.0, -30.0, -25.0, -20.0, -10.0])
+    ny, nx = len(lats), len(lons)
+    _write_grid(
+        wave_dir / "wave-07.npz",
+        lats=lats, lons=lons,
+        hs_p50=np.full((ny, nx), 2.1),
+        hs_p90=np.full((ny, nx), 4.4),
+        period=np.full((ny, nx), 11.0),
+        dir=np.full((ny, nx), 250.0),
+        sea_mask=np.ones((ny, nx), dtype=bool),
+        stat=np.array(["p50_p90"]),
+    )
+    monkeypatch.setattr(wave_mod, "wave_dir", lambda: wave_dir)
+    wave_mod._load_month.cache_clear()
+    wave = wave_mod.wave_tile(7, 4, 6, 7, stat="p90")
+    assert wave["features"]
+    assert set(wave["features"][0]["properties"]) == {"hs_m", "stat", "dir"}
+    assert wave["features"][0]["properties"]["hs_m"] == 4.4
+    assert wave["features"][0]["properties"]["dir"] == 250.0
+    geo = wave_mod.wave_geojson(7, stat="p90", spacing_deg=0.5)
+    assert geo["features"][0]["properties"]["period_s"] == 11.0
+    assert geo["features"][0]["properties"]["dir_deg"] == 250.0
+
+    cur_dir = tmp_path / "current"
+    cur_dir.mkdir()
+    _write_grid(
+        cur_dir / "current-02.npz",
+        lats=lats, lons=lons,
+        uo=np.full((ny, nx), 0.6),
+        vo=np.full((ny, nx), 0.6),
+        sea_mask=np.ones((ny, nx), dtype=bool),
+    )
+    monkeypatch.setattr(current_mod, "current_dir", lambda: cur_dir)
+    current_mod._load_month.cache_clear()
+    cur = current_mod.current_tile(2, 4, 6, 7)
+    assert cur["features"]
+    assert set(cur["features"][0]["properties"]) == {"speed_knots", "direction_to_deg"}
+    geo_c = current_mod.current_geojson(2, spacing_deg=0.5)
+    assert "below_threshold" in geo_c["features"][0]["properties"]
