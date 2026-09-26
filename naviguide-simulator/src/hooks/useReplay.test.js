@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { advanceReplayTime, filmPlan, positionAt } from "../engine/replay.js";
-import { applyReplayStop, approachStopEvent, filmSpeakSeconds, filmTextHasT0Year, linearFilmAt, pickFilmChapters, resolveFilmTargetSeconds, shouldHoldFilmForBudget, shouldReturnToLive, stepAlongPlan, toggleFilmDuration, voiceLeadPolicy } from "./useReplay.js";
+import { applyReplayStop, approachStopEvent, canStartOfficialReplay, filmSpeakSeconds, filmTextHasT0Year, followClockLineFromT0, followEtaFromClock, isRe7OfficialFilm, linearFilmAt, officialFilmStatus, pickFilmChapters, resolveFilmTargetSeconds, shouldHoldFilmForBudget, shouldReturnToLive, stepAlongPlan, toggleFilmDuration, voiceLeadPolicy } from "./useReplay.js";
+import { DEFAULT_T0_ISO, simulationT0Iso } from "../engine/voyageClock.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hook = readFileSync(join(here, "useReplay.js"), "utf8");
@@ -13,7 +14,7 @@ const bar = readFileSync(join(here, "..", "components", "SimulationFilmBar.jsx")
 
 describe("useReplay contract (lot E)", () => {
   it("replays on the official clock, consumes the film plan, and hands back to live at the end or on Stop", () => {
-    assert.match(hook, /replayWindow\(clock, Date\.now\(\)\)/);
+    assert.match(hook, /replayWindow\(clockToUse, Date\.now\(\)\)/);
     assert.match(hook, /requestAnimationFrame\(tick\)/);
     assert.match(hook, /if \(done\)/);
     assert.match(hook, /const stop = useCallback/);
@@ -194,13 +195,117 @@ describe("useReplay lot R3 — onend immédiat sans boundary", () => {
     const ch2026 = [{ text: "L’expédition a quitté Saint-Maur le 15 mai 2026." }];
     assert.equal(filmTextHasT0Year(ch2026, "2026-05-15T08:00:00.000Z"), true);
     assert.equal(filmTextHasT0Year(ch2026, "2025-05-15T08:00:00.000Z"), false);
-    assert.match(hook, /filmTextHasT0Year\(remote\.chapters, t0\)/);
+    assert.match(hook, /filmTextHasT0Year\(remoteToUse\.chapters, t0\)/);
+  });
+});
+
+describe("lot RE4 — ligne d'état pilotée par le t0 de la barre", () => {
+  const sample = {
+    sailNm: 14220,
+    seaHours: 112 * 24,
+    iso: "2026-09-26T09:14:00.000Z",
+  };
+  const t0_2025 = "2025-05-15T08:00:00.000Z";
+
+  it("changer le t0 change l'année et garde le jour de voyage dérivé des heures de mer", () => {
+    const live = followClockLineFromT0({ ...sample, t0: DEFAULT_T0_ISO, lang: "fr" });
+    const shifted = followClockLineFromT0({ ...sample, t0: t0_2025, lang: "fr" });
+    assert.match(live, /2026/);
+    assert.match(live, /j112/);
+    assert.match(shifted, /2025/);
+    assert.match(shifted, /j112/);
+    assert.notEqual(live, shifted);
+    assert.match(shifted, /26 sept\. 2025 · 09:14 UTC/);
+  });
+
+  it("remettre le t0 par défaut restaure la ligne d'origine", () => {
+    const live = followClockLineFromT0({ ...sample, t0: DEFAULT_T0_ISO, lang: "fr" });
+    const shifted = followClockLineFromT0({ ...sample, t0: t0_2025, lang: "fr" });
+    const restored = followClockLineFromT0({ ...sample, t0: DEFAULT_T0_ISO, lang: "fr" });
+    assert.notEqual(shifted, live);
+    assert.equal(restored, live);
+  });
+
+  it("restants et ETA viennent des durées de jambes, pas du t0 Simulation", () => {
+    const clock = {
+      t0: DEFAULT_T0_ISO,
+      vertices: [
+        { filmNm: 0, tHours: 0, iso: DEFAULT_T0_ISO, seaHours: 0, sailNm: 0 },
+        { filmNm: 83, tHours: 10, iso: "2026-05-15T18:00:00.000Z", seaHours: 10, sailNm: 83 },
+      ],
+    };
+    const eta = followEtaFromClock(clock, 0, 83);
+    const shiftedClock = { ...clock, t0: t0_2025 };
+    assert.equal(followEtaFromClock(shiftedClock, 0, 83), eta);
+    assert.equal(eta, 10);
+    const simT0 = simulationT0Iso(new Date("2026-09-26T12:00:00.000Z"));
+    assert.notEqual(simT0, DEFAULT_T0_ISO);
+    assert.notEqual(simT0, t0_2025);
+  });
+
+  it("App décale la ligne dès le champ date, sans toucher au t0 Simulation", () => {
+    assert.match(app, /followClockLineFromT0/);
+    assert.match(app, /t0: isSuivre \? replayT0/);
+    assert.doesNotMatch(app, /iso: isSuivre && replay\.active/);
+    assert.match(app, /onDepartureT0=\{voyage\.setT0\}/);
+    assert.match(app, /onT0: setReplayT0/);
+    assert.doesNotMatch(app, /voyage\.setT0\(replayT0\)/);
+    assert.doesNotMatch(app, /voyage\.setT0\(DEFAULT_T0_ISO\)/);
   });
 });
 
 function chapterHasFirstLeg(ch) {
   return Number.isFinite(ch.fromLat) && Number.isFinite(ch.toLat);
 }
+
+describe("lot RC10 — film officiel, pas la Simulation", () => {
+  it("empreinte RE7 : pas Bay of Biscay, pas milles nautiques du départ, ≤ 800 mots", () => {
+    assert.equal(isRe7OfficialFilm({
+      chapters: [{ text: "Départ de Saint-Maur. golfe de Gascogne. Aujourd’hui, le bateau est à Nouméa." }],
+    }), true);
+    assert.equal(isRe7OfficialFilm({ chapters: [{ text: "Bay of Biscay ".repeat(10) }] }), false);
+    assert.equal(isRe7OfficialFilm({
+      chapters: [{ text: "Aujourd'hui, le bateau est à 19 260 milles nautiques du départ." }],
+    }), false);
+    assert.equal(isRe7OfficialFilm({ chapters: [{ text: `${"mot ".repeat(801)}` }] }), false);
+    assert.equal(isRe7OfficialFilm({ chapters: [] }), false);
+  });
+
+  it("officialFilmStatus : absent si fetch échoue, stale si empreinte manquante", () => {
+    assert.equal(officialFilmStatus(null, { fetchFailed: true }), "absent");
+    assert.equal(officialFilmStatus(null), "pending");
+    assert.equal(officialFilmStatus({
+      chapters: [{ text: "Saint-Maur golfe de Gascogne Gibraltar. Aujourd’hui, le bateau est à Nouméa." }],
+    }), "ready");
+    assert.equal(officialFilmStatus({
+      chapters: [{ text: "Bay of Biscay and milles nautiques du départ" }],
+    }), "stale");
+  });
+
+  it("Revoir attend l'horloge officielle + /film RE7 ; repli local seulement sans API", () => {
+    assert.equal(canStartOfficialReplay({ officialClock: { t0: "x" }, remoteStatus: "ready" }), true);
+    assert.equal(canStartOfficialReplay({ officialClock: null, remoteStatus: "ready" }), false);
+    assert.equal(canStartOfficialReplay({
+      officialClock: null, fallbackClock: { t0: "y" }, remoteStatus: "absent",
+    }), true);
+    assert.equal(canStartOfficialReplay({ officialClock: { t0: "x" }, remoteStatus: "pending" }), false);
+    assert.equal(canStartOfficialReplay({ officialClock: { t0: "x" }, remoteStatus: "stale" }), false);
+  });
+
+  it("App : film = official.clock, Revoir seulement si canStart", () => {
+    assert.match(app, /const filmClock = isSuivre \? official\.clock : voyage\.clock/);
+    assert.match(app, /clock: filmClock/);
+    assert.match(app, /fallbackClock: voyage\.clock/);
+    assert.match(app, /requireOfficialFilm: isSuivre/);
+    assert.match(app, /officialClock && replay\.canStart/);
+    assert.match(hook, /isRe7OfficialFilm/);
+    assert.match(hook, /seekChapter/);
+    assert.match(hook, /pinnedIdxRef/);
+    const replayCall = app.slice(app.indexOf("const replay = useReplay"), app.indexOf("const live = isSuivre"));
+    assert.match(replayCall, /clock: filmClock/);
+    assert.doesNotMatch(replayCall, /clock: officialClock/);
+  });
+});
 
 describe("useReplay lot R4 — temps continu entre deux boundaries", () => {
   it("60 frames entre deux boundaries : 60 positions croissantes, pas < 1/30 de la jambe", () => {
