@@ -25,7 +25,7 @@ import { useMoment } from "./hooks/useMoment.js";
 import { useMomentJournal } from "./hooks/useMomentJournal.js";
 import { useEscaleSheetState } from "./hooks/useEscaleSheetState.js";
 import { useLogbookChat } from "./hooks/useLogbookChat.js";
-import { useReplay } from "./hooks/useReplay.js";
+import { followClockLineFromT0, useReplay } from "./hooks/useReplay.js";
 import { useReplayVoice } from "./hooks/useReplayVoice.js";
 import { dayMonth, expeditionStory } from "./engine/expeditionStory.js";
 import { sumRainHours } from "./engine/eventRules.js";
@@ -52,11 +52,9 @@ import {
   DEFAULT_START_AT,
   DEFAULT_T0_ISO,
   etaHoursToFilmNm,
-  formatFilmClockLine,
   formatMonthName,
   lookupVoyageClock,
   monthOfT0,
-  rebaseIso,
   sampleClockAtTime,
 } from "./engine/voyageClock.js";
 import { VIEW_SIMULATION, VIEW_SUIVRE } from "./constants/viewMode.js";
@@ -153,7 +151,7 @@ export default function App() {
   });
   const [maritimeLayerState, setMaritimeLayerState] = useState(null);
   const maritimeLayers = maritimeLayerState || EMPTY_MARITIME_LAYERS;
-  const [climoLayer, setClimoLayer] = useState({ loading: false, error: null, counts: null });
+  const [climoLayer, setClimoLayer] = useState({ loading: false, error: null, counts: null, source: null });
   const [isLightMode, setIsLightMode] = useState(false);
 
   const [segments, setSegments] = useState([]);
@@ -162,15 +160,15 @@ export default function App() {
   const [segProgress, setSegProgress] = useState({ done: 0, total: 0 });
   const [officialFallback, setOfficialFallback] = useState(false);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [toolsOpen, setToolsOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [expeditionPlan, setExpeditionPlan] = useState(null);
   const [polarData, setPolarData] = useState(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
 
-  const [view, setView] = useState(VIEW_SUIVRE);
+  const [view, setView] = useState(VIEW_SIMULATION);
   const [replayT0, setReplayT0] = useState(DEFAULT_T0_ISO);
-  const [cinemaMode, setCinemaMode] = useState(false);
+  const [cinemaMode, setCinemaMode] = useState(true);
   const [filmFullscreen, setFilmFullscreen] = useState(false);
   const [hideFilmBar, setHideFilmBar] = useState(false);
   const [stopAuto, setStopAuto] = useState(false);
@@ -588,14 +586,14 @@ export default function App() {
   const chat = useLogbookChat({ lang, contextFn: chatContextFn });
 
   const clockLine = officialClock?.vertices?.length && clockSample
-    ? formatFilmClockLine({
+    ? followClockLineFromT0({
       sailNm: isSuivre && !previewing
         ? (clockSample.sailNm ?? cast?.sailNm)
         : (cast?.sailNm ?? clockSample.sailNm),
       seaHours: clockSample.seaHours,
-      iso: isSuivre && replay.active
-        ? rebaseIso(clockSample.iso, DEFAULT_T0_ISO, replayT0)
-        : clockSample.iso,
+      iso: clockSample.iso,
+      fromT0: officialClock.t0 || DEFAULT_T0_ISO,
+      t0: isSuivre ? replayT0 : (officialClock.t0 || DEFAULT_T0_ISO),
       lang,
     })
     : "";
@@ -1006,10 +1004,16 @@ export default function App() {
       sceneApiRef.current?.playback.setProfile("normal");
       sceneApiRef.current?.playback.pause();
       sceneApiRef.current?.playback.seek(simNmRef.current || 0, { jump: true });
+      if (view === VIEW_SUIVRE) {
+        leaveCinema();
+        setSidebarOpen(true);
+        setToolsOpen(true);
+      }
     }
   }, [
     cinemaMode,
     closeEscaleSheet,
+    leaveCinema,
     recaptureBoat,
     replay.active,
     replay.stop,
@@ -1656,7 +1660,7 @@ export default function App() {
         }}
         escaleMarks={legendMarks}
         filmNm={sidebarPlaybackNm}
-        onSeekEscale={handleSidebarSeek}
+        onSeekEscale={isSuivre ? undefined : handleSidebarSeek}
         onEscaleSheet={openEscaleFromUi}
         drawing={drawing}
         showDeparture={isSimulation}
@@ -1750,6 +1754,9 @@ export default function App() {
                 maritimeLayers.showClimoCurrent && `courant ${climoLayer.counts.current || 0}`,
                 maritimeLayers.showClimoCyclones && `IBTrACS ${climoLayer.counts.cyclones || 0}`,
               ].filter(Boolean).join(" · ")}
+              {climoLayer.source === "global" && (
+                <span data-testid="climatology-source">{` · ${t("climatologySourceGlobal")}`}</span>
+              )}
             </span>
           )}
           {climoLayer.error === "atlas_empty" && atlas.alive === false && (
