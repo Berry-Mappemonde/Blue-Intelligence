@@ -1,14 +1,13 @@
-// Lot RC11 / RC10 / RE7 — récit officiel, pas le film Simulation.
-// Sans API : Revoir visible et non cliquable, champ date là, pas de récit
-// Ajaccio. GET /voyage/official sondé ; s'il manque, annotation + saut des
-// seules assertions du script serveur — jamais Revoir retiré, ni le champ
-// date, ni les asserts hors API.
+// Lot RC11 — Revoir et la date restent visibles ; plus de film Simulation
+// si l'API manque. GET /voyage/official sondé ; s'il manque, annotation +
+// saut des seules assertions du /film ready — jamais Revoir, ni le champ
+// date, ni « non cliquable ».
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
-const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-re7");
+const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rc11");
 mkdirSync(recetteDir, { recursive: true });
 
 const shot = (page, name) => page.screenshot({
@@ -19,8 +18,6 @@ const shot = (page, name) => page.screenshot({
 });
 
 const FORBIDDEN = /station croisée\s*:\s*Station croisée|Aucun port d'entr[ée]e|entrée dans Entrée dans/i;
-const LAST_LEG = /Aujourd[’']hui, le bateau est à/i;
-const GEO = /golfe de Gascogne|détroit de Gibraltar|Gibraltar/i;
 
 async function dismissNotForNav(page) {
   const ok = page.getByRole("button", { name: /compris|j.ai compris|ok|continuer|accepter|understand|accept/i }).first();
@@ -76,14 +73,14 @@ async function waitRe7Film(page, { timeout = 45_000 } = {}) {
   return last ? { film: last, stale: !isRe7Film(last) } : null;
 }
 
-test("lot RE7 — récit sans durée, un lieu une fois, dernière jambe fermée", async ({ page }) => {
+test("lot RC11 — Revoir grisé tant que /film n'est pas prêt, date toujours là", async ({ page }) => {
   test.setTimeout(120_000);
   const official = await page.request.get("/voyage/official", { timeout: 5000 }).catch(() => null);
   const apiUp = Boolean(official && official.ok());
   if (!apiUp) {
     test.info().annotations.push({
       type: "sans API",
-      description: "GET /voyage/official absent — script serveur /film sauté",
+      description: "GET /voyage/official absent — assertions /film ready sautées",
     });
   }
 
@@ -95,91 +92,50 @@ test("lot RE7 — récit sans durée, un lieu une fois, dernière jambe fermée"
   await page.getByTestId("view-suivre").click();
   await expect(page.getByTestId("view-suivre")).toHaveAttribute("aria-checked", "true");
 
-  const durations = page.getByTestId("film-duration");
-  if (await durations.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    const pressed = durations.locator("[aria-pressed='true']");
-    await expect(pressed, "aucune durée cochée").toHaveCount(0);
-  }
+  const start = page.getByTestId("replay-start");
+  await expect(start).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("replay-departure")).toBeVisible();
 
   if (!apiUp) {
-    const start = page.getByTestId("replay-start");
-    await expect(start).toBeVisible({ timeout: 15_000 });
     await expect(start).toBeDisabled();
-    await expect(page.getByTestId("replay-departure")).toBeVisible();
-    await expect(durations).toHaveCount(0);
+    await expect(page.getByTestId("film-duration")).toHaveCount(0);
     await expect(page.getByTestId("replay-stop")).toHaveCount(0);
     await expect(page.getByTestId("film-subtitle")).toHaveCount(0);
     const started = await page.evaluate(() => Boolean(window.__naviguideFilm?.startedAt));
-    expect(started, "pas de film Simulation sans /film").toBe(false);
+    expect(started, "pas de récit Ajaccio sans /film").toBe(false);
+    await shot(page, "01-revoir-grise");
     return;
   }
 
   const probed = await waitRe7Film(page);
-  if (!probed?.film?.chapters?.length) {
+  if (!probed?.film?.chapters?.length || probed.stale) {
     test.info().annotations.push({
-      type: "film vide",
-      description: "GET /voyage/official/film?seconds=0 sans chapitres — discours sauté",
+      type: probed?.stale ? "API hors checkout" : "film vide",
+      description: "GET /film pas encore RE7 — Revoir reste grisé, date visible",
     });
-    return;
-  }
-  if (probed.stale) {
-    test.info().annotations.push({
-      type: "API hors checkout",
-      description: "GET /film du processus :8010 n'est pas encore RE7 — assertions discours sautées",
-    });
+    await expect(start).toBeDisabled();
+    await expect(page.getByTestId("replay-departure")).toBeVisible();
+    await expect(page.getByTestId("film-duration")).toHaveCount(0);
+    await shot(page, "01-revoir-grise");
     return;
   }
 
-  const free = probed.film;
-  const blob = free.chapters.map((c) => c.text || "").join(" ");
-  expect(free.targetSeconds, "sans case : pas de budget serveur").toBe(0);
-  const words = wordCount(blob);
-  expect(blob, "pas de station sans nom").not.toMatch(/station croisée\s*:\s*Station croisée/i);
-  expect(blob, "pas d'absence racontée").not.toMatch(/Aucun port d'entr[ée]e/i);
-  expect(blob, "pas d'entrée doublée").not.toMatch(/entrée dans Entrée dans/i);
-  expect(words, "récit sans budget sous 800 mots").toBeLessThanOrEqual(800);
-  expect(blob, "géographie officielle").toMatch(GEO);
-  const last = free.chapters[free.chapters.length - 1]?.text || "";
-  expect(last, "dernière jambe fermée").toMatch(LAST_LEG);
-  if (/halifax/i.test(blob) && /cayenne|guyane/i.test(blob)) {
-    expect(blob, "avion dit").toMatch(/avion|équipage prend/i);
-  }
-
-  const start = page.getByTestId("replay-start");
-  await expect(start).toBeVisible({ timeout: 30_000 });
   await expect(start).toBeEnabled({ timeout: 30_000 });
-  if (await durations.isVisible().catch(() => false)) {
-    await expect(durations.locator("[aria-pressed='true']"), "aucune durée cochée").toHaveCount(0);
-  }
+  await expect(page.getByTestId("replay-departure")).toBeVisible();
+  const durations = page.getByTestId("film-duration");
+  await expect(durations).toBeVisible();
+  await expect(durations.locator("[aria-pressed='true']"), "aucune durée cochée").toHaveCount(0);
   await muteVoice(page);
   await start.click();
   const subtitle = page.getByTestId("film-subtitle");
   await expect(subtitle).toBeVisible({ timeout: 8_000 });
   const sub = (await subtitle.innerText()).trim();
   expect(sub, "sous-titre non vide").not.toBe("");
-  expect(sub, "pas de phrase interdite dans le sous-titre").not.toMatch(FORBIDDEN);
+  expect(sub, "pas de phrase interdite").not.toMatch(FORBIDDEN);
   expect(sub, "récit officiel en tête").toMatch(/Saint-Maur/);
-  await shot(page, "01-recit");
-
-  const budgetNone = await page.evaluate(() => window.__naviguideFilm?.budgetSeconds);
-  expect(budgetNone, "aucune durée → pas de budget").toBe(0);
-
-  await page.waitForFunction(() => {
-    const f = window.__naviguideFilm;
-    return typeof f?.seekChapter === "function" && (f.chapterCount || 0) > 0;
-  }, null, { timeout: 8_000 });
-  const lastIdx = await page.evaluate(() => {
-    const f = window.__naviguideFilm;
-    const idx = Math.max(0, (f.chapterCount || 1) - 1);
-    f.seekChapter(idx);
-    return idx;
-  });
-  await expect(subtitle).toContainText(LAST_LEG, { timeout: 8_000 });
-  const endIdx = await page.evaluate(() => window.__naviguideFilm?.chapterIdx);
-  expect(endIdx, "02-fin à la dernière jambe").toBe(lastIdx);
-  await shot(page, "02-fin");
+  await shot(page, "02-revoir-actif");
 
   const stopBtn = page.getByTestId("replay-stop");
   if (await stopBtn.isVisible().catch(() => false)) await stopBtn.click();
-  await expect(page.getByTestId("replay-start")).toBeVisible({ timeout: 8_000 });
+  await expect(start).toBeVisible({ timeout: 8_000 });
 });
