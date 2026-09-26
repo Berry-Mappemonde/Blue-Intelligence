@@ -11,7 +11,7 @@ tag stays missing; a badge, a phone number or a VHF channel appears only if a
 tag attests it.
 
 This catalogue is an **OpenSeaMap export target** (BI fields ← OSM tags),
-not an S-101 encoder. See `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
+not an S-101 encoder. See `docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 
 ## How to read this catalogue
 
