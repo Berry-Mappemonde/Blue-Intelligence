@@ -140,6 +140,73 @@ def wrap_lon(lon: float) -> float:
     return ((float(lon) + 180.0) % 360.0) - 180.0
 
 
+# Web Mercator latitude limit used by Leaflet; we clamp displayed tiles to ±85°.
+TILE_MAX_LAT = 85.0
+
+
+def tile_step_deg(z: int) -> float:
+    """Native 1° from z=4; coarser farther out. z ≤ 2 → 4°, z = 3 → 2°, else 1°."""
+    return max(1.0, min(4.0, 16.0 / (2 ** int(z))))
+
+
+def tile_bbox(z: int, x: int, y: int) -> tuple[float, float, float, float]:
+    """XYZ Web Mercator (Leaflet). Returns ``(west, south, east, north)`` in degrees."""
+    z = int(z)
+    x = int(x)
+    y = int(y)
+    n = 2.0 ** max(0, z)
+
+    def _merc_lat(ty: float) -> float:
+        return math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * ty / n))))
+
+    west = x / n * 360.0 - 180.0
+    east = (x + 1) / n * 360.0 - 180.0
+    north = max(-TILE_MAX_LAT, min(TILE_MAX_LAT, _merc_lat(float(y))))
+    south = max(-TILE_MAX_LAT, min(TILE_MAX_LAT, _merc_lat(float(y + 1))))
+    if south > north:
+        south, north = north, south
+    return (west, south, east, north)
+
+
+def grid_step(bundle: dict, spacing_deg: float) -> int:
+    """Index stride so the walk matches the historical ``spacing_deg`` geojson."""
+    lats = bundle["lats"]
+    res = abs(float(lats[1] - lats[0])) if len(lats) > 1 else 0.5
+    return max(1, int(round(float(spacing_deg) / max(0.25, res))))
+
+
+def _lon_in_span(lon: float, west: float, east: float) -> bool:
+    lon_w = wrap_lon(lon)
+    west_w = wrap_lon(west)
+    east_w = wrap_lon(east)
+    if west <= east and abs(east - west) < 360.0 - 1e-9:
+        if west_w <= east_w:
+            return west_w <= lon_w <= east_w
+        return lon_w >= west_w or lon_w <= east_w
+    return lon_w >= west_w or lon_w <= east_w
+
+
+def iter_cells(bundle: dict, bbox: tuple[float, float, float, float] | None, step: int):
+    """Yield ``(i, j, lat, lon)`` for sea cells. ``bbox`` is west/south/east/north or None (world)."""
+    lats = bundle["lats"]
+    lons = bundle["lons"]
+    stride = max(1, int(step))
+    west = south = east = north = None
+    if bbox is not None:
+        west, south, east, north = (float(v) for v in bbox)
+    for i in range(0, len(lats), stride):
+        lat = float(lats[i])
+        if south is not None and (lat < south or lat > north):
+            continue
+        for j in range(0, len(lons), stride):
+            lon = float(lons[j])
+            if west is not None and not _lon_in_span(lon, west, east):
+                continue
+            if is_land(lat, lon):
+                continue
+            yield i, j, lat, lon
+
+
 def is_land(lat: float, lon: float) -> bool:
     """True on land. Never invent a wind / Hs / current there."""
     if not (-90.0 <= lat <= 90.0):
