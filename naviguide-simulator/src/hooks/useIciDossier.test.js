@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { wrapLon } from "../utils/geo.js";
-import { iciSearchParams } from "./useIciDossier.js";
+import { countIciFetchesAlongTrack, iciSearchParams, shouldScheduleIciFetch } from "./useIciDossier.js";
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "useIciDossier.js"), "utf8");
 
@@ -40,5 +40,41 @@ describe("useIciDossier contract", () => {
     assert.match(src, /Changing orders never rewinds/);
     assert.doesNotMatch(src, /await enqueueStory|await fetch\(.*chat|Nemotron|Token Factory/);
     assert.doesNotMatch(src, /tavily\?|nvidia\?/);
+    assert.match(src, /frozen = false/);
+    assert.match(src, /shouldScheduleIciFetch/);
+    assert.match(src, /Lot RF4/);
+  });
+});
+
+describe("useIciDossier — lot RF4 film sans rafale", () => {
+  function eastTrack(totalNm, stepNm = 20) {
+    const points = [];
+    for (let nm = 0; nm <= totalNm; nm += stepNm) {
+      points.push({ lat: 0, lon: wrapLon(nm / 60) });
+    }
+    return points;
+  }
+
+  it("3 000 nm de film gelé → zéro GET /ici, un rattrapage à l'arrêt", () => {
+    const track = eastTrack(3000);
+    assert.ok(track.length > 100);
+    assert.equal(countIciFetchesAlongTrack(track, { frozen: true, catchup: false }), 0);
+    assert.equal(countIciFetchesAlongTrack(track, { frozen: true, catchup: true }), 1);
+    assert.ok(countIciFetchesAlongTrack(track, { frozen: false, catchup: false }) > 50);
+    assert.equal(shouldScheduleIciFetch({
+      frozen: true,
+      enabled: true,
+      boat: { lat: 0, lon: 40 },
+      lastFetch: { lat: 0, lon: 0, month: undefined, destLat: undefined, destLon: undefined },
+      now: 20_000,
+    }), false);
+    assert.equal(shouldScheduleIciFetch({
+      frozen: false,
+      enabled: true,
+      boat: { lat: 0, lon: 40 },
+      lastFetch: null,
+      now: 20_000,
+      refetch: 1,
+    }), true);
   });
 });

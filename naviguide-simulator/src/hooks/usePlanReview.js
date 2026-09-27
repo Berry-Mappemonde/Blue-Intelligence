@@ -368,11 +368,36 @@ export async function pollOfficialEta(stopName, {
   return null;
 }
 
-export function useOfficialEta(stopName, { enabled = true } = {}) {
+/** Lot RF4 : the film boat must not re-probe /eta as it crosses stops. */
+export function shouldProbeOfficialEta({ frozen = false, enabled = true, stopName = "" } = {}) {
+  return Boolean(!frozen && enabled && String(stopName || "").trim());
+}
+
+export function shouldPollOfficialAdvice({ frozen = false, enabled = true, reviewKey = "" } = {}) {
+  return Boolean(!frozen && enabled && reviewKey);
+}
+
+/** Simulated film: one probe per stop when live ; zero while frozen ; one catch-up. */
+export function countEtaProbesAlongStops(stopNames, { frozen = false, catchup = false } = {}) {
+  let n = 0;
+  for (const stopName of stopNames) {
+    if (shouldProbeOfficialEta({ frozen, enabled: true, stopName })) n += 1;
+  }
+  if (catchup && shouldProbeOfficialEta({
+    frozen: false,
+    enabled: true,
+    stopName: stopNames[0] || "",
+  })) {
+    n += 1;
+  }
+  return n;
+}
+
+export function useOfficialEta(stopName, { enabled = true, frozen = false } = {}) {
   const [eta, setEta] = useState(null);
   useEffect(() => {
-    if (!enabled || !stopName) {
-      setEta(null);
+    if (!shouldProbeOfficialEta({ frozen, enabled, stopName })) {
+      if (!frozen && (!enabled || !stopName)) setEta(null);
       return undefined;
     }
     const controller = new AbortController();
@@ -387,7 +412,7 @@ export function useOfficialEta(stopName, { enabled = true } = {}) {
       alive = false;
       controller.abort();
     };
-  }, [enabled, stopName]);
+  }, [enabled, stopName, frozen]);
   return eta;
 }
 
@@ -398,12 +423,12 @@ export function useOfficialEta(stopName, { enabled = true } = {}) {
  * Read-only; refreshed every 10 min (the pearls keep warming).
  * Lot C6 : fourchette p10–p90 de la prochaine escale, si l'ensemble répond.
  */
-export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lang = "fr", galeLimitPct } = {}) {
+export function usePlanReview({ enabled = true, frozen = false, clock, lookup, revision = 0, lang = "fr", galeLimitPct } = {}) {
   const [review, setReview] = useState(null);
   const [advice, setAdvice] = useState(null);
   const [error, setError] = useState(null);
   const nextStop = useMemo(() => nextStopFromMarks(clock?.marks), [clock]);
-  const eta = useOfficialEta(nextStop, { enabled: enabled && Boolean(nextStop) });
+  const eta = useOfficialEta(nextStop, { enabled: enabled && Boolean(nextStop), frozen });
 
   useEffect(() => {
     if (!enabled) {
@@ -412,6 +437,7 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
       setError(null);
       return undefined;
     }
+    if (frozen) return undefined;
     let alive = true;
     const controller = new AbortController();
     const load = () => fetch(`${API_URL}/voyage/official/plan-review`, { signal: controller.signal })
@@ -440,7 +466,7 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
       controller.abort();
       clearInterval(timer);
     };
-  }, [enabled]);
+  }, [enabled, frozen]);
 
   const reviewed = useMemo(() => {
     const source = review || (!enabled ? REVIEW_FIXTURE : null);
@@ -455,7 +481,7 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
   const reviewKey = useMemo(() => reviewIdentity(review), [review]);
 
   useEffect(() => {
-    if (!enabled || !reviewKey) return undefined;
+    if (!shouldPollOfficialAdvice({ frozen, enabled, reviewKey })) return undefined;
     const controller = new AbortController();
     let alive = true;
     pollOfficialAdvice(heaviestIdx, {
@@ -469,7 +495,7 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
       alive = false;
       controller.abort();
     };
-  }, [enabled, reviewKey, heaviestIdx, lang]);
+  }, [enabled, frozen, reviewKey, heaviestIdx, lang]);
 
   const legs = useMemo(() => {
     const before = isAdviceDone(advice) ? Number(advice.best?.alertsBefore) : NaN;

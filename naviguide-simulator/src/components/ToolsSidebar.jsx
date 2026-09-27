@@ -180,7 +180,7 @@ function DrawingBox({ drawing }) {
   );
 }
 
-function ExpeditionBox({ routeDistanceNm, routeSegmentCount, routeCounts, waypointCount, escaleMarks, filmNm, onSeekEscale, onEscaleSheet, drawing = null, segments = [] }) {
+function ExpeditionBox({ routeDistanceNm, routeSegmentCount, routeCounts, waypointCount, escaleMarks, filmNm, onSeekEscale, onEscaleSheet, drawing = null, segments = [], filmFrozen = false }) {
   const { t, lang } = useLang();
   const locale = lang === "fr" ? "fr-FR" : "en-US";
   const nm = routeDistanceNm != null ? `${Number(routeDistanceNm).toLocaleString(locale)} nm` : "—";
@@ -210,7 +210,7 @@ function ExpeditionBox({ routeDistanceNm, routeSegmentCount, routeCounts, waypoi
           · {vertexCount.toLocaleString(locale)} {t("routePointsShort")}
         </span>
       </div>
-      <EscaleLegend marks={escaleMarks} filmNm={filmNm} onSeek={onSeekEscale} onSheet={onEscaleSheet} />
+      <EscaleLegend marks={escaleMarks} filmNm={filmNm} onSeek={onSeekEscale} frozen={filmFrozen} />
     </div>
   );
 }
@@ -221,7 +221,7 @@ export const ToolsSidebar = memo(function ToolsSidebar({
   polarData, onPolarDataLoaded,
   routeDistanceNm, routeSegmentCount,
   maritimeLayers = null,
-  escaleMarks = [], filmNm = 0, onSeekEscale, onEscaleSheet, drawing = null,
+  escaleMarks = [], filmNm = 0, onSeekEscale, onEscaleSheet, drawing = null, filmFrozen = false,
   showDeparture = false, departureT0, onDepartureT0,
   skipperOrders = null, skipperProfile = "cruise", onSkipperProfile, onSkipperReset,
   onSkipperComfort, onSkipperHorizon, onSkipperExpert, onSkipperBoat,
@@ -372,6 +372,7 @@ export const ToolsSidebar = memo(function ToolsSidebar({
               filmNm={filmNm}
               onSeekEscale={onSeekEscale}
               onEscaleSheet={onEscaleSheet}
+              filmFrozen={filmFrozen}
               drawing={drawing}
             />
             {showDeparture ? (

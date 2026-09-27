@@ -25,6 +25,9 @@ import {
   pollOfficialEta,
   reviewIdentity,
   tightenEtaMembers,
+  countEtaProbesAlongStops,
+  shouldProbeOfficialEta,
+  shouldPollOfficialAdvice,
 } from "./usePlanReview.js";
 import fr from "../i18n/fr.js";
 import en from "../i18n/en.js";
@@ -249,5 +252,20 @@ describe("usePlanReview — conseil (lot R10d)", () => {
     assert.match(src, /reviewIdentity/);
     assert.match(src, /isAdviceUnavailable/);
     assert.match(src, /reviewKey/);
+  });
+});
+
+describe("usePlanReview — lot RF4 ETA gelée pendant le film", () => {
+  it("ne re-sonde pas /eta ni /advice pendant le film, un rattrapage à l'arrêt", () => {
+    const stops = ["Nouméa", "Dzaoudzi", "Le Cap", "Sainte-Hélène", "Recife", "Açores", "La Rochelle"];
+    assert.equal(countEtaProbesAlongStops(stops, { frozen: true, catchup: false }), 0);
+    assert.equal(countEtaProbesAlongStops(stops, { frozen: true, catchup: true }), 1);
+    assert.equal(countEtaProbesAlongStops(stops, { frozen: false, catchup: false }), stops.length);
+    assert.equal(shouldProbeOfficialEta({ frozen: true, enabled: true, stopName: "Nouméa" }), false);
+    assert.equal(shouldProbeOfficialEta({ frozen: false, enabled: true, stopName: "Nouméa" }), true);
+    assert.equal(shouldPollOfficialAdvice({ frozen: true, enabled: true, reviewKey: "k" }), false);
+    assert.equal(shouldPollOfficialAdvice({ frozen: false, enabled: true, reviewKey: "k" }), true);
+    assert.match(src, /shouldProbeOfficialEta/);
+    assert.match(src, /frozen = false/);
   });
 });

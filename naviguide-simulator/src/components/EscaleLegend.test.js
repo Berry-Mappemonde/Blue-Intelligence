@@ -48,3 +48,11 @@ describe("EscaleLegend — fourchette sous la date (lot C6)", () => {
     assert.match(src, /title=\{etaTitle/);
   });
 });
+
+describe("EscaleLegend — lot RF4 ETA gelée pendant le film", () => {
+  it("passe frozen à useOfficialEta, sans texte d'aide", () => {
+    assert.match(src, /frozen = false/);
+    assert.match(src, /useOfficialEta\(nextName, \{ enabled: Boolean\(nextName\), frozen \}\)/);
+    assert.doesNotMatch(src, /gelé|frozen pendant|pendant le film/i);
+  });
+});

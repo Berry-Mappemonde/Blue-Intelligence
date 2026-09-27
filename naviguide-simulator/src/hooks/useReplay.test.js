@@ -496,6 +496,8 @@ describe("useReplay lot RA5 — Stop coupe voix, animation, caméra", () => {
     assert.match(app, /stop=\{replay\.active \? null : escaleStop\}/);
     assert.match(app, /filmActive: replay\.active/);
     assert.match(app, /clearToken: escaleClear/);
+    assert.match(app, /frozen: replay\.active/);
+    assert.match(app, /filmFrozen=\{Boolean\(replay\.active\)\}/);
     assert.match(app, /setEscaleClear/);
     assert.match(bar, /data-testid="replay-stop"/);
     assert.match(bar, /data-testid="stop-auto"/);

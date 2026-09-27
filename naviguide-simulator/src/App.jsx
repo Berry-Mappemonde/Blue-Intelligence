@@ -546,6 +546,8 @@ export default function App() {
   const momentLat = Number(drawTip?.lat ?? chatBoatPos?.lat);
   const momentLon = Number(drawTip?.lon ?? chatBoatPos?.lon);
   const momentIso = drawTip ? null : (chatBoatPos?.iso || clockSample?.iso || null);
+  const journalUntilRef = useRef(null);
+  if (!replay.active) journalUntilRef.current = momentIso;
   const iciMoment = useMoment({
     lat: Number.isFinite(momentLat) ? Math.round(momentLat * 1000) / 1000 : null,
     lon: Number.isFinite(momentLon) ? Math.round(momentLon * 1000) / 1000 : null,
@@ -553,6 +555,7 @@ export default function App() {
     mode: drawingMode ? "drawn" : (isSuivre ? "follow" : "simulation"),
     lang,
     enabled: sceneReady,
+    frozen: replay.active,
   });
   const momentMode = drawingMode ? "drawn" : (isSuivre ? "follow" : "simulation");
   const journalRouteId = momentMode === "drawn"
@@ -562,7 +565,7 @@ export default function App() {
     mode: momentMode,
     routeId: journalRouteId,
     incomingMoment: iciMoment.moment,
-    until: momentIso,
+    until: replay.active ? journalUntilRef.current : momentIso,
     enabled: sceneReady,
   });
   const displayKnots = isSuivre
@@ -701,16 +704,28 @@ export default function App() {
     && vessel.voyage?.voyageId,
   );
 
+  const alongBoatNm = cast?.sailNm ?? clockSample?.sailNm ?? playback.nm;
+  const alongFromNm = chapterAtNm(escaleMarks, alongBoatNm)?.from?.nm;
+  const alongLiveRef = useRef(null);
+  if (!replay.active) {
+    alongLiveRef.current = {
+      boatNm: alongBoatNm,
+      boatLat: sample?.lat,
+      boatLon: sample?.lon,
+      fromNm: alongFromNm,
+    };
+  }
+  const alongLive = replay.active ? alongLiveRef.current : null;
   const alongPack = useIciAlong({
     enabled: Boolean(cast && routeReady),
     flat: flatRoute,
     // Lot T: when a route is drawn, sample that track — never GET /ici/pearls (Berry).
     customRoute: routeForView,
-    fromNm: chapterAtNm(escaleMarks, cast?.sailNm ?? playback.nm)?.from?.nm,
+    fromNm: alongLive?.fromNm ?? alongFromNm,
     toNm: destMark?.nm,
-    boatNm: cast?.sailNm ?? clockSample?.sailNm ?? playback.nm,
-    boatLat: sample?.lat,
-    boatLon: sample?.lon,
+    boatNm: alongLive?.boatNm ?? alongBoatNm,
+    boatLat: alongLive?.boatLat ?? sample?.lat,
+    boatLon: alongLive?.boatLon ?? sample?.lon,
     mode: isSuivre ? "suivre" : "simulation",
     month: climoMonth,
     orders: skipper.orders,
@@ -720,6 +735,7 @@ export default function App() {
 
   const iciPack = useIciDossier({
     enabled: Boolean(cast),
+    frozen: replay.active,
     stories: !replay.active,
     cast,
     snappedPosition: legContext?.snappedPosition,
@@ -1429,6 +1445,7 @@ export default function App() {
   // Revue de plan par règles (lot K): legs from the server (clock + pearls), season from the atlas cache.
   const planReviewState = usePlanReview({
     enabled: Boolean(officialClock),
+    frozen: replay.active,
     clock: officialClock,
     lookup: atlas.lookup,
     revision: atlas.revision,
@@ -1665,6 +1682,7 @@ export default function App() {
         }}
         escaleMarks={legendMarks}
         filmNm={sidebarPlaybackNm}
+        filmFrozen={Boolean(replay.active)}
         onSeekEscale={isSuivre ? undefined : handleSidebarSeek}
         onEscaleSheet={openEscaleFromUi}
         drawing={drawing}
