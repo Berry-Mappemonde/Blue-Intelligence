@@ -21,6 +21,7 @@ from plan_advisor import (
     bounded_isochrone,
     clear_advice_jobs,
     corridor_track,
+    prepare_plan,
     request_advice,
     score_of,
     shift_plan,
@@ -276,7 +277,93 @@ def test_advice_route_pending_done_and_filter_numbers(monkeypatch):
     assert "99" not in body["best"]["sentence"]
     assert "42" not in body["best"]["sentence"]
     missing = client.get("/voyage/official/advice?leg=9")
-    assert missing.status_code == 400
+    assert missing.status_code == 200
+    assert missing.json()["status"] == "unavailable"
+    assert missing.json()["reason"] == "unknown-leg"
+
+
+def _voyage_no_clock():
+    """Voyage officiel sans horloge : marks + points, comme le semis RD4/RC8."""
+    return {
+        "voyageId": OFFICIAL_VOYAGE_ID,
+        "official": True,
+        "t0": "2026-05-15T08:00:00Z",
+        "marks": [
+            {"name": "La Rochelle", "nm": 0, "iso": "2026-05-15T08:00:00Z"},
+            {"name": "Ajaccio", "nm": 400, "iso": "2026-05-20T08:00:00Z"},
+            {"name": "Fort-de-France (Martinique)", "nm": 3800, "iso": "2026-06-10T08:00:00Z"},
+        ],
+        "points": [
+            {"lat": 46.15, "lon": -1.16, "sailNm": 0},
+            {"lat": 41.92, "lon": 8.74, "sailNm": 400},
+            {"lat": 14.60, "lon": -61.07, "sailNm": 3800},
+        ],
+        "skipper_thresholds": TH,
+    }
+
+
+def test_request_advice_without_clock_is_not_an_error():
+    """Lot RF1 : voyage sans horloge → pas d'exception,  unavailable si rien à calculer."""
+    out = request_advice({"voyageId": OFFICIAL_VOYAGE_ID}, 0, now=NOW)
+    assert out["status"] == "unavailable"
+    assert out["reason"] == "no-legs"
+    assert out["leg"] == 0
+
+
+def test_prepare_plan_matches_review_index_without_clock():
+    """Lot RF1 : même référentiel que plan-review — l'indice de la revue est accepté."""
+    from plan_review import review_official
+
+    voy = _voyage_no_clock()
+    review = review_official(voy, season=False)
+    src = prepare_plan(voy, now=NOW)
+    assert review["legs"], "la revue a des jambes sans clock"
+    assert len(src["legs"]) == len(review["legs"])
+    idx = len(review["legs"]) - 1
+    out = request_advice(voy, idx, now=NOW)
+    assert out["status"] in ("pending", "done")
+    assert out["leg"] == idx
+
+
+def test_request_advice_unknown_leg_is_unavailable_not_value_error():
+    plan = _noumea_chain()
+    out = request_advice(plan, 9, now=NOW)
+    assert out["status"] == "unavailable"
+    assert out["reason"] == "unknown-leg"
+
+
+def test_advice_route_without_clock_is_http_200(monkeypatch):
+    import voyage_api
+    import voyage_store
+    from fastapi.testclient import TestClient
+    from main import app
+
+    voyage_store.save_voyage({"voyageId": OFFICIAL_VOYAGE_ID, "official": True})
+    monkeypatch.setattr(voyage_api, "_now", lambda: datetime(2026, 9, 22, 12, tzinfo=timezone.utc))
+    client = TestClient(app)
+    first = client.get("/voyage/official/advice?leg=0")
+    assert first.status_code == 200
+    assert first.json()["status"] == "unavailable"
+    again = client.get("/voyage/official/advice?leg=0")
+    assert again.status_code == 200
+    assert again.json()["status"] == "unavailable"
+
+
+def test_advice_route_accepts_review_leg_index(monkeypatch):
+    import voyage_api
+    import voyage_store
+    from fastapi.testclient import TestClient
+    from main import app
+    from plan_review import review_official
+
+    voy = _voyage_no_clock()
+    voyage_store.save_voyage(voy)
+    monkeypatch.setattr(voyage_api, "_now", lambda: datetime(2026, 9, 22, 12, tzinfo=timezone.utc))
+    idx = len(review_official(voy, season=False)["legs"]) - 1
+    client = TestClient(app)
+    r = client.get(f"/voyage/official/advice?leg={idx}")
+    assert r.status_code == 200
+    assert r.json()["status"] in ("pending", "done")
 
 
 # ── Lot R10c — écart local borné ─────────────────────────────────────────────

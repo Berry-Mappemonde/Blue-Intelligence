@@ -1251,11 +1251,12 @@ def get_official_advice(
     voy = load_voyage(OFFICIAL_VOYAGE_ID)
     if voy is None:
         raise HTTPException(404, "voyage officiel absent")
-    from plan_advisor import request_advice  # noqa: PLC0415
+    from plan_advisor import advice_unavailable, request_advice  # noqa: PLC0415
     try:
         out = request_advice(voy, int(leg), now=_now(), rewrite=_rewrite_plan_advice)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+    except ValueError:
+        # Lot RF1 : plus de 400 — état honnête, le client cesse de re-sonder.
+        return advice_unavailable(int(leg), "unknown-leg")
     if out.get("status") == "done":
         return _localize_plan_advice(out, lang)
     return out

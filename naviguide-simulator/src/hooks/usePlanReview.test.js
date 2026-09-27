@@ -16,12 +16,14 @@ import {
   formatEtaRange,
   formatEtaRangeTitle,
   isAdviceDone,
+  isAdviceUnavailable,
   localizeAdviceSentence,
   nextEtaRetryMs,
   nextStopFromMarks,
   pickHeaviestLegIdx,
   pollOfficialAdvice,
   pollOfficialEta,
+  reviewIdentity,
   tightenEtaMembers,
 } from "./usePlanReview.js";
 import fr from "../i18n/fr.js";
@@ -215,5 +217,37 @@ describe("usePlanReview — conseil (lot R10d)", () => {
     assert.equal(n, 2);
     assert.equal(ready.best.alertsAfter, 5);
     assert.equal(seen[0].status, "pending");
+  });
+
+  it("arrête de sonder après unavailable, sans relancer (lot RF1)", async () => {
+    let n = 0;
+    const seen = [];
+    const ready = await pollOfficialAdvice(2, {
+      fetchFn: async () => {
+        n += 1;
+        return { status: "unavailable", reason: "no-legs", leg: 2 };
+      },
+      sleep: async () => {
+        throw new Error("ne doit pas relancer après unavailable");
+      },
+      onUpdate: (body) => seen.push(body),
+      lang: "fr",
+    });
+    assert.equal(n, 1);
+    assert.equal(isAdviceUnavailable(ready), true);
+    assert.equal(ready.reason, "no-legs");
+    assert.equal(seen[0].status, "unavailable");
+    assert.equal(reviewIdentity({ source: "fixture", legs: [{ from: "A" }] }), "");
+    assert.equal(
+      reviewIdentity({
+        legs: [
+          { from: "Nouméa", to: "Dzaoudzi", departIso: "2026-10-01T08:00:00Z" },
+        ],
+      }),
+      "Nouméa\tDzaoudzi\t2026-10-01T08:00:00Z\t",
+    );
+    assert.match(src, /reviewIdentity/);
+    assert.match(src, /isAdviceUnavailable/);
+    assert.match(src, /reviewKey/);
   });
 });

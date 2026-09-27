@@ -115,6 +115,22 @@ export function isAdviceDone(body) {
   return Boolean(body && body.status === "done" && body.best && typeof body.best === "object");
 }
 
+export function isAdviceUnavailable(body) {
+  return Boolean(body && body.status === "unavailable");
+}
+
+/** Identité stable de la revue : même jambes = pas de re-sonde (lot RF1). */
+export function reviewIdentity(review) {
+  if (!review || review.source === "fixture") return "";
+  const legs = Array.isArray(review.legs) ? review.legs : [];
+  return legs.map((l) => [
+    l.from || "",
+    l.to || "",
+    l.departIso || l.depart || "",
+    l.arriveIso || l.arrive || "",
+  ].join("\t")).join("\n");
+}
+
 export function pickHeaviestLegIdx(legs) {
   let best = 0;
   let score = -1;
@@ -276,6 +292,10 @@ export async function pollOfficialAdvice(legIdx, {
       onUpdate?.(body);
       return body;
     }
+    if (isAdviceUnavailable(body)) {
+      onUpdate?.(body);
+      return body;
+    }
     if (body?.status === "pending") onUpdate?.(body);
     else {
       onUpdate?.(null);
@@ -432,15 +452,16 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
   }, [review, error, enabled, clock, lookup, revision, lang, galeLimitPct]);
 
   const heaviestIdx = useMemo(() => pickHeaviestLegIdx(reviewed), [reviewed]);
+  const reviewKey = useMemo(() => reviewIdentity(review), [review]);
 
   useEffect(() => {
-    if (!enabled || !review || review.source === "fixture") return undefined;
+    if (!enabled || !reviewKey) return undefined;
     const controller = new AbortController();
     let alive = true;
     pollOfficialAdvice(heaviestIdx, {
       signal: controller.signal,
       lang,
-      onUpdate: (body) => { if (alive) setAdvice(isAdviceDone(body) ? body : body); },
+      onUpdate: (body) => { if (alive) setAdvice(body); },
     }).catch((err) => {
       if (alive && err?.name !== "AbortError") setAdvice((prev) => prev?.source === "fixture" ? prev : null);
     });
@@ -448,7 +469,7 @@ export function usePlanReview({ enabled = true, clock, lookup, revision = 0, lan
       alive = false;
       controller.abort();
     };
-  }, [enabled, review, heaviestIdx, lang]);
+  }, [enabled, reviewKey, heaviestIdx, lang]);
 
   const legs = useMemo(() => {
     const before = isAdviceDone(advice) ? Number(advice.best?.alertsBefore) : NaN;

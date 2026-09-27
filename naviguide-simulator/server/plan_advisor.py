@@ -35,8 +35,8 @@ from plan_alerts import (
     haversine_nm,
     plan_from_voyage,
 )
-from plan_review import PLANNED_KNOTS
-from voyage_clock import bearing_deg, to_iso
+from plan_review import PLANNED_KNOTS, _attach_itinerary_nm, legs_from_clock, legs_from_voyage
+from voyage_clock import bearing_deg, port_days_for, to_iso
 
 log = logging.getLogger("naviguide-simulator.plan-advisor")
 
@@ -69,14 +69,118 @@ def clear_advice_jobs() -> None:
         _JOB_THREADS.clear()
 
 
+def _review_start_name(voy: dict) -> str | None:
+    """Même départ que `review_official` (marks au premier sommet mer)."""
+    clock = voy.get("clock") or {}
+    verts = clock.get("vertices") or []
+    if not verts:
+        return voy.get("startAt")
+    sea_start = verts[0]
+    for a, b in zip(verts, verts[1:]):
+        if b.get("vehicle") in ("main", "side"):
+            sea_start = a
+            break
+    film0 = float(sea_start.get("filmNm") or 0)
+    best = None
+    for m in voy.get("marks") or []:
+        if not m.get("name"):
+            continue
+        d = abs(float(m.get("filmNm", m.get("nm")) or 0) - film0)
+        if best is None or d < best[0]:
+            best = (d, m["name"])
+    if best and best[0] <= 1.0:
+        return best[1]
+    return voy.get("startAt")
+
+
+def _review_raw_legs(voy: dict) -> list[dict]:
+    """Même liste que GET /voyage/official/plan-review — un seul référentiel d'indice."""
+    clock = voy.get("clock") or {}
+    _attach_itinerary_nm(clock.get("marks") or [], voy.get("marks") or [])
+    raw = legs_from_clock(clock, _review_start_name(voy)) if clock.get("t0") else []
+    if not raw:
+        raw = legs_from_voyage(voy)
+    return raw
+
+
+def _point_nm(point: dict) -> float | None:
+    for key in ("sailNm", "cumNm", "filmCum"):
+        if point.get(key) is not None:
+            return float(point[key])
+    return None
+
+
+def _plan_from_review_legs(voy: dict, *, now: Any = None) -> dict:
+    """Jambes de la revue + géométrie déjà sur le voyage — jamais de point inventé."""
+    clock = voy.get("clock") or {}
+    verts = [v for v in (clock.get("vertices") or []) if v.get("lat") is not None and v.get("lon") is not None]
+    voyage_pts = [
+        p for p in (voy.get("points") or [])
+        if isinstance(p, dict) and p.get("lat") is not None and p.get("lon") is not None
+    ]
+    pearls = [p for p in (voy.get("pearls") or []) if isinstance(p, dict)]
+    legs = []
+    for idx, lg in enumerate(_review_raw_legs(voy)):
+        lo = float(lg.get("fromNm") or 0) - 0.5
+        hi = float(lg.get("toNm") or 0) + 0.5
+        pts = [v for v in verts if lo <= float(v.get("sailNm") or 0) <= hi]
+        if not pts:
+            pts = [p for p in voyage_pts if (nm := _point_nm(p)) is not None and lo <= nm <= hi]
+        hold = lg.get("holdDays") if lg.get("holdDays") is not None else port_days_for(str(lg.get("to") or ""))
+        legs.append({
+            "idx": idx, "from": lg.get("from"), "to": lg.get("to"),
+            "depart": _as_day(lg.get("departIso")), "arrive": _as_day(lg.get("arriveIso")),
+            "departIso": lg.get("departIso"), "arriveIso": lg.get("arriveIso"),
+            "holdDays": hold, "kn": lg.get("plannedKnots") or PLANNED_KNOTS, "points": pts,
+            "pearls": [p for p in pearls if lo <= float(p.get("sailNm") or 0) <= hi],
+        })
+    return {
+        "legs": legs,
+        "skipper_thresholds": voy.get("skipper_thresholds") or {},
+        "now": now,
+        "clock": clock,
+    }
+
+
 def prepare_plan(plan: dict, *, now: Any = None) -> dict:
+    """Plan du conseil : mêmes jambes que la revue si l'horloge n'en donne pas."""
     if not isinstance(plan, dict):
         return {"legs": [], "skipper_thresholds": {}}
     if _ready_plan(plan):
         return plan
-    if plan.get("clock") or plan.get("voyageId") or plan.get("pearls"):
-        return plan_from_voyage(plan, now=now, thresholds=plan.get("skipper_thresholds"))
+    if plan.get("clock") or plan.get("voyageId") or plan.get("pearls") or plan.get("marks"):
+        src = plan_from_voyage(plan, now=now, thresholds=plan.get("skipper_thresholds"))
+        if src.get("legs"):
+            return src
+        aligned = _plan_from_review_legs(plan, now=now)
+        if aligned.get("legs"):
+            return aligned
+        return src
     return plan
+
+
+def advice_unavailable(leg_idx: int, reason: str) -> dict:
+    return {
+        "status": "unavailable",
+        "leg": int(leg_idx),
+        "reason": str(reason),
+        "weights": dict(WEIGHTS),
+    }
+
+
+def _advice_block_reason(src: dict, leg_idx: int) -> str | None:
+    """None si la jambe est calculable ; sinon jeton stable (pas de texte UI)."""
+    legs = src.get("legs") or []
+    if not legs:
+        return "no-legs"
+    if not (0 <= int(leg_idx) < len(legs)):
+        return "unknown-leg"
+    chosen = legs[int(leg_idx)]
+    if not _leg_points(chosen):
+        return "no-points"
+    if not (chosen.get("depart") or chosen.get("departIso")):
+        return "no-dates"
+    return None
 
 
 def _now_dt(raw: Any) -> datetime:
@@ -561,10 +665,15 @@ def request_advice(
     climatology: dict | None = None,
     rewrite: Callable[[dict], dict] | None = None,
 ) -> dict:
-    """Réponse immédiate : `{status: pending}` ou le conseil `done` (tâche de fond)."""
+    """Réponse immédiate : `{status: pending}` ou le conseil `done` (tâche de fond).
+
+    Jambe hors du plan préparé (horloge absente, indice de la revue hors liste,
+    pas de géométrie) : `{status: unavailable}` — jamais d'exception HTTP.
+    """
     src = prepare_plan(plan, now=now)
-    if not (0 <= int(leg_idx) < len(src.get("legs") or [])):
-        raise ValueError(f"jambe {leg_idx} absente ({len(src.get('legs') or [])} jambes)")
+    blocked = _advice_block_reason(src, int(leg_idx))
+    if blocked:
+        return advice_unavailable(int(leg_idx), blocked)
     now_dt = _now_dt(now)
     key = _job_key(src, int(leg_idx), now_dt)
     with _JOB_LOCK:
