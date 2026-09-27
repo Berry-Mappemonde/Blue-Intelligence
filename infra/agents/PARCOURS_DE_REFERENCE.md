@@ -49,6 +49,10 @@ avant de commencer (Cmd R) et vérifier qu'aucune erreur n'apparaît au chargeme
 - Les pilules **brut / rédigé** sont grisées pendant le film ; le sous-titre du chapitre s'affiche dans la barre ; sélecteur 2:30 / 3:00 présent.
 - **Stop** arrête net le film (voix + animation) et revient à la vue Suivre ; **Retour au live** replace le bateau sur sa position du jour ; Suivre est de nouveau actif.
 - Laisser un film entier (2 min 30) : la voix tient jusqu'à la fin ; le film finit sur la position du jour ; pas de saut de zoom à l'arrêt.
+- La voix garde **le même rythme** du début à la fin (aucune accélération après le premier chapitre) ; le film n'est jamais coupé au milieu d'une phrase.
+- Le bateau est **où la phrase le dit** : à quai à La Rochelle pendant « 3 jours à quai » et les stations / AMP de La Rochelle ; en mer pendant la traversée ; devant Fort-de-France pendant « approche de Fort-de-France » — jamais déjà au large quand la voix parle encore du port.
+- Par jambe, l'ordre du récit est celui de la route : départ de X → zones / AMP / stations croisées → approche → arrivée.
+- Après le film (Stop ou fin) : dézoomer à la molette **fonctionne** dès le premier geste (le zoom de sortie ne se réimpose pas).
 - Passer la langue en **anglais** (panneau droit) → relancer : voix anglaise compréhensible, même ordre d'escales.
 - Console : aucune erreur pendant le film.
 
@@ -93,6 +97,8 @@ avant de commencer (Cmd R) et vérifier qu'aucune erreur n'apparaît au chargeme
 
 - Tirer la carte vers le haut / le bas au maximum → on ne dépasse pas les pôles (jamais un écran tout bleu).
 - Tirer sur les côtés → le monde ne se répète **qu'une fois** de chaque côté.
+- En Suivre, dézoomer au maximum (molette, bouton −) → **on ne voit jamais deux fois le monde d'affilée** : le dézoom s'arrête quand le monde tient dans l'écran ; le glisser gauche / droite reste possible.
 - Zoom molette sur l'Atlantique → la carte suit tout de suite, sans saccade.
+- Zoomer / dézoomer au-dessus des drapeaux (Wallis, Nouvelle-Calédonie) et des bateaux → **aucun glissement latéral** des marqueurs pendant l'animation ; ils restent sur leur point.
 - Cliquer une fiche de couche (port, balise) → la fiche s'ouvre avec un lien ; la croix la ferme.
 - Console : aucune erreur.
