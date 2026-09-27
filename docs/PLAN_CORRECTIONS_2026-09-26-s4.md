@@ -816,9 +816,9 @@ poste, gelé en archive compressée versionnée (`server/tests/fixtures/`) ;
 (`NAVIGUIDE_OFFLINE=1`) : aucun fournisseur externe, un appel sortant fait
 échouer ; Playwright démarre preview + API (`npm run e2e:store`) ; les specs
 exécutent leurs assertions au lieu de sauter, un test commun vérifie la console
-du parcours nominal. L'agent **ne modifie pas** `ci.yml` (son jeton ne peut pas
-le pousser) : il écrit dans la PR les lignes exactes que le porteur ajoute à la
-main (setup-python, `pip install`, étape `e2e:store`).
+du parcours nominal. L'agent modifie `ci.yml` (job `simulator-e2e` seulement :
+setup-python, `pip install`, étape `e2e:store`) — le jeton git a le droit
+`workflow` depuis le 27 sept. ; si le push est refusé, il documente les lignes.
 
 Recette : sur GitHub, pas sur le poste — sortie de la suite avant/après
 (joués / sautés / rouges), specs corrigés et pourquoi, défauts révélés.
