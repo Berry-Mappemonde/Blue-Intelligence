@@ -278,8 +278,13 @@ def _nudge_official_store() -> None:
         import official_store  # noqa: PLC0415
 
         official_store.nudge()
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("stock officiel nudge: %s", exc)
+
+
+def _dated_error(reason: str, status: str = "unavailable") -> dict:
+    """Erreur propre (jamais une stack) : statut, raison lisible, horodatage UTC."""
+    return {"status": status, "reason": str(reason), "at": to_iso(_now())}
 
 
 def _public_meta(voy: dict) -> dict:
@@ -537,7 +542,24 @@ def create_voyage(body: VoyageCreate, background: BackgroundTasks):
         "draft": None,
         "createdAt": to_iso(_now()),
     }
-    voy["clock"] = _climo_clock(voy)
+    if body.official:
+        # Voyage officiel : horloge et journal viennent du stock RF2, jamais un calcul ici.
+        voy = _build_official(body, compute_clock=False)
+        _nudge_official_store()
+        clock = _store_clock(voy)
+        if clock is None:
+            import official_store  # noqa: PLC0415
+
+            clock = {**official_store.preparing_clock(), **_dated_error("horloge officielle en préparation", "preparing")}
+        return {**_public_meta(voy), "clock": clock}
+    try:
+        voy["clock"] = _climo_clock(voy)
+    except Exception as exc:
+        log.exception("POST /voyage: horloge climato échouée")
+        raise HTTPException(
+            status_code=503,
+            detail=_dated_error(f"horloge climato indisponible: {exc}"),
+        ) from exc
     save_voyage(voy)
     if body.forecast:
         _kick_forecast(voyage_id)
@@ -1151,7 +1173,14 @@ def get_official_moments(
     """Journal des moments — servi tel quel depuis le stock RF2."""
     import official_store  # noqa: PLC0415
 
-    body = official_store.official_moments(until=until)
+    try:
+        body = official_store.official_moments(until=until)
+    except Exception as exc:
+        log.exception("GET /voyage/official/moments")
+        _nudge_official_store()
+        out = official_store.preparing_moments(until)
+        out.update(_dated_error(f"journal indisponible: {exc}", "preparing"))
+        return out
     if body is None:
         _nudge_official_store()
         return official_store.preparing_moments(until)
@@ -1190,7 +1219,13 @@ def get_official_eta(stop: str = Query(..., min_length=1)):
     if row is None:
         _nudge_official_store()
         return official_store.preparing_eta(_now())
-    return tighten_eta_payload(row, _now())
+    try:
+        return tighten_eta_payload(row, _now())
+    except Exception as exc:
+        log.exception("GET /voyage/official/eta")
+        out = official_store.preparing_eta(_now())
+        out.update(_dated_error(f"fourchette indisponible: {exc}", "preparing"))
+        return out
 
 
 @router.get("/voyage/official/plan-review")
@@ -1198,7 +1233,15 @@ def get_official_plan_review():
     """Revue de plan — stock RF2. Absente → en préparation, aucun LLM ni atlas."""
     import official_store  # noqa: PLC0415
 
-    out = official_store.official_plan_review()
+    try:
+        out = official_store.official_plan_review()
+    except Exception as exc:
+        log.exception("GET /voyage/official/plan-review")
+        out = None
+        _nudge_official_store()
+        body = official_store.preparing_review()
+        body.update(_dated_error(f"revue indisponible: {exc}", "preparing"))
+        return body
     if out is None:
         _nudge_official_store()
         return official_store.preparing_review()
@@ -1513,7 +1556,17 @@ def get_clock(voyage_id: str):
     voy = load_voyage(voyage_id)
     if voy is None:
         raise HTTPException(404, "voyage inconnu")
-    return voy.get("clock") or _climo_clock(voy)
+    if _is_official(voyage_id):
+        clock = _store_clock(voy)
+        if clock is None:
+            import official_store  # noqa: PLC0415
+
+            return {**official_store.preparing_clock(), **_dated_error("horloge officielle en préparation", "preparing")}
+        return clock
+    clock = voy.get("clock")
+    if isinstance(clock, dict) and clock.get("vertices"):
+        return clock
+    raise HTTPException(503, _dated_error("horloge absente"))
 
 
 @router.get("/voyage/{voyage_id}/at")
@@ -1521,7 +1574,15 @@ def get_at(voyage_id: str, t: Optional[str] = Query(None)):
     voy = load_voyage(voyage_id)
     if voy is None:
         raise HTTPException(404, "voyage inconnu")
-    clock = voy.get("clock") or _climo_clock(voy)
+    if _is_official(voyage_id):
+        clock = _store_clock(voy)
+        if clock is None:
+            _nudge_official_store()
+            return {"voyageId": voyage_id, **_dated_error("horloge officielle en préparation", "preparing"), "t": t}
+    else:
+        clock = voy.get("clock")
+    if not isinstance(clock, dict) or not clock.get("vertices"):
+        raise HTTPException(503, _dated_error("horloge absente"))
     when = parse_iso(t) if t else _now()
     sample = sample_clock_at_time(clock, when)
     if sample is None:
@@ -1577,7 +1638,13 @@ def recompute(voyage_id: str, body: Optional[RecomputeBody] = None):
     if voy is None:
         raise HTTPException(404, "voyage inconnu")
     _maybe_auto_refresh(voy)
-    clock = voy.get("clock") or _climo_clock(voy)
+    clock = voy.get("clock")
+    if not isinstance(clock, dict) or not clock.get("vertices"):
+        try:
+            clock = _climo_clock(voy)
+        except Exception as exc:
+            log.exception("recompute: horloge climato échouée")
+            raise HTTPException(503, _dated_error(f"horloge climato indisponible: {exc}")) from exc
     when = parse_iso(body.t) if body.t else _now()
     live = sample_clock_at_time(clock, when)
     if live is None:
@@ -1746,7 +1813,11 @@ def accept_draft(voyage_id: str):
     voy["points"] = new_points
     voy["routeRev"] = int(voy.get("routeRev") or 0) + 1
     cube = load_cube(voyage_id)
-    voy["clock"] = _clock_with_cube(voy, cube) if cube else _climo_clock(voy)
+    try:
+        voy["clock"] = _clock_with_cube(voy, cube) if cube else _climo_clock(voy)
+    except Exception as exc:
+        log.exception("accept: horloge climato échouée")
+        raise HTTPException(503, _dated_error(f"horloge climato indisponible: {exc}")) from exc
     voy["draft"] = None
     voy["acceptedAlt"] = draft.get("old_geojson")
     save_voyage(voy)
