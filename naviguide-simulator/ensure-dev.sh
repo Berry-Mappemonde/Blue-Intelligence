@@ -109,6 +109,14 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
+# Lot RF2 : le poste de recette part avec le stock disque déjà rempli
+# (~/.cache/naviguide/voyage-store/ sauf NAVIGUIDE_OFFICIAL_STORE_DIR).
+if [[ -x .venv/bin/python ]]; then
+  PYTHONPATH="$ROOT/server${PYTHONPATH:+:$PYTHONPATH}" \
+    .venv/bin/python -c "import official_store; official_store.seed_disk()" \
+    >> .dev/api.log 2>&1 || log "!! stock officiel : semis disque ignoré"
+fi
+
 if [[ ! -d node_modules ]]; then
   log "==> npm install (première fois)…"
   npm install

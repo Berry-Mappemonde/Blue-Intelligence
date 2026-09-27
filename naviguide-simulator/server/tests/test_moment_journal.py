@@ -183,6 +183,8 @@ def test_status_and_get_expose_moments():
     assert st["store"]["moments"] == n
 
     from main import app
+    from tests.official_rf2 import put_moments
+    put_moments(read_moments(OFFICIAL_VOYAGE_ID), OFFICIAL_VOYAGE_ID)
     client = TestClient(app)
     res = client.get("/voyage/official/moments")
     assert res.status_code == 200

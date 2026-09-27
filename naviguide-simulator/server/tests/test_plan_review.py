@@ -27,6 +27,8 @@ def test_review_reads_calendar_and_pearls_without_inventing(client, monkeypatch)
     now = T0 + timedelta(days=10)
     _freeze(monkeypatch, now)
     client.put("/voyage/official", json=_official())
+    import official_store
+    official_store.materialize_clock()
     voy = voyage_store.load_voyage(OFFICIAL_VOYAGE_ID)
     legs = plan_review.legs_from_clock(voy["clock"], "La Rochelle")
     assert len(legs) == 1
@@ -53,6 +55,8 @@ def test_review_reads_calendar_and_pearls_without_inventing(client, monkeypatch)
     assert "formalities" in kinds, kinds
     assert next(f for f in leg["flags"] if f["kind"] == "formalities")["names"] == ["Somewhere Exclusive Economic Zone"]
     assert "no-rest" not in kinds, "3 days alongside at Fort-de-France"
+    from tests.official_rf2 import put_review
+    put_review(out)
     body = client.get("/voyage/official/plan-review", headers=PUBLIC).json()
     assert body["legs"][0]["to"] == "Fort-de-France (Martinique)"
     assert body["pearlsUnknown"] == leg["pearls"]["unknown"]
@@ -279,9 +283,9 @@ def test_plan_review_seeded_without_clock_has_legs(client, monkeypatch):
     r = client.get("/voyage/official/plan-review", headers=PUBLIC)
     assert r.status_code == 200
     body = r.json()
-    assert len(body.get("legs") or []) > 0
-    blob = " ".join(f"{leg.get('from')} {leg.get('to')}" for leg in body["legs"])
-    assert "Ajaccio" in blob
+    # Lot RF2 : sans stock → en préparation, aucun calcul d'horloge.
+    assert body.get("status") == "preparing"
+    assert body.get("legs") == []
 
 
 def test_plan_review_http_exposes_comment_source(client, monkeypatch):
@@ -292,6 +296,9 @@ def test_plan_review_http_exposes_comment_source(client, monkeypatch):
     now = T0 + timedelta(days=10)
     _freeze(monkeypatch, now)
     client.put("/voyage/official", json=_official())
+    import official_store
+    official_store.materialize_clock()
+    official_store.fill_family("plan_review")
     body = client.get("/voyage/official/plan-review", headers=PUBLIC).json()
     assert "comment" in body
     assert body["comment"]["source"] == "rules"

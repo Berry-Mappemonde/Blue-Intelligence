@@ -89,6 +89,8 @@ def test_official_get_exposes_clock_params(client):
 
 def test_official_september_has_moved(client):
     client.put("/voyage/official", json=_payload())
+    import official_store
+    official_store.materialize_clock()
     sample = client.get("/voyage/official/at", params={"t": "2026-09-15T12:00:00Z"}).json()
     assert sample["status"] in ("live", "arrived")
     assert float(sample.get("tHours") or 0) > 24
@@ -161,6 +163,8 @@ def test_grib_refresh_without_voyage_uses_latest_around(client, tmp_path):
 
 def test_grib_absent_keeps_dest_corridor(client):
     client.put("/voyage/official", json=_payload())
+    import official_store
+    official_store.materialize_clock()
     grib = client.get("/voyage/official/grib").json()
     dest = (grib.get("around") or {}).get("dest") or grib.get("dest")
     assert dest is not None
@@ -173,6 +177,8 @@ def test_grib_absent_keeps_dest_corridor(client):
 
 def test_official_at_now_and_grib_absent(client):
     client.put("/voyage/official", json=_payload())
+    import official_store
+    official_store.materialize_clock()
     sample = client.get("/voyage/official/at").json()
     assert sample["voyageId"] == "berry-mappemonde-2026-officiel"
     assert sample["status"] in ("live", "waiting", "arrived")
@@ -239,6 +245,8 @@ def test_scan_inbox_json(client, tmp_path, monkeypatch):
 
 def test_saildocs_query_covers_eta_next_download(client):
     client.put("/voyage/official", json=_payload())
+    import official_store
+    official_store.materialize_clock()
     now = datetime.now(timezone.utc)
     here = client.get("/voyage/official/at", params={"t": now.strftime("%Y-%m-%dT%H:%M:%SZ")}).json()
     body = client.get("/voyage/official/saildocs-query").json()

@@ -295,6 +295,47 @@ The script extends the existing certificate (`certbot --expand`, free) if it
 does not yet contain `simulator.naviguide.fr`. It does not rewrite
 `sites-available/naviguide` and does not restart skipper / BI services.
 
+### Simulateur — stock officiel (base Mongo séparée)
+
+Le voyage officiel précalculé (journal, film, ETA, climato, sacs « ici »,
+revue) vit dans une **base Mongo séparée** `naviguide_simulator` sur la
+même instance (`127.0.0.1:27017`), avec un **utilisateur dédié**
+`readWrite` sur cette base **seulement**. La base de Blue Intelligence
+n'est ni lue, ni écrite, ni migrée. Le stock est **recalculable** : sa
+perte coûte un recalcul, jamais une donnée ; il **n'entre pas** dans la
+sauvegarde quotidienne (qui reste `--db` BI seulement).
+
+Connexion : `SIMULATOR_MONGO_URL` dans
+`~/.config/naviguide/simulator.env` (VPS uniquement). Ne pas lire
+`~/.config/blue-intelligence/mongo.env`, ni `MONGO_URL_LOCAL`, ni
+`DB_NAME`. Premier démarrage : stock vide → le travail de fond le
+remplit ; l'API répond « en préparation » entre-temps. Déploiement :
+`pymongo` est dans `naviguide-simulator/server/requirements.txt` — le
+déploiement fait `pip` puis redémarre **uniquement** `naviguide-simulator`
+(MongoDB n'est pas redémarré).
+
+À exécuter **une fois**, par le porteur, sur le VPS (jamais par un lot) :
+
+```javascript
+// mongosh 127.0.0.1:27017 -u admin -p --authenticationDatabase admin
+use naviguide_simulator
+db.createUser({
+  user: "naviguide_simulator",
+  pwd: "CHANGER_MOI",
+  roles: [ { role: "readWrite", db: "naviguide_simulator" } ]
+})
+```
+
+Puis dans `~/.config/naviguide/simulator.env` :
+
+```
+SIMULATOR_MONGO_URL=mongodb://naviguide_simulator:CHANGER_MOI@127.0.0.1:27017/naviguide_simulator?authSource=naviguide_simulator
+```
+
+Ailleurs (Mac, CI, tests) : fichiers sur disque
+(`~/.cache/naviguide/voyage-store/` ou répertoire temporaire). Même
+contenu, même comportement.
+
 nginx rollback (www becomes the only NAVIGUIDE vhost again):
 
 ```bash

@@ -30,7 +30,18 @@ def client(tmp_path, monkeypatch):
     journal.reset()
     admin_guard.reset_limiters()
     from main import app
-    return TestClient(app)
+    raw = TestClient(app)
+    orig_put = raw.put
+
+    def put(url, *args, **kwargs):
+        response = orig_put(url, *args, **kwargs)
+        if url.split("?")[0].rstrip("/") == "/voyage/official" and response.status_code == 200:
+            import official_store
+            official_store.materialize_clock()
+        return response
+
+    raw.put = put
+    return raw
 
 
 def _official():
@@ -129,6 +140,7 @@ def test_public_reads_and_admin_note(client, monkeypatch):
     now = T0 + timedelta(days=1)
     _freeze(monkeypatch, now)
     client.put("/voyage/official", json=_official())
+    journal.tick(voyage_store.load_voyage(OFFICIAL_VOYAGE_ID), now, force=True)
 
     r = client.get("/voyage/official/journal", headers=PUBLIC)
     assert r.status_code == 200

@@ -150,13 +150,14 @@ async def get_official_film(
     style: str = Query("raw"),
     t0: str | None = Query(None),
 ):
-    """Script du film (lot F3) : brut par règles, rédigé Nemotron si `style=written`.
-    Réponse `{chapters, source, chars, targetSeconds, hasWritten}`. Sans voyage : 404."""
-    from film_script import official_film
-    try:
-        return await official_film(lang=lang, seconds=seconds, style=style, t0=t0)
-    except FileNotFoundError:
-        raise HTTPException(404, "voyage officiel absent") from None
+    """Script du film — stock RF2. Absente → en préparation, aucun LLM."""
+    import official_store  # noqa: PLC0415
+
+    body = official_store.official_film(lang=lang, seconds=seconds)
+    if body is None:
+        official_store.nudge()
+        return official_store.preparing_film(seconds)
+    return official_store.apply_film_t0(body, t0)
 
 
 class PositionRequest(BaseModel):
@@ -220,6 +221,17 @@ async def get_ici(
         raise HTTPException(400, "dest_lat hors limites")
     if dest_lon is not None and not (-180 <= dest_lon <= 180):
         raise HTTPException(400, "dest_lon hors limites")
+    try:
+        import official_store  # noqa: PLC0415
+
+        bag = official_store.official_ici(lat, lon)
+        if bag is not None:
+            return bag
+        if official_store.on_official_route(lat, lon):
+            official_store.nudge()
+            return official_store.preparing_ici(lat, lon, radius_nm)
+    except Exception:
+        pass
     return await fill_dossier(
         lat, lon, radius_nm, month=month, dest_lat=dest_lat, dest_lon=dest_lon, thin=thin,
     )
@@ -317,6 +329,25 @@ async def get_ici_moment(
         raise HTTPException(400, "lat/lon hors limites")
     from moment import build_moment
     pearl = _nearest_warmed_pearl(lat, lon)
+    if pearl is None:
+        try:
+            import official_store  # noqa: PLC0415
+
+            bag = official_store.official_ici(lat, lon)
+            if bag is not None:
+                pearl = bag
+            elif official_store.on_official_route(lat, lon):
+                official_store.nudge()
+                return {
+                    "status": "preparing",
+                    "t": t,
+                    "pos": {"lat": lat, "lon": lon},
+                    "here": {},
+                    "alerts": [],
+                    "around": [],
+                }
+        except Exception:
+            pearl = None
     if pearl is None:
         pearl = await fill_dossier(
             lat, lon, ICI_RADIUS_NM, month=_month_from_t(t), dest_lat=None, dest_lon=None, thin=False,

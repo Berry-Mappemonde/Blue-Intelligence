@@ -143,6 +143,8 @@ def test_chat_answers_from_server_facts_and_logs_only_for_admin(client, monkeypa
     now = T0 + timedelta(days=3)
     monkeypatch.setattr(voyage_api, "_now", lambda: now)
     client.put("/voyage/official", json=_official(), headers=ADMIN)
+    import official_store
+    official_store.materialize_clock()
     monkeypatch.setattr(story_cascade, "nebius_key", lambda: "test")
     monkeypatch.setattr(story_cascade, "nvidia_key", lambda: "test")
     transport = _llm_transport("Le bateau est en mer, dans French Exclusive Economic Zone. Le vent au bateau est de 99 kn. Prochaine escale Fort-de-France (Martinique).")

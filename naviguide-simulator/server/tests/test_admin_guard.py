@@ -136,10 +136,10 @@ def test_official_put_accepts_unwrapped_pacific_longitudes(client):
     ])
     r = client.put("/voyage/official", json=body)
     assert r.status_code == 200, r.text
-    assert r.json().get("clock", {}).get("t0")
     official = client.get("/voyage/official").json()
     assert len(official["points"]) == 3
-    assert client.get("/voyage/official/clock").status_code == 200
+    clock = client.get("/voyage/official/clock")
+    assert clock.status_code == 200
 
 
 def test_official_voyage_is_never_recomputed_or_accepted(client):
