@@ -801,6 +801,28 @@ Recette (visuelle, si Open-Meteo répond ce jour-là) :
 - Relance du poste → même teinte immédiatement, sans nouveau préchauffage.
 - Console : aucune ligne rouge.
 
+### RF11 — CI avec API : le stock disque figé sert de vraies données aux specs de lots (M, après RF2 ; ajouté le 27 sept. 02:16 par le porteur)
+
+Constat : l'étape « Specs de lots (informatif, sans API) » joue 92 specs contre
+un build sans API ; chacun sonde `/voyage/official`, ne trouve rien et saute
+l'essentiel (journal, film, horloge, ETA, console). Aucun des KO de la nuit du
+26 sept. n'aurait été vu par eux.
+
+Ce qui change : en CI l'API tourne pendant les specs et sert le voyage officiel
+depuis un **stock disque figé** — le vrai stock RF2, calculé une fois sur le
+poste, gelé en archive compressée versionnée (`server/tests/fixtures/`) ;
+`official_store` sert la **dernière clé disponible** quand celle du jour manque
+(aussi le bon comportement à minuit UTC en prod) ; mode **hors ligne**
+(`NAVIGUIDE_OFFLINE=1`) : aucun fournisseur externe, un appel sortant fait
+échouer ; Playwright démarre preview + API (`npm run e2e:store`) ; les specs
+exécutent leurs assertions au lieu de sauter, un test commun vérifie la console
+du parcours nominal. L'agent **ne modifie pas** `ci.yml` (son jeton ne peut pas
+le pousser) : il écrit dans la PR les lignes exactes que le porteur ajoute à la
+main (setup-python, `pip install`, étape `e2e:store`).
+
+Recette : sur GitHub, pas sur le poste — sortie de la suite avant/après
+(joués / sautés / rouges), specs corrigés et pourquoi, défauts révélés.
+
 ## 5. Ordre, pile, lancement
 
 | # | Lot | Taille | Priorité porteur | Touche surtout |
