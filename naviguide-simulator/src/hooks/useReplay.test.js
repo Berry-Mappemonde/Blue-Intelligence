@@ -533,3 +533,22 @@ describe("useReplay lot RB6 — voix sans coupure, Stop total, pas de live sur i
     assert.match(hook, /stoppingRef\.current \|\| finishedRef\.current/);
   });
 });
+
+describe("useReplay lot RF5 — fin : le sous-titre de clôture reste", () => {
+  it("applyReplayStop conserve le dernier sous-titre si keepSubtitle", () => {
+    const kept = "Aujourd'hui, le bateau est à Nouméa.";
+    const next = applyReplayStop({
+      keepSubtitle: true,
+      subtitle: kept,
+    });
+    assert.equal(next.active, false);
+    assert.equal(next.chapterText, kept);
+    assert.equal(applyReplayStop({}).chapterText, "");
+  });
+
+  it("stop() du film garde le sous-titre ; la barre l'affiche hors active", () => {
+    assert.match(hook, /keepSubtitle:\s*true/);
+    assert.match(hook, /subtitle:\s*chapterTextRef\.current/);
+    assert.match(bar, /replay\?\.active \|\| replay\?\.subtitle/);
+  });
+});

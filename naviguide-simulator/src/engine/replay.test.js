@@ -138,6 +138,21 @@ describe("replay — filmPlan (lot F1)", () => {
     assert.ok(squeezed.chapters[0].seconds >= 12);
   });
 
+  it("lot RF5 : une phrase d'avion n'est pas perdue par la fusion / le filtre", () => {
+    const plan = filmPlan({
+      chapters: [
+        { text: "Départ vers Cayenne (Guyane).", tA: 1_000, tB: 4_000 },
+        { text: "L'équipage prend l'avion pour Halifax. Retour en avion vers Cayenne.", tA: 4_000, tB: 4_000 },
+        { text: "Aujourd’hui, le bateau est à Nouméa.", tA: 8_000, tB: 12_000 },
+      ],
+      targetSeconds: 108,
+    });
+    const blob = plan.chapters.map((c) => c.text).join(" ");
+    assert.match(blob, /prend l'avion pour Halifax/);
+    assert.match(blob, /retour en avion vers Cayenne/i);
+    assert.ok(plan.chapters.length >= 1);
+  });
+
   it("calibrage du rate borné dans [0,9 ; 1,25]", () => {
     assert.equal(calibrateRate({ chapterChars: 100, elapsedSeconds: 1, remainingChars: 10_000, remainingBudgetSeconds: 1 }), FILM_RATE_MAX);
     assert.equal(calibrateRate({ chapterChars: 100, elapsedSeconds: 100, remainingChars: 10, remainingBudgetSeconds: 100 }), FILM_RATE_MIN);

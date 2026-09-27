@@ -382,16 +382,16 @@ def _is_land_leg(a: str, b: str) -> bool:
 
 
 def _window_vehicle(frm: dict | None, to: dict | None) -> str:
-    for src in (frm, to):
-        veh = (src or {}).get("vehicle")
-        if veh in {"plane", "land", "main"}:
-            return str(veh)
     a = (frm or {}).get("name") or ""
     b = (to or {}).get("name") or ""
     if _is_air_leg(a, b):
         return "plane"
     if _is_land_leg(a, b):
         return "land"
+    for src in (frm, to):
+        veh = (src or {}).get("vehicle")
+        if veh in {"land", "main"}:
+            return str(veh)
     return "main"
 
 
@@ -431,7 +431,7 @@ def is_saint_maur(name: str) -> bool:
 
 def official_dated_stops(marks: list | None, clock: dict | None = None) -> list[dict]:
     """Escales datées, Saint-Maur + 15 mai 2026 en tête. Aucune autre date inventée."""
-    raw = marks if marks else (clock or {}).get("marks")
+    raw = merge_route_marks(marks if marks else None, clock)
     dated = dated_marks(raw)
     saint_raw = next(
         (m for m in (raw or []) if isinstance(m, dict) and is_saint_maur(m.get("name") or "")),
@@ -492,6 +492,35 @@ def _sea_stop(stops: list[dict], marks: list | None, clock: dict | None) -> Opti
     return {"name": "La Rochelle"}
 
 
+def _iso_from_clock_vertex(mark: dict, clock: dict | None) -> Optional[str]:
+    """Iso d'un sommet horloge avion proche. Rien si l'horloge n'en a pas."""
+    if not _air_stop_key(mark.get("name") or ""):
+        return None
+    lat, lon = mark.get("lat"), mark.get("lon")
+    best_iso: Optional[str] = None
+    best_d: Optional[float] = None
+    for v in ((clock or {}).get("vertices") or []):
+        if not isinstance(v, dict) or v.get("vehicle") != "plane":
+            continue
+        iso = v.get("iso")
+        if _ms(iso) is None:
+            continue
+        va, vo = v.get("lat"), v.get("lon")
+        if (
+            isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+            and isinstance(va, (int, float)) and isinstance(vo, (int, float))
+        ):
+            d = (float(lat) - float(va)) ** 2 + (float(lon) - float(vo)) ** 2
+        elif best_d is None:
+            d = 0.0
+        else:
+            continue
+        if best_d is None or d < best_d:
+            best_d = d
+            best_iso = str(iso)
+    return best_iso
+
+
 def merge_route_marks(route_marks: list | None, clock: dict | None) -> list[dict]:
     """Marques de la route + iso de l'horloge. Pas de date inventée."""
     clock_marks = [c for c in ((clock or {}).get("marks") or []) if isinstance(c, dict)]
@@ -523,6 +552,10 @@ def merge_route_marks(route_marks: list | None, clock: dict | None) -> list[dict
                     row["lat"] = hit.get("lat")
                 if row.get("lon") is None:
                     row["lon"] = hit.get("lon")
+        if _ms(row.get("iso")) is None:
+            vertex_iso = _iso_from_clock_vertex(row, clock)
+            if vertex_iso:
+                row["iso"] = vertex_iso
         out.append(row)
     return out
 
@@ -1981,6 +2014,87 @@ def _trim_free_script(chapters: list[dict], max_words: int = FILM_FREE_MAX_WORDS
     return chapters
 
 
+_AIR_OUT_RE = re.compile(r"prend l'avion pour|flies to", re.I)
+_AIR_BACK_RE = re.compile(r"retour en avion|return flight", re.I)
+
+
+def _air_name_from_sources(sources: list[str], key: str) -> str:
+    for name in sources:
+        if _air_stop_key(name) == key:
+            return short_name(name)
+    return ""
+
+
+def _air_name_sources(chapters: list[dict], marks: list | None, clock: dict | None) -> list[str]:
+    out: list[str] = []
+    for ch in chapters or []:
+        out.extend([ch.get("fromName") or "", ch.get("toName") or "", ch.get("text") or ""])
+    for m in list(marks or []) + list((clock or {}).get("marks") or []):
+        if isinstance(m, dict):
+            out.append(m.get("name") or "")
+    return out
+
+
+def _insert_before_close(text: str, sentence: str) -> str:
+    if not sentence or sentence in (text or ""):
+        return text or ""
+    sents = _sentences(text)
+    if sents and re.search(r"aujourd|today", sents[-1] or "", re.I):
+        sents.insert(-1, sentence)
+        return " ".join(sents).strip()
+    return f"{(text or '').strip()} {sentence}".strip()
+
+
+def _air_host_chapter(chapters: list[dict], cayenne: str, halifax: str) -> dict:
+    for ch in chapters:
+        if _is_air_leg(ch.get("fromName") or "", ch.get("toName") or ""):
+            return ch
+    blob_c = cayenne.casefold()
+    blob_h = halifax.casefold()
+    for ch in chapters:
+        text = (ch.get("text") or "").casefold()
+        names = f"{ch.get('fromName') or ''} {ch.get('toName') or ''}".casefold()
+        if blob_c and (blob_c in text or blob_c in names):
+            return ch
+        if blob_h and (blob_h in text or blob_h in names):
+            return ch
+    return chapters[-1]
+
+
+def _ensure_air_spoken(
+    chapters: list[dict],
+    *,
+    lang: str,
+    marks: list | None = None,
+    clock: dict | None = None,
+) -> list[dict]:
+    """Aller et retour avion restent dits, quel que soit le budget ou la fusion."""
+    if not chapters:
+        return chapters
+    names = _air_name_sources(chapters, marks, clock)
+    cayenne = _air_name_from_sources(names, "cayenne")
+    halifax = _air_name_from_sources(names, "halifax")
+    if not cayenne or not halifax:
+        return chapters
+    blob = " ".join(c.get("text") or "" for c in chapters)
+    has_out = bool(_AIR_OUT_RE.search(blob))
+    has_back = bool(_AIR_BACK_RE.search(blob))
+    if has_out and has_back:
+        return chapters
+    host = _air_host_chapter(chapters, cayenne, halifax)
+    text = host.get("text") or ""
+    if not has_out:
+        text = _insert_before_close(
+            text, _air_sentence({"from": {"name": cayenne}, "destName": halifax}, i=0, lang=lang),
+        )
+    if not has_back:
+        text = _insert_before_close(
+            text, _air_sentence({"from": {"name": halifax}, "destName": cayenne}, i=0, lang=lang),
+        )
+    host["text"] = speak_film_text(text, lang)
+    return chapters
+
+
 def _air_bits_from_moments(
     moments: list[dict],
     w: dict,
@@ -2174,6 +2288,7 @@ def build_raw_from_moments(
             chapters[-1]["text"] = " ".join(sents[:-1]).strip()
             n = script_chars(chapters)
             guard += 1
+    _ensure_air_spoken(chapters, lang=lang, marks=marks, clock=clock)
     return {
         "chapters": chapters,
         "source": "rules",
@@ -2231,6 +2346,7 @@ def build_raw_script(
         events = [e for e in events if e["id"] != drop["id"]]
         chapters = compose(events)
         attach_chapter_events(chapters, packed, journal, lang)
+    _ensure_air_spoken(chapters, lang=lang, marks=marks, clock=clock)
     return {
         "chapters": chapters,
         "source": "rules",

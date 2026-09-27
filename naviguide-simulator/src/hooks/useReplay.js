@@ -195,6 +195,8 @@ export function applyReplayStop({
   cancelRaf,
   stopVoice,
   releaseCamera,
+  keepSubtitle = false,
+  subtitle = "",
 } = {}) {
   (stopVoice || stopSpeaking)();
   (releaseCamera || publishFilmEnd)();
@@ -205,7 +207,7 @@ export function applyReplayStop({
     card: null,
     progress: 0,
     chapterIdx: 0,
-    chapterText: "",
+    chapterText: keepSubtitle ? subtitle : "",
     filmLeg: null,
   };
 }
@@ -291,6 +293,7 @@ export function useReplay({
   const [targetSeconds, setTargetSeconds] = useState(0);
   const [chapterIdx, setChapterIdx] = useState(0);
   const [chapterText, setChapterText] = useState("");
+  const chapterTextRef = useRef("");
   const [filmLeg, setFilmLeg] = useState(null);
   const [voiceRate, setVoiceRate] = useState(1);
   const [progress, setProgress] = useState(0);
@@ -347,6 +350,8 @@ export function useReplay({
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       },
+      keepSubtitle: true,
+      subtitle: chapterTextRef.current,
     });
     setActive(cleared.active);
     setTMs(cleared.tMs);
@@ -372,6 +377,7 @@ export function useReplay({
     recaleRemainRef.current = 0;
     if (Number.isFinite(ch.tA)) tMsRef.current = ch.tA;
     setChapterIdx(ch.idx);
+    chapterTextRef.current = ch.text || "";
     setChapterText(ch.text || "");
     setFilmLeg({
       fromLat: ch.fromLat, fromLon: ch.fromLon, toLat: ch.toLat, toLon: ch.toLon,
@@ -592,7 +598,11 @@ export function useReplay({
   }, [clock, requireOfficialFilm, marks, destination, journal, lang, targetSeconds, applyChapter, t0]);
 
   useEffect(() => {
-    if (!enabled && active) stop();
+    if (!enabled) {
+      if (active) stop();
+      chapterTextRef.current = "";
+      setChapterText("");
+    }
   }, [enabled, active, stop]);
 
   const onVoiceBoundary = useCallback((charIdx) => {

@@ -396,10 +396,32 @@ export function chapterAtElapsed(plan, elapsedSeconds) {
  * Répartit `targetSeconds` au prorata des caractères. `timeAt(i, charIdx)`
  * est monotone : le bateau ne recule jamais.
  */
+const AIR_CHAPTER_RE = /avion|flies|flight/i;
+
+function keepFilmChapters(chapters) {
+  const list = [];
+  let orphan = "";
+  for (const c of chapters || []) {
+    if (!c) continue;
+    const ok = ms(c.tA) != null && ms(c.tB) != null && ms(c.tB) > ms(c.tA);
+    if (ok) {
+      list.push(orphan ? { ...c, text: [orphan, c.text].filter(Boolean).join(" ") } : c);
+      orphan = "";
+    } else if (AIR_CHAPTER_RE.test(c.text || "")) {
+      orphan = [orphan, c.text].filter(Boolean).join(" ");
+    }
+  }
+  if (orphan && list.length) {
+    const last = list[list.length - 1];
+    list[list.length - 1] = { ...last, text: [last.text, orphan].filter(Boolean).join(" ") };
+  }
+  return list;
+}
+
 export function filmPlan({ chapters, targetSeconds = FILM_TARGET_SECONDS } = {}) {
   const target = Number(targetSeconds);
   const seconds = Number.isFinite(target) && target > 0 ? target : FILM_TARGET_SECONDS;
-  const list = (chapters || []).filter((c) => c && (ms(c.tA) != null) && (ms(c.tB) != null) && ms(c.tB) > ms(c.tA));
+  const list = keepFilmChapters(chapters);
   const weights = list.map((c) => Math.max(1, String(c.text || "").length));
   const totalChars = weights.reduce((s, n) => s + n, 0) || 1;
   let startWall = 0;

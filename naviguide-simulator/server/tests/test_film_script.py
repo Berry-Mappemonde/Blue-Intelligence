@@ -1126,3 +1126,64 @@ def test_re7_discourse_eleven_defects():
     assert 0 <= idx_zee < idx_dep
     _assert_no_filler(blob)
     assert not re.search(r"\bnm\b", blob)
+
+
+def _rf5_seeded_clock():
+    """Voyage semé : Halifax sans iso sur les marques, absent des marks horloge."""
+    route = [
+        {"name": "Saint-Maur (Berry, Indre)", "nm": 0, "filmNm": 0, "lat": 46.8, "lon": 1.6},
+        {"name": "La Rochelle", "nm": 0, "filmNm": 122, "lat": 46.15, "lon": -1.16},
+        {"name": "Cayenne (Guyane)", "nm": 4000, "filmNm": 4000, "lat": 4.9, "lon": -52.3},
+        {"name": "Halifax (Nouvelle-Écosse)", "nm": 4000, "filmNm": 4100, "lat": 44.6, "lon": -63.6},
+        {"name": "Nouméa (Nouvelle-Calédonie)", "nm": 19055, "filmNm": 19177, "lat": -22.2, "lon": 166.4},
+    ]
+    clock = {
+        "t0": OFFICIAL_T0,
+        "marks": [
+            {"name": "Saint-Maur (Berry, Indre)", "nm": 0, "filmNm": 0, "iso": "2026-05-15T08:00:00Z", "holdHours": 0, "lat": 46.8, "lon": 1.6},
+            {"name": "La Rochelle", "nm": 122, "filmNm": 122, "iso": "2026-05-15T12:00:00Z", "holdHours": 72, "lat": 46.15, "lon": -1.16},
+            {"name": "Cayenne (Guyane)", "nm": 4000, "filmNm": 4000, "iso": "2026-07-01T08:00:00Z", "holdHours": 72, "lat": 4.9, "lon": -52.3},
+            {"name": "Nouméa (Nouvelle-Calédonie)", "nm": 19055, "filmNm": 19177, "iso": "2026-09-17T22:48:00Z", "holdHours": 72, "lat": -22.2, "lon": 166.4},
+        ],
+        "vertices": [
+            {"lat": 44.6, "lon": -63.6, "iso": "2026-07-02T08:00:00Z", "vehicle": "plane", "filmNm": 4100},
+            {"lat": 4.9, "lon": -52.3, "iso": "2026-07-10T08:00:00Z", "vehicle": "plane", "filmNm": 4100},
+        ],
+    }
+    return clock, route
+
+
+def _assert_air_both_ways(blob: str) -> None:
+    assert re.search(r"prend l'avion pour Halifax", blob, re.I)
+    assert re.search(r"retour en avion vers Cayenne", blob, re.I)
+
+
+def test_rf5_air_when_halifax_undated_and_no_moments():
+    clock, route = _rf5_seeded_clock()
+    plan = build_raw_script(clock, route, RE7_LIVE, None, lang="fr", seconds=0, now_ms=NOW_MS)
+    blob = _script_blob(plan)
+    assert plan["targetSeconds"] == 0
+    _assert_air_both_ways(blob)
+    assert "départ vers Nouméa" not in blob or "avion" in blob
+    _assert_no_filler(blob)
+
+
+def test_rf5_air_survives_tight_budget():
+    clock, route = _rf5_seeded_clock()
+    plan = build_raw_script(
+        clock, route, RE7_LIVE, _re7_journal(), lang="fr", seconds=108, now_ms=NOW_MS,
+    )
+    blob = _script_blob(plan)
+    assert plan["targetSeconds"] == 108
+    _assert_air_both_ways(blob)
+    _assert_no_filler(blob)
+
+
+def test_rf5_air_survives_re7_tight_budget():
+    plan = build_raw_script(
+        RE7_CLOCK, RE7_CLOCK["marks"], RE7_LIVE, _re7_journal(),
+        lang="fr", seconds=108, now_ms=NOW_MS, review=RE7_REVIEW,
+    )
+    blob = _script_blob(plan)
+    _assert_air_both_ways(blob)
+    assert re.search(r"Aujourd’hui, le bateau est à Nouméa", blob)
