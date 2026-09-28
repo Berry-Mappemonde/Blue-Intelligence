@@ -14,6 +14,7 @@ import AuditView from "./components/AuditView";
 import ReviewView from "./components/ReviewView";
 import SettingsPanel from "./components/SettingsPanel";
 import ReportModal from "./components/ReportModal";
+import ReportPoEModal from "./components/ReportPoEModal";
 import NotForNavModal from "./components/map/NotForNavModal";
 import { DEFAULT_SCIENCE_WMS } from "./components/MapLayersSidebar";
 import { DEFAULT_SAFETY_M } from "./components/map/safetyIsobathSpec";
@@ -83,7 +84,8 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-  // Admin mode — Console and Review are visible only after the backend
+  const [isReportPoEOpen, setIsReportPoEOpen] = useState(false);
+  // Admin mode - Console and Review are visible only after the backend
   // validates the key (?admin=<key> in the URL, stored by api.js).
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
@@ -293,7 +295,7 @@ export default function App() {
     try {
       const run = mapRunsRef.current.marinas;
       if (!force && !run?.id
-          && (marinasRef.current?.features?.length || 0) > 0) {
+        && (marinasRef.current?.features?.length || 0) > 0) {
         return;
       }
       const { data } = showReviewRef.current
@@ -758,6 +760,7 @@ export default function App() {
             fiche={zoneFiche}
             ficheLoading={ficheLoading}
             onFlyToPort={handleFlyToPoe}
+            onReportPoE={() => setIsReportPoEOpen(true)}
           />
         )}
         {view !== "review" && mode === "amp" && (
@@ -856,7 +859,7 @@ export default function App() {
             )
           ) : null}
         </main>
-          {showSettings && (
+        {showSettings && (
           <SettingsPanel t={t} lang={lang} mode={mode} settings={settings}
             isAdmin={isAdmin}
             overlayOn={overlayOn}
@@ -884,6 +887,23 @@ export default function App() {
       {showReport && (
         <ReportModal t={t} onClose={() => setShowReport(false)} onSubmitted={() => { setShowReport(false); }} />
       )}
+
+      {isReportPoEOpen && (
+        <ReportPoEModal
+          t={t}
+          onClose={() => setIsReportPoEOpen(false)}
+          onSubmit={(data) => {
+            api.post("/report-poe", data)
+              .then(() => {
+                setIsReportPoEOpen(false);
+              })
+              .catch(() => {
+                setIsReportPoEOpen(false);
+              });
+          }}
+        />
+      )}
+
       <NotForNavModal
         t={t}
         open={notForNavOpen}
