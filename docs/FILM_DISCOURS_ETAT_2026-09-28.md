@@ -3,7 +3,7 @@
 Relevé fait sur le poste de recette (tête de pile #386, `GET /voyage/official/film?lang=fr&style=raw`,
 stock du 28 sept. 02:14, horloge en **climatologie** — l'hindcast Open-Meteo est vide, quota).
 Les variantes **2:30 et 3:00 sont identiques** : 2 913 caractères, 11 chapitres, soit ≈ 3 min 15 de voix à
-débit constant. Ce document sert de base au batch **RG — « le film raconte la route »** (§ 5).
+débit constant. Ce document sert de base au batch **RG — « le film raconte la route »** (§ 6).
 
 ---
 
@@ -126,9 +126,56 @@ attend à Cayenne ; retour le … ; le 28 juillet, il reprend la mer vers Panama
 
 ---
 
-## 5. Le batch proposé — RG « le film raconte la route »
+## 5. Cinématique et motion design — pourquoi le bateau n'avance pas de manière fluide
 
-Onze lots, à enchaîner dans cet ordre (RG11 optionnel). Tailles : 6 M + 5 S ≈ deux nuits.
+Mesures du 28 sept. (Chromium headless 1440×860, poste = tête #386, film lancé depuis Suivre, 45 s,
+un relevé par `requestAnimationFrame` : temps-film, position du bateau à l'écran, centre et zoom de la
+carte ; script `naviguide-simulator/scripts/film-cinematique.mjs`, livré avec ce document).
+Sans moteur vocal le film roule à l'horloge murale ; la dent de scie de la voix (§ 5.2) est mesurée à part.
+
+### 5.1 Ce que les chiffres disent
+
+| Mesure | Valeur | Lecture |
+|---|---|---|
+| Cadence | 44 fps ; **8,3 % des frames > 34 ms**, max 100 ms | une frame sur douze est un à-coup visible |
+| Bateau à l'écran, pas par frame | **63 % de pas nuls** ; p90 = 12 px ; p99 = 29 px ; max = 243 px | le bateau est immobile deux frames sur trois, puis avance par bonds de 12 à 29 px |
+| Caméra, pas par frame | 58 % de pas nuls ; p90 = 22 px ; **max = 29 px = la butée** (2 % de 1 440 px) | la caméra attend, puis court derrière le bateau à la vitesse plafond |
+| Vitesse du temps-film, par seconde | 0 → 0,7 → 9 → **44 → 56** → 7 → 0 → 56 → 12 → **154** → 97 → 12 → 0 h de voyage / s | d'une phrase à l'autre, le bateau passe de l'arrêt complet à **six jours de route par seconde** |
+| Frames sans avance du temps-film | 39 % | à quai (3 jours d'escale) et Saint-Maur → La Rochelle : rien ne bouge pendant 4 à 9 s |
+
+### 5.2 Les causes, dans le code
+
+1. **Le rythme du bateau est dicté par la longueur des phrases, pas par la route** (`src/engine/replay.js` `anchoredTimeAt`, ancres de `server/film_script.py` `chapter_anchors`). Entre deux ancres le temps-film est linéaire en caractères : la phrase « À partir du 31 mai, 11 stations scientifiques croisées » (55 caractères, 3,5 s) porte **26 jours d'Atlantique** → 154 h/s ; « Arrivée à Ajaccio le 26 mai, 3 jours à quai » porte 3 jours à quai → 0 h/s, bateau figé. La vitesse change **par palier à chaque phrase**, sans transition.
+2. **Menée par la voix, l'avance est en dent de scie à chaque mot** (`src/engine/replay.js` `voiceLedStep` → `advanceReplayTime` : à chaque frame, on comble une fraction `dt / horizon` de l'écart à la cible ; la cible ne bouge qu'à la frontière de mot). Simulation avec le code réel (mot de 6 caractères toutes les 375 ms, 16 car./s) : avance par frame de **0,94 h à 0,14 h, rapport 6,8** — le bateau bondit au début de chaque mot puis freine, ~2,7 fois par seconde.
+3. **La caméra recale la carte à chaque frame par `setView(…, { animate: false })`** (`src/map/filmCamera.js` `applyFilmCamera` l. 336, appelé par `MapSceneController.syncFilmCamera` l. 1180-1192 dans une boucle rAF). Chaque appel est un `_resetView` Leaflet : toutes les couches se redessinent (route en canvas de plusieurs milliers de points, drapeaux, roses, ZEE) → les frames à 50-100 ms. Le pan est en plus **borné à 2 % de l'écran par frame** (`FILM_PAN_MAX_SCREEN`, `clampFilmPan`) : quand le bateau va plus vite que 29 px/frame, la caméra décroche et le bateau glisse vers le bord, puis revient quand la phrase suivante le ralentit.
+4. **Le cadrage dépend du cap instantané** (`filmViewCenter` : bateau au tiers avant selon `heading`). À chaque sommet de route le cap tourne de quelques degrés → le centre visé se déplace latéralement → le bateau **dérive sur l'écran** alors qu'il avance droit.
+5. **Le sillage et les autres acteurs sont rendus à 8 Hz** (`src/map/ScenePlaybackController.js` `SCENE_INTERVAL_MS = 125` → `renderDynamic` → `syncWake`) : la route colorée avance par marches de 125 ms derrière un bateau à 60 Hz — à 6 jours/s, chaque marche fait 150 nm.
+6. **Au changement de chapitre, un `flyTo` de 1,2 s** pendant lequel le bateau n'est plus repositionné (garde `zoomAnimating`), puis la caméra rattrape à 29 px/frame : le bond de 243 px mesuré.
+7. **Onglet caché** : `requestAnimationFrame` s'arrête, la voix continue → au retour, le bateau saute (E3).
+
+### 5.3 Pourquoi le discours n'est pas déclamé aux bons endroits
+
+1. **L'ancre est posée au début de la phrase** (`chapter_anchors`) : pendant que la voix parle d'un lieu, le bateau **le quitte** déjà pour rejoindre l'ancre suivante. « Le 21 mai, le détroit de Gibraltar » : le bateau est à Gibraltar au premier mot et bien au-delà au dernier. La position juste est celle du **nom du lieu** dans la phrase (ou son milieu) ; une phrase de durée (« trois jours à quai ») demande **deux ancres** (début = arrivée, fin = départ).
+2. **Le départ faux de La Rochelle** (A1) : « Puis, le 18 mai, départ vers Ajaccio » est ancré au 18 mai (tA + 3 jours d'escale de la règle) alors que l'horloge a le bateau en mer depuis le 15 : la voix dit « départ » avec le bateau au large de la Galice.
+3. **Les phrases de groupe** (« 11 stations scientifiques croisées ») sont ancrées au premier membre du groupe puis étirées jusqu'à l'ancre suivante : la voix parle de stations de Gibraltar pendant que le bateau traverse l'Atlantique.
+4. **Le bateau est en avance d'une seconde sur la voix** (`FILM_VOICE_LOOKAHEAD_CHARS = 12`) : voulu pour qu'il ne soit jamais en retard, mais il faut le compenser dans l'ancre (nom du lieu − 12 caractères).
+5. **Le vol** (A2) : ancré comme une navigation de trois jours vers Saint-Pierre, alors que le bateau ne bouge pas de Cayenne.
+
+### 5.4 Le motion design visé
+
+- **Vitesse continue** : le bateau ne s'arrête et ne repart jamais brutalement. Vitesse à l'écran bornée (v_min, v_max en px/s), transitions adoucies (ease-in / ease-out) aux ancres, interpolation **monotone lissée** entre ancres au lieu de la ligne brisée.
+- **Voix sans dent de scie** : entre deux frontières de mot, l'avance est prédite à la vitesse mesurée de la voix (car./s), et la frontière ne sert qu'à corriger doucement l'estimation — plus de bond à chaque mot.
+- **Gouverneur de rythme** : quand une phrase courte porte des jours de route, le bateau avance à v_max et **la voix attend** (silence entre deux phrases, jamais coupée au milieu) ; quand le bateau est à quai, le temps-film **saute l'escale** après la phrase qui la dit — l'écran ne reste jamais figé plus de ~2 s.
+- **Une ancre au nom du lieu**, deux pour une durée, un départ au premier mot, une arrivée au dernier ; recette automatique : quand le nom est prononcé, le bateau est à moins de N milles du lieu.
+- **Caméra qui est le cadre du bateau, pas une poursuite** : le centre suit une position lissée (cap moyen de la jambe, pas le cap instantané) ; déplacement de la carte par translation du plan (pas de `_resetView` par frame), couches lourdes redessinées à l'arrêt seulement ; zoom constant par jambe **avec** un léger resserrement à l'approche et un élargissement au départ ; un seul mouvement au changement d'étape, sans trou de repositionnement.
+- **Tout à 60 Hz pendant le film** : bateau, sillage, bulle ; budget de frame ≤ 16 ms mesuré par le script de § 5.1 (≤ 1 % de frames > 34 ms).
+- **Sous-titre = la phrase en cours**, mise en avant du nom du lieu au moment où il est dit ; bulle d'événement ancrée au même instant que la phrase.
+
+---
+
+## 6. Le batch proposé — RG « le film raconte la route »
+
+Quatorze lots, à enchaîner dans cet ordre (RG11 optionnel en dernier). Tailles : 8 M + 6 S ≈ trois nuits.
 Chaque lot : cause lue sur la tête de pile, tests, recette visuelle sur le poste, PR séparée (gabarit REGLES § 3).
 
 | n° | id | taille | deps | quoi |
@@ -141,10 +188,13 @@ Chaque lot : cause lue sur la tête de pile, tests, recette visuelle sur le post
 | 108 | RG6 | M | RG2, RG3, RG4 | **Gabarit narratif par étape** (§ 4) : ouverture → route chronologique → escale ; marina ou port d'arrivée nommé (B8) ; durée d'escale dite une fois et variée (C6) ; une date toutes les deux phrases (C2) ; liste de mots interdits (C3) ; connecteurs liés au contenu (C5) ; annexe « À surveiller / Couloirs / La jambe compte » supprimée, fondue dans la route (B7) ; « de de », titres anglais (C4) |
 | 109 | RG7 | S | RG6 | **Ouverture et fin** : l'expédition (qui, d'où, combien d'escales, combien de milles), et la fin (aujourd'hui, ETA de la prochaine escale, les escales à venir : Nouméa, Dzaoudzi, Europa, Tromelin, La Réunion) (B9) |
 | 110 | RG8 | S | RG6 | **Budgets réels** : 2:30 / 3:00 / intégral produisent des textes différents (priorités de sélection), durée estimée affichée à côté des pilules ; débit de voix constant conservé (E1) |
-| 111 | RG9 | S | — | **Client robuste** : sans moteur vocal, horloge murale dès le départ et jamais « fini » avant la dernière phrase (E2) ; onglet caché → reprise douce (E3) ; sous-titre = la phrase en cours (E4) |
+| 111 | RG9 | S | — | **Client robuste** : sans moteur vocal, horloge murale dès le départ et jamais « fini » avant la dernière phrase (E2) ; onglet caché → reprise douce, sans saut (E3, § 5.2-7) ; sous-titre = la phrase en cours, nom du lieu mis en avant quand il est dit (E4) |
 | 112 | RG10 | S | RG6 | **Recette automatique du discours** : test serveur qui lit le film produit et refuse jargon (liste), « de de », titres anglais, comptages sans nom, dates en rafale, phrases trop longues ; vérifie chronologie et ancres ; parcours de référence du bot mis à jour |
-| 113 | RG11 | M | RG10 | *(optionnel)* **« Rédigé »** : réécriture LLM depuis les faits structurés de chaque étape (JSON), zéro invention, chiffres et noms vérifiés automatiquement contre les faits ; repli sur le brut sinon |
+| 113 | RG12 | M | RG1 | **Vitesse continue du bateau** (§ 5.2-1, 5.2-2, § 5.4) : interpolation monotone lissée entre ancres avec transitions adoucies ; menée par la voix, avance prédite au débit mesuré (car./s) et frontières de mot en correction douce — plus de dent de scie (rapport max/min d'avance par frame ≤ 1,5 sur une phrase) ; gouverneur de rythme : vitesse écran bornée (v_min, v_max), la voix attend en fin de phrase quand la route est longue, l'escale est sautée après la phrase qui la dit (jamais plus de ~2 s d'écran figé) |
+| 114 | RG13 | M | RG12 | **Caméra et rendu à 60 Hz** (§ 5.2-3 à 5.2-6) : déplacement de la carte par translation du plan, plus de `setView` par frame ni de redessin des couches lourdes en mouvement ; cadrage sur le cap lissé de la jambe ; butée de pan liée à la vitesse du bateau (la caméra ne décroche plus) ; resserrement à l'approche, élargissement au départ ; sillage, acteurs et bulle rendus à la frame pendant le film (plus de 8 Hz) ; un seul mouvement au changement d'étape sans trou ; script `scripts/film-cinematique.mjs` avec seuils en recette : ≤ 1 % de frames > 34 ms, 0 pas nul hors escale, bateau jamais à plus de 40 % du centre |
+| 115 | RG14 | S | RG6, RG12 | **Ancres au bon mot** (§ 5.3) : l'ancre d'un lieu est posée au nom du lieu dans la phrase (compensée de l'avance de la voix), une phrase de durée a deux ancres, départ au premier mot, arrivée au dernier ; groupes datés au membre le plus proche du bateau ; recette automatique : quand le nom est prononcé, le bateau est à moins de N milles du lieu (N par type : escale 5, marina 15, AMP/projet 30, ZEE = à l'intérieur) |
+| 116 | RG11 | M | RG10 | *(optionnel)* **« Rédigé »** : réécriture LLM depuis les faits structurés de chaque étape (JSON), zéro invention, chiffres et noms vérifiés automatiquement contre les faits ; repli sur le brut sinon |
 
-Décisions à prendre par le porteur avant d'ouvrir la PR GO : le gabarit § 4 ; la liste et l'ordre § 5
+Décisions à prendre par le porteur avant d'ouvrir la PR GO : le gabarit § 4 (validé le 28 sept.) ; le motion design § 5.4 ; la liste et l'ordre § 6
 (ajouts, retraits) ; le sort de la PR GO #388 (RH1–RH2 : chat par les faits, console sans ERR_ABORTED) —
 à fermer et remplacer par la PR GO « RG », ou à garder en queue du batch.
