@@ -9,8 +9,12 @@ import {
   ETA_RETRY_MS,
   boundEtaIso,
   buildAdviceCompare,
+  attachClockIso,
+  etaDayLabel,
+  etaDisplayFromResponse,
   etaFromResponse,
   etaRangeFromMembers,
+  etaRetryDue,
   formatAdvicePills,
   formatAdviceSentence,
   formatEtaRange,
@@ -20,12 +24,15 @@ import {
   localizeAdviceSentence,
   nextEtaRetryMs,
   nextStopFromMarks,
+  nextStopRowIndex,
   countOfficialEtaPolls,
   shouldPollOfficialEta,
   pickHeaviestLegIdx,
   pollOfficialAdvice,
   pollOfficialEta,
   reviewAdviceKey,
+  startOfficialEtaWatch,
+  startWarmStatusWatch,
   tightenEtaMembers,
 } from "./usePlanReview.js";
 import fr from "../i18n/fr.js";
@@ -33,6 +40,21 @@ import en from "../i18n/en.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(here, "usePlanReview.js"), "utf8");
+const sidebarSrc = readFileSync(join(here, "../components/Sidebar.jsx"), "utf8");
+
+const tick = (ms = 15) => new Promise((r) => setTimeout(r, ms));
+const hangUntilAbort = (_ms, signal) => new Promise((resolve, reject) => {
+  const onAbort = () => {
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    reject(err);
+  };
+  if (signal?.aborted) {
+    onAbort();
+    return;
+  }
+  signal?.addEventListener?.("abort", onAbort, { once: true });
+});
 
 const interpolate = (dict) => (key, vars = {}) =>
   Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), dict[key] ?? key);
@@ -149,6 +171,114 @@ describe("usePlanReview — fourchette ETA (lot R11)", () => {
     const hidden = boundEtaIso("2026-11-13T00:00:00Z", null, "2027-06-10T00:00:00Z");
     assert.equal(hidden.p10, "");
   });
+
+  it("lot RG17 — ligne de raison quand members = 0, jamais une fourchette", () => {
+    const empty = {
+      members: 0,
+      p10: "2026-10-11T00:00:00Z",
+      p90: "2026-10-14T00:00:00Z",
+      reason: "quota Open-Meteo atteint",
+      nextRetry: "2026-09-29T00:15:00Z",
+      status: "unavailable",
+    };
+    assert.equal(etaFromResponse(empty), null);
+    assert.equal(etaDisplayFromResponse(empty), empty);
+    const preparing = { members: 0, p10: null, p90: null, status: "preparing", reason: "en préparation" };
+    assert.equal(etaDisplayFromResponse(preparing), preparing);
+    const preparingLabel = plain(formatEtaRange(preparing, tFr, "fr"));
+    assert.match(preparingLabel, /fourchette indisponible/);
+    assert.match(preparingLabel, /en préparation/);
+    assert.doesNotMatch(preparingLabel, /1 janv/);
+    assert.equal(etaRetryDue(empty, Date.parse("2026-09-28T12:00:00Z")), false);
+    const frLabel = plain(formatEtaRange(empty, tFr, "fr"));
+    assert.match(frLabel, /fourchette indisponible/);
+    assert.match(frLabel, /quota Open-Meteo atteint/);
+    assert.match(frLabel, /29 sept/);
+    assert.doesNotMatch(frLabel, /arrivée entre le/);
+    const enLabel = plain(formatEtaRange(empty, tEn, "en"));
+    assert.match(enLabel, /arrival window unavailable/i);
+    assert.match(enLabel, /Open-Meteo quota reached/);
+    assert.match(enLabel, /29 Sep/i);
+    assert.doesNotMatch(enLabel, /arrival between/i);
+  });
+
+  it("lot RG17 — pollOfficialEta s'arrête quand nextRetry est dans le futur", async () => {
+    const unavailable = {
+      members: 0,
+      p10: null,
+      p90: null,
+      reason: "quota",
+      nextRetry: "2099-01-02T00:15:00Z",
+      status: "unavailable",
+    };
+    let n = 0;
+    const seen = [];
+    const out = await pollOfficialEta("Nouméa", {
+      fetchFn: async () => {
+        n += 1;
+        return unavailable;
+      },
+      sleep: async () => {
+        throw new Error("ne doit pas relancer");
+      },
+      onUpdate: (eta) => seen.push(eta),
+    });
+    assert.equal(n, 1);
+    assert.equal(out.reason, "quota");
+    assert.equal(seen[0].status, "unavailable");
+    assert.match(plain(formatEtaRange(out, tFr, "fr")), /fourchette indisponible/);
+  });
+
+  it("lot RC24 — nextRetry null ou epoch : pas « 1 janv. »", () => {
+    assert.equal(etaDayLabel(null, "fr"), "");
+    assert.equal(etaDayLabel(undefined, "fr"), "");
+    assert.equal(etaDayLabel("", "fr"), "");
+    assert.equal(etaDayLabel("1970-01-01T00:00:00Z", "fr"), "");
+    assert.match(etaDayLabel("2026-09-30T00:00:00Z", "fr"), /30 sept/);
+    const noRetry = {
+      members: 0,
+      p10: null,
+      p90: null,
+      reason: "quota Open-Meteo atteint",
+      nextRetry: null,
+      status: "unavailable",
+    };
+    const label = plain(formatEtaRange(noRetry, tFr, "fr"));
+    assert.match(label, /fourchette indisponible/);
+    assert.match(label, /quota Open-Meteo atteint/);
+    assert.doesNotMatch(label, /1 janv/);
+    assert.doesNotMatch(label, /nouvel essai/);
+    const epoch = { ...noRetry, nextRetry: "1970-01-01T00:00:00.000Z" };
+    assert.doesNotMatch(plain(formatEtaRange(epoch, tFr, "fr")), /1 janv/);
+    const invalid = { ...noRetry, nextRetry: "pas-une-date" };
+    assert.doesNotMatch(plain(formatEtaRange(invalid, tFr, "fr")), /1 janv/);
+  });
+
+  it("lot RC24 — label sur la prochaine, pas la première rangée", () => {
+    const now = Date.parse("2026-09-29T12:00:00Z");
+    const marks = [
+      { name: "Saint-Maur (Berry, Indre)", iso: "2026-05-15T08:00:00Z", filmNm: 0 },
+      { name: "La Rochelle", iso: "2026-05-15T12:00:00Z", filmNm: 122 },
+      { name: "Nouméa (Nouvelle-Calédonie)", iso: "2026-09-30T07:51:40Z", filmNm: 19177 },
+      { name: "La Rochelle", iso: "2027-04-17T21:16:31Z", filmNm: 39426 },
+    ];
+    const stolen = marks.map((m, i) => (
+      i === 1 ? { ...m, iso: "2027-04-17T21:16:31Z" } : m
+    ));
+    assert.equal(nextStopFromMarks(stolen, now), "Nouméa (Nouvelle-Calédonie)");
+    const clock = [
+      { name: "Nouméa (Nouvelle-Calédonie)", iso: "2026-09-30T07:51:40Z", filmNm: 19336 },
+      { name: "La Rochelle", iso: "2027-04-17T21:16:31Z", filmNm: 39585 },
+    ];
+    const attached = attachClockIso(marks, clock);
+    assert.equal(attached[1].iso, "2026-05-15T12:00:00Z");
+    assert.equal(attached[3].iso, "2027-04-17T21:16:31Z");
+    assert.equal(nextStopFromMarks(attached, now), "Nouméa (Nouvelle-Calédonie)");
+    const rows = attached.map((m) => ({ name: m.name, mark: m }));
+    assert.equal(nextStopRowIndex(rows, attached, now), 2);
+    assert.notEqual(nextStopRowIndex(rows, attached, now), 0);
+    assert.notEqual(nextStopRowIndex(rows, attached, now), 1);
+  });
 });
 
 describe("usePlanReview — conseil (lot R10d)", () => {
@@ -252,6 +382,120 @@ describe("usePlanReview — conseil (lot R10d)", () => {
     assert.equal(reviewAdviceKey({ legs: [] }, 0), "");
     assert.match(src, /reviewAdviceKey/);
     assert.match(src, /isAdviceUnavailable/);
+  });
+});
+
+describe("lot RH2 — plus d'abort en vol", () => {
+  it("démontage pendant une requête en vol : aucun abort du fetch, aucun update", async () => {
+    let resolveFetch;
+    const pending = new Promise((r) => { resolveFetch = r; });
+    const fetchArgs = [];
+    const seen = [];
+    const full = {
+      members: 40,
+      p10: "2026-10-31T00:00:00Z",
+      p50: "2026-11-02T00:00:00Z",
+      p90: "2026-11-04T00:00:00Z",
+    };
+    const watch = startOfficialEtaWatch("Nouméa", {
+      fetchFn: async (...args) => {
+        fetchArgs.push(args);
+        await pending;
+        return full;
+      },
+      sleep: hangUntilAbort,
+      onUpdate: (v) => seen.push(v),
+    });
+    await tick();
+    watch.stop();
+    resolveFetch();
+    await watch.done;
+    await tick();
+    assert.equal(fetchArgs.length, 1);
+    assert.equal(fetchArgs[0].length, 1);
+    assert.equal(fetchArgs[0][0], "Nouméa");
+    assert.equal(seen.length, 0);
+    assert.equal(watch.alive, false);
+  });
+
+  it("changement de briefing : pas de nouvelle requête warm/status", async () => {
+    let n = 0;
+    let resolve;
+    const hang = new Promise((r) => { resolve = r; });
+    const seen = [];
+    const stop = startWarmStatusWatch(async () => {
+      n += 1;
+      await hang;
+      return { llm: { lastSource: "claude" } };
+    }, (src) => seen.push(src));
+    assert.equal(n, 1);
+    stop();
+    resolve();
+    await tick();
+    assert.equal(n, 1);
+    assert.equal(seen.length, 0);
+    assert.match(sidebarSrc, /startWarmStatusWatch/);
+    assert.match(sidebarSrc, /\}, \[showIciBriefing\]\);/);
+    assert.doesNotMatch(sidebarSrc, /\[showIciBriefing,\s*briefing\]/);
+    assert.doesNotMatch(sidebarSrc, /\/ici\/warm\/status[\s\S]{0,220}abort\(/);
+  });
+
+  it("changement de stopName : une seule boucle active", async () => {
+    const fetches = [];
+    const watchA = startOfficialEtaWatch("Nouméa", {
+      fetchFn: async (name) => {
+        fetches.push(name);
+        return { members: 0 };
+      },
+      sleep: hangUntilAbort,
+      onUpdate: () => {},
+    });
+    await tick();
+    assert.deepEqual(fetches, ["Nouméa"]);
+    watchA.stop();
+    const watchB = startOfficialEtaWatch("Dzaoudzi", {
+      fetchFn: async (name) => {
+        fetches.push(name);
+        return { members: 0 };
+      },
+      sleep: hangUntilAbort,
+      onUpdate: () => {},
+    });
+    await tick();
+    assert.deepEqual(fetches, ["Nouméa", "Dzaoudzi"]);
+    await tick(40);
+    assert.equal(fetches.filter((name) => name === "Nouméa").length, 1);
+    assert.equal(fetches.filter((name) => name === "Dzaoudzi").length, 1);
+    watchB.stop();
+    await watchA.done;
+    await watchB.done;
+  });
+
+  it("coupe l'attente entre sondes, pas une deuxième sonde", async () => {
+    let n = 0;
+    const watch = startOfficialEtaWatch("Nouméa", {
+      fetchFn: async () => {
+        n += 1;
+        return { members: 0 };
+      },
+      sleep: hangUntilAbort,
+      onUpdate: () => {},
+    });
+    await tick();
+    assert.equal(n, 1);
+    watch.stop();
+    await watch.done;
+    await tick();
+    assert.equal(n, 1);
+  });
+
+  it("ne passe plus le signal d'arrêt au fetch /eta ni à plan-review", () => {
+    assert.match(src, /startOfficialEtaWatch/);
+    assert.match(src, /startWarmStatusWatch/);
+    assert.doesNotMatch(src, /fetchFn\(stopName,\s*\{\s*signal/);
+    assert.doesNotMatch(src, /fetchFn\(legIdx,\s*lang,\s*\{\s*signal/);
+    assert.doesNotMatch(src, /\/voyage\/official\/plan-review`,\s*\{\s*signal/);
+    assert.match(src, /fetch\(`\$\{API_URL\}\/voyage\/official\/plan-review`\)/);
   });
 });
 
