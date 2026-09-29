@@ -8,7 +8,16 @@ import { isLandLegNames, nmToRoundedKm } from "../utils/berryLegs.js";
 import { ListenButton } from "./ListenButton.jsx";
 import { DepartureField } from "./DepartureField.jsx";
 import { clockRegimeText, clockWeatherTooltip, nextFilmSpeed, PROFILES } from "./filmBarClock.js";
-import { filmSubtitleShowsAir, visibleFilmSubtitle } from "../hooks/useReplay.js";
+import { filmSubtitleHighlight, filmSubtitleShowsAir, formatFilmEstimateClock, pickFilmEstimateSeconds, visibleFilmSubtitle } from "../hooks/useReplay.js";
+
+function filmEstimateLabel(replay, t) {
+  const clock = formatFilmEstimateClock(pickFilmEstimateSeconds(
+    replay?.targetSeconds,
+    replay?.variantEstimates,
+    replay?.estimatedSeconds,
+  ));
+  return clock ? t("filmDurationEstimate", { time: clock }) : "";
+}
 
 function clockSpeedBasis(clock, clockCurrent, barNm) {
   const direct = clockCurrent?.basis;
@@ -141,6 +150,7 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
   };
   const filmSubtitle = visibleFilmSubtitle(replay?.subtitle || "");
   const filmSubtitleAir = filmSubtitleShowsAir(filmSubtitle);
+  const filmSubtitleParts = filmSubtitleHighlight(filmSubtitle, replay?.subtitlePlace || "");
 
   if (hideBar) {
     return (
@@ -314,7 +324,15 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
               filmSubtitleAir ? "whitespace-normal" : "truncate"
             }`}
           >
-            {filmSubtitle}
+            {filmSubtitleParts.place ? (
+              <>
+                {filmSubtitleParts.before}
+                <strong data-testid="film-subtitle-place" className="text-cyan-200 font-semibold">
+                  {filmSubtitleParts.place}
+                </strong>
+                {filmSubtitleParts.after}
+              </>
+            ) : filmSubtitle}
           </div>
         ) : null}
         {storiesPending > 0 ? (
@@ -413,7 +431,7 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
                 data-testid="film-view-switch"
                 className="flex bg-white/5 border border-white/10 rounded-md p-0.5 gap-0.5 flex-shrink-0"
               >
-                {[[VIEW_SUIVRE, t("followExpeditionButton"), "view-suivre", "mode-follow"], [VIEW_SIMULATION, t("simulationButton"), "view-simulation", "mode-sim"]].map(([id, label, testId, alias]) => (
+                {[[VIEW_SUIVRE, t("followExpeditionButton"), "view-suivre", "mode-follow", null], [VIEW_SIMULATION, t("tracerButton"), "view-tracer", "mode-tracer", t("tracerModeTooltip")]].map(([id, label, testId, alias, tip]) => (
                   <button
                     key={id}
                     type="button"
@@ -421,6 +439,7 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
                     aria-checked={view === id}
                     data-testid={testId}
                     data-mode={alias}
+                    title={tip || undefined}
                     onClick={() => onView(id)}
                     className={`px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap ${
                       view === id ? "bg-cyan-700/70 text-cyan-50 border border-cyan-400/50" : "text-white/70 hover:text-white border border-transparent"
@@ -492,6 +511,14 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
                             {t(key)}
                           </button>
                         ))}
+                        {filmEstimateLabel(replay, t) ? (
+                          <span
+                            data-testid="film-duration-estimate"
+                            className="px-1 py-0.5 text-[9px] font-semibold text-white/70 whitespace-nowrap"
+                          >
+                            {filmEstimateLabel(replay, t)}
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
