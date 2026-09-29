@@ -11,6 +11,7 @@ from official_store import (
     DiskBackend,
     FAMILIES,
     FILM_SCRIPT_REV,
+    MOMENTS_REV,
     MongoBackend,
     OfficialStore,
     PREPARING,
@@ -318,7 +319,66 @@ def test_film_key_includes_script_rev(tmp_path):
     film_key = store.family_key("film", voy, NOW)
     base = store.current_key(voy, NOW)
     assert film_key == f"{base}:{FILM_SCRIPT_REV}"
+    assert store.family_key("moments", voy, NOW) == f"{base}:{MOMENTS_REV}"
     assert store.family_key("eta", voy, NOW) == base
+
+
+def test_film_get_falls_back_to_previous_rev_when_worker_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAVIGUIDE_OFFICIAL_WORKER", "0")
+    store = OfficialStore(DiskBackend(tmp_path / "disk"), now=lambda: NOW)
+    voy = {"t0": T0, "points": [{"lat": 1, "lon": 2}], "marks": []}
+    monkeypatch.setattr(official_store, "_load_official", lambda: voy)
+    payload = {"fr": {"chapters": [{"text": "ancien rf5"}]}}
+    store.put("film", payload, f"{store.current_key(voy, NOW)}:rf5")
+    hit = store.get("film")
+    assert hit is not None
+    assert hit["payload"]["fr"]["chapters"][0]["text"] == "ancien rf5"
+
+
+def test_film_get_prefers_current_rev_when_both_exist(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAVIGUIDE_OFFICIAL_WORKER", "0")
+    store = OfficialStore(DiskBackend(tmp_path / "disk"), now=lambda: NOW)
+    voy = {"t0": T0, "points": [{"lat": 1, "lon": 2}], "marks": []}
+    monkeypatch.setattr(official_store, "_load_official", lambda: voy)
+    base = store.current_key(voy, NOW)
+    store.put("film", {"fr": {"chapters": [{"text": "vieux"}]}}, f"{base}:rf5")
+    store.put("film", {"fr": {"chapters": [{"text": "rg1"}]}}, f"{base}:{FILM_SCRIPT_REV}")
+    hit = store.get("film")
+    assert hit["payload"]["fr"]["chapters"][0]["text"] == "rg1"
+
+
+def test_film_get_skips_previous_rev_when_worker_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAVIGUIDE_OFFICIAL_WORKER", "1")
+    store = OfficialStore(DiskBackend(tmp_path / "disk"), now=lambda: NOW)
+    voy = {"t0": T0, "points": [{"lat": 1, "lon": 2}], "marks": []}
+    monkeypatch.setattr(official_store, "_load_official", lambda: voy)
+    store.put("film", {"fr": {"chapters": [{"text": "rf5"}]}}, f"{store.current_key(voy, NOW)}:rf5")
+    assert store.get("film") is None
+
+
+def test_frozen_archive_serves_film_under_new_rev_when_worker_off(tmp_path, monkeypatch):
+    import tarfile
+
+    monkeypatch.setenv("NAVIGUIDE_OFFICIAL_WORKER", "0")
+    dest = tmp_path / "store"
+    dest.mkdir()
+    archive = Path(__file__).resolve().parent / "fixtures" / "official_store.tar.gz"
+    with tarfile.open(archive, "r:gz") as tf:
+        tf.extractall(dest, filter="data")
+    store = OfficialStore(DiskBackend(dest), now=lambda: datetime(2026, 9, 27, tzinfo=timezone.utc))
+    current = "c4a0d2dc06cea61b:2026-05-15T08:00:00Z:2026-09-27:rg1"
+    monkeypatch.setattr(
+        store, "family_key",
+        lambda family, voy=None, now=None: current if family == "film" else current.rsplit(":", 1)[0],
+    )
+    hit = store.get("film")
+    assert hit is not None
+    chapters = ((hit.get("payload") or {}).get("fr") or {}).get("chapters") or []
+    if not chapters:
+        variants = ((hit.get("payload") or {}).get("variants") or {}).get("fr") or {}
+        first = next(iter(variants.values()), {}) if isinstance(variants, dict) else {}
+        chapters = (first or {}).get("chapters") or []
+    assert len(chapters) > 0
 
 
 def test_stale_film_refreshed_when_marks_have_air_pair(tmp_path):
@@ -344,8 +404,8 @@ def test_stale_film_refreshed_when_marks_have_air_pair(tmp_path):
         for c in store.get("film", key)["payload"]["fr"]["chapters"]
     )
     low = blob.lower()
-    assert "prend l'avion pour" in low
-    assert "retour en avion vers" in low
+    assert "s'envole" in low
+    assert "bateau attend" in low
 
     again = official_store.refresh_family(
         "film", compute=compute, now=NOW, store=store, voy=voy, force=False,
@@ -380,6 +440,7 @@ def test_ajaccio_refresh_does_not_invent_air(tmp_path):
     assert status == READY
     blob = store.get("film", store.family_key("film", voy, NOW))["payload"]["fr"]["chapters"][0]["text"]
     assert "prend l'avion" not in blob
+    assert "s'envole" not in blob
     assert "retour en avion" not in blob
 
 
@@ -422,8 +483,8 @@ def test_cayenne_voyage_uses_itinerary_halifax_for_air(tmp_path):
     assert status == READY
     blob = store.get("film", store.family_key("film", voy, NOW))["payload"]["fr"]["chapters"][0]["text"]
     low = blob.lower()
-    assert "prend l'avion pour" in low
-    assert "retour en avion vers" in low
+    assert "s'envole" in low
+    assert "bateau attend" in low
 
 
 def test_http_force_refresh_film_serves_air_when_marks_have_pair(client, monkeypatch):
@@ -469,8 +530,8 @@ def test_http_force_refresh_film_serves_air_when_marks_have_pair(client, monkeyp
     assert film.status_code == 200
     blob = " ".join(c.get("text") or "" for c in film.json().get("chapters") or [])
     low = blob.lower()
-    assert "prend l'avion pour" in low
-    assert "retour en avion vers" in low
+    assert "s'envole" in low
+    assert "bateau attend" in low
 
 
 YESTERDAY = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
@@ -631,3 +692,42 @@ def test_filler_from_another_checkout_is_replaced(tmp_path, monkeypatch):
     monkeypatch.setattr(official_store, "_process_command", lambda pid: "python /ailleurs/scripts/prepare_official_store.py --loop")
     assert official_store.fill_process_alive() is None
     assert (31337, 15) in killed
+
+
+def test_rg8_three_variants_stored_and_served(tmp_path, monkeypatch):
+    import film_script
+
+    store = OfficialStore(DiskBackend(tmp_path / "disk"), now=lambda: NOW)
+    monkeypatch.setattr(official_store, "_INSTANCE", store)
+    monkeypatch.setattr(official_store, "_load_official", lambda: {
+        "t0": T0, "clock": {"t0": T0, "vertices": [{"lat": 1, "lon": 2, "iso": T0}]}, "marks": [],
+    })
+
+    async def fake_film(*, lang="fr", seconds=150, **_k):
+        n = {0: 40, 150: 10, 180: 20}.get(int(seconds or 0), 10)
+        text = ("Berry-Mappemonde quitte La Rochelle. " * n).strip()
+        return {
+            "chapters": [{"id": "c0", "text": text}],
+            "chars": len(text),
+            "source": "rules",
+            "targetSeconds": int(seconds or 0),
+        }
+
+    monkeypatch.setattr(film_script, "official_film", fake_film)
+    voy = {"t0": T0, "clock": {"t0": T0, "vertices": [{"lat": 1, "lon": 2, "iso": T0}]}, "marks": []}
+    payload = official_store.compute_film(voy, NOW)
+    assert payload is not None
+    fr = (payload.get("variants") or {}).get("fr") or {}
+    assert set(fr) >= {"150", "180", "0"}
+    assert fr["150"]["chars"] < fr["180"]["chars"] < fr["0"]["chars"]
+    assert fr["150"]["estimatedSeconds"] < fr["180"]["estimatedSeconds"]
+    key = store.family_key("film", voy, NOW)
+    store.put("film", payload, key)
+    short = official_store.serve_film("fr", 150)
+    mid = official_store.serve_film("fr", 180)
+    full = official_store.serve_film("fr", 0)
+    assert short["status"] == READY
+    assert short["chars"] < mid["chars"] < full["chars"]
+    assert short["estimatedSeconds"] == fr["150"]["estimatedSeconds"]
+    assert "150" in (full.get("estimates") or {})
+    assert full["estimates"]["0"]["chars"] == fr["0"]["chars"]
