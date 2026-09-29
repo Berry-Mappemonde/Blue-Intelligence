@@ -77,14 +77,50 @@ function displayEta(eta) {
   return { ...eta, p10: bound.p10, p90: bound.p90 };
 }
 
-/** Texte de fourchette ; chaîne vide si pas d'ensemble (jamais inventé). */
+export function isEtaPreparing(eta) {
+  if (!eta) return false;
+  const status = String(eta.status || "").toLowerCase();
+  const reason = String(eta.reason || "").toLowerCase();
+  return status === "preparing" || reason === "en préparation" || reason === "preparing";
+}
+
+export function etaReasonLabel(eta, t) {
+  if (isEtaPreparing(eta)) return "";
+  const raw = `${eta?.reason || ""} ${eta?.detail || ""}`.toLowerCase();
+  if (!raw.trim()) return "";
+  if (raw.includes("quota") || raw.includes("429") || raw.includes("limit exceeded")) {
+    return t("etaReasonQuota");
+  }
+  if (raw.includes("network") || raw.includes("réseau") || raw.includes("blocked")) {
+    return t("etaReasonNetwork");
+  }
+  if (raw.includes("beyond") || raw.includes("horizon")) {
+    return t("etaReasonHorizon");
+  }
+  if (raw.includes("ensemble_unavailable") || raw.includes("unavailable") || raw.includes("indisponible")) {
+    return t("etaReasonUnavailable");
+  }
+  return t("etaReasonUnavailable");
+}
+
+export function formatEtaUnavailable(eta, t, lang = "fr") {
+  if (!eta || Number(eta.members) > 0 || isEtaPreparing(eta)) return "";
+  const reason = etaReasonLabel(eta, t);
+  if (!reason) return "";
+  const date = etaDayLabel(eta.nextRetry, lang);
+  if (date) return t("etaUnavailable", { reason, date });
+  return t("etaUnavailableShort", { reason });
+}
+
+/** Texte de fourchette, ou une ligne de raison ; jamais une date inventée. */
 export function formatEtaRange(eta, t, lang = "fr") {
   const tight = displayEta(eta);
-  if (!tight) return "";
-  const p10 = etaDayLabel(tight.p10, lang);
-  const p90 = etaDayLabel(tight.p90, lang);
-  if (!p10 || !p90) return "";
-  return t("etaRange", { p10, p90 });
+  if (tight) {
+    const p10 = etaDayLabel(tight.p10, lang);
+    const p90 = etaDayLabel(tight.p90, lang);
+    if (p10 && p90) return t("etaRange", { p10, p90 });
+  }
+  return formatEtaUnavailable(eta, t, lang);
 }
 
 /** Détail p10–p90 / membres — info-bulle uniquement, jamais à l'écran. */
@@ -263,9 +299,9 @@ export function buildAdviceCompare(best, leg, t, lang = "fr") {
   };
 }
 
-async function defaultAdviceFetch(legIdx, lang, { signal } = {}) {
+async function defaultAdviceFetch(legIdx, lang) {
   const q = new URLSearchParams({ leg: String(legIdx), lang: String(lang || "fr") });
-  const r = await fetch(`${API_URL}/voyage/official/advice?${q}`, { signal });
+  const r = await fetch(`${API_URL}/voyage/official/advice?${q}`);
   return r.ok ? r.json() : null;
 }
 
@@ -280,11 +316,12 @@ export async function pollOfficialAdvice(legIdx, {
   while (!signal?.aborted) {
     let body = null;
     try {
-      body = await fetchFn(legIdx, lang, { signal });
+      body = await fetchFn(legIdx, lang);
     } catch (err) {
       if (err?.name === "AbortError") throw err;
       body = null;
     }
+    if (signal?.aborted) return null;
     if (isAdviceDone(body)) {
       onUpdate?.(body);
       return body;
@@ -310,6 +347,25 @@ export function etaFromResponse(body) {
   return null;
 }
 
+/** Fourchette prête, ou état honnête (raison / nextRetry) — jamais une date inventée. */
+export function etaDisplayFromResponse(body) {
+  const ready = etaFromResponse(body);
+  if (ready) return ready;
+  if (!body || Number(body.members || 0) > 0) return null;
+  if (isEtaPreparing(body)) return null;
+  if (body.status === "unavailable" || (body.reason && body.nextRetry)) return body;
+  return null;
+}
+
+export function etaRetryDue(body, nowMs = Date.now()) {
+  if (Number(body?.members) > 0) return false;
+  const raw = body?.nextRetry;
+  if (!raw) return true;
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return true;
+  return t <= nowMs;
+}
+
 export function sleepMs(ms, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -332,14 +388,61 @@ export function sleepMs(ms, signal) {
   });
 }
 
-async function defaultEtaFetch(stopName, { signal } = {}) {
-  const r = await fetch(`${API_URL}/voyage/official/eta?stop=${encodeURIComponent(stopName)}`, { signal });
+async function defaultEtaFetch(stopName) {
+  const r = await fetch(`${API_URL}/voyage/official/eta?stop=${encodeURIComponent(stopName)}`);
   return r.ok ? r.json() : null;
 }
 
 /**
- * Relance /eta tant que members == 0. Premier appel immédiat, puis recul
- * progressif. `onUpdate(null)` tant que l'ensemble n'est pas prêt.
+ * Lecture unique de /ici/warm/status. La requête déjà partie va au bout ;
+ * le nettoyage ignore la réponse (cancelled), sans abort() — lot RH2.
+ */
+export function startWarmStatusWatch(fetchFn, onSource) {
+  let cancelled = false;
+  fetchFn()
+    .then((data) => {
+      const src = data?.llm?.lastSource;
+      if (!cancelled && typeof src === "string" && src.trim()) onSource?.(src.trim());
+    })
+    .catch(() => { /* sans API : on garde « règles » */ });
+  return () => {
+    cancelled = true;
+  };
+}
+
+/**
+ * Boucle /eta : à l'arrêt, seule l'attente entre deux sondes est coupée.
+ * La requête en vol se termine ; sa réponse est ignorée (alive) — lot RH2.
+ */
+export function startOfficialEtaWatch(stopName, {
+  fetchFn,
+  sleep,
+  onUpdate,
+} = {}) {
+  const waitCtrl = new AbortController();
+  let alive = true;
+  const done = pollOfficialEta(stopName, {
+    fetchFn,
+    sleep,
+    signal: waitCtrl.signal,
+    onUpdate: (ready) => { if (alive) onUpdate?.(ready); },
+  }).catch((err) => {
+    if (alive && err?.name !== "AbortError") onUpdate?.(null);
+  });
+  return {
+    stop() {
+      alive = false;
+      waitCtrl.abort();
+    },
+    get alive() { return alive; },
+    done,
+  };
+}
+
+/**
+ * Relance /eta tant que members == 0 et que nextRetry n'est pas dans le futur.
+ * Premier appel immédiat, puis recul. `onUpdate` reçoit la fourchette ou
+ * la raison honnête — jamais une date inventée.
  */
 export async function pollOfficialEta(stopName, {
   fetchFn = defaultEtaFetch,
@@ -351,14 +454,17 @@ export async function pollOfficialEta(stopName, {
   while (!signal?.aborted) {
     let body = null;
     try {
-      body = await fetchFn(stopName, { signal });
+      body = await fetchFn(stopName);
     } catch (err) {
       if (err?.name === "AbortError") throw err;
       body = null;
     }
+    if (signal?.aborted) return null;
     const ready = etaFromResponse(body);
-    onUpdate?.(ready);
+    const display = etaDisplayFromResponse(body);
+    onUpdate?.(display);
     if (ready) return ready;
+    if (display && !etaRetryDue(body)) return display;
     await sleep(nextEtaRetryMs(attempt), signal);
     attempt += 1;
   }
@@ -385,18 +491,8 @@ export function useOfficialEta(stopName, { enabled = true, frozen = false } = {}
       if (!frozen && (!enabled || !stopName)) setEta(null);
       return undefined;
     }
-    const controller = new AbortController();
-    let alive = true;
-    pollOfficialEta(stopName, {
-      signal: controller.signal,
-      onUpdate: (ready) => { if (alive) setEta(ready); },
-    }).catch((err) => {
-      if (alive && err?.name !== "AbortError") setEta(null);
-    });
-    return () => {
-      alive = false;
-      controller.abort();
-    };
+    const watch = startOfficialEtaWatch(stopName, { onUpdate: setEta });
+    return () => watch.stop();
   }, [enabled, stopName, frozen]);
   return eta;
 }
@@ -424,8 +520,7 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
       return undefined;
     }
     let alive = true;
-    const controller = new AbortController();
-    const load = () => fetch(`${API_URL}/voyage/official/plan-review`, { signal: controller.signal })
+    const load = () => fetch(`${API_URL}/voyage/official/plan-review`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -437,8 +532,8 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
           setAdvice((prev) => (prev?.source === "fixture" ? null : prev));
         }
       })
-      .catch((err) => {
-        if (alive && err?.name !== "AbortError") {
+      .catch(() => {
+        if (alive) {
           setReview(REVIEW_FIXTURE);
           setAdvice(ADVICE_FIXTURE);
           setError(null);
@@ -448,7 +543,6 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
     const timer = setInterval(load, REFRESH_MS);
     return () => {
       alive = false;
-      controller.abort();
       clearInterval(timer);
     };
   }, [enabled, frozen]);
@@ -467,10 +561,10 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
 
   useEffect(() => {
     if (frozen || !enabled || !adviceKey) return undefined;
-    const controller = new AbortController();
+    const waitCtrl = new AbortController();
     let alive = true;
     pollOfficialAdvice(heaviestIdx, {
-      signal: controller.signal,
+      signal: waitCtrl.signal,
       lang,
       onUpdate: (body) => { if (alive) setAdvice(body); },
     }).catch((err) => {
@@ -478,7 +572,7 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
     });
     return () => {
       alive = false;
-      controller.abort();
+      waitCtrl.abort();
     };
   }, [enabled, frozen, adviceKey, heaviestIdx, lang]);
 
@@ -490,7 +584,8 @@ export function usePlanReview({ enabled = true, frozen = false, clock, lookup, r
         ? { ...leg, alertCount: before }
         : leg
     ));
-    if (!eta || !eta.members || !nextStop) return base;
+    if (!eta || !nextStop) return base;
+    if (!eta.members && (isEtaPreparing(eta) || !eta.reason)) return base;
     return base.map((leg) => (
       stopMatch(leg.to, nextStop) ? { ...leg, etaRange: eta } : leg
     ));

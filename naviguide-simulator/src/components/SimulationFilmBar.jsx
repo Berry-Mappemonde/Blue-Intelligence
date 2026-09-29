@@ -8,7 +8,16 @@ import { isLandLegNames, nmToRoundedKm } from "../utils/berryLegs.js";
 import { ListenButton } from "./ListenButton.jsx";
 import { DepartureField } from "./DepartureField.jsx";
 import { clockRegimeText, clockWeatherTooltip, nextFilmSpeed, PROFILES } from "./filmBarClock.js";
-import { filmSubtitleShowsAir, visibleFilmSubtitle } from "../hooks/useReplay.js";
+import { filmSubtitleHighlight, filmSubtitleShowsAir, formatFilmEstimateClock, pickFilmEstimateSeconds, visibleFilmSubtitle } from "../hooks/useReplay.js";
+
+function filmEstimateLabel(replay, t) {
+  const clock = formatFilmEstimateClock(pickFilmEstimateSeconds(
+    replay?.targetSeconds,
+    replay?.variantEstimates,
+    replay?.estimatedSeconds,
+  ));
+  return clock ? t("filmDurationEstimate", { time: clock }) : "";
+}
 
 function clockSpeedBasis(clock, clockCurrent, barNm) {
   const direct = clockCurrent?.basis;
@@ -141,6 +150,7 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
   };
   const filmSubtitle = visibleFilmSubtitle(replay?.subtitle || "");
   const filmSubtitleAir = filmSubtitleShowsAir(filmSubtitle);
+  const filmSubtitleParts = filmSubtitleHighlight(filmSubtitle, replay?.subtitlePlace || "");
 
   if (hideBar) {
     return (
@@ -314,7 +324,15 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
               filmSubtitleAir ? "whitespace-normal" : "truncate"
             }`}
           >
-            {filmSubtitle}
+            {filmSubtitleParts.place ? (
+              <>
+                {filmSubtitleParts.before}
+                <strong data-testid="film-subtitle-place" className="text-cyan-200 font-semibold">
+                  {filmSubtitleParts.place}
+                </strong>
+                {filmSubtitleParts.after}
+              </>
+            ) : filmSubtitle}
           </div>
         ) : null}
         {storiesPending > 0 ? (
@@ -492,6 +510,14 @@ export const SimulationFilmBar = memo(function SimulationFilmBar({
                             {t(key)}
                           </button>
                         ))}
+                        {filmEstimateLabel(replay, t) ? (
+                          <span
+                            data-testid="film-duration-estimate"
+                            className="px-1 py-0.5 text-[9px] font-semibold text-white/70 whitespace-nowrap"
+                          >
+                            {filmEstimateLabel(replay, t)}
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
