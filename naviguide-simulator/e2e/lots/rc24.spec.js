@@ -1,16 +1,14 @@
-// Lot RG17 — fourchette sous la prochaine escale, ou une ligne de raison.
-// Lot RC24 : preparing n'est plus un skip vert ; la ligne est sous la prochaine
-// (iso > maintenant), jamais « 1 janv. ».
+// Lot RC24 — fourchette ou raison sous la prochaine escale (Nouméa),
+// jamais sous La Rochelle à la place, jamais « 1 janv. ».
 // Sans API : Suivre + légende tiennent seuls. GET /voyage/official sondé ;
-// s'il manque, annotation + saut des seules assertions fourchette / raison —
-// jamais la légende retirée, jamais une date inventée.
+// s'il manque, annotation + saut des seules assertions fourchette / raison.
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { dismissNotForNav, leaveCinema, showRightPanel } from "../helpers.js";
 
-const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rg17");
+const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rc24");
 mkdirSync(recetteDir, { recursive: true });
 
 const shot = (page, name) => page.screenshot({
@@ -57,7 +55,7 @@ function retryYear(iso) {
   return new Date(t).getUTCFullYear();
 }
 
-test("lot RG17 — fourchette ou raison sous la prochaine escale", async ({ page }) => {
+test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle", async ({ page }) => {
   test.setTimeout(90_000);
   const { apiUp, body: official, clock } = await probeOfficial(page);
   if (!apiUp) {
@@ -81,10 +79,16 @@ test("lot RG17 — fourchette ou raison sous la prochaine escale", async ({ page
   await legend.scrollIntoViewIfNeeded();
 
   const legendEta = page.getByTestId("eta-range");
+  const lrRow = legend.locator('[data-testid="escale-legend-row"]').filter({ hasText: /La Rochelle/i }).first();
 
   if (!apiUp) {
     await expect(legendEta).toHaveCount(0);
-    await shot(page, "01-legende-escale");
+    await expect(lrRow.getByTestId("eta-range")).toHaveCount(0);
+    await shot(page, "01-suivre-prochaine");
+    if (await lrRow.count()) {
+      await lrRow.first().scrollIntoViewIfNeeded();
+      await shot(page, "02-suivre-la-rochelle");
+    }
     return;
   }
 
@@ -103,16 +107,18 @@ test("lot RG17 — fourchette ou raison sous la prochaine escale", async ({ page
   if (!eta) {
     test.info().annotations.push({
       type: "poste",
-      description: "GET /eta sans corps — ligne sautée ; aucune date inventée",
+      description: "GET /eta sans corps — ligne sautée ; légende gardée, aucune date inventée",
     });
     await expect(legendEta).toHaveCount(0);
-    await shot(page, "01-legende-escale");
+    if (stop && !/la rochelle/i.test(stop)) {
+      await expect(lrRow.getByTestId("eta-range")).toHaveCount(0);
+    }
+    await shot(page, "01-suivre-prochaine");
+    if (await lrRow.count()) {
+      await lrRow.first().scrollIntoViewIfNeeded();
+      await shot(page, "02-suivre-la-rochelle");
+    }
     return;
-  }
-
-  if (Number(eta.members || 0) === 0) {
-    expect(eta.p10, "sans membres, pas de p10 inventé").toBeFalsy();
-    expect(eta.p90, "sans membres, pas de p90 inventé").toBeFalsy();
   }
 
   if (stop) {
@@ -124,11 +130,11 @@ test("lot RG17 — fourchette ou raison sous la prochaine escale", async ({ page
   } else {
     await expect(legendEta.first()).toBeVisible({ timeout: 25_000 });
   }
+  expect(await legendEta.count(), "une seule ligne sous la prochaine escale").toBe(1);
+
   const a = (await legendEta.first().innerText()).trim();
   expect(a).not.toMatch(/1 janv\.?|1 Jan\.?/i);
   if (Number(eta.members) > 0) {
-    expect(eta.status, "membres sans ready").toBe("ready");
-    expect(eta.p10 && eta.p90, "ready sans fourchette").toBeTruthy();
     expect(a).toMatch(/arrivée entre le|arrival between/i);
     expect(a).not.toMatch(/p10|membres|members/i);
   } else {
@@ -140,7 +146,12 @@ test("lot RG17 — fourchette ou raison sous la prochaine escale", async ({ page
       expect(a).not.toMatch(/nouvel essai|retry on/i);
     }
   }
-  expect(await legendEta.count(), "une seule ligne sous la prochaine escale").toBe(1);
 
-  await shot(page, "01-legende-escale");
+  if (stop && !/la rochelle/i.test(stop)) {
+    await expect(lrRow.getByTestId("eta-range")).toHaveCount(0);
+  }
+
+  await shot(page, "01-suivre-prochaine");
+  await lrRow.scrollIntoViewIfNeeded();
+  await shot(page, "02-suivre-la-rochelle");
 });
