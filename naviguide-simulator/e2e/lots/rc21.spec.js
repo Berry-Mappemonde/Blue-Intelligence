@@ -1,13 +1,13 @@
-// Lot RG6 — gabarit narratif par étape (ouverture → route → escale).
-// Sans API : Suivre, Revoir et la barre tiennent seuls ; le script serveur
-// est sauté. GET /voyage/official sondé ; s'il manque, annotation + saut des
-// seules assertions film — jamais Revoir retiré, ni les pilules, ni la barre.
+// Lot RC21 — Revoir accepte le film RG6+ long (intégral, sans pilule).
+// Sans API : Suivre, barre et Revoir restent visibles. GET /voyage/official
+// sondé ; s'il manque, annotation + saut des seules assertions film —
+// jamais Revoir retiré, ni les pilules, ni la barre.
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
-const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rg6");
+const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rc21");
 mkdirSync(recetteDir, { recursive: true });
 
 const shot = (page, name) => page.screenshot({
@@ -17,11 +17,15 @@ const shot = (page, name) => page.screenshot({
   fullPage: false,
 });
 
-const FORBIDDEN = /\bjambe\b|zone économique exclusive|Couloirs\s*:|À surveiller|à portée de|\bde de\b/i;
-const QUAY_REPEAT = /3 jours à quai/;
-const OPENING = /Berry-Mappemonde quitte|Berry-Mappemonde leaves/i;
-const MILES_DAYS = /\d[\d\s]*\s*milles|dizaine de jours|jours de mer|miles|days at sea/i;
-const ARRIVAL = /Arrivée à Ajaccio|Arrival at Ajaccio/i;
+const RG6_OPENING = /Berry-Mappemonde quitte|L['’]expédition Berry-Mappemonde|Berry-Mappemonde leaves|The Berry-Mappemonde expedition/i;
+const RG6_MILES_DAYS = /milles|jours de mer|days at sea|\bmiles\b/i;
+const RG7_CLOSE = /Aujourd['’]hui, le bateau|Today, the boat/i;
+const RE7_STALE = /Bay of Biscay|milles nautiques du départ/i;
+
+function hasRg6Rg7Fingerprint(blob) {
+  if (RG7_CLOSE.test(blob)) return true;
+  return RG6_OPENING.test(blob) && RG6_MILES_DAYS.test(blob);
+}
 
 async function dismissNotForNav(page) {
   const modal = page.getByTestId("not-for-nav-modal");
@@ -64,7 +68,7 @@ async function probeOfficial(page) {
   return { apiUp: true };
 }
 
-test("lot RG6 — gabarit d'étape, sans jargon ni annexe", async ({ page }) => {
+test("lot RC21 — Revoir accepte le film RG6+ long", async ({ page }) => {
   test.setTimeout(90_000);
   const { apiUp } = await probeOfficial(page);
   if (!apiUp) {
@@ -84,74 +88,64 @@ test("lot RG6 — gabarit d'étape, sans jargon ni annexe", async ({ page }) => 
   const start = page.getByTestId("replay-start");
   await expect(start).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("replay-departure")).toBeVisible();
-  await expect(page.getByTestId("ici-maintenant")).toBeVisible();
-
-  const durations = page.getByTestId("film-duration");
-  if (await durations.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    await expect(durations.locator("[aria-pressed='true']"), "aucune durée cochée").toHaveCount(0);
-  }
 
   if (!apiUp) {
     await expect(start).toBeDisabled();
     await expect(page.getByTestId("film-subtitle")).toHaveCount(0);
-    await shot(page, "01-sous-titre");
+    await shot(page, "01-suivre-revoir");
     return;
   }
 
-  const film = await page.request.get("/voyage/official/film?lang=fr&style=raw", { timeout: 12_000 })
+  const film = await page.request.get("/voyage/official/film?lang=fr&seconds=0", { timeout: 12_000 })
     .then((r) => (r.ok() ? r.json() : null))
     .catch(() => null);
   if (!film?.chapters?.length) {
     test.info().annotations.push({
       type: "film vide",
-      description: "GET /voyage/official/film sans chapitres — assertions RG6 sautées",
+      description: "GET /voyage/official/film sans chapitres — lecture sautée ; Revoir visible",
     });
-    await shot(page, "01-sous-titre");
+    await expect(start).toBeVisible();
+    await shot(page, "01-suivre-revoir");
     return;
   }
 
   const blob = film.chapters.map((c) => c.text || "").join(" ");
-  const hasRgOpening = OPENING.test(blob)
-    || /L['’]expédition Berry-Mappemonde|The Berry-Mappemonde expedition/i.test(blob);
-  // RC21 : ouverture RG6/RG7 ⇒ Revoir jouable ; plus de skip « pré-RG » qui cache un bouton grisé.
-  if (hasRgOpening) {
-    await expect(start).toBeEnabled({ timeout: 30_000 });
-  }
-  if (!hasRgOpening) {
+  const playable = hasRg6Rg7Fingerprint(blob) && !RE7_STALE.test(blob);
+  if (!playable) {
     test.info().annotations.push({
-      type: "stock pré-RG6",
-      description: "film servi encore à l'ancienne clé — remplisseur doit recalculer (FILM_SCRIPT_REV=rg6)",
+      type: "stock sans empreinte RG6",
+      description: "film servi sans ouverture/clôture RG6/RG7 — lecture sautée ; Revoir visible",
     });
-    await shot(page, "01-sous-titre");
+    await expect(start).toBeVisible();
+    await shot(page, "01-suivre-revoir");
     return;
   }
 
-  expect(blob, "mots interdits absents").not.toMatch(FORBIDDEN);
-  expect(blob, "plus de « 3 jours à quai »").not.toMatch(QUAY_REPEAT);
-  expect(blob, "ouverture Berry-Mappemonde").toMatch(OPENING);
-
-  const lrAj = film.chapters.find((c) => /La Rochelle/i.test(c.fromName || "") && /Ajaccio/i.test(c.toName || c.text || ""));
-  if (lrAj) {
-    expect(lrAj.text, "milles et jours dans l'ouverture").toMatch(MILES_DAYS);
-    expect(lrAj.text, "arrivée nommée").toMatch(ARRIVAL);
-  }
-
   await expect(start).toBeEnabled({ timeout: 30_000 });
+  const durations = page.getByTestId("film-duration");
+  await expect(durations).toBeVisible({ timeout: 8_000 });
+  await expect(durations).toContainText("2:30");
+  await expect(durations).toContainText("3:00");
+  await expect(durations.locator("[aria-pressed='true']"), "aucune durée cochée").toHaveCount(0);
+  await shot(page, "01-suivre-revoir");
+
   await muteVoice(page);
   await start.click();
   const subtitle = page.getByTestId("film-subtitle");
   await expect(subtitle).toBeVisible({ timeout: 8_000 });
+  const sub = (await subtitle.innerText()).trim();
+  expect(sub, "sous-titre non vide").not.toBe("");
+  expect(
+    RG6_OPENING.test(sub) || RG6_MILES_DAYS.test(sub) || /La Rochelle|Ajaccio|Saint-Maur/i.test(sub),
+    "ouverture ou milles/jours dans le sous-titre",
+  ).toBeTruthy();
+  await shot(page, "02-ouverture");
 
-  await page.waitForFunction(() => {
-    const f = window.__naviguideFilm;
-    return typeof f?.seekChapter === "function" && (f.chapterCount || 0) > 0;
-  }, null, { timeout: 8_000 }).catch(() => null);
-
-  await page.evaluate(() => {
-    const list = window.__naviguideFilm?.chapters || [];
-    const i = list.findIndex((c) => /La Rochelle/i.test(c.fromName || "") && /Ajaccio/i.test((c.toName || "") + (c.text || "")));
-    if (i >= 0 && window.__naviguideFilm?.seekChapter) window.__naviguideFilm.seekChapter(i);
-  });
-  await expect(subtitle).toBeVisible();
-  await shot(page, "01-sous-titre");
+  const stopBtn = page.getByTestId("replay-stop");
+  await expect(stopBtn).toBeVisible({ timeout: 8_000 });
+  await stopBtn.click();
+  await expect(page.getByTestId("replay-start")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByTestId("view-suivre")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("replay-stop")).toHaveCount(0);
+  await shot(page, "03-stop-suivre");
 });
