@@ -1,5 +1,6 @@
-// Lot RC24 — fourchette ou raison sous la prochaine escale (Nouméa),
-// jamais sous La Rochelle à la place, jamais « 1 janv. ».
+// Lot RC28 — fourchette ou raison sous la jambe live (Nouméa tant que
+// le bateau n'y est pas), jamais sous Dzaoudzi / Papeete / La Rochelle
+// à la place. Instant officiel (iso / filmNm), jamais Date.now().
 // Sans API : Suivre + légende tiennent seuls. GET /voyage/official sondé ;
 // s'il manque, annotation + saut des seules assertions fourchette / raison.
 import { mkdirSync } from "node:fs";
@@ -9,7 +10,7 @@ import { expect, test } from "@playwright/test";
 import { nextStopFromMarks } from "../../src/hooks/usePlanReview.js";
 import { dismissNotForNav, leaveCinema, showRightPanel } from "../helpers.js";
 
-const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rc24");
+const recetteDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/recette/lot-rc28");
 mkdirSync(recetteDir, { recursive: true });
 
 const shot = (page, name) => page.screenshot({
@@ -44,7 +45,8 @@ async function probeOfficial(page) {
 function nextStopName(official, clock, live) {
   const marks = clock?.marks || official?.clock?.marks || official?.marks || [];
   const nowMs = Date.parse(live?.iso || "");
-  return nextStopFromMarks(marks, Number.isFinite(nowMs) ? nowMs : undefined, live?.filmNm);
+  const liveNm = live?.filmNm;
+  return nextStopFromMarks(marks, Number.isFinite(nowMs) ? nowMs : undefined, liveNm);
 }
 
 function stopShort(name) {
@@ -58,7 +60,7 @@ function retryYear(iso) {
   return new Date(t).getUTCFullYear();
 }
 
-test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle", async ({ page }) => {
+test("lot RC28 — fourchette sous la jambe live, pas sous Dzaoudzi", async ({ page }) => {
   test.setTimeout(90_000);
   const { apiUp, body: official, clock, live } = await probeOfficial(page);
   if (!apiUp) {
@@ -88,7 +90,8 @@ test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle"
   if (!apiUp) {
     await expect(legendEta).toHaveCount(0);
     await expect(lrRow.getByTestId("eta-range")).toHaveCount(0);
-    await shot(page, "01-suivre-prochaine");
+    await expect(dzRow.getByTestId("eta-range")).toHaveCount(0);
+    await shot(page, "01-suivre-jambe-live");
     if (await lrRow.count()) {
       await lrRow.first().scrollIntoViewIfNeeded();
       await shot(page, "02-suivre-la-rochelle");
@@ -120,7 +123,7 @@ test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle"
     if (stop && /nouméa/i.test(stop)) {
       await expect(dzRow.getByTestId("eta-range")).toHaveCount(0);
     }
-    await shot(page, "01-suivre-prochaine");
+    await shot(page, "01-suivre-jambe-live");
     if (await lrRow.count()) {
       await lrRow.first().scrollIntoViewIfNeeded();
       await shot(page, "02-suivre-la-rochelle");
@@ -137,7 +140,7 @@ test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle"
   } else {
     await expect(legendEta.first()).toBeVisible({ timeout: 25_000 });
   }
-  expect(await legendEta.count(), "une seule ligne sous la prochaine escale").toBe(1);
+  expect(await legendEta.count(), "une seule ligne sous la jambe live").toBe(1);
 
   const a = (await legendEta.first().innerText()).trim();
   expect(a).not.toMatch(/1 janv\.?|1 Jan\.?/i);
@@ -161,7 +164,13 @@ test("lot RC24 — fourchette ou raison sous la prochaine, pas sous La Rochelle"
     await expect(dzRow.getByTestId("eta-range")).toHaveCount(0);
   }
 
-  await shot(page, "01-suivre-prochaine");
-  await lrRow.scrollIntoViewIfNeeded();
-  await shot(page, "02-suivre-la-rochelle");
+  await shot(page, "01-suivre-jambe-live");
+  if (await lrRow.count()) {
+    await lrRow.scrollIntoViewIfNeeded();
+    await shot(page, "02-suivre-la-rochelle");
+  }
+  if (stop && /nouméa/i.test(stop) && await dzRow.count()) {
+    await dzRow.scrollIntoViewIfNeeded();
+    await shot(page, "03-suivre-dzaoudzi");
+  }
 });
