@@ -28,8 +28,10 @@ FAMILIES = ("moments", "film", "eta", "climo", "ici", "plan_review")
 FILM_VARIANT_SECONDS = (150, 180)   # les pilules 2:30 / 3:00 de la barre ; la première est la variante par défaut
 PREPARING = "preparing"
 READY = "ready"
-# Clé film : un snapshot RF2 (avant phrases avion) ne matche plus.
-FILM_SCRIPT_REV = "rf5"
+# Clé film : RG7 (ouverture + fin) invalide rg6. moments reste rg4 ; ici reste rg3.
+FILM_SCRIPT_REV = "rg7"
+MOMENTS_REV = "rg4"
+ICI_REV = "rg3"
 DB_NAME = "naviguide_simulator"
 COLLECTION = "official_voyage"
 # Par défaut, le stock disque vit DANS le checkout (server/voyage_data/, ignoré par git) : un agent qui teste
@@ -152,6 +154,17 @@ def worker_enabled() -> bool:
     if os.environ.get("PYTEST_CURRENT_TEST") and raw != "force":
         return False
     return True
+
+
+def _store_rev_relaxed() -> bool:
+    """Sans remplisseur (CI, stock figé) : une ancienne rev film/moments/ici reste joignable.
+
+    La clé `…:rg4` n'existe pas encore dans l'archive gelée ; sans ça, GET
+    /film, /moments et /ici restent « en préparation » et Revoir reste grisé.
+    Sur le poste le remplisseur tourne (WORKER≠0) : pas de repli, il recalcule.
+    """
+    raw = (os.environ.get("NAVIGUIDE_OFFICIAL_WORKER") or "1").strip().lower()
+    return raw in ("0", "false", "no")
 
 
 def disk_root() -> Path:
@@ -309,10 +322,14 @@ class OfficialStore:
         voy: Optional[dict] = None,
         now: Optional[datetime] = None,
     ) -> str:
-        """Clé de rangement : le film inclut la révision du script (RF5)."""
+        """Clé de rangement : film, moments et ici portent la révision du calcul (RG5)."""
         base = self.current_key(voy, now)
         if family == "film":
             return f"{base}:{FILM_SCRIPT_REV}"
+        if family == "moments":
+            return f"{base}:{MOMENTS_REV}"
+        if family == "ici":
+            return f"{base}:{ICI_REV}"
         return base
 
     def _with_date(self, hit: Optional[dict]) -> Optional[dict]:
@@ -335,7 +352,7 @@ class OfficialStore:
         lister = getattr(self.backend, "list_family", None)
         if not callable(lister):
             return None
-        best: Optional[tuple[str, str, dict]] = None
+        best: Optional[tuple[tuple, str, dict]] = None
         for stored_key, doc in lister(family):
             try:
                 r, t, date, suf = parse_key(stored_key)
@@ -343,16 +360,18 @@ class OfficialStore:
                 continue
             if r != route_id or t != t0:
                 continue
-            if (want_suf or None) != (suf or None):
+            exact = (want_suf or None) == (suf or None)
+            if not exact and not (family in {"film", "moments", "ici"} and _store_rev_relaxed()):
                 continue
-            if best is None or date > best[0]:
-                best = (date, stored_key, doc)
+            rank = (1 if exact else 0, date)
+            if best is None or rank > best[0]:
+                best = (rank, stored_key, doc)
         if not best:
             return None
-        date, stored_key, doc = best
+        rank, stored_key, doc = best
         out = dict(doc)
         out["key"] = stored_key
-        out["dataDate"] = date
+        out["dataDate"] = rank[1]
         return out
 
     def get(self, family: str, key: Optional[str] = None) -> Optional[dict]:
@@ -690,6 +709,7 @@ def preparing_ici(lat: float, lon: float, radius_nm: float = 30.0) -> dict:
 # ── calculs (mêmes fonctions que le serveur d'aujourd'hui) ───────────────────
 
 def compute_climo(voy: dict, now: datetime) -> Optional[dict]:
+    from climo_events import notable_climo_changes  # noqa: PLC0415
     from voyage_api import _climo_clock, _regime_portions  # noqa: PLC0415
     from voyage_store import save_voyage  # noqa: PLC0415
 
@@ -710,7 +730,12 @@ def compute_climo(voy: dict, now: datetime) -> Optional[dict]:
             "windKnots": v.get("windKnots"),
             "dirFromDeg": v.get("dirFromDeg"),
         })
-    return {"clock": clock, "regimes": _regime_portions(clock), "fiches": fiches}
+    return {
+        "clock": clock,
+        "regimes": _regime_portions(clock),
+        "fiches": fiches,
+        "events": notable_climo_changes(clock),
+    }
 
 
 RICH_EVENT_KINDS = frozenset({"zee", "sci", "science", "poe", "amp", "climo", "wx", "grib", "marina", "port"})
@@ -941,8 +966,8 @@ COMPUTE: dict[str, Callable[[dict, datetime], Optional[dict]]] = {
     "plan_review": compute_plan_review,
 }
 
-# Horloge d'abord : les autres familles s'appuient dessus.
-COMPUTE_ORDER = ("climo", "moments", "film", "eta", "ici", "plan_review")
+# Horloge d'abord. Plan-review et eta avant le film (RG7 : le script les lit).
+COMPUTE_ORDER = ("climo", "moments", "plan_review", "eta", "film", "ici")
 
 
 def refresh_family(
