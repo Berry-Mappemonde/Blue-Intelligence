@@ -14,13 +14,17 @@ Les prompts complets sont dans `docs/LOTS_ORDRE_ET_PROMPTS.md`, section « Batch
 | 3 | **DM5** — Suivre suit la route que je viens de tracer ; une seule route à l'écran ; pilules Berry \| ma route | Fable | L | Tracer → Terminer → Suivre : ma route, seule, le bateau dessus, date de départ au choix |
 | 4 | **DM6** — Tracer : on arrive sur le dessin ; la pilule Berry affiche la route Berry sans jeter le brouillon | Grok | M | « Choisissez votre point de départ » tout de suite ; aller-retour Berry ↔ mon tracé sans rien perdre |
 | 5 | **DM7** — Tracer : la lecture part d'aujourd'hui ; l'encadré suit le bateau du tracé | Grok | S | Play part le jour de la connexion ; plus de fiche Papeete quand le bateau est à Saint-Maur ; champ Date de départ en Suivre seulement |
-| 6 | **UI1** — barre de mentions légales posée au-dessus de la barre film, même hauteur que le zoom | Grok | S | Plus de chevauchement ; une seule hauteur pour la barre et les boutons + / − |
-| 7 | **RC30** — film : chronologie stricte eaux / climatologie, phrases jamais coupées, clôture entière | Fable | M | Gascogne → eaux espagnoles → portugaises → Gibraltar → marocaines ; plus de phrase coupée aux escales ; « Aujourd'hui, le bateau est… » jusqu'au bout |
-| 8 | **AM1** — AMP croisées par polygone (base remplie : 3 769 sites) | Fable | M | « Le bateau entre dans la réserve de … » partout sur la route |
-| 9 | **RG18** — une seule plume (récits sur demande) | Grok | M | Les fiches Ici parlent comme le film ; le modèle n'écrit que sur « Rédigé » |
-| 10 | **RG19** — chat à trois paliers (Lightning comprend, règles répondent, Ultra raisonne) | Grok | M | Le chat répond aux faits depuis un paquet complet ; Ultra sur geste, plafonné |
-| 11 | **RG20** — specs vérité (stock figé régénéré) | Grok | M | Une réserve en CI = un cas « poste » attendu, rien d'autre |
-| 12 | **DM3** — le ménage des deux modes (`VIEW_TRACER`, `isTracer`…) | Fable | M | Rien à l'écran ; lancé en dernier, rien n'en dépend |
+| 6 | **DM9** — Tracer : encadré gauche (Revue du plan + Récit seulement) et panneau droit (Polaires, Paramètres repliés) | Grok | S | Les panneaux de Tracer servent le tracé ; Suivre intact |
+| 7 | **UI1** — barre de mentions légales posée au-dessus de la barre film, même hauteur que le zoom | Grok | S | Plus de chevauchement ; une seule hauteur pour la barre et les boutons + / − |
+| 8 | **RC30** — film : chronologie stricte eaux / climatologie, phrases jamais coupées, clôture entière | Fable | M | Gascogne → eaux espagnoles → portugaises → Gibraltar → marocaines ; plus de phrase coupée aux escales ; « Aujourd'hui, le bateau est… » jusqu'au bout |
+| 9 | **DM8** — Suivre sur ma route : Revoir et le récit de la route que j'ai tracée | Fable | L | Je trace, Suivre me rejoue ma route et me la raconte (même moteur que le film officiel, à la demande, borné) |
+| 10 | **RC27** — le 2:30 tient à 150 s (gabarit compact des ouvertures / arrivées en 2:30) | Grok | S | La pilule 2:30 dure 2:30 : c'est la source de la vidéo Devpost du 30 octobre |
+| 11 | **RG11** — « Rédigé » : le film réécrit par Nemotron 3 Super depuis les faits, vérifié, servi par le stock | Fable | M | La pilule Rédigé vit : plus fluide, mêmes faits, étiquette « Nemotron 3 Super · Token Factory » — l'appel Nebius visible exigé par le hackathon |
+| 12 | **AM1** — AMP croisées par polygone (base remplie : 3 769 sites) | Fable | M | « Le bateau entre dans la réserve de … » partout sur la route |
+| 13 | **RG18** — une seule plume (récits sur demande) | Grok | M | Les fiches Ici parlent comme le film ; le modèle n'écrit que sur « Rédigé » |
+| 14 | **RG19** — chat à trois paliers (Lightning comprend, règles répondent, Ultra raisonne) | Grok | M | Le chat répond aux faits depuis un paquet complet ; Ultra sur geste, plafonné |
+| 15 | **RG20** — specs vérité (stock figé régénéré) | Grok | M | Une réserve en CI = un cas « poste » attendu, rien d'autre |
+| 16 | **DM3** — le ménage des deux modes (`VIEW_TRACER`, `isTracer`…) | Fable | M | Rien à l'écran ; lancé en dernier, rien n'en dépend |
 
 Pourquoi cet ordre : **HC1 d'abord** — la position du bateau est la donnée que tout le reste regarde (film, fourchette,
 encadré Ici, AMP croisées, pré-revues du bot) ; tant qu'elle change au gré de l'atlas, aucune recette n'est
@@ -28,19 +32,19 @@ comparable d'un jour à l'autre. Puis **les deux modes** (DM4 → DM7), qui sont
 simple au plus structurant ; UI1 et RC30 sont indépendants ; AM1 change les moments → avant RG20 qui régénère le stock
 figé ; DM3 renomme ce que tout le monde touche → en dernier.
 
-## 2. Hors batch — décisions du porteur (`REVUE_PORTEUR_2026-10-14.md` § 4-5)
+## 2. Décisions du porteur (14 oct. au soir)
 
-- **RC27** (le 2:30 tient à 150 s) : nécessaire seulement si la vidéo Devpost du 30 octobre est tournée depuis la pilule 2:30.
-- **RG11** (« Rédigé » par Nemotron 3 Super, faits vérifiés) : l'usage de Nebius le plus visible pour les juges ; sinon retirer la pilule Rédigé.
-- **DM8** (Revoir et récit sur ma route) : après les décisions sur l'encadré gauche (§ 4.1) et l'IA (§ 4.3).
-- Encadré gauche en Tracer (§ 4.1), panneau droit en Tracer (§ 4.2) : options posées, recommandation A / masquer la date — à trancher.
+- **RC27** : « ce qui serait bien, c'est que la vidéo du 30 octobre soit faite à partir de la vidéo de 2:30 » → dans le batch.
+- **RG11** : « on le fait bien évidemment, c'est l'objet du hackathon » → dans le batch (Fable).
+- Encadré gauche en Tracer : **option A** ; panneau droit : **Date masquée (DM7), Polaires et Paramètres repliés** → DM9.
+- **DM8** (Revoir et récit sur ma route) : dans le batch, après RC30 (il hérite de l'ordre et des phrases entières).
 
-Dès que le porteur tranche, le chat de pilotage ajoute ces lots à la file (`infra/agents/queue.md`) : la pile en cours les prend en bout de pile sans relance.
+Plus rien n'est hors batch. 16 lots : deux nuits environ.
 
 ## 3. Lancer
 
 La boucle (`infra/agents/loop.py`) est en phase **`await_go`** sur la PR GO de ce plan : **merger la PR GO lance le batch**
-(ligne `LOTS: HC1 DM4 DM5 DM6 DM7 UI1 RC30 AM1 RG18 RG19 RG20 DM3` dans son corps ; tête #444 mergée → les lots partent de
+(ligne `LOTS: HC1 DM4 DM5 DM6 DM7 DM9 UI1 RC30 DM8 RC27 RG11 AM1 RG18 RG19 RG20 DM3` dans son corps ; tête #444 mergée → les lots partent de
 `main`). Un commentaire « CORRIGER : … » sur la PR GO la fait amender avant le merge. À la main, l'équivalent :
 
 ```bash
@@ -57,5 +61,5 @@ Devpost est prête (issue #432, `infra/agents/GROK_BOT_DEVPOST.md`, `infra/agent
 Grok Bot relève le formulaire → Fable propose → le bot remplit le brouillon → le porteur soumet.
 
 ## 5. Coût
-Fable : HC1 ≈ 500-800 k tokens, DM5 ≈ 500 k, RC30 ≈ 300 k, AM1 ≈ 400 k, DM3 ≈ 400 k. Grok : inclus. Nebius : zéro
+Fable : HC1 ≈ 500-800 k tokens, DM5 ≈ 500 k, RC30 ≈ 300 k, DM8 ≈ 600 k, RG11 ≈ 300 k, AM1 ≈ 400 k, DM3 ≈ 400 k. Nebius : RG11 génère le rédigé une fois par jour et par variante (quelques appels Super, plafonnés), c'est le seul usage payant du batch. Grok : inclus. Nebius : zéro
 pendant le batch (agents en `NAVIGUIDE_LLM_MODE=off`).

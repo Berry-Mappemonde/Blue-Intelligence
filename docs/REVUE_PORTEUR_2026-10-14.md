@@ -75,7 +75,7 @@ décision, des options) et ce qui est **à trancher** (§ 5 : RC27, RG11).
   à différentes dates de départ et obtenir un récit (calculs « ici », sac, récit).
 - La communication : je trace en Tracer → Suivre me permet de rejouer *cette* route et d'en obtenir le récit.
 
-## 4. Réflexions demandées (pas de décision aujourd'hui)
+## 4. Réflexions demandées — tranchées par le porteur le 14 oct. au soir (« Encadré OK, Panneau droit OK »)
 
 ### 4.1 L'encadré gauche (Maintenant · Journal · Revue du plan · Récit) : à quoi sert-il dans chaque mode ?
 Ce qu'il est aujourd'hui : un instrument de **Suivre**. *Maintenant* = le sac « ici » autour du bateau calculé ;
@@ -99,6 +99,8 @@ Options :
 Recommandation du chat : **A maintenant** (c'est le cloisonnement que vous décrivez, et C5 disparaît avec), **B
 comme lot ultérieur** quand le sac le long d'une route (RG19 / AM1 fournissent les briques) sera en place.
 
+**Décision (porteur, 14 oct.) : option A → lot DM9.**
+
 ### 4.2 Le panneau droit en Tracer : qu'est-ce qui doit rester ?
 | Élément | En Tracer | Pourquoi |
 |---|---|---|
@@ -110,7 +112,9 @@ comme lot ultérieur** quand le sac le long d'une route (RG19 / AM1 fournissent 
 | Isochrone / Recalculer / Conseil | oui | c'est l'outil du traceur |
 
 Recommandation : masquer **Date de départ** en Tracer (elle y serait inerte après C4), tout le reste reste,
-Polaires et Paramètres avancés repliés par défaut. Décision : porteur.
+Polaires et Paramètres avancés repliés par défaut.
+
+**Décision (porteur, 14 oct.) : recommandation retenue → DM7 (date) et DM9 (replis).**
 
 ### 4.3 Où mettre l'IA (Nemotron via Nebius Token Factory) ?
 Règle déjà posée et qui tient : **les règles décident *quand* et *de quoi* on parle, les sources décident de ce qui
@@ -131,10 +135,11 @@ usages visibles, maîtrisés, étiquetés « Nemotron 3 … · Token Factory ».
 | Pré-génération de récits en fond | coupé (RG18 la supprime) | — | 177 appels/nuit | non |
 
 Recommandation : **RG11 et RG19 dans ce batch** — ce sont les deux usages que les juges verront (une pilule, un
-chat), bornés et étiquetés ; RG18 pour que rien ne tourne sans geste. Le reste attend que les deux modes soient
-posés. Décision : porteur.
+chat), bornés et étiquetés ; RG18 pour que rien ne tourne sans geste.
 
-## 5. Les deux décisions en suspens, expliquées
+**Décision (porteur, 14 oct.) : RG11 « bien évidemment, c'est l'objet du hackathon » → dans le batch ; RG19 et RG18 restent ; DM8 (récit de ma route) entre dans le batch.**
+
+## 5. Les deux décisions en suspens, expliquées — et tranchées le 14 oct. au soir
 
 ### RC27 — « le 2:30 tient vraiment à 150 s »
 Le film a trois durées : **2:30**, **3:00** (pilules) et **intégral** (sans pilule). Le 2:30 existe pour la **vidéo
@@ -144,8 +149,7 @@ le plafond (2 475 car.) est inatteignable en élaguant le milieu. RC27 propose u
 variante 2:30 seulement (« Le 26 mai, cap sur Fort-de-France : 5 153 milles, une trentaine de jours de mer. »
 au lieu de trois phrases où le lieu est dit quatre fois). Vous l'avez **parqué** le 29 sept. : « c'est pour la
 vidéo du hackathon, c'est un faux problème : d'abord un film et un récit qui se tiennent ». Le film se tient
-mieux maintenant (RC26). **À trancher** : la vidéo du 30 octobre sera-t-elle tournée depuis la pilule 2:30 (→
-RC27 nécessaire, Grok, S) ou montée au banc à partir de l'intégral (→ RC27 reste parqué) ?
+mieux maintenant (RC26). **Décision (porteur)** : « ce qui serait bien, c'est que la vidéo du 30 octobre soit faite à partir de la vidéo de 2:30 ; si c'est trop compliqué on fera autrement » → **RC27 entre dans le batch** (après RC30, avant RG11 : le Rédigé doit tenir dans le même budget).
 
 ### RG11 — « Rédigé » depuis les faits
 La barre film a deux pilules **Brut | Rédigé**. *Brut* = le texte des règles (ce qu'on entend). *Rédigé* devait
@@ -154,8 +158,7 @@ changer un nombre. Depuis RF2 (le stock), la version rédigée **n'est plus serv
 rend le brut). RG11 la ferait vivre : réécriture depuis les faits structurés de chaque étape, vérification
 (nombres, noms, dates — `filter_numbers`), repli sur le brut au moindre écart, régénérée une fois par jour et par
 langue dans le stock, étiquette « Nemotron 3 Super · Token Factory » affichée. Coût : quelques appels Super par
-jour. C'est **l'usage le plus visible de Nebius** pour les juges (§ 4.3). **À trancher** : le faire (M, Fable ou
-Grok) ou retirer la pilule Rédigé.
+jour. C'est **l'usage le plus visible de Nebius** pour les juges (§ 4.3). **Décision (porteur)** : « on le fait bien évidemment, c'est l'objet du hackathon » → **RG11 dans le batch** (Fable), servi par le stock, une génération par jour et par variante, étiqueté.
 
 ## 6. Transcription du film (porteur, 14 oct.) — lecture
 Points justes : ouverture, escales, eaux, projets, climatologie, clôture présente. Défauts (→ RC30) : ordre
