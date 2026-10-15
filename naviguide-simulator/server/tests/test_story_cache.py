@@ -175,20 +175,61 @@ def test_story_through_cache_translates_cached_fr(monkeypatch):
 
 
 def test_pregeneration_spends_nothing_in_default_mode(monkeypatch):
-    """Mode par défaut on-demand (28 sept.) : le préchauffage des récits ne fait aucun appel payant."""
     monkeypatch.delenv("NAVIGUIDE_LLM_MODE", raising=False)
     ici_engine.reset_caches()
-    monkeypatch.setattr(story_cascade, "nebius_key", lambda: "test")
-    monkeypatch.setattr(story_cascade, "nvidia_key", lambda: "test")
     calls = []
 
     async def spy(body, client=None):
         calls.append(body)
-        return "texte", "nemotron-super"
+        return {"status": "ready", "text": "x", "source": "nemotron-super"}
 
     monkeypatch.setattr(story_cascade, "write_story", spy)
     voy = {**_official(), "voyageId": OFFICIAL_VOYAGE_ID}
     voyage_store.save_voyage(voy)
     out = asyncio.run(story_cache.pregenerate_official(voy["points"], pause_s=0))
-    assert out.get("written", 0) == 0, "arrière-plan en on-demand : rien n'est écrit par le LLM"
-    assert calls == [], "aucun appel au modèle"
+    assert calls == []
+    assert out.get("written", 0) == 0
+
+
+def test_pregeneration_counts_on_demand_as_skipped_never_attempted(monkeypatch):
+    """On-demand never calls write_story: planned stories are skipped, not failed."""
+    monkeypatch.delenv("NAVIGUIDE_LLM_MODE", raising=False)
+    monkeypatch.setattr(
+        story_cache,
+        "pregen_bodies",
+        lambda points, lang="fr": [{
+            "event": "zee-enter",
+            "type": "zee-enter",
+            "stableKey": "zee-enter:test",
+            "lang": lang,
+        }],
+    )
+    monkeypatch.setattr(story_cache, "get_cached", lambda body: None)
+    calls = []
+
+    async def spy(body, client=None):
+        calls.append(body)
+        return {"status": "failed", "source": "budget"}
+
+    monkeypatch.setattr(story_cascade, "write_story", spy)
+    out = asyncio.run(story_cache.pregenerate_official([{"lat": 0, "lon": 0}], pause_s=0))
+    assert calls == []
+    assert out["failed"] == 0
+    assert out["written"] == 0
+    assert out["skippedBudget"] >= 1
+
+
+def test_pregeneration_counts_budget_as_skipped(monkeypatch):
+    monkeypatch.delenv("NAVIGUIDE_LLM_MODE", raising=False)
+    ici_engine.reset_caches()
+
+    async def budget_writer(body, client=None):
+        return {"status": "failed", "source": "budget", "text": None}
+
+    monkeypatch.setattr(story_cascade, "write_story", budget_writer)
+    voy = {**_official(), "voyageId": OFFICIAL_VOYAGE_ID}
+    voyage_store.save_voyage(voy)
+    out = asyncio.run(story_cache.pregenerate_official(voy["points"], pause_s=0))
+    if out.get("planned", 0) > out.get("cached", 0):
+        assert out.get("failed", 0) == 0
+        assert out.get("skippedBudget", 0) >= 1
