@@ -28,9 +28,8 @@ décision, des options) et ce qui est **à trancher** (§ 5 : RC27, RG11).
   Berry affichée.
 - **C2.** La pilule **Berry-Mappemonde** ramène directement à la route Berry — **sans Annuler**, et **sans perdre le
   brouillon** : on doit pouvoir faire Berry → « Tracer votre propre route » et retrouver son tracé en cours.
-  (Le porteur dit que « Annuler » et la pilule Berry « ont la même fonction » puis que ça « ne doit pas annuler
-  à chaque fois » : lu comme « la pilule Berry affiche la route Berry et garde le brouillon ; Annuler reste
-  l'abandon explicite ». À confirmer.)
+  **Confirmé par le porteur le 14 oct. au soir** : la pilule Berry affiche la route Berry et garde le brouillon ;
+  Annuler reste l'abandon explicite. → DM6.
 - **C3.** Dans Tracer, la route Berry est **de l'affichage** : une vitrine de ce qu'on peut faire avec « Tracer votre
   propre route » (un tour du monde, une transat, l'océan Indien). Importer une route existante préfigure aussi
   Tracer. Les deux restent.
@@ -57,10 +56,24 @@ décision, des options) et ce qui est **à trancher** (§ 5 : RC27, RG11).
   Autres incohérences relevées dans la même transcription : « Cayenne, cap au nord pour Papeete » ; « la route
   passe par Caraïbes Ouest, Atlantique Nord » à l'arrivée à **Papeete** ; « les eaux de Saint-Martin, puis celles
   de Saint-Martin » ; six « un flotteur Argo » sans nom ni lieu ; « HS 33 m » (3,3 m ?).
+- **E4 (ajout du soir).** L'épisode **Caraïbes → Cayenne (bateau 1) → vol → Halifax → bateau 2 → Saint-Pierre-et-Miquelon →
+  bateau 2 → Halifax → vol → Cayenne → bateau 1 → Polynésie** n'est pas raconté comme il s'est passé : une seule phrase
+  (« l'équipage s'envole de Cayenne pour Saint-Pierre-et-Miquelon ; le bateau attend »), destination du vol fausse, les
+  deux traversées du second bateau absentes. → **RC31**.
+- **E5 (ajout du soir).** Les noms de lieux en langue d'origine (Saint-Martin / Sint Maarten, Sint Eustatius…) posent
+  problème : il faut une règle (exonymes de la langue du récit pour les pays et eaux, nom d'origine pour les ports et
+  aires, homonymes distingués). → **RC32**.
+- **B3 (rappel du soir).** La route Berry à venir ne s'affiche pas après Tracer → tracer → Suivre : dans DM5 (étape 3,
+  test de contrôleur qui rejoue la séquence).
 
 ### F. Dependabot et pipeline (faits en séance)
 - Huit PR Dependabot mergées (CI verte, une par une) ; label `dependances` créé.
 - Tête de pile #444 mergée (28 lots).
+
+## 1 bis. Objectif du week-end (17-18 oct.) : publier la première soumission Devpost
+Le batch 2 doit avoir livré au moins HC1 (position stable), RC27 (le 2:30 tient : source de la vidéo) et RG11 (l'appel
+Nebius visible) ; la pile mergée et **déployée en production** (`simulator.naviguide.fr`) avant la chaîne Devpost
+(issue #432 : relève → réponses Fable → brouillon rempli → le porteur soumet). Détail : `docs/PLAN_BATCH_2026-10-14.md` § 4.
 
 ## 2. Ce que la revue valide
 - Deux pilules Suivre | Tracer ; Tracer sur la route Berry montre l'expédition complète depuis Saint-Maur (« ça
