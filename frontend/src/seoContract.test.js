@@ -14,6 +14,9 @@ describe("contrat SEO blueintelligence.online", () => {
     );
     expect(html).toMatch(/"@type":\s*"WebApplication"/);
     expect(html).toMatch(/alternateName/);
+    expect(html).toMatch(/"sameAs":\s*\[/);
+    expect(html).toMatch(/https:\/\/lablab\.ai\/u\/@Berry-Mappemonde/);
+    expect(html).not.toMatch(/"@type":\s*"VideoObject"/);
     expect(html).toMatch(/<h1>Blue Intelligence by Berry-Mappemonde<\/h1>/);
   });
 
@@ -21,6 +24,8 @@ describe("contrat SEO blueintelligence.online", () => {
     expect(existsSync(join(publicDir, "robots.txt"))).toBe(true);
     expect(existsSync(join(publicDir, "sitemap.xml"))).toBe(true);
     const robots = readFileSync(join(publicDir, "robots.txt"), "utf8");
-    expect(robots).toMatch(/blueintelligence\.online\/sitemap\.xml/);
+    expect(robots).toMatch(/www\.blueintelligence\.online\/sitemap\.xml/);
+    const sitemap = readFileSync(join(publicDir, "sitemap.xml"), "utf8");
+    expect(sitemap).toMatch(/<loc>https:\/\/www\.blueintelligence\.online\/<\/loc>/);
   });
 });
