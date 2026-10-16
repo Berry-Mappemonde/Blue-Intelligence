@@ -178,12 +178,7 @@ if _SERVE_FRONTEND:
             headers={"Cache-Control": "no-cache"},
         )
 
-    @app.get("/", include_in_schema=False)
-    async def spa_index():
-        return _spa_index_response()
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def spa_assets(full_path: str):
+    def _spa_file_or_index(full_path: str) -> FileResponse:
         head = full_path.split("/", 1)[0] if full_path else ""
         if head in _RESERVED_ROOT:
             raise HTTPException(404, detail="Not Found")
@@ -200,3 +195,11 @@ if _SERVE_FRONTEND:
             # is better than index.html served in place of a JS file.
             raise HTTPException(404, detail="Not Found")
         return _spa_index_response()
+
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    async def spa_index():
+        return _spa_index_response()
+
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def spa_assets(full_path: str):
+        return _spa_file_or_index(full_path)
