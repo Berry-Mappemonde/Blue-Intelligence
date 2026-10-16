@@ -24,6 +24,8 @@ describe("contrat SEO blueintelligence.online", () => {
     expect(existsSync(join(publicDir, "robots.txt"))).toBe(true);
     expect(existsSync(join(publicDir, "sitemap.xml"))).toBe(true);
     const robots = readFileSync(join(publicDir, "robots.txt"), "utf8");
-    expect(robots).toMatch(/blueintelligence\.online\/sitemap\.xml/);
+    expect(robots).toMatch(/www\.blueintelligence\.online\/sitemap\.xml/);
+    const sitemap = readFileSync(join(publicDir, "sitemap.xml"), "utf8");
+    expect(sitemap).toMatch(/<loc>https:\/\/www\.blueintelligence\.online\/<\/loc>/);
   });
 });
