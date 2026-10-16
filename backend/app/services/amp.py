@@ -29,12 +29,16 @@ ARCGIS_AMP_URL = (
 
 LAST_REFRESH: dict = {}
 
+# site_id = champ ArcGIS réel. Entry / Speed : 0 autorisé, 1 interdit,
+# 2 restreint, 3 inconnu (dictionnaire Navigator, activités marines).
 AMP_OUT_FIELDS = (
-    "SITE_ID,site_name,url,country,state,managing_authority,designation,"
+    "site_id,SITE_ID,site_name,url,country,state,managing_authority,designation,"
     "category_name,wdpa_id,iucn_cat,purpose,lfp,other_helpful_links,"
-    "gov_level,year_est"
+    "gov_level,year_est,entry,speed"
 )
-ATTR_OUT_FIELDS = "SITE_ID,site_name,url,other_helpful_links,purpose"
+ATTR_OUT_FIELDS = (
+    "site_id,SITE_ID,site_name,url,other_helpful_links,purpose,entry,speed"
+)
 ATTR_REFRESH_BATCH = 80
 
 VISIT_STATUSES = (
@@ -81,6 +85,8 @@ SLIM_PROJECTION = {
     "gov_level": 1,
     "wdpa_id": 1,
     "year_est": 1,
+    "entry": 1,
+    "speed": 1,
     "manager_url": 1,
     "other_helpful_links": 1,
     "visit_url": 1,
@@ -409,6 +415,267 @@ def _as_lfp(value: Any) -> int:
     return n if 0 <= n <= 5 else 0
 
 
+def _as_activity(value: Any) -> int | None:
+    """Navigator : 0 autorisé, 1 interdit, 2 restreint, 3 inconnu. None = pas encore codé."""
+    if value is None or value == "":
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n in (0, 1, 2, 3) else None
+
+
+def traffic_kind(entry: Any, speed: Any) -> str:
+    e = _as_activity(entry)
+    s = _as_activity(speed)
+    if e == 1 or s == 1:
+        return "forbidden"
+    if e == 2 or s == 2:
+        return "regulated"
+    if e == 0 and s in (None, 0, 3):
+        return "allowed"
+    if e is None and s == 0:
+        return "allowed"
+    return "unknown"
+
+
+def is_forbidden_pleasure(doc: dict | None) -> bool:
+    if not isinstance(doc, dict):
+        return False
+    return traffic_kind(doc.get("entry"), doc.get("speed")) == "forbidden"
+
+
+def is_area_geom(geom: dict | None) -> bool:
+    return bool(isinstance(geom, dict) and geom.get("type") in ("Polygon", "MultiPolygon"))
+
+
+def _as_geojson_geom(geom: dict | None) -> dict | None:
+    """GeoJSON, ou anneaux / x,y ArcGIS."""
+    if not geom or not isinstance(geom, dict):
+        return None
+    if geom.get("type") in ("Polygon", "MultiPolygon", "Point", "GeometryCollection"):
+        return geom
+    if "rings" in geom:
+        return {"type": "Polygon", "coordinates": geom.get("rings") or []}
+    if "x" in geom and "y" in geom:
+        try:
+            return {"type": "Point", "coordinates": [float(geom["x"]), float(geom["y"])]}
+        except (TypeError, ValueError):
+            return None
+    return geom
+
+
+def _ring_span_ok(ring) -> bool:
+    lons, lats = [], []
+    for pt in ring or []:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            continue
+        try:
+            lons.append(float(pt[0]))
+            lats.append(float(pt[1]))
+        except (TypeError, ValueError):
+            continue
+    if len(lons) < 3:
+        return False
+    return (max(lons) - min(lons)) <= 179.9 and (max(lats) - min(lats)) <= 89.9
+
+
+def _area_span_ok(geom: dict | None) -> bool:
+    if not is_area_geom(geom):
+        return False
+    coords = geom.get("coordinates") or []
+    if geom.get("type") == "Polygon":
+        return _ring_span_ok(coords[0] if coords else [])
+    return all(_ring_span_ok(poly[0]) for poly in coords if poly)
+
+
+def _source_is_area(geom: dict | None) -> bool:
+    if not isinstance(geom, dict):
+        return False
+    if geom.get("type") in ("Polygon", "MultiPolygon", "GeometryCollection"):
+        return True
+    return "rings" in geom
+
+
+def missing_entry_speed_query() -> dict:
+    """Champ absent **ou** null — ProtectedSeas n'a pas encore été recopié."""
+    return {"$or": [
+        {"entry": {"$exists": False}},
+        {"speed": {"$exists": False}},
+        {"entry": None},
+        {"speed": None},
+    ]}
+
+
+def repair_geometry_for_mongo(geom: dict | None, *, max_bytes: int = 800_000) -> dict | None:
+    """Rendre un polygone indexable (2dsphere). Jamais un Point à la place d'une forme."""
+    geom = _as_geojson_geom(geom)
+    if not geom or not isinstance(geom, dict):
+        return None
+    import json
+    cleaned = sanitize_geometry(geom)
+    if is_area_geom(cleaned) and len(json.dumps(cleaned)) <= max_bytes and _area_span_ok(cleaned):
+        return cleaned
+    if geom.get("type") not in ("Polygon", "MultiPolygon", "GeometryCollection"):
+        return None
+    try:
+        from shapely.geometry import MultiPoint, mapping, shape
+        from shapely.ops import unary_union
+    except Exception:
+        return None
+    try:
+        raw = shape(geom)
+        if raw.is_empty:
+            return None
+        if not raw.is_valid:
+            raw = raw.buffer(0)
+        if raw.is_empty:
+            return None
+        if raw.geom_type == "GeometryCollection":
+            parts = [g for g in raw.geoms if g.geom_type in ("Polygon", "MultiPolygon") and not g.is_empty]
+            raw = unary_union(parts) if parts else None
+        if raw is None or raw.is_empty:
+            return None
+        if raw.geom_type not in ("Polygon", "MultiPolygon"):
+            return None
+        raw = _parts_under_hemisphere(raw)
+        if raw is None or raw.is_empty:
+            return None
+        tol = 0.0002
+        current = raw
+        while True:
+            gj = mapping(current)
+            blob = json.dumps(gj)
+            cleaned = sanitize_geometry(gj)
+            if is_area_geom(cleaned) and len(blob) <= max_bytes and _area_span_ok(cleaned):
+                return cleaned
+            if tol > 8.0:
+                return _local_area_geom(current)
+            try:
+                nxt = current.simplify(tol, preserve_topology=True)
+            except Exception:
+                nxt = None
+            if nxt is None or nxt.is_empty:
+                return _local_area_geom(raw)
+            current = nxt
+            tol *= 2
+    except Exception:
+        return None
+
+
+def _span_ok_shape(g) -> bool:
+    try:
+        minx, miny, maxx, maxy = g.bounds
+    except Exception:
+        return False
+    return (maxx - minx) <= 179.9 and (maxy - miny) <= 89.9
+
+
+def _parts_under_hemisphere(raw):
+    """Mongo refuse une pièce plus grande qu'un hémisphère ou qui traverse 180°."""
+    from shapely.geometry import box
+    from shapely.ops import unary_union
+
+    if raw.geom_type == "Polygon":
+        parts = [raw]
+    elif raw.geom_type == "MultiPolygon":
+        parts = list(raw.geoms)
+    else:
+        return raw
+    kept = []
+    west = box(-180.0, -90.0, 0.0, 90.0)
+    east = box(0.0, -90.0, 180.0, 90.0)
+    for part in parts:
+        if _span_ok_shape(part):
+            kept.append(part)
+            continue
+        for cut in (west, east):
+            try:
+                piece = part.intersection(cut)
+            except Exception:
+                continue
+            if piece.is_empty:
+                continue
+            if piece.geom_type == "Polygon" and _span_ok_shape(piece):
+                kept.append(piece)
+            elif piece.geom_type == "MultiPolygon":
+                kept.extend(g for g in piece.geoms if not g.is_empty and _span_ok_shape(g))
+            elif piece.geom_type == "GeometryCollection":
+                kept.extend(
+                    g for g in piece.geoms
+                    if g.geom_type in ("Polygon", "MultiPolygon") and not g.is_empty and _span_ok_shape(g)
+                )
+    if not kept:
+        return raw
+    if len(kept) == 1:
+        return kept[0]
+    try:
+        return unary_union(kept)
+    except Exception:
+        return kept[0]
+
+
+def _local_area_geom(raw, radius: float = 25.0) -> dict | None:
+    """Dernier recours : enveloppe convexe autour du morceau le plus dense."""
+    try:
+        from shapely.geometry import MultiPoint, mapping
+    except Exception:
+        return None
+    pts: list[tuple[float, float]] = []
+
+    def walk(g):
+        if g.geom_type == "Polygon":
+            pts.extend((float(x), float(y)) for x, y in g.exterior.coords)
+        elif g.geom_type == "MultiPolygon":
+            for p in g.geoms:
+                walk(p)
+
+    try:
+        walk(raw)
+    except Exception:
+        return None
+    if len(pts) < 3:
+        return None
+    if raw.geom_type == "MultiPolygon" and raw.geoms:
+        best = max(
+            (g for g in raw.geoms if g.geom_type == "Polygon"),
+            key=lambda g: len(g.exterior.coords),
+            default=None,
+        )
+        cx, cy = (best.centroid.x, best.centroid.y) if best is not None else (raw.centroid.x, raw.centroid.y)
+    else:
+        cx, cy = raw.centroid.x, raw.centroid.y
+    local = [(x, y) for x, y in pts if abs(x - cx) <= radius and abs(y - cy) <= radius]
+    if len(local) < 3:
+        return {
+            "type": "Polygon",
+            "coordinates": [[
+                [cx - 0.5, cy - 0.5], [cx + 0.5, cy - 0.5],
+                [cx + 0.5, cy + 0.5], [cx - 0.5, cy + 0.5],
+                [cx - 0.5, cy - 0.5],
+            ]],
+        }
+    try:
+        hull = MultiPoint(local).convex_hull
+    except Exception:
+        return None
+    if hull.geom_type != "Polygon" or hull.is_empty:
+        return None
+    return sanitize_geometry(mapping(hull))
+
+
+def _hull_from_geom(geom) -> dict | None:
+    if geom is None:
+        return None
+    try:
+        from shapely.geometry import shape
+        raw = geom if getattr(geom, "geom_type", None) else shape(geom)
+        return _local_area_geom(raw, radius=8.0)
+    except Exception:
+        return None
+
+
 def _ring_ok(ring) -> bool:
     """Mongo 2dsphere requires ≥ 3 distinct vertices (closed ring ≥ 4 positions)."""
     if not isinstance(ring, (list, tuple)) or len(ring) < 4:
@@ -541,9 +808,16 @@ def attrs_from_feature(feat: dict) -> dict:
     site_id = str(props.get("SITE_ID") or props.get("site_id") or "").strip()
     website_raw = props.get("url") or ""
     manager, _ps_extras = split_protectedseas_website(website_raw)
-    raw_geom = feat.get("geometry")
+    raw_geom = _as_geojson_geom(feat.get("geometry"))
     lat, lon = _centroid(raw_geom)
-    geom = sanitize_geometry(raw_geom) or _point_geom(lat, lon)
+    source_area = _source_is_area(raw_geom)
+    geom = sanitize_geometry(raw_geom)
+    if not is_area_geom(geom) or not _area_span_ok(geom):
+        geom = repair_geometry_for_mongo(raw_geom) or (geom if is_area_geom(geom) else None)
+    if not is_area_geom(geom) and source_area:
+        geom = repair_geometry_for_mongo(raw_geom, max_bytes=200_000)
+    if not is_area_geom(geom):
+        geom = _point_geom(lat, lon)
     doc = {
         "_id": site_id,
         "site_id": site_id,
@@ -555,6 +829,8 @@ def attrs_from_feature(feat: dict) -> dict:
         "iucn_cat": props.get("iucn_cat") or "",
         "purpose": props.get("purpose") or "",
         "lfp": _as_lfp(props.get("lfp")),
+        "entry": _as_activity(props.get("entry")),
+        "speed": _as_activity(props.get("speed")),
         "managing_authority": props.get("managing_authority") or "",
         "gov_level": props.get("gov_level") or "",
         "wdpa_id": props.get("wdpa_id") or "",
@@ -576,6 +852,11 @@ def merge_cached(existing: dict | None, incoming: dict) -> dict:
     if not existing:
         return incoming
     out = dict(incoming)
+    if is_area_geom(existing.get("geometry")) and not is_area_geom(incoming.get("geometry")):
+        out["geometry"] = existing["geometry"]
+        if existing.get("lat") is not None:
+            out["lat"] = existing.get("lat")
+            out["lon"] = existing.get("lon")
     prev = existing.get("visit_url")
     prev_status = existing.get("visit_url_status")
     if prev and not urls_equivalent(prev, incoming.get("manager_url")):
@@ -604,6 +885,8 @@ def public_properties(doc: dict, *, include_geometry_meta: bool = True) -> dict:
         "iucn_cat": doc.get("iucn_cat"),
         "purpose": doc.get("purpose"),
         "lfp": _as_lfp(doc.get("lfp")),
+        "entry": _as_activity(doc.get("entry")),
+        "speed": _as_activity(doc.get("speed")),
         "managing_authority": doc.get("managing_authority"),
         "gov_level": doc.get("gov_level"),
         "wdpa_id": doc.get("wdpa_id"),
@@ -645,15 +928,16 @@ def to_feature_collection(docs: Iterable[dict], *, geometry: bool = True,
 
 
 def _offset_for_span(span: float) -> float:
+    """Simplification ArcGIS. 0,05° (~5 km) détruisait les petits parcs → Point."""
     if span >= 8:
-        return 0.05
+        return 0.002
     if span >= 4:
-        return 0.02
+        return 0.001
     if span >= 2:
-        return 0.008
+        return 0.0005
     if span >= 1:
-        return 0.003
-    return 0.0008
+        return 0.0003
+    return 0.0001
 
 
 async def fetch_arcgis(bbox: tuple[float, float, float, float], *,
@@ -692,7 +976,7 @@ def _sql_site_ids(site_ids: list[str]) -> str:
         safe = str(sid).replace("'", "''")
         if safe:
             parts.append(f"'{safe}'")
-    return f"SITE_ID IN ({','.join(parts)})"
+    return f"site_id IN ({','.join(parts)})"
 
 
 async def fetch_arcgis_attrs(site_ids: list[str]) -> dict[str, dict]:
@@ -721,6 +1005,172 @@ async def fetch_arcgis_attrs(site_ids: list[str]) -> dict[str, dict]:
     return out
 
 
+async def fetch_arcgis_by_ids(site_ids: list[str], *, offset: float = 0.0) -> list[dict]:
+    """Polygones + attributs (dont entry/speed) pour une liste de SITE_ID. offset=0 = forme native."""
+    ids = [str(s).strip() for s in site_ids if str(s).strip()]
+    docs: list[dict] = []
+    if not ids:
+        return docs
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        for i in range(0, len(ids), 20):
+            chunk = ids[i:i + 20]
+            params = {
+                "where": _sql_site_ids(chunk),
+                "outFields": AMP_OUT_FIELDS,
+                "returnGeometry": "true",
+                "outSR": 4326,
+                "f": "geojson",
+                "maxAllowableOffset": offset,
+            }
+            r = await client.get(ARCGIS_AMP_URL, params=params)
+            r.raise_for_status()
+            data = r.json()
+            for feat in data.get("features") or []:
+                if not feat.get("properties") and feat.get("attributes"):
+                    feat = {
+                        "type": "Feature",
+                        "properties": feat.get("attributes") or {},
+                        "geometry": feat.get("geometry"),
+                    }
+                doc = attrs_from_feature(feat)
+                if doc.get("site_id"):
+                    docs.append(doc)
+    return docs
+
+
+async def _still_point_ids(db, ids: list[str]) -> list[str]:
+    left = []
+    for sid in ids:
+        row = await db.amp_sites.find_one({"_id": sid}, {"geometry.type": 1})
+        if not row:
+            row = await db.amp_sites.find_one({"site_id": sid}, {"geometry.type": 1})
+        if ((row or {}).get("geometry") or {}).get("type") == "Point":
+            left.append(sid)
+    return left
+
+
+async def _fetch_ids_resilient(fetch, ids: list[str], *, offset: float, log=None) -> tuple[list[dict], int]:
+    """Un lot trop gros (ZEE) ne doit pas faire rater les petits parcs du même paquet."""
+    docs: list[dict] = []
+    fetched = 0
+    batch = 8 if offset <= 0.001 else 4
+    for i in range(0, len(ids), batch):
+        chunk = ids[i:i + batch]
+        try:
+            got = await fetch(chunk, offset=offset)
+        except TypeError:
+            try:
+                got = await fetch(chunk)
+            except Exception as exc:
+                got = None
+                if log:
+                    log(f"AMP repair lot {i}/{len(ids)} : {type(exc).__name__}: {str(exc)[:80]}")
+        except Exception as exc:
+            got = None
+            if log:
+                log(f"AMP repair lot {i}/{len(ids)} : {type(exc).__name__}: {str(exc)[:80]}")
+        if got is None:
+            for sid in chunk:
+                try:
+                    one = await fetch([sid], offset=offset)
+                except TypeError:
+                    try:
+                        one = await fetch([sid])
+                    except Exception as exc:
+                        if log:
+                            log(f"AMP repair {sid} : {type(exc).__name__}: {str(exc)[:60]}")
+                        continue
+                except Exception as exc:
+                    if log:
+                        log(f"AMP repair {sid} : {type(exc).__name__}: {str(exc)[:60]}")
+                    continue
+                docs.extend(one)
+                fetched += len(one)
+            continue
+        docs.extend(got)
+        fetched += len(got)
+        if log:
+            log(f"AMP repair {min(i + batch, len(ids))}/{len(ids)} offset={offset} fetched={fetched}")
+    return docs, fetched
+
+
+async def repair_point_sites(db, *, limit: int = 0, log=None, fetch_fn=None,
+                             offsets: tuple[float, ...] | None = None) -> dict:
+    """Reprendre chez ProtectedSeas les sites stockés en Point. Ne jamais les y laisser si un polygone existe."""
+    q = {"geometry.type": "Point"}
+    cur = db.amp_sites.find(q, {"site_id": 1, "_id": 1})
+    if hasattr(cur, "to_list"):
+        rows = await cur.to_list(int(limit) if limit else 20_000)
+    else:
+        rows = []
+        async for doc in cur:
+            rows.append(doc)
+            if limit and len(rows) >= limit:
+                break
+    ids = [str(d.get("site_id") or d.get("_id") or "").strip() for d in rows]
+    ids = [i for i in ids if i]
+    fetch = fetch_fn or fetch_arcgis_by_ids
+    fetched = 0
+    upserted = 0
+    remaining = list(ids)
+    for offset in (offsets if offsets is not None else (0.0, 0.02, 0.08, 0.2)):
+        if not remaining:
+            break
+        docs, n = await _fetch_ids_resilient(fetch, remaining, offset=offset, log=log)
+        fetched += n
+        if docs:
+            upserted += await upsert_sites(db, docs)
+        remaining = await _still_point_ids(db, remaining)
+        if log:
+            log(f"AMP repair offset={offset} still_point={len(remaining)}")
+    still_point = len(await _still_point_ids(db, ids))
+    summary = {
+        "candidates": len(ids),
+        "fetched": fetched,
+        "upserted": upserted,
+        "still_point": still_point,
+    }
+    if log:
+        log(f"AMP repair terminé : {summary}")
+    return summary
+
+
+async def backfill_entry_speed(db, *, log=None, fetch_fn=None) -> dict:
+    """Moissonner Entry / Speed pour les fiches qui ne les ont pas encore."""
+    q = missing_entry_speed_query()
+    cur = db.amp_sites.find(q, {"site_id": 1, "_id": 1})
+    if hasattr(cur, "to_list"):
+        rows = await cur.to_list(20_000)
+    else:
+        rows = [d async for d in cur]
+    ids = [str(d.get("site_id") or d.get("_id") or "").strip() for d in rows]
+    ids = [i for i in ids if i]
+    fetch = fetch_fn or fetch_arcgis_attrs
+    updated = 0
+    try:
+        remote = await fetch(ids)
+    except Exception as exc:
+        if log:
+            log(f"AMP entry/speed : {type(exc).__name__}: {str(exc)[:80]}")
+        return {"candidates": len(ids), "updated": 0}
+    for sid, attrs in remote.items():
+        entry = _as_activity(attrs.get("entry"))
+        speed = _as_activity(attrs.get("speed"))
+        if entry is None:
+            entry = 3
+        if speed is None:
+            speed = 3
+        await db.amp_sites.update_one(
+            {"_id": sid},
+            {"$set": {"entry": entry, "speed": speed}},
+        )
+        updated += 1
+    summary = {"candidates": len(ids), "updated": updated}
+    if log:
+        log(f"AMP entry/speed : {summary}")
+    return summary
+
+
 def apply_protectedseas_attrs(doc: dict, attrs: dict | None) -> dict:
     """Rewrite manager_url / extras from an ArcGIS record (no polygon)."""
     if not attrs:
@@ -737,6 +1187,10 @@ def apply_protectedseas_attrs(doc: dict, attrs: dict | None) -> dict:
         doc["other_helpful_links"] = helpful
     if purpose:
         doc["purpose"] = purpose
+    if "entry" in attrs:
+        doc["entry"] = _as_activity(attrs.get("entry"))
+    if "speed" in attrs:
+        doc["speed"] = _as_activity(attrs.get("speed"))
     return doc
 
 
@@ -777,6 +1231,8 @@ async def refresh_protectedseas_attrs(
                     "ps_website_raw": doc.get("ps_website_raw"),
                     "other_helpful_links": doc.get("other_helpful_links"),
                     "purpose": doc.get("purpose"),
+                    "entry": doc.get("entry"),
+                    "speed": doc.get("speed"),
                     "visit_url": doc.get("visit_url"),
                     "visit_url_status": doc.get("visit_url_status"),
                     "visit_url_source": doc.get("visit_url_source"),
@@ -839,16 +1295,30 @@ async def upsert_sites(db, docs: list[dict]) -> int:
             continue
         existing = await db.amp_sites.find_one({"_id": sid})
         merged = merge_cached(existing, incoming)
+        if is_area_geom(merged.get("geometry")):
+            fitted = repair_geometry_for_mongo(merged.get("geometry"))
+            if is_area_geom(fitted):
+                merged["geometry"] = fitted
         try:
             await db.amp_sites.update_one({"_id": sid}, {"$set": merged}, upsert=True)
         except Exception:
-            merged["geometry"] = _point_geom(merged.get("lat"), merged.get("lon"))
-            if not merged.get("geometry"):
+            repaired = repair_geometry_for_mongo(merged.get("geometry"))
+            if not is_area_geom(repaired):
+                repaired = _hull_from_geom(merged.get("geometry"))
+            if not is_area_geom(repaired):
                 continue
+            merged["geometry"] = repaired
             try:
                 await db.amp_sites.update_one({"_id": sid}, {"$set": merged}, upsert=True)
             except Exception:
-                continue
+                hull = _hull_from_geom(repaired)
+                if not is_area_geom(hull):
+                    continue
+                merged["geometry"] = hull
+                try:
+                    await db.amp_sites.update_one({"_id": sid}, {"$set": merged}, upsert=True)
+                except Exception:
+                    continue
         n += 1
     return n
 
