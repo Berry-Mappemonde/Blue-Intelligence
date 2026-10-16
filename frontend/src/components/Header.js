@@ -28,6 +28,9 @@ export default function Header({
         <div>
           <h1 className="font-heading font-black text-lg leading-none tracking-tight text-white">
             Blue Intelligence
+            <span className="block font-semibold text-[11px] tracking-normal text-accent/90 normal-case mt-0.5">
+              by Berry-Mappemonde
+            </span>
           </h1>
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70 leading-none mt-1">
             {t("subtitle")}
