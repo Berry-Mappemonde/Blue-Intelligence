@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -313,6 +314,94 @@ def test_set_visit_url_accepts_procedure_page():
     assert not amp_svc.urls_equivalent(out["visit_url"], out["manager_url"])
 
 
+def test_traffic_kind_forbidden_and_regulated():
+    assert amp_svc.traffic_kind(1, 3) == "forbidden"
+    assert amp_svc.traffic_kind(3, 1) == "forbidden"
+    assert amp_svc.traffic_kind(2, 3) == "regulated"
+    assert amp_svc.traffic_kind(0, 3) == "allowed"
+    assert amp_svc.is_forbidden_pleasure({"entry": 1, "speed": 3}) is True
+    assert amp_svc.is_forbidden_pleasure({"entry": 2, "speed": 3}) is False
+
+
+def test_entry_speed_coding_and_public_properties():
+    assert amp_svc._as_activity(0) == 0
+    assert amp_svc._as_activity(1) == 1
+    assert amp_svc._as_activity(2) == 2
+    assert amp_svc._as_activity(3) == 3
+    assert amp_svc._as_activity(None) is None
+    assert amp_svc._as_activity(9) is None
+    feat = _feat(entry=1, speed=2)
+    doc = amp_svc.attrs_from_feature(feat)
+    assert doc["entry"] == 1
+    assert doc["speed"] == 2
+    props = amp_svc.to_feature(doc)["properties"]
+    assert props["entry"] == 1
+    assert props["speed"] == 2
+
+
+def test_merge_cached_keeps_polygon_over_point():
+    poly = amp_svc.attrs_from_feature(_feat())
+    incoming = dict(poly)
+    incoming["geometry"] = {"type": "Point", "coordinates": [3.2, 42.1]}
+    incoming["entry"] = 1
+    incoming["speed"] = 3
+    merged = amp_svc.merge_cached(poly, incoming)
+    assert merged["geometry"]["type"] == "Polygon"
+    assert merged["entry"] == 1
+
+
+def test_repair_geometry_keeps_a_real_park():
+    geom = {
+        "type": "Polygon",
+        "coordinates": [[
+            [-9.8, 42.1], [-9.4, 42.1], [-9.4, 42.4], [-9.8, 42.4], [-9.8, 42.1],
+        ]],
+    }
+    out = amp_svc.repair_geometry_for_mongo(geom)
+    assert amp_svc.is_area_geom(out)
+
+
+def test_repair_geometry_shrinks_a_dense_park():
+    ring = [[-1.0 + i * 0.0002, 45.0] for i in range(4000)]
+    ring += [[-0.2, 45.0 + i * 0.0002] for i in range(4000)]
+    ring += [[-0.2 - i * 0.0002, 45.8] for i in range(4000)]
+    ring += [[-1.0, 45.8 - i * 0.0002] for i in range(4000)]
+    ring.append(ring[0])
+    geom = {"type": "Polygon", "coordinates": [ring]}
+    out = amp_svc.repair_geometry_for_mongo(geom, max_bytes=8_000)
+    assert amp_svc.is_area_geom(out)
+    assert len(json.dumps(out)) <= 8_000
+
+
+def test_attrs_from_feature_never_turns_a_park_into_a_point():
+    feat = _feat()
+    feat["geometry"] = {
+        "type": "Polygon",
+        "coordinates": [[
+            [3.0, 42.0], [3.4, 42.0], [3.4, 42.3], [3.0, 42.3], [3.0, 42.0],
+        ]],
+    }
+    doc = amp_svc.attrs_from_feature(feat)
+    assert amp_svc.is_area_geom(doc["geometry"])
+
+
+def test_missing_entry_speed_query_covers_null():
+    q = amp_svc.missing_entry_speed_query()
+    assert {"entry": None} in q["$or"]
+    assert {"speed": None} in q["$or"]
+
+
+def test_hull_from_geom_keeps_an_area():
+    geom = {
+        "type": "Polygon",
+        "coordinates": [[
+            [3.0, 42.0], [3.4, 42.0], [3.4, 42.3], [3.0, 42.3], [3.0, 42.0],
+        ]],
+    }
+    out = amp_svc._hull_from_geom(geom)
+    assert amp_svc.is_area_geom(out)
+
+
 def test_to_feature_exposes_two_url_fields():
     doc = amp_svc.attrs_from_feature(_feat(
         other_helpful_links="https://parc-marin.fr/visite"))
@@ -329,6 +418,7 @@ def test_amp_router_and_legacy_mpa_stay_apart():
     amp_paths = {getattr(r, "path", "") for r in amp_router.router.routes}
     mpa_paths = {getattr(r, "path", "") for r in projects_router.router.routes}
     assert "/api/amp" in amp_paths
+    assert "/api/amp/nogo" in amp_paths
     assert "/api/amp/sites/{site_id}/visit-url" in amp_paths
     assert "/api/amp/discover-visit-urls" in amp_paths
     assert "/api/amp/runs" in amp_paths
@@ -357,6 +447,13 @@ def test_apply_protectedseas_attrs_cleans_manager_and_keeps_extras():
     assert "afbiodiversite.fr" in doc["ps_website_raw"]
     assert doc["other_helpful_links"] == "https://parc.fr/visite"
     assert doc["purpose"].startswith("Protect")
+
+
+def test_apply_protectedseas_attrs_copies_entry_speed():
+    doc = {"_id": "PS-1", "site_id": "PS-1"}
+    amp_svc.apply_protectedseas_attrs(doc, {"entry": 1, "speed": 3, "url": ""})
+    assert doc["entry"] == 1
+    assert doc["speed"] == 3
 
 
 def test_refresh_protectedseas_attrs_writes_cache():
