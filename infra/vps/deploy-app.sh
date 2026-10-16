@@ -73,6 +73,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable blue-intelligence >/dev/null 2>&1 || true
 sudo systemctl restart blue-intelligence
 
+# ── nginx: vhosts publics (référence dépôt → sites-available, nginx -t, reload) ─
+bash "$APP/infra/vps/sync-public-nginx.sh"
+
 code=000
 for _ in $(seq 1 30); do
   code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8001/api/ || true)
