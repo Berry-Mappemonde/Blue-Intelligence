@@ -9,6 +9,9 @@ describe("contrat SEO blueintelligence.online", () => {
     expect(html).toMatch(/<html lang="fr"/);
     expect(html).toMatch(/Blue Intelligence by Berry-Mappemonde/);
     expect(html).toMatch(/rel="canonical" href="https:\/\/www\.blueintelligence\.online\/"/);
+    expect(html).toMatch(
+      /name="google-site-verification" content="5QUxdIp_P9JBi-wgFUnp_1efTPnnVDYKQhIp6kTMyeA"/
+    );
     expect(html).toMatch(/"@type":\s*"WebApplication"/);
     expect(html).toMatch(/alternateName/);
     expect(html).toMatch(/<h1>Blue Intelligence by Berry-Mappemonde<\/h1>/);
