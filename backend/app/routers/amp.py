@@ -89,6 +89,29 @@ async def list_amp(bbox: str = "", force: bool = False, visible: bool = False,
     })
 
 
+@router.get("/amp/nogo")
+async def amp_nogo():
+    """AMP interdites à la plaisance (entry=1 ou speed=1), polygones allégés."""
+    docs = await db.amp_sites.find(
+        {"$or": [{"entry": 1}, {"speed": 1}]},
+    ).to_list(500)
+    kept = []
+    for doc in docs:
+        if not amp_svc.is_forbidden_pleasure(doc):
+            continue
+        geom = amp_svc.repair_geometry_for_mongo(doc.get("geometry"), max_bytes=80_000)
+        if not amp_svc.is_area_geom(geom):
+            continue
+        slim = dict(doc)
+        slim["geometry"] = geom
+        kept.append(slim)
+    return amp_svc.to_feature_collection(kept, extra={
+        "name": "amp_nogo",
+        "note": "entry=1 or speed=1 — no-transit polygons for routing",
+        "count": len(kept),
+    })
+
+
 @router.get("/amp/stats")
 async def amp_stats():
     return await amp_svc.amp_stats(db)
