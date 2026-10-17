@@ -36,6 +36,14 @@ EXCLUDED = {
         "identité git emergent-agent-e1, pas un fichier de produit ; "
         "elle reste dans l'archive"
     ),
+    "Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md": (
+        "doublon octet pour octet de la copie navsecops ; "
+        "la classification documentaire le retire des dépôts neufs"
+    ),
+    "Archives/naviguide-nova/docs/SETUP_NOVA_CREDITS.md": (
+        "doublon octet pour octet de la copie navsecops ; "
+        "la classification documentaire le retire des dépôts neufs"
+    ),
 }
 
 # Fichiers présents dans les deux dépôts. Contrôlés avant les préfixes,
@@ -51,7 +59,6 @@ BOTH_EXACT = {
     "Archives/README.md",
     "docs/PLAN_SEPARATION_DEPOTS.md",
     "docs/HACKATHON_PLAN.md",
-    "docs/ETAT_DES_LIEUX_DOCS.md",
     "docs/README.md",
     "docs/check_md_links.py",
     "docs/REGLES_PARAMETRES.md",
@@ -66,6 +73,7 @@ BOTH_EXACT = {
     "infra/agents/open_pr.py",
     "infra/agents/post_pr_comment.py",
     "infra/agents/review_collect.py",
+    ".cursor/rules/base-de-donnees-vps.mdc",
     ".cursor/rules/environnement-utilisateur.mdc",
     ".cursor/rules/modeles-cursor-uniquement.mdc",
     ".cursor/rules/pas-de-verification-video.mdc",
@@ -81,7 +89,6 @@ BI_EXACT = {
     ".cursor/install.sh",
     ".cursor/preview.sh",
     ".cursor/start.sh",
-    ".cursor/rules/base-de-donnees-vps.mdc",
     "infra/vps/blue-intelligence-backup.cron",
     "infra/vps/blue-intelligence.service",
     "infra/vps/deploy-app.sh",
@@ -119,6 +126,7 @@ DOC_BI = {
     "docs/CATALOGUE_SEAMARK.md",
     "docs/CONTRATS_MODES.md",
     "docs/CONTRATS_REVIEW_PAR_MODE.md",
+    "docs/ETAT_DES_LIEUX_DOCS.md",
     "docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md",
     "docs/PRD.md",
     "docs/design_guidelines.json",
@@ -130,7 +138,6 @@ DOC_BI = {
     "docs/archives/HACKATHON_OPEN_AGENT_2026.md",
     "docs/archives/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md",
     "docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md",
-    "docs/archives/nvidia-llm-audit.md",
 }
 
 DOC_NG = {
@@ -184,6 +191,7 @@ DOC_NG = {
     "docs/archives/PLAN_UI_PRODUIT_SIMULATEUR.md",
     "docs/archives/hackathon-nebius-nvidia.en.md",
     "docs/archives/hackathon-nebius-nvidia.md",
+    "docs/archives/nvidia-llm-audit.md",
 }
 
 NG_EXACT = {
@@ -217,6 +225,7 @@ BI_DIRS = (
     "Archives/Blue-Intelligence/",
     "infra/searxng/",
     "infra/vps/seamap/",
+    "infra/vps/ci/",
     "docs/data/",
     "prototype_ai_studio/",
     "test_reports/",
@@ -227,7 +236,6 @@ BI_DIRS = (
 NG_DIRS = (
     "naviguide-simulator/",
     "naviguide/",
-    "Archives/naviguide-nova/",
     "Archives/naviguide-navsecops/",
     ".zap/",
     ".vscode/",
@@ -236,9 +244,7 @@ NG_DIRS = (
     "infra/agents/",
     ".cursor/hooks/",
 )
-BOTH_DIRS = (
-    "infra/vps/ci/",
-)
+BOTH_DIRS = ()
 # Fichiers qui ne sont plus sur main, mais dont l'historique appartient
 # encore à un dépôt. filter-repo ne suit pas les renommages : l'ancien
 # chemin doit être une ligne à part, sauf s'il est déjà sous un dossier pur.
@@ -261,7 +267,6 @@ HIST_BI_FILES = (
     "docs/HACKATHON_OPEN_AGENT_2026.md",
     "docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md",
     "docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md",
-    "docs/nvidia-llm-audit.md",
 )
 HIST_NG_FILES = (
     "docs/PLAN_CHANTIERS_STRUCTURANTS_SIMULATEUR.md",
@@ -279,6 +284,7 @@ HIST_NG_FILES = (
     "docs/PROFIL_BUILD_PROD_2026-09-19.md",
     "docs/hackathon-nebius-nvidia.en.md",
     "docs/hackathon-nebius-nvidia.md",
+    "docs/nvidia-llm-audit.md",
 )
 # Restent dans l'archive seulement. .env.example contenait une valeur de
 # clé ; memory/test_credentials.md est un aide-mémoire de noms de clés.
@@ -336,6 +342,7 @@ BI_FORBIDDEN = (
     "docs/recette/",
     "docs/LOTS_ORDRE_ET_PROMPTS.md",
     "docs/HACKATHON_DEVPOST_SOUMISSION.md",
+    "docs/archives/nvidia-llm-audit.md",
     ".github/workflows/zap-baseline.yml",
 )
 
@@ -357,6 +364,7 @@ NG_REQUIRED = (
     ".cursor/hooks.json",
     ".cursor/hooks/",
     ".cursor/rules/anti-regression-visuelle-simulateur.mdc",
+    ".cursor/rules/base-de-donnees-vps.mdc",
     "docs/LOTS_ORDRE_ET_PROMPTS.md",
     "docs/HACKATHON_DEVPOST_SOUMISSION.md",
     "docs/PLAN_HACKATHON_NEBIUS_NAVIGUIDE.md",
@@ -382,8 +390,11 @@ NG_FORBIDDEN = (
     ".gitconfig",
     ".cursor/environment.json",
     ".cursor/install.sh",
-    ".cursor/rules/base-de-donnees-vps.mdc",
+    "infra/vps/ci/README.md",
+    "docs/ETAT_DES_LIEUX_DOCS.md",
     "docs/PRD.md",
+    "Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md",
+    "Archives/naviguide-nova/docs/SETUP_NOVA_CREDITS.md",
     "docs/data/",
     "docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md",
     ".github/workflows/weekly-data-build.yml",
@@ -408,6 +419,9 @@ def is_excluded(path: str) -> bool:
 def classify(path: str) -> str:
     if is_excluded(path):
         return "excluded"
+    # Le dossier ci/ est partagé, son README ne l'est pas (proposition #553).
+    if path == "infra/vps/ci/README.md":
+        return "bi"
     if path in BOTH_EXACT or _starts(path, BOTH_PREFIXES):
         return "both"
     if (
@@ -586,7 +600,10 @@ def self_test() -> int:
         ".gitignore": "both",
         ".nvmrc": "both",
         "Archives/Blue-Intelligence/docs/DEPLOIEMENT-VPS-OVH.md": "bi",
-        "Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md": "ng",
+        "Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md": "excluded",
+        "Archives/naviguide-nova/docs/SETUP_NOVA_CREDITS.md": "excluded",
+        "Archives/naviguide-nova/README.md": "ng",
+        "Archives/naviguide-navsecops/docs/PLAN_DEV_NOVA.md": "ng",
         "Archives/README.md": "both",
         "infra/agents/run_lots.py": "ng",
         "infra/agents/gh_token.py": "both",
@@ -594,6 +611,7 @@ def self_test() -> int:
         "infra/vps/naviguide/deploy-simulator.sh": "ng",
         "infra/vps/deploy-app.sh": "bi",
         "infra/vps/ci/plan_deploy.py": "both",
+        "infra/vps/ci/README.md": "bi",
         "infra/vps/nginx-bi-climatology-cache.conf": "both",
         "infra/searxng/docker-compose.yml": "bi",
         "docs/recette/lot-f1/a.jpg": "ng",
@@ -605,7 +623,10 @@ def self_test() -> int:
         "docs/PLAN_SEPARATION_DEPOTS.md": "both",
         ".cursor/environment.json": "bi",
         ".cursor/hooks/simulator-ensure-dev.sh": "ng",
-        ".cursor/rules/base-de-donnees-vps.mdc": "bi",
+        ".cursor/rules/base-de-donnees-vps.mdc": "both",
+        "docs/ETAT_DES_LIEUX_DOCS.md": "bi",
+        "docs/archives/nvidia-llm-audit.md": "ng",
+        "docs/nvidia-llm-audit.md": "ng",
         ".cursor/rules/pas-de-verification-video.mdc": "both",
         ".zap/rules.tsv": "ng",
         ".vscode/tasks.json": "ng",
