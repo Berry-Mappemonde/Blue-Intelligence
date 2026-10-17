@@ -39,7 +39,6 @@ POST /api/poe/seeds/osm/refresh        reload Overpass → osm_port_seeds
 GET  /api/poe/runs/code-fingerprint
 """
 import asyncio
-import os
 import time
 
 import httpx

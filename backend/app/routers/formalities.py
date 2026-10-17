@@ -6,7 +6,7 @@ import os
 import time
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.core.tasks import TaskState
