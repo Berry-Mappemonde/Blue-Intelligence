@@ -40,10 +40,17 @@
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Perf 2026-10: Google Fonts loaded without blocking first paint. -->
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
-      rel="stylesheet"
+      rel="stylesheet" media="print" onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Blue Intelligence by Berry-Mappemonde — OSINT maritime</title>
     <script type="application/ld+json">
       {
@@ -85,6 +92,15 @@
         line-height: 1.5;
         color: #e2e8f0;
         background: #020617;
+      }
+      /* Perf 2026-10 (CLS): the pre-JS fallback sits out of flow, so hiding
+         it when React mounts no longer shifts the whole page (CLS 0.165). */
+      #seo-fallback {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        margin: 1.25rem auto;
       }
       body:has(#root:not(:empty)) .seo-fallback {
         display: none;

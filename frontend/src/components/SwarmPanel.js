@@ -1,6 +1,9 @@
 import { Compass, Flag, Search } from "lucide-react";
 import ProjectList from "./ProjectList";
 
+// Number of category groups served by /api/categories (fixed taxonomy).
+const LEGEND_PLACEHOLDER_ROWS = 9;
+
 /**
  * Projects-mode side strip — same structure as the other four modes:
  * header (icon + title + count) → search → filters → list → action.
@@ -59,6 +62,16 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
         <section className="p-4 border-b border-line" data-testid="map-legend">
           <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-2">{t("legend")}</p>
           <div className="grid grid-cols-1 gap-0.5">
+            {/* Perf 2026-10 (CLS): until /api/categories answers, reserve the
+                legend's height (9 fixed category groups) so the project list
+                below does not jump down when it arrives. */}
+            {legendCats.length === 0 && Array.from({ length: LEGEND_PLACEHOLDER_ROWS }, (_, i) => (
+              <div key={`ph-${i}`} aria-hidden="true" data-testid="legend-placeholder"
+                className="flex items-center gap-2 py-1 px-1.5 rounded-sm">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-raised" />
+                <span className="text-[11px] text-transparent select-none">&nbsp;</span>
+              </div>
+            ))}
             {legendCats.map((c) => (
               <button key={c.name} data-testid={`legend-item-${c.name}`}
                 onClick={() => setCategoryFilter(categoryFilter === c.name ? "All" : c.name)}
