@@ -45,6 +45,14 @@ function latLngsFromFc(fc) {
   return pts;
 }
 
+// Heavy datasets displayed only by one mode — fetched when that mode opens.
+const MODE_DATASETS = {
+  marinas: ["marinas", "anchorages"],
+  capitaineries: ["capitaineries"],
+  formalities: ["poeZones", "poePorts"],
+  science: ["science"],
+};
+
 const MODES = ["projects", "marinas", "capitaineries", "formalities", "amp", "science", "climatology"];
 
 // Read the persisted mode on boot. Default = "projects". (7 modes)
@@ -286,6 +294,9 @@ export default function App() {
     } catch (e) { /* transient */ }
   }, []);
 
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+
   const marinasRef = useRef(marinas);
   marinasRef.current = marinas;
 
@@ -394,14 +405,26 @@ export default function App() {
     } catch (e) { /* transient */ }
   }, []);
 
+  // Lazy per-mode datasets (perf 2026-10): a dataset is "wanted" once
+  // loaded, or when the current mode displays it.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const loadedRef = useRef(new Set());
+  const isWanted = useCallback((key) => {
+    if (loadedRef.current.has(key)) return true;
+    return (MODE_DATASETS[modeRef.current] || []).includes(key);
+  }, []);
+
   const refreshMapData = useCallback(() => {
     fetchProjects(true);
-    fetchMarinas(true);
-    fetchCapitaineries(true);
-    fetchPoeZones();
-    fetchPoePorts(true);
+    // Only datasets already loaded (or shown by the current mode) — see
+    // the lazy per-mode loading below.
+    if (isWanted("marinas")) fetchMarinas(true);
+    if (isWanted("capitaineries")) fetchCapitaineries(true);
+    if (isWanted("poeZones")) fetchPoeZones();
+    if (isWanted("poePorts")) fetchPoePorts(true);
     setMapEpoch((n) => n + 1);
-  }, [fetchProjects, fetchMarinas, fetchCapitaineries, fetchPoeZones, fetchPoePorts]);
+  }, [fetchProjects, fetchMarinas, fetchCapitaineries, fetchPoeZones, fetchPoePorts, isWanted]);
 
   useEffect(() => {
     // Phase 3.1 — async enrichment via 202 + poll status.
@@ -517,28 +540,75 @@ export default function App() {
     };
   }, [fetchMarinas, fetchProjects, lang]);
 
+  // Perf 2026-10 (Lighthouse mobile) — heavy per-mode datasets (marinas
+  // ~15 MB, science ~8 MB, PoE ports ~0.8 MB, capitaineries, anchorages)
+  // are fetched only when their mode is opened (or once loaded, refreshed by
+  // the polls). Before, every visit parsed ~27 MB of GeoJSON and built every
+  // Leaflet cluster at boot even though only the active mode is displayed.
+  const DATASET_FETCHERS = useMemo(() => ({
+    marinas: fetchMarinas,
+    anchorages: fetchAnchorages,
+    capitaineries: fetchCapitaineries,
+    poeZones: fetchPoeZones,
+    poePorts: fetchPoePorts,
+    science: fetchScience,
+  }), [fetchMarinas, fetchAnchorages, fetchCapitaineries, fetchPoeZones, fetchPoePorts, fetchScience]);
+
+  useEffect(() => {
+    for (const key of MODE_DATASETS[mode] || []) {
+      if (loadedRef.current.has(key)) continue;
+      loadedRef.current.add(key);
+      DATASET_FETCHERS[key]();
+    }
+  }, [mode, DATASET_FETCHERS]);
+
+  // Admin console shows the anchorages count.
+  useEffect(() => {
+    if (view !== "audit" || loadedRef.current.has("anchorages")) return;
+    loadedRef.current.add("anchorages");
+    fetchAnchorages();
+  }, [view, fetchAnchorages]);
+
+  // Perf 2026-10: in projects mode the map shows the default isolated run
+  // (picked by the run sync below), so the live /api/projects dump (~3.5 MB)
+  // fetched at boot was parsed then immediately replaced. At boot we only
+  // load the funders; the live dump is fetched only if no run gets picked.
+  const fetchFundersOnly = useCallback(async () => {
+    try {
+      const f = await api.get("/funders");
+      setFunders(f.data);
+    } catch (e) { /* transient */ }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
-    fetchProjects();
+    let projectsFallback = null;
+    if (modeRef.current === "projects" && !showReviewRef.current) {
+      fetchFundersOnly();
+      projectsFallback = setTimeout(() => {
+        if (mapRunsRef.current.projects?.id) return;
+        if ((projectsRef.current?.features?.length || 0) > 0) return;
+        fetchProjects(true);
+      }, 6000);
+    } else {
+      fetchProjects();
+    }
     fetchSettings();
-    fetchMarinas();
-    fetchScience();
     fetchClimoMeta(new Date().getMonth() + 1);
-    // Chrome's 6 HTTP/1.1 connections to this origin saturate if we fire
-    // every dump in parallel (marinas ~15 MB + maplibre chunks).
-    const later = setTimeout(() => {
-      fetchCategories();
-      fetchCapitaineries();
-      fetchAnchorages();
-      fetchPoeZones();
-      fetchPoePorts();
-    }, 2500);
+    // Tiny payload, drives the projects legend: no longer delayed now that
+    // the heavy per-mode dumps are not fetched at boot.
+    fetchCategories();
     const unlessReview = (fn) => () => {
       if (viewRef.current === "review") return;
       fn();
     };
+    const ifWanted = (key, fn) => () => {
+      if (!isWanted(key)) return;
+      fn();
+    };
     const fetchMarinasIfIdle = async () => {
       if (viewRef.current === "review") return;
+      if (!isWanted("marinas")) return;
       if (mapRunsRef.current.marinas?.id) {
         await fetchMarinas(true);
         return;
@@ -558,17 +628,17 @@ export default function App() {
     const p = setInterval(unlessReview(() => fetchProjects()), 30000);
     const c = setInterval(fetchCategories, 60000);
     const m = setInterval(fetchMarinasIfIdle, 180000);
-    const cap = setInterval(unlessReview(() => fetchCapitaineries()), 60000);
-    const a = setInterval(unlessReview(fetchAnchorages), 120000);
-    const sci = setInterval(unlessReview(fetchScience), 180000);
-    const z = setInterval(unlessReview(fetchPoeZones), 60000);
-    const pp = setInterval(unlessReview(() => fetchPoePorts()), 60000);
+    const cap = setInterval(unlessReview(ifWanted("capitaineries", () => fetchCapitaineries())), 60000);
+    const a = setInterval(unlessReview(ifWanted("anchorages", fetchAnchorages)), 120000);
+    const sci = setInterval(unlessReview(ifWanted("science", fetchScience)), 180000);
+    const z = setInterval(unlessReview(ifWanted("poeZones", fetchPoeZones)), 60000);
+    const pp = setInterval(unlessReview(ifWanted("poePorts", () => fetchPoePorts())), 60000);
     return () => {
-      clearTimeout(later);
+      if (projectsFallback) clearTimeout(projectsFallback);
       clearInterval(s); clearInterval(p); clearInterval(c); clearInterval(m);
       clearInterval(cap); clearInterval(a); clearInterval(sci); clearInterval(z); clearInterval(pp);
     };
-  }, [fetchStatus, fetchProjects, fetchSettings, fetchCategories, fetchMarinas, fetchCapitaineries, fetchAnchorages, fetchScience, fetchClimoMeta, fetchPoeZones, fetchPoePorts]);
+  }, [fetchStatus, fetchProjects, fetchFundersOnly, fetchSettings, fetchCategories, fetchMarinas, fetchCapitaineries, fetchAnchorages, fetchScience, fetchClimoMeta, fetchPoeZones, fetchPoePorts, isWanted]);
 
   // Select a run to display (null = live map) for the current mode.
   const handleSelectMapRun = useCallback((run) => {
