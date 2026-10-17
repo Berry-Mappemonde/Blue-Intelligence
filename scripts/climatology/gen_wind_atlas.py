@@ -283,16 +283,21 @@ def generate_month(
     pct[pct < 2.5] = 0.0
     sea = acc["count"] > 20
     tmp = dest.with_name(dest.stem + ".tmp.npz")
+    # float16 on disk. The 0.5° grid (k·0.125) is exact in float16, and the
+    # reader widens every array back to float32 before the roses are queried.
+    def _f16(arr):
+        return np.asarray(arr, dtype=np.float16)
+
     np.savez_compressed(
         tmp,
-        lats=acc["lats"],
-        lons=acc["lons"],
-        sector_pct=pct.astype("float32"),
-        sector_spd=spd_mean.astype("float32"),
-        calm_pct=(acc["calm"] * 100.0 / n).astype("float32"),
-        gale_pct=(acc["gale"] * 100.0 / n).astype("float32"),
-        u_mean=(acc["u_sum"] / n).astype("float32"),
-        v_mean=(acc["v_sum"] / n).astype("float32"),
+        lats=_f16(acc["lats"]),
+        lons=_f16(acc["lons"]),
+        sector_pct=_f16(pct),
+        sector_spd=_f16(spd_mean),
+        calm_pct=_f16(acc["calm"] * 100.0 / n),
+        gale_pct=_f16(acc["gale"] * 100.0 / n),
+        u_mean=_f16(acc["u_sum"] / n),
+        v_mean=_f16(acc["v_sum"] / n),
         sample_count=acc["count"],
         sea_mask=sea,
         stat=np.array(["rose"]),
