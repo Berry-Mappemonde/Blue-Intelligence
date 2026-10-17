@@ -115,7 +115,10 @@ class TestUnclosUnit:
         from app.services import poe_pipeline as poe
         assert len(poe.QUERY_TEMPLATES) >= 16, len(poe.QUERY_TEMPLATES)
         assert "官方入境港口" in poe.localized_query({"sov_iso2": "CN", "name": "Hainan"})
-        assert poe.localized_query({"sov_iso2": "XX", "name": "Nowhere"}) is None
+        # Décision Berry 17 oct. 2026 : pays inconnu -> requête famille en anglais (commit b6f4a855)
+        assert poe.localized_query({"sov_iso2": "XX", "name": "Nowhere"}) == (
+            "official ports of entry yacht marina customs gazette list Nowhere"
+        )
 
 
 # ---------------------------------------------------------------- UNCLOS API
