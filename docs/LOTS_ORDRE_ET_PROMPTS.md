@@ -164,6 +164,9 @@ testent avec de faux serveurs).
 | 119 | DM2 | deux modes | S | DM1 | les mots : accueil, info-bulles, « cette jambe (Tracer) », parcours de référence, docs — plus aucun « Simulation » à l'écran FR/EN |
 | 120 | DM3 | deux modes | M | DM2 | le ménage : `VIEW_TRACER`, `isTracer`, `ViewModeSwitch` mort supprimé, helpers e2e, clés i18n renommées ; protocole serveur (`"simulation"`) intact ; **suite Playwright complète verte** comme preuve ; lancé seul |
 | 117 | RG11 | film 1 (hors batch) | M | RG10 | *(optionnel)* « Rédigé » depuis les faits structurés, réécriture LLM vérifiée (zéro invention), repli sur le brut |
+| **corrections 8** | | **revue du 16 oct. (session 7)** | | | `PLAN_CORRECTIONS_2026-10-16-s7.md` — 0 KO porteur, 0 KO nouveaux ; leftover DM8C / RG18 lus sur main ; RC34–RC51 déjà mergés, non replanifiés |
+| 122 | RJ1 | corrections 8 | S | — | Suivre × ma route : le Journal montre ce que la route croise, pas seulement les 2 premières heures |
+| 123 | RJ2 | corrections 8 | S | — | Fiche Ici : l'ouverture est la phrase du film, plus « Le bateau navigue dans Zone économique exclusive… » |
 
 Les lots C couvrent **toutes** les lignes de l'audit (`PLAN_AUDIT_CALCULS.md`
 § 3 donne la correspondance ligne → lot) ; avec P2, S, F1 et F2 pour les
@@ -2425,7 +2428,35 @@ Branche fix/lot-dm3-deux-modes-menage depuis la base indiquée. PR vers main, ga
 Interdits : renommer un fichier ; toucher au moteur (playback, useVirtualVessel, useReplay, film) ; changer la valeur "simulation" du protocole serveur ; supprimer une branche sans preuve qu'elle est morte ; une spec supprimée ou affaiblie ; vidéo ; secret. Décide seul et note-le. Fin : PR, compteurs (identifiants renommés, branches supprimées avec preuve), captures, reste à faire.
 ```
 
+<!-- LOT id="RJ1" title="Suivre × ma route : le Journal montre ce que la route croise" plan="docs/PLAN_CORRECTIONS_2026-10-16-s7.md" size="S" deps="" -->
+```text
+Lis docs/REGLES_WORKFLOW_AGENT.md en entier, puis docs/PLAN_CORRECTIONS_2026-10-16-s7.md § 0 et le lot RJ1 (texte intégral). Tu travailles dans naviguide-simulator/.
 
+Lot RJ1 — Suivre × ma route : le Journal montre ce que la route croise.
+Objectif : en Suivre sur la route que je viens de tracer, l'onglet Journal liste ce que la transat croise (eaux, côtes, arrivée) — plus seulement deux lignes des premières heures du jour — et ce n'est pas le journal Berry.
+Cause racine : src/hooks/useMomentJournal.js l. 209-211 — pollOfficialMoments s'arrête dès la première liste non vide, or server/custom_story.py l. 339-350 (MAX_CHUNK_S=12, l. 41) rend d'abord status preparing avec un morceau ; et l. 299 visibleJournalEntries coupe à until (App.jsx l. 626 momentIso) alors que DM7 part aujourd'hui.
+Fichiers à ouvrir (seulement) : src/hooks/useMomentJournal.js, src/hooks/useMomentJournal.test.js, server/custom_story.py PAR EXTRAIT (rg -n "status|preparing|done|_public"), src/App.jsx PAR EXTRAIT (rg -n "until:|momentJournal|suivreCustom"), src/components/IciMaintenant.jsx PAR EXTRAIT (JournalList — lecture), e2e/lots/dm8-recit-ma-route.spec.js.
+Étapes : 1) le poll des moments perso continue tant que status !== ready (et coverageNm < totalNm) ; on affiche les lignes déjà là ; officiel ready = un seul GET ; 2) en Suivre × ma route, ne plus couper la liste à l'horloge live ; Berry garde until ; nowMoment reste ≤ maintenant ; 3) tests : preparing puis ready → liste longue ; suivreCustom ignore until ; Berry + until inchangé ; 4) spec dm8 : Journal contient une mer ou une arrivée, pas seulement l'heure de départ. Aucun libellé nouveau.
+Tests : cd naviguide-simulator && npm test && npx vite build && PW_PORT=5199 npx playwright test e2e/lots/dm8-recit-ma-route.spec.js.
+Recette (visuelle, par écran) : Tracer, deux clics (près de La Rochelle, puis les Antilles), Terminer, Suivre → Journal : plus d'une poignée de lignes du matin, au moins une mer / une côte / l'arrivée, pas le journal Berry ; pilule Berry-Mappemonde → Journal du 15 mai à aujourd'hui, inchangé. Captures docs/recette/lot-rj1/01-journal-ma-route.jpg, 02-journal-berry.jpg (URL complète sur ta branche).
+Branche fix/lot-rj1-journal-ma-route depuis la base indiquée. PR vers main, gabarit REGLES § 3 (FR puis EN). Ne merge pas.
+Interdits : couper le journal Berry à un autre horizon ; remettre ma route sur localStorage (R9b) ; retirer une surface visible ; texte d'aide ; chiffre LLM ; vidéo ; secret. Décide seul et note-le. Fin : PR, compteurs, captures, reste à faire.
+```
+
+<!-- LOT id="RJ2" title="Fiche Ici : l'ouverture est la phrase du film" plan="docs/PLAN_CORRECTIONS_2026-10-16-s7.md" size="S" deps="" -->
+```text
+Lis docs/REGLES_WORKFLOW_AGENT.md en entier, puis docs/PLAN_CORRECTIONS_2026-10-16-s7.md § 0 et le lot RJ2 (texte intégral). Tu travailles dans naviguide-simulator/.
+
+Lot RJ2 — Fiche Ici : l'ouverture dit la phrase du film.
+Objectif : en Suivre, onglet Maintenant, la fiche Ici ouvre comme le Récit / le film (« les eaux de Nouvelle-Calédonie ») — plus « Le bateau navigue dans Zone économique exclusive… ».
+Cause racine : src/engine/iciBriefing.js zeeSentence l. 189-191 écrit la phrase longue ; narrateIci l. 838 la place en tête, avant eventSentence. RG18 a branché pickFilmPhrase (l. 506-532) seulement sur les événements (src/hooks/useIciDossier.js l. 441) — le sac porte déjà filmPhrases.zee-enter.
+Fichiers à ouvrir (seulement) : src/engine/iciBriefing.js (zeeSentence, poeSentence, narrateIci, pickFilmPhrase), src/engine/iciBriefing.test.js, src/hooks/useIciDossier.js PAR EXTRAIT (lecture), e2e/lots/rg18-une-seule-plume.spec.js.
+Étapes : 1) zeeSentence préfère filmPhrases zee-enter / zee-ahead / zee-exit ; formalités une seule fois si absentes de la phrase film ; sans filmPhrases = phrase actuelle ; 2) poeSentence idem avec poe-ahead (plus de redite « Aucun port d'entrée officiel… » ×2) ; 3) narrateIci ne recolle pas eventSentence du même type ; 4) tests : sac NC + filmPhrases.zee-enter → narrateIci commence par la phrase film, plus « Le bateau navigue dans Zone économique exclusive » ; sans filmPhrases = repli actuel ; FR et EN.
+Tests : cd naviguide-simulator && npm test && npx vite build && PW_PORT=5199 npx playwright test e2e/lots/rg18-une-seule-plume.spec.js.
+Recette (visuelle, par écran) : Suivre, Maintenant, position du jour (Nouvelle-Calédonie) → Ici ouvre comme le Récit (« les eaux de Nouvelle-Calédonie »), plus « Le bateau navigue dans Zone économique exclusive… » ; Brut enfoncé = phrases de règles ; Tracer inchangé. Captures docs/recette/lot-rj2/01-ici-phrase-film.jpg, 02-recit-meme-phrase.jpg (URL complète sur ta branche).
+Branche fix/lot-rj2-ici-phrase-film depuis la base indiquée. PR vers main, gabarit REGLES § 3 (FR puis EN). Ne merge pas.
+Interdits : retirer la fiche Ici, Brut / Rédigé ou les onglets ; inventer une phrase absente du sac ; texte d'aide ; chiffre LLM ; vidéo ; secret. Décide seul et note-le. Fin : PR, compteurs, captures, reste à faire.
+```
 
 ## 3. Enchaîner les lots la nuit (`infra/agents/run_lots.py`)
 
