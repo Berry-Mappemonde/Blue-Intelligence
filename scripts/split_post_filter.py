@@ -862,6 +862,68 @@ def retarget_assignments(text: str) -> str:
     return text
 
 
+def git_bytes(repo: Path, spec: str) -> bytes:
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "show", spec],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        die(f"git show {spec} : {proc.stderr.decode().strip()}")
+    return proc.stdout
+
+
+def cmd_cross_imports(root: Path, bi: Path) -> None:
+    """Fichiers que main a rendus communs après l'écriture des diffs 6.6.
+
+    ``public/route.geojson`` est un lien vers ``backend/data/``. Ce
+    dossier n'est pas dans NAVIGUIDE : on pose le fichier lui-même.
+    ``test_wind_float16.py`` importe ``app.services.climatology_wind``
+    depuis ``parents[3] / backend``. On copie ce module et
+    ``climatology_common.py``. Les tests ne sont pas modifiés.
+    """
+    if not (bi / ".git").exists() and not (bi / "HEAD").is_file():
+        die(f"dépôt Blue Intelligence illisible : {bi}")
+    link = root / "naviguide-simulator/public/route.geojson"
+    payload = git_bytes(bi, "HEAD:backend/data/route.geojson")
+    if link.is_symlink() or not link.is_file():
+        link.unlink(missing_ok=True)
+        link.write_bytes(payload)
+        print(f"route.geojson : {len(payload)} octets à la place du lien")
+    elif link.read_bytes() != payload:
+        die("route.geojson existe et diffère de backend/data")
+    else:
+        print("route.geojson déjà le fichier")
+    modules = (
+        "backend/app/__init__.py",
+        "backend/app/services/__init__.py",
+        "backend/app/services/climatology_common.py",
+        "backend/app/services/climatology_wind.py",
+    )
+    for rel in modules:
+        dest = root / rel
+        if dest.is_file() and dest.stat().st_size > 0 and not rel.endswith("__init__.py"):
+            print(f"déjà copié {rel}")
+            continue
+        if rel.endswith("__init__.py"):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                dest.write_text("", encoding="utf-8")
+                print(f"paquet {rel}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(git_bytes(bi, f"HEAD:{rel}"))
+        print(f"copié {rel} ({dest.stat().st_size} octets)")
+    wind = root / "backend/data/climatology/wind"
+    wind.mkdir(parents=True, exist_ok=True)
+    for month in range(1, 13):
+        rel = f"backend/data/climatology/wind/wind-{month:02d}.npz"
+        dest = root / rel
+        if dest.is_file():
+            continue
+        dest.write_bytes(git_bytes(bi, f"HEAD:{rel}"))
+        print(f"copié {rel} ({dest.stat().st_size} octets)")
+
+
 def cmd_repo_paths(root: Path) -> None:
     agents = root / "infra/agents"
     if not agents.is_dir():
@@ -934,11 +996,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("shared", "public-name", "film-discours", "repo-paths", "self-check"),
+        choices=("shared", "public-name", "film-discours", "repo-paths", "cross-imports", "self-check"),
     )
     parser.add_argument("--role", choices=("bi", "ng"))
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--archive", type=Path)
+    parser.add_argument("--bi", type=Path, help="copie ou bare Blue Intelligence, pour cross-imports")
     args = parser.parse_args()
     if args.command == "self-check":
         self_check()
@@ -956,6 +1019,10 @@ def main() -> None:
         cmd_public_name(args.role, root, args.archive.resolve())
     elif args.command == "film-discours":
         cmd_film(root)
+    elif args.command == "cross-imports":
+        if not args.bi:
+            die("--bi")
+        cmd_cross_imports(root, args.bi.resolve())
     else:
         cmd_repo_paths(root)
 
