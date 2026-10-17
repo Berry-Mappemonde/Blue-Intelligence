@@ -1,0 +1,11 @@
+[Unit]
+Description=Toutes les minutes : Blue Intelligence répond-elle encore ?
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
