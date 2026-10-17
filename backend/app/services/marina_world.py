@@ -377,7 +377,7 @@ def marinas_to_slim_geojson(docs: Iterable[dict]) -> dict:
 
 
 async def upsert_world_marina(coll, cand: dict, now_iso: str) -> str:
-    from app.services.isolated_runs import current_run_id, identity_query, run_doc_id, stamp
+    from app.services.isolated_runs import identity_query, run_doc_id, stamp
     osm_id = cand["osm_id"]
     existing = await coll.find_one(identity_query("osm_id", osm_id))
     website, status, wsrc = merge_website(existing, cand.get("website"))

@@ -7,7 +7,6 @@ import time
 import uuid
 
 from fastapi import APIRouter, Body, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.core.tasks import new_task, prune_tasks

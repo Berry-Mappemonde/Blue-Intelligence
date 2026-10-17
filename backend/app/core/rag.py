@@ -69,7 +69,6 @@ def chunk_text(text: str, size: int = 500, overlap: int = 60) -> list[str]:
 def _cosine_scores(query: str, docs: list[str]) -> list[float]:
     model = _get_st()
     if model is not None:
-        import numpy as np
         emb = model.encode([query] + docs, normalize_embeddings=True)
         return (emb[1:] @ emb[0]).tolist()
     # Repli TF-IDF
