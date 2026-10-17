@@ -2,13 +2,13 @@
 
 The mono-repo split is a separate document: [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). The Nebius × NVIDIA plan, for NAVIGUIDE, is in [PLAN_HACKATHON_NEBIUS_NAVIGUIDE.md](PLAN_HACKATHON_NEBIUS_NAVIGUIDE.md).
 
-Plan date: 16 October 2026. Build window: **22 October 2026 00:00 UTC → 27 October 2026 23:45 UTC** (Open Agent Hackathon 2026, GenAI.Works).
+Plan date: 16 October 2026, updated 17 October 2026 (see “Decisions of 17 October 2026” at the end). Build window: **22 October 2026 00:00 UTC → 27 October 2026 23:45 UTC** (Open Agent Hackathon 2026, GenAI.Works).
 
 Every line of code already in the repository is **pre-existing**. Only work committed after 22 October 2026 00:00 UTC counts toward the score. This file is a plan, not that work.
 
-Target product: a **PoE Reconciler** agent. For an exclusive economic zone identified by its VLIZ `mrgid`, it crosses the sources already held, has Nemotron VL read the official PDFs, reconciles the lists with Nemotron Super while citing its evidence, keeps the productive URLs per country, sends doubtful cases to human reviewers (Toloka, overlap of 3), and writes a versioned `poe_gold` table.
+Target product: a **PoE Reconciler** agent. For an exclusive economic zone identified by its VLIZ `mrgid`, it crosses the sources already held, has Nemotron VL read the official PDFs, reconciles the lists with Nemotron Super while citing its evidence, keeps the productive URLs per country (Meterless H-MEM, reimplemented in Python), sends doubtful cases to human reviewers (Toloka, overlap of 3), and writes a versioned `poe_gold` table into the agent’s own Postgres, registered in Zetaris and read back through Zetaris (§4.3).
 
-Required hackathon stack: Zetaris (data), Cursor, Nemotron. Bonus: Meterless engines (H-MEM, Markovian, World Model). Human validation: Toloka account already credited.
+Required hackathon stack (rule 05, every track): **Zetaris** and **Meterless** integrated, built with **Cursor**. Models: NVIDIA Nemotron (VL + Super). Meterless has **no API, no key, and no credit** (confirmed by Pavlo on the forum, 13 October 2026): its engines are implementation specifications, and Blue Intelligence reimplements the H-MEM contract in Python (§6.5). Markovian and World Model stay optional. Human validation: Toloka account already credited, handled by Clément.
 
 Target track: **01 — Solving Fragmented Intelligence**. The full demo stays ports of entry. Harbour masters are a proof of concept. Marinas and marine protected areas stay at design stage. Climatology is out of scope.
 
@@ -153,15 +153,15 @@ The other files under `frontend/src/components/` (science, climatology, projects
 
 ### 1.6 What the submission says in one sentence
 
-The PoE pipeline, the catalogue parsers, JPEG vision, Mongo runs, the listing, WPI, OSM, and the review sheets exist. §6.3 (read the whole list, with a page proof), cited multi-source reconciliation, H-MEM of URLs, the Toloka send, and the `poe_gold` table in Zetaris are the new work, after 22 October 2026 00:00 UTC.
+The PoE pipeline, the catalogue parsers, JPEG vision, Mongo runs, the listing, WPI, OSM, and the review sheets exist. §6.3 (read the whole list, with a page proof), cited multi-source reconciliation, H-MEM of URLs, the Toloka send, the H-MEM conformance adapter, and the `poe_gold` table (agent Postgres registered in Zetaris) are the new work, after 22 October 2026 00:00 UTC.
 
 ---
 
 ## 2. Repository split
 
-Over the weekend of 17–18 October 2026, `Blue-Intelligence-Map` becomes two repositories and the VPS is pointed at them. Commands, risks, and the eight tests that allow archiving are in [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md).
+After his current batch of work (target: before 22 October 2026 00:00 UTC), Clément splits `Blue-Intelligence-Map` into two repositories (Blue Intelligence and NAVIGUIDE) himself and points the VPS at them. Only Blue Intelligence is presented at this hackathon. Commands, risks, and the eight tests that allow archiving are in [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md).
 
-This plan starts once that split is done. On 22 October 2026 at 00:00 UTC, graded code lives in the Blue Intelligence repository, already in production. The only new package is `backend/app/agent_poe/`. The repository README separates pre-existing and new. No commit of this agent during the split weekend.
+This plan starts once that split is done. On 22 October 2026 at 00:00 UTC, graded code lives in the Blue Intelligence repository, already in production. The only new package is `backend/app/agent_poe/`. The repository README separates pre-existing and new. No agent code before 22 October 2026 00:00 UTC.
 
 ## 3. Target architecture
 
@@ -180,8 +180,11 @@ flowchart LR
 
   subgraph zet [Zetaris]
     T[(working tables)]
-    GOLD[(versioned poe_gold)]
+    GOLDV[poe_gold registered datasource]
   end
+
+  GOLD[(versioned poe_gold, agent Postgres)]
+  GOLD --> GOLDV
 
   VLIZ --> T
   WPI --> T
@@ -200,6 +203,8 @@ flowchart LR
   REC --> MEM
 ```
 
+`poe_gold` is written by the agent into its own Postgres (Method A, §4.3), then registered in Zetaris and read back and joined there with the other sources.
+
 ### 3.1 New module — `backend/app/agent_poe/`
 
 None of these files exist today. They call the code in §1; they do not copy it.
@@ -207,13 +212,14 @@ None of these files exist today. They call the code in §1; they do not copy it.
 | File | Planned signature | Existing code called |
 |---|---|---|
 | `config.py` | `TabConfig`: `tab`, `sources`, `vl_schema`, `reconcile_rules`, `toloka_question`, `gold_table`. `CONFIGS["poe"]` is the demo. | `poe_stable.STABLE_REVIEW_MRGIDS` for the demo set. |
-| `zetaris_client.py` | `run_sql(sql: str, *, source: str = "SqlEditor", limit: int = 1, query_id: str \| None = None) -> dict` | None. HTTP only: `POST {ZETARIS_REST_URL}/sql-editor/sqls/run`, headers `Authorization: Bearer`, `X-Org-ID`, `X-Request-ID`. Body confirmed on 16 Oct: `queryId` (UUID), `sql`, `source` = `"SqlEditor"`, `limit`. |
+| `zetaris_client.py` | `run_sql(sql: str, *, source: str = "SqlEditor", limit: int = 1, query_id: str \| None = None) -> dict` — **SELECT-only** (plus, on 22 Oct only, the one-off `CREATE DATASOURCE` / `REGISTER DATASOURCE TABLES` setup and the Method B test, run by a separate setup script, not by this client) | None. HTTP only: `POST {ZETARIS_REST_URL}/sql-editor/sqls/run`, headers `Authorization: Bearer`, `X-Org-ID`, `X-Request-ID`. Body confirmed on 16 Oct: `queryId` (UUID), `sql`, `source` = `"SqlEditor"`, `limit`. |
 | `load_sources.py` | `load_zone(mrgid: int) -> ZoneBundle` | `territory_ref`, `listing_ref.project_listing`, `wpi_ports.match_wpi_port`, OSM via `osm_port_priors.json` / `osm_seeds`, Mongo reads of `poe_ports`, `poe_run_ports`, `poe_seed_ports`, `eez_zones`. Writes: **working** CSV/Parquet files, then an ingest `run_sql`. Never a write to `poe_ports`. |
 | `vl_extractor.py` | `extract_document(url: str, content: bytes, *, schema: dict, max_pages: int = 4) -> VlResult` | `extract.pdf_page_jpegs` or `pdf_preview`, `vision_msg.openai_user_content`, `nvidia.chat_payload` with model `nvidia/nemotron-3.5-super-vl-120b-a12b`, `reasoning_effort="none"`. Check: `extract.looks_like_port_catalog` and `extract_structured_ports` on `pdf_worker` text if VL returns an empty list. |
 | `reconciler.py` | `reconcile(zone: ZoneBundle, documents: list[VlResult]) -> list[Verdict]` | `dedup.normalize_name`, `geo.classify_poe_point` to attach a French name to the right polygon, `nvidia.complete_json_nvidia_tracked` forced onto `nvidia/nemotron-3-super-120b-a12b` (not the gpt-oss chain). `ask_yes_no` serves only the residue that has no page. |
-| `memory.py` | `remember(country_iso2: str, url: str, evidence: Evidence) -> None` and `recall(country_iso2: str) -> list[Memory]` | H-MEM contract rewritten in Python (no Node at runtime). Seeded from `poe_exceptions.json` → `seed_urls`. Working layer, then long_term. Cited as Meterless H-MEM in the README and `metadata.json`. |
+| `memory.py` | `remember(country_iso2: str, url: str, evidence: Evidence) -> None` and `recall(country_iso2: str) -> list[Memory]` | H-MEM contract rewritten in Python (no Node at runtime), with Nemotron as the model for mining. Seeded from `poe_exceptions.json` → `seed_urls`. Working layer, then long_term. Cited as Meterless H-MEM in the README and `metadata.json`. |
+| `hmem_adapter/index.ts` (outside the Python runtime) | Exports `class HMEM`, delegating to the Python `memory.py` (subprocess or local HTTP). | Lets the official Meterless conformance suite run on our implementation: `HMEM_IMPL=/abs/path/index.ts npx tsx conformance/runner.ts`. Green scorecard = definition of done. |
 | `toloka_task.py` | `build_tasks(verdicts: list[Verdict], *, overlap: int = 3, limit: int = 30) -> list[Task]` and `aggregate(answers: list[Answer]) -> list[Verdict]` | Classic Toloka API. Each task carries the original excerpt and its English translation. Cap of 30, configurable. `review_queue` is not wired to it. |
-| `gold.py` | `publish(mrgid: int, rows: list[Verdict], *, parent_version: str \| None) -> str` | Inspired by the versioning of `review_gold.gold_key` and by `export_meta` (fingerprint), but the table lives in Zetaris. Does not write `poe_ports` or `review_gold`. |
+| `gold.py` | `publish(mrgid: int, rows: list[Verdict], *, parent_version: str \| None) -> str` | Inspired by the versioning of `review_gold.gold_key` and by `export_meta` (fingerprint). **Writes (INSERT only) into the agent’s own Postgres** (`POE_GOLD_PG_URL`, Method A, §4.3), never through `zetaris_client`. That Postgres is registered in Zetaris, so the table is read and joined through Zetaris. Does not write `poe_ports` or `review_gold`. |
 | `run.py` | `run_mrgid(mrgid: int, tab: str = "poe") -> GoldVersion` | Chains the functions above. One `mrgid` at a time, as in the brief. |
 
 `ZoneBundle`, `VlResult`, `Verdict`, `Evidence`, and `Task` are dataclasses of the package. Their JSON is in §5.
@@ -334,6 +340,14 @@ Join keys, in order:
 | `published_at` | STRING ISO-8601 |
 
 The sibling tables in §11 (`capitainerie_gold`, `marina_gold`, `amp_gaps`) follow the same versioning, with their own business columns.
+
+### 4.3 Writing `poe_gold` (decided 17 October 2026)
+
+The Zetaris client is SELECT-only (§8), but `gold.py` must write `poe_gold`. Resolution:
+
+- **Method A — main path.** `gold.py` writes `poe_gold` into the agent’s **own, separate Postgres** (not the Zetaris platform’s internal Postgres on `127.0.0.1:55000`). That database is registered in Zetaris once, on the 22nd, with `CREATE DATASOURCE` then `REGISTER DATASOURCE TABLES`. Zetaris then reads `poe_gold` back and joins it with `eez`, `wpi_ports`, `osm_ports`, `noonsite_poe`, `poe_runs`. The Zetaris client stays SELECT-only; the contradiction disappears. Zetaris runs in Docker: it will most likely reach that Postgres via `host.docker.internal`, not `localhost` (to verify on the 22nd). Connection string in `.env` as `POE_GOLD_PG_URL` (placeholder only today).
+- **Method B — bonus test on 22 October.** `INSERT INTO <datasource>.poe_gold …` through the Zetaris SQL API. Documented in the Zetaris SQL guide (kbase.zetaris.com, sql-guide), **not verified** in the `zetaris/getting-started` hackathon repo. If it works, the demo shows Zetaris writing (stronger “Sponsor tech” score); the main path stays A.
+- **Option C — fallback.** A versioned CSV / Parquet file per Gold version, registered as a filestore table in Zetaris.
 
 ### 4.2 Reconciliation queries (examples)
 
@@ -544,9 +558,9 @@ These totals are the frozen stock described in the brief (1,280 / 4,034). The **
 
 ### 6.5 Meterless — documentation only, no install
 
-Public repository `github.com/Meterless/Meterless` (Apache 2.0). It is not a pip package: no `pyproject.toml` in use. The H-MEM reference is the private npm package `@meterless/hmem-reference` (TypeScript, zero runtime dependencies, Vitest tests).
+Public repository `github.com/Meterless/Meterless` (Apache 2.0), engine `engines/hmem`. It is not a pip package: no `pyproject.toml` in use. **Meterless has no API, no key, and no credit** (confirmed by Pavlo on the forum, 13 October 2026): the engines are implementation specifications that each team codes with its own model provider. The H-MEM reference package `@meterless/hmem-reference` (TypeScript, zero runtime dependencies, Vitest tests) is marked `"private": true` in its `package.json`, which only means it is **not published on npm**. It is fetched from the public repository with `npx degit`.
 
-Documented install, not run here:
+Documented fetch, not run here:
 
 ```bash
 npx degit meterless/meterless/engines/hmem my-hmem
@@ -559,7 +573,15 @@ H-MEM exposes, in `engines/hmem/reference/src/` and in `HOW_TO_USE_H-MEM.md`, se
 
 For the agent, only the subset useful to the demo is wired: mine the URL that produced a list, store it in `working` then `long_term` by `country_iso2`, recall it on the next run of the same country. Dreaming and sleep stay outside the demo (bonus if time remains on the 26th). Markovian and World Model are cited in the README as bonuses not required for the PoE path.
 
-The Python guide in `HOW_TO_USE_H-MEM.md` is an **API example**, not a published library. On the 22nd, copy the contract (types + `MemoryStore` / `MemoryRetrieval`) into `memory.py` in Python, and run `npm test` of the reference in a directory outside the repository to show that the reference engine passes. The agent runtime does not depend on npm.
+The Python guide in `HOW_TO_USE_H-MEM.md` is an **API example**, not a published library. From the 22nd, reimplement the contract (types + `MemoryStore` / `MemoryRetrieval`) in Python in `memory.py`, with Nemotron as the model. In the plan and the README, write: “Python reimplementation of the H-MEM contract, from the reference in the Meterless repository”. The agent runtime does not depend on npm.
+
+**Conformance (decided 17 Oct):** a small TypeScript adapter (`hmem_adapter/index.ts`, module exporting `class HMEM`, delegating to the Python implementation) lets the official suite run on our implementation:
+
+```bash
+HMEM_IMPL=/abs/path/index.ts npx tsx conformance/runner.ts
+```
+
+Green scorecard = definition of done for H-MEM. The rules do not require it, but it is a clear plus under “Technical”. The scorecard goes into the README and the video.
 
 ---
 
@@ -599,8 +621,9 @@ New pytest, hermetic, Zetaris and NVIDIA clients **mocked**. No test contacts At
 |---|---|
 | `backend/tests/test_agent_poe_vl.py` | Fake JPEG → the HTTP body contains an image and `reasoning_effort=none`. JSON response matches §5.1. Empty `quote` → the row is rejected from Gold and marked doubtful. `is_port_list: false` → zero ports. Fallback: if VL returns empty content, `extract_structured_ports` text (France fixture) fills the same shape. |
 | `backend/tests/test_agent_poe_reconcile.py` | Same normalised name in the PDF and the listing → `confirmed` with two proofs. Name only in the PDF → `new_from_doc`. Name only in the listing → `missing_in_official`. WPI `harbor_use` commercial with no pleasure-craft mention → `rejected`. A GPS inside the Mayotte polygon does not land on 5677. |
-| `backend/tests/test_agent_poe_gold.py` | `publish` inserts a new `version`. Calling `publish` again does not modify the previous version. `parent_version` chains the two. Fingerprint changes if a proof changes. |
-| `backend/tests/test_agent_poe_zetaris.py` | The client sends Bearer, `X-Org-ID`, `X-Request-ID`, and the body `{queryId, sql, source: "SqlEditor", limit}`. A 400 raises an explicit error, with no retry loop. `SELECT` only: the client refuses SQL that starts with `INSERT`, `UPDATE`, `DELETE`, `DROP`. |
+| `backend/tests/test_agent_poe_gold.py` | `publish` inserts a new `version` into the gold Postgres (mocked connection, Method A). Calling `publish` again does not modify the previous version. `parent_version` chains the two. Fingerprint changes if a proof changes. `gold.py` never calls `zetaris_client` to write and never issues `UPDATE` / `DELETE`. |
+| `backend/tests/test_agent_poe_zetaris.py` | The client sends Bearer, `X-Org-ID`, `X-Request-ID`, and the body `{queryId, sql, source: "SqlEditor", limit}`. A 400 raises an explicit error, with no retry loop. `SELECT` only: the client refuses SQL that starts with `INSERT`, `UPDATE`, `DELETE`, `DROP`. (The 22 Oct datasource registration and Method B test live in a separate setup script, outside this client.) |
+| `backend/tests/test_agent_poe_memory.py` | `remember` then `recall` for the same `country_iso2` returns the URL; another country does not. Seeding from `poe_exceptions.json`. The official TypeScript conformance suite runs separately through the adapter (§6.5), not in pytest. |
 | `backend/tests/test_agent_poe_toloka.py` | Overlap 3. 3× yes → confirmed. 2 yes / 1 no → not confirmed (`split`). A `confirmed` verdict with complete proofs creates no task. |
 | `backend/tests/test_agent_poe_tabs.py` | The four configs (§11) have a distinct VL schema, Toloka question, and Gold table. No model call. |
 
@@ -627,11 +650,11 @@ Scope legend: **demo** = PoE path filmed end to end. **POC** = harbour masters, 
 
 | Day | PoE demo | Harbour-master POC | Design | Risk of the day |
 |---|---|---|---|---|
-| **22** | Both repositories already exist. `SELECT 1` is green with `source: "SqlEditor"`. Load the CSVs of the five zones and check one join. `agent_poe` skeleton that only does `load_sources`. | — | Empty `TabConfig` for the three other tabs. | Zetaris: CSV ingest, not `SELECT 1`. |
+| **22** | Both repositories already exist. `SELECT 1` is green with `source: "SqlEditor"`. Load the CSVs of the five zones and check one join. Start the separate gold Postgres, register it in Zetaris (`CREATE DATASOURCE`, `REGISTER DATASOURCE TABLES`, via `host.docker.internal`), test Method B (`INSERT INTO`). **Launch the Toloka batch** (Clément), after the mini test batch prepared beforehand. `agent_poe` skeleton that only does `load_sources`. | — | Empty `TabConfig` for the three other tabs. | Zetaris: CSV ingest and Docker → Postgres networking. Toloka: launch slips. |
 | **23** | `vl_extractor` on the France PDF (1 page) and the Mexico PDF. Cite or reject. Parser fallback on the text. | — | — | VL: quota, 502, reasoning eating the tokens, empty citations. |
 | **24** | Nemotron Super `reconciler` on the five zones. Proofs as JSON. H-MEM: remember the FR customs URL and recall it for a second French polygon (Mayotte does not copy it; it sees it and filters by geometry). | — | Marina / harbour-master match rules written in `config.py`, not executed. | Super 502. Hallucinated port outside the excerpt. |
-| **25** | Toloka tasks, overlap 3, on doubtful cases only (cap: 30 tasks, not the 119 Mexican ports). `gold.publish` v1 of the non-doubtful rows. | If France PoE is in Gold: one directory PDF or scan, one port (Calais or La Rochelle), harbour-master schema. | `amp_gaps` schema frozen. | Toloka delay: answers do not arrive before the 27th. |
-| **26** | §8 metrics. README, `metadata.json`, video script. Second Gold version if Toloka has answered. | Show the harbour-master sheet in the README, not in the main video. | Re-read §11. No marina / MPA code. | The video takes longer than the code. |
+| **25** | Collect the Toloka answers already returned (batch launched on the 22nd; a second small batch only if new doubtful cases appeared, overlap 3, cap 30). `gold.publish` v1 of the non-doubtful rows. | If France PoE is in Gold: one directory PDF or scan, one port (Calais or La Rochelle), harbour-master schema. | `amp_gaps` schema frozen. | Toloka delay on the second batch. |
+| **26** | §8 metrics. H-MEM conformance scorecard green. README, `metadata.json`, video script. Second Gold version if Toloka has answered. | Show the harbour-master sheet in the README, not in the main video. | Re-read §11. No marina / MPA code. | The video takes longer than the code. |
 | **27** morning | Freeze. Replay the demo once on 5677 and 8429. Fix only a blocking bug. | — | — | A last-hour fix breaks Gold. |
 | **27** afternoon | Video, form, send before 20:00 UTC (margin before 23:45). | — | — | Form: a forgotten field (track, video link, pre-existing-code declaration). |
 
@@ -642,29 +665,36 @@ Scope legend: **demo** = PoE path filmed end to end. **POC** = harbour masters, 
 | VL on the free endpoint: 502, 429, queue | On 16 Oct both models answered in under 7 s with the key already configured. Reasoning mode swallowed 1,000 tokens with no JSON. | `reasoning_effort=none` is mandatory. One page at a time. If 502 twice: text via `pdf_worker` + `extract_structured_ports` (France and Mexico parsers already written), and the README says VL was shown on the cached French page from the trial. The whole demo does not switch to gpt-oss: that is not the required model. |
 | NVIDIA quota | One Super call costs ~80 tokens, one VL call ~1,000 to 2,000. Five zones × a few pages stay inside a small budget. | Disk cache of VL JSON by SHA-256 of the URL. A page already read is not read again. |
 | Zetaris CSV ingest | `SELECT 1` passes with `source: "SqlEditor"` (HTTP 200, `data: [["1"]]`). Loading the §4 tables is not done yet. | On the 22nd: register the CSVs in the editor, then a control `SELECT` on `eez` with the same body (`source` stays `SqlEditor`). If the UI blocks the import: one table loaded by hand, the client does not change. |
-| Toloka too slow | Account credited; overlap 3 multiplies the delay. | Cap of 30 tasks sent on the 25th before 12:00 UTC. The video shows the task and, if no answer has come back, an aggregate on **3 control answers** clearly labelled “operator, waiting for the pool”, plus the queue that was actually submitted. Those 3 controls are not presented as the Toloka pool. |
+| Toloka too slow | Account credited; overlap 3 multiplies the delay. | Mini test batch prepared before the 22nd; real batch launched on **Day 1 (22 Oct)** so answers arrive before 27 Oct 23:45 UTC. Cap of 30 tasks. The video shows the task and, if no answer has come back, an aggregate on **3 control answers** clearly labelled “operator, waiting for the pool”, plus the queue that was actually submitted. Those 3 controls are not presented as the Toloka pool. |
 | 502 at video time | — | Replay from `docs_cache` and `poe_gold` already written. The video does not need a live call if a live call was shown earlier in the week. |
 | Mexico or Niue PDF unreachable | The URLs are in `poe_exceptions.json`. | France is enough for the video. Niue is the “small document” plan B. Mexico illustrates the conflict only if it downloads on the 23rd. |
-| Split or VPS tests late | Planned for the weekend of 17–18 October, including the re-point described in [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). | Finish on Monday 19 or Tuesday 20. Archive `Blue-Intelligence-Map` only if the eight tests are green. |
-| Atlas rewritten by mistake | The Mac `.env` still points at Atlas. | The agent opens Mongo read-only, and only for the initial export. `gold.py` talks to Zetaris. A test forbids `insert` / `update` / `delete` in the agent’s Mongo client. |
+| Split or VPS tests late | Done by Clément after his current batch, including the re-point described in [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). | Finish on Monday 19 or Tuesday 20. Archive `Blue-Intelligence-Map` only if the eight tests are green. |
+| Atlas rewritten by mistake | The Mac `.env` still points at Atlas. | The agent opens Mongo read-only, and only for the initial export. `gold.py` writes only to its own gold Postgres (§4.3). A test forbids `insert` / `update` / `delete` in the agent’s Mongo client. |
 
 ---
 
 ## 10. Submission checklist
 
-Track: **01 Solving Fragmented Intelligence** (sources VLIZ, WPI, OSM, listing, runs, state PDFs). Track 02 (“explain why”) is close because every row has a proof; submit only one track. The Wildcard bonus track requires Zetaris **and** Meterless and grades new work on a brought-in project: stay on the announced track 01. Meterless stays a bonus **inside** track 01 (H-MEM of URLs), not a second submission.
+Track: **01 Solving Fragmented Intelligence** (sources VLIZ, WPI, OSM, listing, runs, state PDFs), preferred. Track 02 (“explain why”) is close because every row has a proof; submit only one track. No rule bars a pre-existing project from track 01 as long as it is declared (rules 04–05), and only work done in the window is scored, whatever the track. Zetaris and Meterless are mandatory in **every** track (rule 05), not only Wildcard. The Wildcard track brings no advantage and has lower prizes. The track can be changed until the deadline. Written confirmation requested from the organizers (hackathons@genai.works).
+
+Rules to honour:
+
+- **Rule 05**: every submission integrates Zetaris **and** Meterless, and uses Cursor.
+- **Rules 04–05**: declare all pre-existing product code in the submission form; only new work is scored.
+- **Rule 06**: the video (1–4 min), the slides and the README must clearly show **how Zetaris and Meterless are integrated**, plus Cursor usage and the NVIDIA contribution.
+- **Rule 07 (scoring)**: Impact 30, Technical 20, Innovation 15, Demo 15, Product & UX 10, Sponsor tech (Zetaris + Meterless) 10. Ties broken by Impact, then submission time. Ignore the different grid in the Meterless repo’s `docs/community/hackathon-guide.md` and the old dates on meterless.ai (confirmation requested from the organizers).
 
 Submit before 27 October 2026 23:45 UTC.
 
 | Piece | Contents |
 |---|---|
-| README | 1. Product in one sentence and the user (the Berry-Mappemonde operator preparing a zone sheet). 2. Track 01. 3. **Pre-existing**: §1 of this plan, dated before 22 Oct. 4. **New**: `backend/app/agent_poe/`, Zetaris tables, Toloka tasks. 5. Where Zetaris, Nemotron VL, Nemotron Super, and Cursor are. 6. Meterless engines: H-MEM wired; Markovian and World Model cited, not required for the filmed path. 7. Toloka: overlap 3, question, majority rule. 8. The five `mrgid` values and the metrics. 9. Limits: empty citations refused, climatology absent, ProtectedSeas not copied, data indicative and not official for navigation. |
-| `metadata.json` | The public hackathon site, read on 16 Oct, does not publish the schema. Proposal to adjust to the real form: `name`, `track` = `solving-fragmented-intelligence`, `team`, `repo`, `video`, `preexisting: true`, `stack: ["zetaris","cursor","nemotron"]`, `bonus: ["meterless-hmem"]`, `human_review: "toloka"`, `license`. |
-| Video | YouTube, in English, produced by Grok Bot. The git repository does not contain the file. The form receives the YouTube link. Shot list for the bot: (1) one zone, five sources in Zetaris; (2) one PDF page → VL JSON with a citation; (3) one `confirmed` and one conflict; (4) the Toloka task; (5) the versioned `poe_gold` row; (6) one on-screen sentence: the map backend predates 22 October. |
+| README | 1. Product in one sentence and the user (the Berry-Mappemonde operator preparing a zone sheet). 2. Track 01. 2b. Integration section: Zetaris (sources + registered gold Postgres, Method A/B), Meterless (H-MEM in Python + conformance scorecard), Cursor, NVIDIA. 3. **Pre-existing**: §1 of this plan, dated before 22 Oct. 4. **New**: `backend/app/agent_poe/`, Zetaris tables, Toloka tasks. 5. Where Zetaris, Nemotron VL, Nemotron Super, and Cursor are. 6. Meterless engines: H-MEM reimplemented in Python and wired, conformance scorecard via the TypeScript adapter; Markovian and World Model cited, not required for the filmed path. 7. Toloka: overlap 3, question, majority rule. 8. The five `mrgid` values and the metrics. 9. Limits: empty citations refused, climatology absent, ProtectedSeas not copied, data indicative and not official for navigation. |
+| `metadata.json` | The public hackathon site, read on 16 Oct, does not publish the schema. Proposal to adjust to the real form: `name`, `track` = `solving-fragmented-intelligence`, `team`, `repo`, `video`, `preexisting: true`, `stack: ["zetaris","meterless-hmem","cursor","nemotron"]`, `human_review: "toloka"`, `license`. |
+| Video | YouTube, in English, produced by Grok Bot. The git repository does not contain the file. The form receives the YouTube link. Length 1–4 min (rule 06). It must show clearly how Zetaris and Meterless are integrated. Shot list for the bot: (1) one zone, five sources in Zetaris, plus the registered gold Postgres; (1b) H-MEM recall of a URL for a country and the green conformance scorecard; (2) one PDF page → VL JSON with a citation; (3) one `confirmed` and one conflict; (4) the Toloka task; (5) the versioned `poe_gold` row; (6) one on-screen sentence: the map backend predates 22 October. |
 | Declaration | Link to commits before 22 Oct on `poe_pipeline.py`, `extract.py`, `nvidia.py`. Link to commits after that date on `agent_poe/` only. |
 | Data citation | VLIZ Marine Regions v12 (see `LICENSE_EEZ_v12.txt`). WPI NGA, US public domain. OSM © contributors ODbL. Community listing: a signal, not Gold. ProtectedSeas: citation in §11. |
 
-Prizes worth knowing, not optimising for: track 01 up to 1,600 / 1,200 / 900 USD; in-kind prize “best use of Nemotron”; prize “product built with Cursor”. The README shows the three models and tools for those prizes, without changing the track.
+Prizes, verified on the event page (hackathon.genai.works, 17 Oct): track 01: 1,600 / 1,200 / 900 USD; Wildcard: 1,000 / 600 / 400 USD; special prizes open to every track: “Best use of NVIDIA Nemotron” = a DGX Spark (4,699 USD) and “Best use of Cursor-built product” = credits (2,301 USD). The README shows the models and tools for those prizes, without changing the track.
 
 ---
 
@@ -830,7 +860,23 @@ Climatology (wind, wave, current, and cyclone atlases in `backend/data/climatolo
 | 10 | H-MEM | Python reimplementation of the contract in `memory.py`. Meterless H-MEM is cited in the README and in `metadata.json`. No Node at runtime. |
 | 11 | MPAs | Default: the FeatureServer already used by `services/amp.py`, and the design in §11.3. No bulk download. |
 | 12 | Fallback branch | See [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). If the split is still not pushed at 22 October 00:00 UTC: a branch in the old repository, created after that time, declared in the README. |
-| 1 | Two repositories | See [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). Two new repositories over the weekend of 17–18 October, VPS re-pointed, `Blue-Intelligence-Map` archived only when the eight tests are green. No agent code this weekend. |
-| 4 | Mongo data | No Mongo write during the hackathon. `poe_gold` goes to Zetaris only. Forbidden: `sync-from-atlas.sh`, `drop`, `update`, or `delete` on `poe_ports` and the runs. The 22 October CSV export is a read of the VPS (live database since 10 September 2026). Atlas stays the frozen copy: do not overwrite the VPS with it, and do not use it for the demo. |
+| 1 | Two repositories | See [PLAN_SEPARATION_DEPOTS.md](PLAN_SEPARATION_DEPOTS.md). Two new repositories, made by Clément after his current batch (amended 17 Oct), VPS re-pointed, `Blue-Intelligence-Map` archived only when the eight tests are green. No agent code this weekend. |
+| 4 | Mongo data | No Mongo write during the hackathon. `poe_gold` goes to the agent’s gold Postgres registered in Zetaris (amended 17 Oct, §4.3). Forbidden: `sync-from-atlas.sh`, `drop`, `update`, or `delete` on `poe_ports` and the runs. The 22 October CSV export is a read of the VPS (live database since 10 September 2026). Atlas stays the frozen copy: do not overwrite the VPS with it, and do not use it for the demo. |
 | 6 | Video | YouTube, in English, produced by Grok Bot. The form receives the link. |
-| 7 | Team sheet | **Clément Filisetti** and **Association Berry-Mappemonde**. Both names appear on the form and in `metadata.json`. Copy the exact file shape from the registered space on 22 October, then add the Meterless H-MEM citation. |
+| 7 | Team sheet | *Superseded on 17 Oct (see below):* team of 5 members, under **Association Berry-Mappemonde**. All names appear on the form and in `metadata.json`. Copy the exact file shape from the registered space on 22 October, then add the Meterless H-MEM citation. |
+
+## Decisions of 17 October 2026
+
+| # | Topic | Decision |
+|---|---|---|
+| 13 | Meterless | No API, no key, no credit (confirmed by Pavlo on the forum, 13 Oct). Engines are implementation specs: `github.com/Meterless/Meterless`, `engines/hmem`, Apache 2.0, fetched with `npx degit meterless/meterless/engines/hmem`; the reference package is `"private": true`, not on npm. Blue Intelligence reimplements the H-MEM contract in Python with Nemotron as the model; it remembers per country which URLs give good port-of-entry lists. Nothing to wait for from Meterless. |
+| 14 | H-MEM conformance | **Decided: we do it.** Small TypeScript adapter (module exporting `class HMEM`) so the official suite runs on our implementation: `HMEM_IMPL=/abs/path/index.ts npx tsx conformance/runner.ts`. Green scorecard = definition of done. |
+| 15 | Zetaris writes | **Method A** (main): `gold.py` writes `poe_gold` to its own separate Postgres (not the Zetaris internal Postgres on port 55000), registered via `CREATE DATASOURCE` + `REGISTER DATASOURCE TABLES`, read back and joined through Zetaris; the Zetaris client stays SELECT-only. Zetaris runs in Docker: reach that Postgres via `host.docker.internal`, not `localhost`. **Method B** (bonus test on 22 Oct): `INSERT INTO <datasource>.poe_gold` through Zetaris (documented in the kbase.zetaris.com SQL guide, unverified in `zetaris/getting-started`). **Option C** (fallback): versioned CSV/Parquet registered as a filestore table. See §4.3. |
+| 16 | Presentation (keep in mind) | Video (1–4 min), slides and README must clearly show how Zetaris and Meterless are integrated (rule 06), plus Cursor usage and the NVIDIA contribution. Every submission integrates Zetaris and Meterless and uses Cursor (rule 05). Declare all pre-existing product code in the form (rules 04–05); only new work is scored. |
+| 17 | Scoring | Rule 07: Impact 30, Technical 20, Innovation 15, Demo 15, Product & UX 10, Sponsor tech 10; ties broken by Impact, then submission time. Ignore the grid in the Meterless repo’s `docs/community/hackathon-guide.md` and the old dates on meterless.ai (confirmation requested from the organizers). |
+| 18 | Prizes | Verified on the event page: track 01 1,600 / 1,200 / 900 USD; Wildcard 1,000 / 600 / 400 USD; Best use of NVIDIA Nemotron = DGX Spark (4,699 USD); Best use of Cursor-built product = credits (2,301 USD). |
+| 19 | Track | Track 01 Solving Fragmented Intelligence preferred. No rule bars a declared pre-existing project; the track can change until the deadline. Question sent / drafted to hackathons@genai.works for confirmation. |
+| 20 | Team | 5 members: Clément Filisetti (President, Association Berry-Mappemonde), Dileep, Nitesh, Hakan, and a 5th member replacing Hamid Aziz (in progress). Replaces decision 7. |
+| 21 | Toloka | Batch launched on **Day 1 (22 Oct)** so answers arrive before 27 Oct 23:45 UTC; mini test batch prepared beforehand. Clément handles Toloka himself; he adds `TOLOKA_API_KEY` to `.env`. |
+| 22 | Repo split and code freeze | Clément splits Blue Intelligence / NAVIGUIDE after his current batch. No code before 22 Oct 00:00 UTC: until then, plan, test and prepare only. |
+| 23 | Organizer contact | hackathons@genai.works (reply within one working day). Two questions: track choice for a pre-existing project; which grid and dates apply (event page vs Meterless repo). |
