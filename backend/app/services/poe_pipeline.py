@@ -1687,8 +1687,10 @@ async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log,
     searx_groups, tf_groups, serper_groups = [], [], []
 
     def _add_serper_jobs(jobs: list, labels: list) -> None:
-        if not serper_key:
-            return
+        # The shots are always scheduled. `_serper_search_safe` returns []
+        # without calling Serper when the key is empty, so a machine without
+        # SERPER_API_KEY still builds the google-style queries and merges
+        # nothing. A hermetic test can replace that function and see them.
         for qlang, q in google_style_shots(zone):
             jobs.append(_serper_search_safe(q, serper_key, log, gl=iso, hl=qlang))
             labels.append(("serper", qlang, q))
