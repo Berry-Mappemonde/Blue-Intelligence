@@ -25,8 +25,8 @@ async def main() -> int:
         print(msg, flush=True)
 
     await amp_svc.ensure_amp_indexes(db)
-    # 0.02° d'abord : offset=0 sur une ZEE (12 Mo) faisait rater tout le lot HTTP.
-    poly = await amp_svc.repair_point_sites(db, log=log, offsets=(0.02, 0.08, 0.2))
+    # Forme native d'abord (offset 0). Un lot trop gros est repris site par site.
+    poly = await amp_svc.repair_point_sites(db, log=log, offsets=(0.0, 0.02, 0.08, 0.2))
     attrs = await amp_svc.backfill_entry_speed(db, log=log)
     print({"polygons": poly, "entry_speed": attrs}, flush=True)
     return 0 if int(poly.get("still_point") or 0) < int(poly.get("candidates") or 1) else 1
