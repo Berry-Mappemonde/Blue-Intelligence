@@ -12,7 +12,11 @@ ExecStart=/home/ubuntu/blue-intelligence-map/backend/.venv/bin/uvicorn server:ap
 Restart=always
 RestartSec=3
 TimeoutStartSec=180
-MemoryHigh=2G
+# Pas de MemoryHigh : au-dessus du plafond souple le noyau met le process
+# en pause (D / mem_cgroup_handle_over_high). Swap plein = API coincée,
+# impossible à tuer vite (15 oct. 2026). MemoryMax + Restart=always :
+# trop gros → tué, puis relancé. Sonde : blue-intelligence-health.timer.
+TimeoutStopSec=30
 MemoryMax=3G
 # Soft 1024 (Ubuntu default) + climatology burst → EMFILE / nginx 500 / CF 525.
 LimitNOFILE=65536
