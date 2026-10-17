@@ -215,7 +215,7 @@ def test_centroid_uses_exterior_not_inland_hole():
     assert 0.0 <= lon <= 4.2
 
 
-def test_sanitize_falls_back_to_centroid_point():
+def test_sanitize_does_not_store_a_broken_polygon_as_a_point():
     geom = {
         "type": "Polygon",
         "coordinates": [[[3.0, 42.0], [3.0, 42.0], [3.0, 42.0], [3.0, 42.0]]],
@@ -224,8 +224,12 @@ def test_sanitize_falls_back_to_centroid_point():
     feat = _feat()
     feat["geometry"] = geom
     doc = amp_svc.attrs_from_feature(feat)
-    assert doc["geometry"]["type"] == "Point"
+    assert (doc.get("geometry") or {}).get("type") != "Point"
     assert doc["lat"] is not None and doc["lon"] is not None
+    shown = amp_svc.to_feature(doc, geometry=True)
+    assert (shown.get("geometry") or {}).get("type") != "Point"
+    light = amp_svc.to_feature(doc, geometry=False)
+    assert light["geometry"]["type"] == "Point"
 
 
 def test_cache_covers_tile_rejects_orphan_sites():
@@ -383,6 +387,24 @@ def test_attrs_from_feature_never_turns_a_park_into_a_point():
     }
     doc = amp_svc.attrs_from_feature(feat)
     assert amp_svc.is_area_geom(doc["geometry"])
+
+
+def test_upsert_does_not_insert_a_broken_polygon_as_a_point():
+    db = _FakeDB()
+    feat = _feat()
+    feat["geometry"] = {
+        "type": "Polygon",
+        "coordinates": [[[3.0, 42.0], [3.0, 42.0], [3.0, 42.0], [3.0, 42.0]]],
+    }
+    broken = amp_svc.attrs_from_feature(feat)
+    n = asyncio.run(amp_svc.upsert_sites(db, [broken]))
+    assert n == 0
+    assert db.amp_sites.docs == []
+    kept = dict(broken)
+    kept["geometry"] = {"type": "Point", "coordinates": [3.0, 42.0]}
+    asyncio.run(db.amp_sites.update_one({"_id": kept["_id"]}, {"$set": kept}, upsert=True))
+    asyncio.run(amp_svc.upsert_sites(db, [broken]))
+    assert db.amp_sites.docs[0]["geometry"]["type"] == "Point"
 
 
 def test_missing_entry_speed_query_covers_null():
