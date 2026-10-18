@@ -19,6 +19,7 @@ from app.services.climatology_common import (
     grid_step,
     is_land,
     iter_cells,
+    loop_pauser,
     parse_month,
     product_meta,
     rule,
@@ -67,8 +68,16 @@ def _load_month(month: int):
     path = wind_npz_path(month)
     if not path.is_file():
         return None
-    data = np.load(path, allow_pickle=False)
-    return {k: _widen_storage(data[k]) for k in data.files}
+    # Own the arrays and close the zip. A cached view would keep the
+    # decompressed member alive next to the float32 copy.
+    with np.load(path, allow_pickle=False) as data:
+        owned = {}
+        for key in data.files:
+            arr = _widen_storage(data[key])
+            if not getattr(arr, "flags", None) or not arr.flags.owndata:
+                arr = np.copy(arr)
+            owned[key] = arr
+        return owned
 
 
 def _nearest_index(arr, value) -> int:
@@ -256,7 +265,9 @@ def _wind_feature(month: int, lat: float, lon: float, rose: dict, *, light: bool
 
 def _wind_features(month: int, bundle: dict, bbox, step: int, *, light: bool) -> list[dict]:
     features: list[dict] = []
+    pauser = loop_pauser()
     for _i, _j, lat, lon in iter_cells(bundle, bbox, step):
+        pauser.tick()
         cell = _sample_cell(bundle, lat, lon)
         if cell is None:
             continue

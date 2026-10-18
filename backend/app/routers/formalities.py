@@ -474,7 +474,7 @@ async def poe_ports(mrgid: int | None = None, country: str | None = None,
         if country:
             q["country_iso2"] = country.upper()
         docs = await _db.poe_ports.find(q).to_list(10000)
-    return poe.ports_to_geojson(docs)
+    return await asyncio.to_thread(poe.ports_to_geojson, docs)
 
 
 @router.get("/export/poe.geojson")

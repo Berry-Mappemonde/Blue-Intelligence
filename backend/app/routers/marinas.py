@@ -182,7 +182,7 @@ def _write_marinas_fc_disk(fc: dict) -> None:
 
 async def _rebuild_marinas_fc() -> dict:
     docs = await _all_marinas({})
-    fc = marinas_to_slim_geojson(docs)
+    fc = await asyncio.to_thread(marinas_to_slim_geojson, docs)
     _MARINAS_FC_CACHE["fc"] = fc
     _MARINAS_FC_CACHE["built_at"] = time.monotonic()
     await asyncio.to_thread(_write_marinas_fc_disk, fc)
