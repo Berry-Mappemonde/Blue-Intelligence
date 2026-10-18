@@ -14,8 +14,6 @@ from app.services.climatology_common import (
     KIND,
     LICENSE_CMEMS,
     SECTOR_DEG,
-    SECTORS,
-    SOURCE_IDS,
     WIND_PERIOD,
     climatology_dir,
     grid_step,
@@ -24,7 +22,6 @@ from app.services.climatology_common import (
     parse_month,
     product_meta,
     rule,
-    sector_index,
     tile_bbox,
     tile_step_deg,
     wind_from_uv,
@@ -51,6 +48,18 @@ def has_snapshot(month: int | None = None) -> bool:
     return wind_npz_path(month).is_file()
 
 
+def _widen_storage(arr):
+    """float16 on disk is widened back to float32 for the existing math.
+
+    The monthly roses are stored in float16 (about 44 % smaller than
+    float32). Half an ulp at these magnitudes stays under the 0.1 kn /
+    0.1° rounding already applied by ``wind_at`` and ``atlas_at``.
+    """
+    if np is not None and getattr(arr, "dtype", None) == np.float16:
+        return arr.astype(np.float32)
+    return arr
+
+
 @lru_cache(maxsize=12)
 def _load_month(month: int):
     if np is None:
@@ -59,7 +68,7 @@ def _load_month(month: int):
     if not path.is_file():
         return None
     data = np.load(path, allow_pickle=False)
-    return {k: data[k] for k in data.files}
+    return {k: _widen_storage(data[k]) for k in data.files}
 
 
 def _nearest_index(arr, value) -> int:

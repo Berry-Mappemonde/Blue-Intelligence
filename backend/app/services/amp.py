@@ -520,7 +520,7 @@ def repair_geometry_for_mongo(geom: dict | None, *, max_bytes: int = 800_000) ->
     if geom.get("type") not in ("Polygon", "MultiPolygon", "GeometryCollection"):
         return None
     try:
-        from shapely.geometry import MultiPoint, mapping, shape
+        from shapely.geometry import mapping, shape
         from shapely.ops import unary_union
     except Exception:
         return None
@@ -817,7 +817,9 @@ def attrs_from_feature(feat: dict) -> dict:
     if not is_area_geom(geom) and source_area:
         geom = repair_geometry_for_mongo(raw_geom, max_bytes=200_000)
     if not is_area_geom(geom):
-        geom = _point_geom(lat, lon)
+        # Une forme ProtectedSeas trop simplifiée ou refusée par la base
+        # ne devient pas un point silencieux : on n'enregistre pas de géométrie.
+        geom = None if source_area else _point_geom(lat, lon)
     doc = {
         "_id": site_id,
         "site_id": site_id,
@@ -906,7 +908,10 @@ def public_properties(doc: dict, *, include_geometry_meta: bool = True) -> dict:
 
 def to_feature(doc: dict, *, geometry: bool = True) -> dict:
     geom = doc.get("geometry") if geometry else None
-    if not geom and doc.get("lon") is not None and doc.get("lat") is not None:
+    # L'export léger (geometry=False) sert le centroïde. L'API polygones
+    # ne fabrique pas un point quand la forme manque : un point inventé
+    # était enregistré comme si c'était l'aire.
+    if not geometry and doc.get("lon") is not None and doc.get("lat") is not None:
         geom = {"type": "Point", "coordinates": [doc["lon"], doc["lat"]]}
     return {
         "type": "Feature",
@@ -1295,6 +1300,13 @@ async def upsert_sites(db, docs: list[dict]) -> int:
             continue
         existing = await db.amp_sites.find_one({"_id": sid})
         merged = merge_cached(existing, incoming)
+        if not is_area_geom(merged.get("geometry")):
+            # Pas de nouveau point. Un point déjà en base reste, pour que
+            # repair_point_sites puisse encore le retrouver et le remplacer.
+            if existing and (existing.get("geometry") or {}).get("type") == "Point":
+                merged["geometry"] = existing["geometry"]
+            else:
+                continue
         if is_area_geom(merged.get("geometry")):
             fitted = repair_geometry_for_mongo(merged.get("geometry"))
             if is_area_geom(fitted):
