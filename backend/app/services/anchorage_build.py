@@ -35,7 +35,6 @@ from app.services.marina_build import (
     dedup_key,
     fetch_corridor_band,
     flush_docs_incremental,
-    haversine_nm,
     load_route,
     overpass_await_slot,
     priority_for,

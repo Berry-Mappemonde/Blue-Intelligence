@@ -8,7 +8,6 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.config import ROUTE_FILE
@@ -965,7 +964,7 @@ async def marina_enrich_batch(body: MarinaEnrichBatchBody | None = None):
     ENRICH_BATCH_STATE.cancel = False
 
     async def _runner():
-        from app.core.run_rules import bind_rules, reset_rules
+        from app.core.run_rules import bind_rules
         rules_token = bind_rules(rules)
         try:
             ENRICH_BATCH_STATE.log(
