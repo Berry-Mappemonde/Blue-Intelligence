@@ -1,6 +1,6 @@
 # Master plan: GenAI.works Open Agent Hackathon 2026, Blue Intelligence (PoE Reconciler)
 
-Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 Oct 19:45 Toronto: Toloka ASAP decision (D24) and organizer questions sent.** Read-only review: nothing in the repo, on the Mac or on any service was changed. No message was sent. Facts marked **(unverified)** could not be checked from the sources listed in §1.
+Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 Oct 19:45 Toronto: Toloka ASAP decision (D24) and organizer questions sent. Updated 17 Oct ~21:00 Toronto: full rules review of every public official source → new §0.5 "How this hackathon actually works", conflicts C19–C26, tasks P23–P33, CH-16 likely done.** Read-only review: nothing in the repo, on the Mac or on any service was changed. No message was sent. Facts marked **(unverified)** could not be checked from the sources listed in §1.
 
 ---
 
@@ -9,8 +9,8 @@ Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 O
 1. On présente **uniquement Blue Intelligence** sur le **track 01** avec l'agent **PoE Reconciler**. Le règlement officiel (relu le 17 oct.) confirme : Zetaris + Meterless obligatoires, Cursor obligatoire, code préexistant déclaré, seul le travail fait du 22 au 27 oct. est noté.
 2. **Aucun code avant le 22 oct. 00:00 UTC** (21 oct. 20:00 Toronto). D'ici là : préparation des données, des comptes et des textes uniquement.
 3. **Bloquant n°1 : Toloka, à lancer le plus vite possible (décision du 17 oct. 19:39).** Le lot est construit **avant le 22** à partir des verdicts existants (aucun code nouveau) et déployé **le 22 oct. à 00:00 UTC pile (21 oct. 20:00 Toronto)**, après ton « oui » sur le coût. Le contrôle Nemotron VL n'est plus un préalable : il tourne en parallèle le 22 et sert de comparaison (démo/évals). L'équipe est encore en essai : la vérification est à faire **ce week-end**, sans attendre l'appel avec Rajesh (**lun. 19 oct. 12:30 Toronto**, en secours).
-4. **Organisateurs.** L'adresse hackathons@genai.works (règle 10) a rejeté le mail. Les deux questions (track, grille de notation) sont **parties le 17 oct. à 19:38 Toronto** à support@academy.genai.works (fil « Remove a team member and rename our team »). Réponse attendue ; sinon, les poser à l'appel d'onboarding du 21 oct.
-5. **Équipe** : 5 membres, Hamid à remplacer. Le remplaçant doit être inscrit **avant le 22 oct. 23:59 UTC**. Ne créer **aucune soumission** avant, car la première soumission verrouille l'équipe.
+4. **Organisateurs.** L'adresse hackathons@genai.works (règle 10) a rejeté le mail. Les deux questions (track, grille de notation) sont **parties le 17 oct. à 19:38 Toronto** à support@academy.genai.works (fil « Remove a team member and rename our team »). Réponse attendue ; sinon, les poser sur HackOS (canal « Help desk », que les e-mails des organisateurs désignent comme canal des questions) ou à l'appel d'onboarding du 21 oct. Voir §0.5 pour le fonctionnement complet du hackathon (règles, soumission, jugement, divergences entre sources).
+5. **Équipe** : 5 membres, Hamid à remplacer. Le remplaçant doit être inscrit **avant le 22 oct. 23:45 UTC** (19:45 Toronto ; l'e-mail officiel du 12 oct. dit 23:45, la page 23:59 : on retient le plus tôt). Ne créer **aucune soumission** avant, car la première soumission verrouille l'équipe.
 6. **Six contradictions** entre le plan Toloka et le plan du dépôt (granularité, nombre de lots, budget, stockage, zones, calendrier) : je propose de les trancher ainsi. Un seul lot Toloka, au niveau des URL (≈ 23 items, ≈ 48 $), lancé le 22 à 00:00 UTC, construit à partir des verdicts existants ; Nemotron VL en parallèle. Les résultats vont dans le Postgres `poe_gold`, pas dans Mongo, et nourrissent la mémoire H-MEM.
 7. **Split** : pas encore fait (aucun dépôt NAVIGUIDE n'existe). S'il n'est pas fini au 22 oct. 00:00 UTC, on ouvre une branche `agent-poe` dans le dépôt actuel (décision 12).
 8. **Ajouts proposés** : une boucle où Nemotron interroge lui-même Zetaris avec `run_sql` (c'est le modèle du guide officiel, et ça compte pour « Sponsor tech »), un petit écran Gold pour la note « Produit & UX », ainsi que `evals/` et `FAILURES.md`.
@@ -24,10 +24,12 @@ Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 O
 | Now (this plan) | Sat 17 Oct 23:30 | Sat 17 Oct 19:30 (EDT, UTC−4) |
 | Toloka call with Rajesh (Google Meet, booked) | Mon 19 Oct 16:30–17:00 | Mon 19 Oct 12:30–13:00 |
 | Setup guide: "run the checks at least two days before kickoff" | by Tue 20 Oct 00:00 | by Mon 19 Oct 20:00 |
+| Power Day workshop (Meterless + Nemotron, YouTube live; "3:00 PM PST", PT ambiguity) | Mon 19 Oct ~22:00 | Mon 19 Oct ~18:00 |
+| Build Day workshop (Cursor + Meterless prompt library, YouTube live; "9:00 PM PST") | Wed 21 Oct ~04:00 | Wed 21 Oct ~00:00 |
 | Nebius × NVIDIA judges webinar (NAVIGUIDE hackathon, optional) | Tue 20 Oct 16:00–17:00 | Tue 20 Oct 12:00–13:00 |
-| Participant onboarding call (not yet in calendar) | Wed 21 Oct 12:00–13:30 | Wed 21 Oct 08:00–09:30 |
+| Participant onboarding call (YouTube live, recording afterwards in the Academy lesson; not yet in calendar) | Wed 21 Oct 12:00–13:30 | Wed 21 Oct 08:00–09:30 |
 | **Build window opens** | **Thu 22 Oct 00:00** | **Wed 21 Oct 20:00** |
-| Registration closes (5th member must be registered) | Thu 22 Oct 23:59 | Thu 22 Oct 19:59 |
+| Registration closes (5th member must be registered; e-mail 12 Oct says 23:45, page 23:59 → use 23:45) | Thu 22 Oct 23:45 | Thu 22 Oct 19:45 |
 | Toloka dataset built + uploaded, pipeline Self-check green (no deploy) | by Wed 21 Oct 23:59 at the latest | by Wed 21 Oct 19:59 |
 | **Toloka run deployed (D24)** | **Thu 22 Oct 00:00 exactly** | **Wed 21 Oct 20:00** |
 | Nebius × NVIDIA "submission update" (NAVIGUIDE) | Fri 23 Oct (time not stated) | Fri 23 Oct |
@@ -38,6 +40,88 @@ Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 O
 | Toronto leaves daylight saving | Sun 1 Nov | (from then on UTC−5) |
 | Toloka promo code validity | until 4 Nov (whether the credit itself expires: **unverified**) | |
 | Results announced | Fri 6 Nov 16:00 | Fri 6 Nov 11:00 (EST, UTC−5) |
+
+---
+
+## 0.5 How this hackathon actually works (rules review, 17 Oct 2026 ~21:00 Toronto)
+
+Read-only review of every public official source on 17 Oct 2026 (UTC−4 Toronto). Quotes are verbatim. **(unverified)** = not confirmed by an official source; **(inference)** = my reading.
+
+**Sources.** [E] event page and its rules 01–10 + FAQ (read from the page data), https://hackathon.genai.works/event/open-agent-hackathon-2026 · [A] GenAI Academy course "Open Agent Hackathon 2026", lessons *How the Week Runs*, *Onboarding Call*, *Build/Power Quick Start*, *Build Day / Power Day* (public API of https://academy.genai.works/courses/open-agent-hackathon-2026/details) · [G] Participant Setup Guide, last updated 15 Oct (`/workspace/guide.txt`, Google Doc linked in the organizer e-mail of 15 Oct) · [M1] organizer e-mail 12 Oct "has moved to 22–27 October" · [M2] e-mail 15 Oct "Your Setup Guide Is Here" · [M3] e-mail 13 Oct "Data Day recap" · [Z] https://github.com/zetaris/getting-started (README, organizer checklist, demo template) · [ML] https://github.com/Meterless/Meterless `docs/community/hackathon-guide.md` · [X] @GenAI_Now posts (23 Sep, 9 Oct). Not readable: HackOS pages behind sign-in (team workspace, submission form, task board, `/policy/content`), and the Discord server https://discord.gg/tfwSeqVWmR (announcements) → **unread**.
+
+### 0.5.1 Timeline (all deadlines UTC; "Time zones do not extend the window; all deadlines are UTC." [E 04])
+| When (UTC) | Toronto (EDT; EST from 1 Nov) | What | Source / note |
+|---|---|---|---|
+| 14 Aug 00:00 | — | Registration opens | [E] |
+| 12 Oct 22:00 | 12 Oct 18:00 | Data Day workshop (Zetaris), recording on HackOS Resources | [A], [M3] |
+| 19 Oct "3:00 PM PST" | 19 Oct 18:00 (if PT = PDT) | Power Day workshop (Meterless + Nemotron), YouTube live | [A]; "PST" in October is ambiguous (PDT = UTC−7 → 22:00 UTC) **(unverified)** |
+| 20 Oct "9:00 PM PST" | 21 Oct 00:00 (if PDT) | Build Day workshop (Cursor + Meterless prompt library), YouTube live | [A]; same ambiguity |
+| **21 Oct 12:00–13:30** | **21 Oct 08:00–09:30** | Onboarding call, "Streamed live on YouTube. The recording appears in this lesson after the call." | [A], [M1], [M2] |
+| **22 Oct 00:00** | **21 Oct 20:00** | Build window opens | [E 04] |
+| **22 Oct 23:45** (e-mail) / 23:59 (page) | **22 Oct 19:45** | Registration closes: "Everyone on a team needs to be registered before registration closes." | [M1] says 23:45, [E] says 23:59 → **plan on 23:45** |
+| first submission created | — | Team locks: "Team composition locks when your first submission is created" | [E 02] |
+| 27 Oct 00:00 | 26 Oct 20:00 | Judging opens (submissions still open) | [E]; judges may start on early submissions **(inference)** |
+| **27 Oct 23:45** | **27 Oct 19:45** | Submissions close, "Hard deadline" | [E] |
+| 6 Nov 16:00 | 6 Nov 11:00 (EST) | Results announced | [E] |
+| ≤ 30 days after results | — | "Cash prizes are paid by bank transfer within 30 days of the results announcement." | [E 08] |
+
+Finalists / live pitch: **no rule describes a finalist round or live pitch.** The event page community block only says "Judge announcements, finalist demos and next-edition dates as they are confirmed" and "the results call"; FAQ: "Kickoff, office hours, judging and results all happen online in Discord and on the platform." The 2025 GenAI.Works #LeadWithAIAgents hackathon (72 h, 3,000+ builders) announced 6 ranked winners on LinkedIn, no pitch round visible **(unverified)**. → Judging is on the submitted artifacts; keep Clément reachable 27 Oct–6 Nov in case finalists are asked for a live demo.
+
+### 0.5.2 What you submit, and where
+- **Where**: "Submission done in HackOS Platform: https://hackathon.genai.works/dashboard" [A]; "You may change track any time before the submission deadline from your team workspace." [E 03]. The form itself is behind sign-in → **exact field list unverified**; it will be visible once a submission draft is created (which locks the team, see P31).
+- **Required pieces** [E 06], [A]: (1) "A demo video of 1-4 minutes that shows the main workflow, how the agent solves the selected challenge, its key features, and how Zetaris and Meterless are integrated." (2) "A slide deck covering the problem and target users, the solution, the agent workflow or architecture, the technical stack, how Zetaris and Meterless were used, what was unique about your use of the sponsor technologies, product visuals, and future enhancements." (3) "A GitHub repository with all source code and a README covering setup, usage and dependencies. If your agents run in Google Colab, include the Colab links." (4) "A clear explanation of how Zetaris and Meterless were integrated, how Cursor was used during development, where NVIDIA technology contributes, and what was unique about your use of the sponsor technologies." (5) "Pre-existing product code must be declared in the submission form." [E 05]
+- **Official checklist** [A]: primary track selected; video 1–4 min end to end; "Video and deck both name Zetaris, Meterless and Cursor and show where each one sits"; deck has an architecture diagram and the stack; README "someone outside your team could run it"; `.env` in `.gitignore`, no secrets; pre-existing code declared; Colab links if any; "Submitted before 27 October 2026, 23:45 UTC".
+- **Video hosting**: no platform rule (YouTube is our choice). HackOS has a chunked video-upload endpoint (seen in the platform's front-end code) → the form may accept a direct upload **(unverified)**: keep the MP4 (< 4:00) ready **and** a YouTube link (public or unlisted).
+- **Deck format**: not specified → export PDF (and keep the source). **Repo visibility / licence**: not specified; judges must be able to read it → keep the graded repo **public** (today `Berry-Mappemonde/Blue-Intelligence` is public, MIT + Apache-2.0). If the split creates a new repo, it must be public with a LICENSE before submission. `metadata.json`: no rule asks for it (optional).
+- **Draft pre-existing declaration** (to paste in the form; adjust after the split):
+  > Pre-existing (all commits before 22 Oct 2026 00:00 UTC, tag `pre-hackathon-2026-10-22`): the Blue Intelligence platform — FastAPI backend (`backend/app/`, incl. the PoE pipeline `services/poe_*.py`, text catalogue harvesting in `poe_seed_enrich.py`, `core/extract.py`/`render.py`/`pdf_preview.py`, the NVIDIA client `core/nvidia.py`), the React map and review UI (`frontend/`), embedded data (`backend/data/`), CI workflows and docs. Pre-existing data prepared before the window without new code: the 23-item Toloka dataset built from existing review verdicts, and its screenshots. The NAVIGUIDE simulator (`naviguide-simulator/`, `naviguide/`) shares the repository but is not part of this submission.
+  > New during the window (22–27 Oct): `backend/app/agent_poe/` (Zetaris client and source registration, Nemotron VL extraction with mandatory citation, Nemotron reconciler and `run_sql` tool loop, H-MEM memory in Python + TypeScript conformance adapter, versioned `poe_gold` in a Postgres registered in Zetaris, Toloka aggregation), `evals/`, `FAILURES.md`, the Gold card UI, the agent CI job, and hygiene/compliance PRs `conformite/*` on the existing product (declared as such).
+
+### 0.5.3 Judging
+- "Scoring out of 100: Impact 30, Technical 20, Innovation 15, Demo 15, Product & UX 10, Sponsor tech 10." · "Each submission is reviewed by at least three judges." · "Ties are resolved on the Impact score, then on submission timestamp." [E 07] · The primary track "determines the judging panel and the prizes it competes for"; "Cross-track relevance is welcome but is not scored twice." [E 03]
+- Named judges [E]: Michael Hay (CTO, Zetaris), Michael Armentano (Head of Technical Partnerships, SpaceXAI), Sam Cummings, Shestakov Vladyslav, Remus Ranca (GenAI Works). A further list of ~35 names (mentors or extra judges) follows on the page **(role unverified)**. A Zetaris CTO on the panel → the Zetaris integration must be technically credible, not cosmetic.
+- Special prizes ("Best use of NVIDIA Nemotron": DGX Spark, $4,699; "Best use of Cursor-built product": SpaceX Cursor API credits, $2,301) are "in-kind rewards for selected winners" [E 08]; **how they are judged is not published (unverified)**; they are not a separate track.
+- Wildcard wording [A]: "Judging is on the extension, not on prior development" — the same treatment as rule 04 for every track → **track 01 stays the choice** (question still pending with support).
+
+### 0.5.4 Teams, eligibility, IP, conduct
+- [E 01] "Open worldwide to anyone aged 16 or older at the start of the build window." · "Employees of the organizer and of judging sponsors may participate but are not eligible for cash prizes." · "One account per participant. Duplicate accounts disqualify the whole team."
+- [E 02] "Teams of one to five people." · "Team composition locks when your first submission is created; before that you may join, leave or merge freely." · "A participant may belong to exactly one team."
+- [E 08] "Cash prizes are split equally among team members unless the team submits a different split in writing." · "Taxes and any local charges are the recipient's responsibility."
+- [E 09] "You keep all rights to what you build." · "By submitting you grant the organizer a license to show your demo, screenshots and description in event coverage." · "Sponsor-track submissions grant that sponsor the same non-exclusive promotional license." (No transfer of rights to the association is planned, §3.8.)
+- [E 05] "Generated code is allowed and expected, you own the result and are accountable for it." · "Any language, framework, model or cloud, including closed-source APIs and sponsor credits."
+- [E 10] "The organizer may adjust the schedule for technical reasons; changes are announced on this page and in Discord." · "Disqualification decisions are final and are communicated with a reason to the team lead."
+- **Forbidden / disqualifying** (explicit): undeclared work committed before 22 Oct 00:00 UTC ([E 04]); duplicate accounts ([E 01]); missing Zetaris + Meterless integration or not using Cursor ([E 05]). No separate code of conduct is public (`/policy/content` needs sign-in) **(unverified)**.
+
+### 0.5.5 Required technology — what each source says
+| Source | Zetaris | Meterless | Cursor | NVIDIA |
+|---|---|---|---|---|
+| [E 05] (rules, governs) | required | **required** ("Every submission must integrate Zetaris and Meterless") | required ("teams must use Cursor for development") | "wherever it contributes" |
+| [G] setup guide | "Zetaris and meterless must be running on your machine for eligibility" | Option A = Nemotron through a Meterless account/credit; base URL, prompt library, hotspot still "[Organisers: add …]" | required | "The Power rule: your product must run on NVIDIA Nemotron" (Option A Meterless, or Option B NVIDIA free API) |
+| [A] *How the Week Runs* | required | required | required | "The setup guide's Power rule is that your product runs on NVIDIA Nemotron through Meterless" |
+| [A] *Power Quick Start* | — | Meterless = OpenAI-compatible provider; "Sponsor credits are on the task board on HackOS"; `METERLESS_BASE_URL` still "[ORGANISERS TO ADD …]" | Cursor credit also on the HackOS task board | Nemotron inside Meterless |
+| [A] course landing FAQ (updated 8 Oct) | required | not listed ("Nemotron, either connected directly or through the Meterless engine") | required | Nemotron |
+| Pavlo (Meterless), 13 Oct (decision 13) | — | no API, no key | — | — |
+
+→ **Our reading**: H-MEM implemented in Python + green official conformance scorecard is an honest "integration of Meterless" under [E 05], and Nemotron via NVIDIA's free API is the guide's explicit Option B. **But** the organizer material increasingly frames Meterless as the model route with credit on the HackOS task board. Cheap hedge: Clément checks the task board now (P29); if a Meterless endpoint/credit exists by 22 Oct, route Nemotron through it as well (3 `.env` settings, no architecture change) and show both in the video; otherwise ask at the onboarding call / HackOS "Help Meterless".
+
+### 0.5.6 Communication channels
+| Channel | Status |
+|---|---|
+| hackathons@genai.works (rule 10, "expect a reply within one working day") | **bounced** 17 Oct 06:13 Toronto ("Address not found") |
+| support@academy.genai.works ("usually within one business day") | works; team request 17 Oct 14:16 + 2 rules questions 19:38 Toronto; **no reply yet** |
+| HackOS Help desk + "Help Zetaris / Help Meterless / Help Cursor / Help NVIDIA Tools" channels | organizer e-mails: "Questions go on HackOS, the technical and sponsor teams are there and respond quickly." → **preferred channel** for rules questions |
+| Discord https://discord.gg/tfwSeqVWmR | announcements and schedule changes ([E 10]); **unread by Grok Bot** |
+| Onboarding call 21 Oct (YouTube live) | last chance to ask before the window |
+
+### 0.5.7 Discrepancies and surprises
+1. **Registration close**: page 23:59 UTC vs e-mail 12 Oct 23:45 UTC → use **23:45 UTC (19:45 Toronto)** for the 5th member.
+2. **Prize split**: page = $13,000 cash + $7,000 in-kind, track 01 $1,600/$1,200/$900; Academy landing = $15,000 + $5,000 and $2,000/$1,350/$1,000 per track; Academy lesson = "$15,000 in cash" but per-track $1,600/$1,200/$900. **The event page (rule 08) governs**; amounts in this plan unchanged.
+3. **Meterless** required vs "provider with credit" vs "no API, no key" (§0.5.5).
+4. **Dates moved**: Sept posts said 15–20 Oct, registration 13 Oct, "4 tracks"; e-mail 12 Oct moved the event to 22–27 Oct "from bringing new sponsors on board, which means more challenges and more prizes. You'll hear the full details at the onboarding call on 21 October." → **tracks/prizes may still change on 21 Oct**; re-read [E] and [A] right after the call (P30). @GenAI_Now (9 Oct) also lists Bright Data as a sponsor, absent from the page.
+5. **Zetaris**: [Z] README says "The event instance is shared; use assigned team names and permissions", while [G] says "everyone runs Zetaris locally in Docker". We stay local (Method A); ask at the call whether a shared instance exists.
+6. **Meterless repo grid** ([ML]: Usefulness 30 %, Meterless engine usage 25 %…) is not the event grid; rule 07 governs (question sent).
+7. **Build Day** [A] calls the workshop agent "a legitimate starting skeleton for your submission" — organizers tolerate pre-window skeletons, but **our rule stays: no BI code before 22 Oct 00:00 UTC.**
+8. **Cursor credit** is on the HackOS task board ([A]) while [G] still has a placeholder → claim it (P29).
 
 ---
 
@@ -84,6 +168,14 @@ Drafted Sat 17 Oct 2026, ~19:30 Toronto (23:30 UTC), by Grok Bot. **Updated 17 O
 | C16 | **S2 schedule internal inconsistency.** Toloka launches on the 22nd, but VL extraction is on the 23rd and the reconciler (which produces port-level doubts) on the 24th. So the 22nd batch could not contain the S2 §5.3 tasks. | S2 §9 | Solved by C1 + C4/D24 (URL-level batch built before the window from existing verdicts). |
 | C17 | **`metadata.json`.** S2 plans it, but rule 06 does not require it and no schema is published. | S2, S9 | Keep it optional (2 min of work). Required deliverables = video, slide deck, repo + README, sponsor explanation (rule 06). Slides were not in the S2 checklist as a full item: add them. |
 | C18 | **Meterless setup guide placeholders.** The guide still has "[Organisers: add the Meterless base URL / prompt library / AI hotspot]". Pavlo (13 Oct): no API, no key. | S8, S1 | Keep the decision (H-MEM in Python + TS conformance). Check at the onboarding call whether the organizers publish a "Meterless prompt library" or "hotspot" by then. If they do, using one prompt file in Cursor is a cheap extra sponsor proof. |
+| C19 | **Registration close time.** Event page 23:59 UTC; organizer e-mail of 12 Oct 23:45 UTC. | §0.5.1 | Use **22 Oct 23:45 UTC (19:45 Toronto)** everywhere (P7, Day 1). |
+| C20 | **Meterless as provider vs "no API, no key".** Academy *Power Quick Start* and the setup guide route Nemotron through Meterless with credit on the HackOS task board (base URL still a placeholder); Pavlo said no API, no key; the course FAQ even omits Meterless from the required list, while rule 05 requires it. | §0.5.5 | Keep decision 13 (H-MEM in Python + TS conformance) as the Meterless integration. Hedge: Clément checks the HackOS task board (P29); if a Meterless endpoint/credit exists, also route Nemotron through it (3 `.env` settings). Ask at the 21 Oct call / HackOS "Help Meterless". |
+| C21 | **Prize amounts.** Event page $13k cash + $7k in-kind; Academy landing $15k + $5k with $2,000/$1,350/$1,000 per track. | §0.5.7 | Event page (rule 08) governs; no change to the plan's figures. |
+| C22 | **Video hosting.** The plan says YouTube; HackOS has a video-upload endpoint, so the form may want a file. | §0.5.2 | Keep the MP4 (< 4:00) **and** a YouTube link ready; decide when the draft form is visible (P31). |
+| C23 | **Organizer contact.** Rule 10 address bounced; organizer e-mails say "Questions go on HackOS". | §0.5.6 | HackOS Help desk is the primary channel; support@academy.genai.works second; Discord unread. |
+| C24 | **Tracks/prizes may change on 21 Oct** ("more challenges and more prizes … full details at the onboarding call"). | §0.5.7 | Re-read the event page and the *How the Week Runs* lesson right after the call (P30); re-check the track choice. |
+| C25 | **NAVIGUIDE content in the graded repo.** If the split is not done, the graded repo also contains NAVIGUIDE. | §0.5.2 | The declaration says NAVIGUIDE is not part of the submission; README points judges to `backend/app/agent_poe/`. |
+| C26 | **Freeze language.** Older drafts had a code/PR/video freeze. | Clément 17 Oct | **No freeze** (decision 25 amended, PR #568). Safety margin = target submission 27 Oct 16:00 Toronto, hard 19:45; green CI on every merge. |
 
 ---
 
@@ -102,7 +194,7 @@ Rule: **no repo code, no agent code, no commit of hackathon work.** Merging the 
 | P5 | Public HTTPS hosting for screenshots (JPEG < 300 KB), outside the repo | C | Mon 19–Tue 20 Oct | One test image opens in the Toloka UI check |
 | P6 | **Organizer questions** (track 01 vs Wildcard for a declared pre-existing project; which grid and dates apply) (C10) | C | ✅ **Sent Sat 17 Oct 19:38 Toronto** to support@academy.genai.works (thread "Remove a team member and rename our team") | Reply logged in the plan. If no reply: ask on the 21 Oct call |
 | P6b | **Toloka deploy slot**: Clément available Wed 21 Oct 20:00 Toronto (= 22 Oct 00:00 UTC) to read the Cost breakdown, say "yes" and Deploy | C | Wed 21 Oct 20:00 | Run deployed |
-| P7 | Team: removal of Hamid Aziz + team rename to "Blue Intelligence" (support email 17 Oct 14:16 Toronto + ticket + `#general-admin` + Discord, no reply yet); choose and onboard the 5th member | C (+ RH agent drafts) | Replacement registered **before Thu 22 Oct 19:59 Toronto** | HackOS team page shows 5 members and the new name |
+| P7 | Team: removal of Hamid Aziz + team rename to "Blue Intelligence" (support email 17 Oct 14:16 Toronto + ticket + `#general-admin` + Discord, no reply yet); choose and onboard the 5th member | C (+ RH agent drafts) | Replacement registered **before Thu 22 Oct 19:45 Toronto** (23:45 UTC) | HackOS team page shows 5 members and the new name |
 | P8 | Roles for the 5 members (proposal: Clément = product/operator/Gold reviewer; Dileep = harbour-master POC + PR #552 knowledge; Nitesh / Hakan = tests, README/slides, H-MEM TS adapter; 5th = video/QA). **(Names known, skills unverified.)** | C | Wed 21 Oct | Roles posted in Blue Intelligence `#général` (after approval) |
 | P9 | Repo split (S5 phases 0–4). Graded code then lives in the new BI repo. | C (Split agent prepares) | Ideally Sun 18 Oct; at the latest Wed 21 Oct 19:00 | Both repos exist, BI CI green, VPS repointed. Otherwise fallback: `agent-poe` branch in the current repo after 00:00 UTC (decision 12) |
 | P10 | Pre-window PRs: decide on **#557** (deploy_ai fix + F401), **#561** (backend pytest in CI with a local Mongo), **#553/#554/#555** (split docs), **#542/#543/#546/#547/#549/#562**. Either merged **before 22 Oct 00:00 UTC**, or left until after 27 Oct so they are not mixed with graded work. | C | Wed 21 Oct 19:00 | Each PR merged or explicitly deferred |
@@ -113,11 +205,20 @@ Rule: **no repo code, no agent code, no commit of hackathon work.** Merging the 
 | P15 | H-MEM homework: read `engines/hmem` (AGENTS.md, conformance runner, the `HMEM` interface) and write the **Python type map** in the plan (no code) | CU-plan | Wed 21 Oct | A table of interface methods → Python functions → tests |
 | P16 | Write the test cases as **notes** (≈ 20 eval cases from the 11 stable polygons, expected vs actual) for `evals/` | CU-plan / GB | Wed 21 Oct | List in the plan |
 | P17 | Shot list and storyboard of the video (1–4 min, English, YouTube); slide outline aligned with rule 06 | GB | Wed 21 Oct | Storyboard file on the box |
-| P18 | Onboarding call (Wed 21 Oct 08:00–09:30 Toronto): ask the open questions (track, grid, Meterless prompt library or hotspot, Zetaris write path B). **Add it to the calendar** (offer still open). | C attends, GB prepares questions | Wed 21 Oct 08:00 | Answers noted |
+| P18 | Onboarding call (Wed 21 Oct 08:00–09:30 Toronto, YouTube live): ask the open questions (track, grid, Meterless provider/credit vs H-MEM, shared Zetaris instance or local, can a submission be edited after it is submitted and does that change its timestamp, video upload vs link, Zetaris write path B). Live questions may only be possible in the YouTube chat or HackOS: post them on HackOS Help desk beforehand (P33). **Add it to the calendar** (offer still open). | C attends, GB prepares questions | Wed 21 Oct 08:00 | Answers noted |
 | P19 | `.env` hygiene: `chmod 600 ~/Blue-Intelligence-Map/.env`; check `.gitignore`; add `TOLOKA_API_KEY` himself | C | Sun 18 Oct | `ls -l` shows `-rw-------` |
 | P20 | HackOS / LinkedIn polish (optional): role location, headline; invitation note once the 5th member is known | C / GB with approval | Wed 21 Oct | — |
 | P21 | Mac local repo after the batch: delete the untracked plan copy, `git pull`, `git remote set-url` to the right repo (only after the split decision) | C | After his batch | Local `main` = origin |
 | P22 | NAVIGUIDE time budget (Clément's choice, **to be confirmed**): the Nebius "submission update" on 23 Oct and the final submission on 30 Oct (editable until then) overlap the window. No Nebius rule freezes NAVIGUIDE; how much NAVIGUIDE work to do during 22–27 Oct is purely a time-budget decision for Clément. | C | Wed 21 Oct | Decision written |
+| P23 | **Submission-form pack** (docs, not code): title, one-line pitch, track 01, team, repo URL, video (MP4 + YouTube link), deck (PDF), sponsor explanation (Zetaris / Meterless / Cursor / NVIDIA / "what was unique"), pre-existing declaration (§0.5.2 draft), Colab = none. | GB drafts, C validates | Wed 21 Oct | One text file ready to paste |
+| P24 | **Duplicate-account check** (rule 01: duplicates disqualify the whole team): each of the 5 members has exactly one HackOS account. | C | Wed 21 Oct | Confirmed by each member |
+| P25 | **Repo visibility and licence**: the graded repo must stay public with a LICENSE (today public, MIT + Apache-2.0). If the split creates a new BI repo, make it public and add LICENSE before 22 Oct 00:00 UTC. | C | Wed 21 Oct 19:00 | `gh repo view` shows public + licence |
+| P26 | **Prize split** (rule 08: equal split unless the team submits another split in writing): decide whether any cash goes to the association, and get the members' written agreement if so. | C | Before 27 Oct | Decision noted (no message sent without approval) |
+| P27 | Power Day (Mon 19 Oct ~18:00 Toronto) and Build Day (Wed 21 Oct ~00:00 Toronto) workshops: watch live or the recording, only to catch Meterless provider details or new rules. Optional. | C / T | 19–21 Oct | Notes added to §0.5 |
+| P28 | Daily watch of the event page and Discord announcements (schedule changes are announced there, rule 10). | GB (page) / C (Discord) | daily to 27 Oct | Changes logged |
+| P29 | **HackOS task board** (read-only look, then claim): Cursor credit, and whether a Meterless credit / base URL exists (C20). | C | Sun 18 Oct | Cursor credit active; Meterless status noted |
+| P30 | **Right after the onboarding call** (21 Oct 13:30 UTC): re-read the event page + *How the Week Runs* lesson; update §0.5 and the track choice if tracks/prizes changed (C24). | GB | Wed 21 Oct 10:00 Toronto | §0.5 updated |
+| P33 | Post the open rules questions on **HackOS Help desk** (same text as §6.4, plus: edit-after-submit, video upload vs link, Meterless provider). Needs Clément's approval to post. | C (GB drafts) | Sun 18 Oct | Question posted / answered |
 
 **Code-audit items before the 22nd: no.** No new code from Cursor before 22 Oct 00:00 UTC (Clément's rule). The only code allowed to land before is what already sits in open PRs (#557, #561…), if Clément merges them himself, and it is then declared as pre-existing.
 
@@ -142,7 +243,7 @@ Toronto = UTC−4 for the whole window. Blocks are targets; every gate decides w
 | 03:00–14:00 | 23:00–10:00 | Run the VL review **in parallel** on the same 23 Toloka items (+ the rest of `candidates.jsonl`), SHA-256 cache; store verdicts for the Toloka vs VL vs Proposer agreement table. Toloka: read-only GET monitoring. | Script unattended; C |
 | 14:00–18:00 | 10:00–14:00 | Zetaris: generate the CSVs of the 5 zones (`load_sources.py`), register them, control SELECT + one join; gold Postgres: DDL for `poe_gold` / `toloka_answers` (in `gold.py` migrations), `CREATE DATASOURCE` + `REGISTER DATASOURCE TABLES` via `host.docker.internal`; **Method B test** (`INSERT INTO`) in a separate setup script | Cursor + C |
 | 18:00–20:00 | 14:00–16:00 | **Gate G2 (Zetaris)**: `poe_gold` (empty) readable through Zetaris? B works or not, noted in the README | C |
-| 20:00–24:00 | 16:00–20:00 | Registration closes 23:59 UTC: check the 5th member is in. Start `memory.py` (types + `MemoryStore`), seeded from `poe_exceptions.json` | C / Cursor |
+| 20:00–24:00 | 16:00–20:00 | Registration closes **23:45 UTC** (19:45 Toronto, C19): check the 5th member is in before. Start `memory.py` (types + `MemoryStore`), seeded from `poe_exceptions.json` | C / Cursor |
 
 ### 3.2 Day 2: Fri 23 Oct
 | UTC | Toronto | Work |
@@ -151,6 +252,7 @@ Toronto = UTC−4 for the whole window. Blocks are targets; every gate decides w
 | 16:00–20:00 | 12:00–16:00 | Decision 8: Mayotte or New Caledonia (2nd French polygon). Niue + UK pages. Toloka: read-only monitoring, first answers |
 | 20:00–02:00 | 16:00–22:00 | `memory.py`: `MemoryRetrieval`, layers working → long_term, trust from Toloka; start `hmem_adapter/index.ts` |
 | — | — | Clément: Nebius "submission update" for NAVIGUIDE (time-box ≤ 2 h) |
+| 12:00–13:00 | 08:00–09:00 | **P31: create the submission draft on HackOS** (only once Hamid's removal is done and the 5th member has joined: the first submission locks the team). Select track 01, read the real form fields, save; adjust the P23 pack. |
 
 **Gate G3 (end of 23 Oct)**: VL gives cited rows for France. If VL fails twice (502/429): text fallback, and the README says VL was shown on the cached page (S2 plan B).
 
@@ -188,6 +290,8 @@ Note: judging opens at 27 Oct 00:00 UTC (26 Oct 20:00 Toronto). Submissions stay
 | 12:00–16:00 | 08:00–12:00 | Video edit (GB), upload to YouTube (Clément's account; public or unlisted, to confirm); slides exported to PDF |
 | 16:00–19:00 | 12:00–15:00 | Submission form: track 01, links, **pre-existing declaration** (tag + list of modules), sponsor explanation, team. Clément says "publish". |
 | **by 20:00** | **by 16:00** | **Submit.** Margin to 23:45 UTC (19:45 Toronto). |
+
+**P32, submission protocol (no freeze; safety margin only).** The official checklist ([A], §0.5.2) is ticked item by item: track 01 selected; video 1–4 min (check the exact length) naming Zetaris, Meterless and Cursor; deck PDF with architecture diagram + stack; README runnable by an outsider; `.env` ignored, secret scan clean; pre-existing declaration pasted; Colab = none. Links opened from a private browser window (repo public, video plays). If edits after submit are allowed (to confirm, P18/P33), submit a complete version **before 27 Oct 00:00 UTC** (judging opens; ties go to the earlier timestamp) and update it later; otherwise submit once at 16:00 Toronto. Merges may continue after submission with green CI; the video stays the one recorded on `main` that day.
 
 ### 3.7 Scope per tab (unchanged from S2 §11.5)
 | Tab | Scope | Deliverable |
@@ -229,7 +333,7 @@ Source: `conformite-hackathon.md` (agent « Actif technologique », 17 Oct 20:15
 | **CH-13** | **Badge IA sur la carte Gold** (la vue UI du plan maître, AP-ui) : « Généré par IA (NVIDIA Nemotron) · vérifié par : opérateur / Toloka 3/3 », en FR et en EN, avec un lien vers la citation | Dans **AP-ui** | Le composant de la carte Gold, les fichiers i18n BI | Visible sur la carte. Test Playwright ou test unitaire de rendu | S | 🤖 | **Product & UX** et **Demo** : environ 10 s dans la vidéo |
 | **CH-14** | **Tests adverses de l'agent** : injection de prompt *indirecte* dans les pages et PDF lus par le VL (« ignore previous instructions… »), invention de chiffres, fuite de consignes, boucle `run_sql` qui tenterait autre chose qu'un SELECT. **promptfoo** pour les cas ciblés de l'agent, **garak (NVIDIA)** pour quelques sondes génériques sur l'endpoint Nemotron. Ces deux outils sont open source et gratuits. **Seulement sur l'API NVIDIA gratuite** (`integrate.api.nvidia.com`, endpoint principal du plan maître), avec un nombre d'appels plafonné. **Pas de repli payant** (Token Factory ou autre) : si le quota gratuit est épuisé, on s'arrête et on consigne ce qui a tourné | Avec **AP-evals** | `evals/redteam/promptfooconfig.yaml`, `evals/redteam/cases/*.html|pdf` (pages piégées locales), `evals/redteam/README.md`, résultats dans `FAILURES.md` | Au moins 10 cas exécutés, avec le résultat réel consigné (réussi ou échoué) **sans maquillage**. Le garde-fou SELECT-only est prouvé par un test. Le nombre d'appels est noté, à 0 € (API gratuite) | M | 🤖 · 👤 accord sur le plafond d'appels (API NVIDIA gratuite uniquement) | **Technical** (fiabilité), **Sponsor tech** (garak est un outil NVIDIA), lien avec la piste 02 |
 | **CH-15** | **Section README « Responsible AI & Security »**, **une slide « Trust »** et **une ligne dans le formulaire** (« hygiène et conformité du produit préexistant, faites pendant la fenêtre, PR `conformite/*` » d'un côté, « marquage et tests adverses de l'agent, nouveau travail » de l'autre) | Avec **AP-readme** | `README.md`, deck, formulaire | Chaque élément renvoie à une preuve (un lien vers un run, un fichier, un test) | S | 🤖 rédaction · 👤 validation et soumission (Clément) | Toutes les catégories. Honnêteté sur ce qui préexiste (règle 04) |
-| **CH-16** *(NAVIGUIDE, hors notation GenAI)* | **Simulateur** : phrase visible « Vous échangez avec un assistant d'IA (NVIDIA Nemotron)… Ne convient pas à la navigation », étiquette « Texte généré par IA », champs JSON `ai_generated`/`model`/`generated_at` dans les réponses du serveur, et test Playwright | `conformite/naviguide-ai-act-art50` (dépôt NAVIGUIDE si la séparation est faite, sinon le mono-dépôt) | `naviguide-simulator/src/i18n/fr.js`, `en.js`, le composant du chat ou du briefing, `naviguide-simulator/server/main.py` (réponses), un spec e2e | Phrase et étiquette visibles dans les modes Suivre et Simulation. Spec vert. Champs présents dans le JSON | M | 🤖 · 👤 **décision de Clément** (calendrier à confirmer) et validation | **À ne pas présenter aux juges GenAI.** Utile pour les juges Nebius (du 1er au 15 déc.) et pour l'échéance AI Act |
+| **CH-16** *(NAVIGUIDE, hors notation GenAI)* — **probablement fait / à vérifier** (PR #566 « EU AI Act art. 50 transparency (NAVIGUIDE) » ouverte le 17 oct. ; Clément pense que c'est fait ou en cours) | **Simulateur** : phrase visible « Vous échangez avec un assistant d'IA (NVIDIA Nemotron)… Ne convient pas à la navigation », étiquette « Texte généré par IA », champs JSON `ai_generated`/`model`/`generated_at` dans les réponses du serveur, et test Playwright | `conformite/naviguide-ai-act-art50` (dépôt NAVIGUIDE si la séparation est faite, sinon le mono-dépôt) | `naviguide-simulator/src/i18n/fr.js`, `en.js`, le composant du chat ou du briefing, `naviguide-simulator/server/main.py` (réponses), un spec e2e | Phrase et étiquette visibles dans les modes Suivre et Simulation. Spec vert. Champs présents dans le JSON | M | 🤖 · 👤 Clément vérifie la PR #566 (phrase visible, spec vert) et la fusionne ; plus de créneau planifié | **À ne pas présenter aux juges GenAI.** Utile pour les juges Nebius (du 1er au 15 déc.) et pour l'échéance AI Act |
 
 **Schedule (Toronto), adjusted to the critical path:**
 
@@ -239,7 +343,7 @@ Source: `conformite-hackathon.md` (agent « Actif technologique », 17 Oct 20:15
 | Wed 21:00 → Thu 08:00 | 🤖 opens CH-3, CH-4; read-only triage of CH-1 alerts | No conflict (parallel agent). |
 | Thu 22, 14:00–16:00 | Clément merges CH-3/CH-4; **CH-2** key rotation if alerts appeared | **Constraint**: do not rotate the NVIDIA or Zetaris keys while the VL review (until ~10:00) or Zetaris G2 (14:00–16:00) needs them; rotate after 16:00, update `.env` himself. Toloka item: the source doc's "Toloka Thu 7–10" slot is obsolete (D24). |
 | Fri 23, 08:00–16:00 | CH-6 `DATA_SOURCES.md`, CH-11 first draft | No conflict. |
-| To be confirmed by Clément | **CH-16** (NAVIGUIDE simulator) | Not scheduled; outside the GenAI critical path. |
+| — | **CH-16** (NAVIGUIDE simulator): **likely done / to verify** (PR #566 open) | Not scheduled; Clément checks and merges #566 when convenient; outside the GenAI critical path. |
 | Fri 23 evening | CH-5 `security.txt` PR + Clément deploys nginx (5 min) | No conflict. |
 | Sat 24, 08:00–13:00 | CH-7 SBOM, CH-8 CodeQL, CH-9 Scorecard (non-blocking) | Watch CI minutes: the pytest job already takes 30+ min; keep these workflows non-required. |
 | Sat 24, 13:00–17:00 | CH-12 schema **designed** + validated by Clément (15 min) | Overlaps AP-agentic; design only, 15 min of Clément. |
@@ -334,6 +438,12 @@ Split + VPS repoint (P9), doc sorting (D0), Contabo for NAVIGUIDE, OVH Ubuntu 25
 - Rule 06: video 1–4 min (main workflow, how the agent solves the challenge, key features, **how Zetaris and Meterless are integrated**); slide deck (problem and users, solution, workflow/architecture, stack, Zetaris and Meterless use, what is unique, product visuals, future enhancements); GitHub repo + README (setup, usage, dependencies); explanation of Zetaris/Meterless/Cursor/NVIDIA.
 - Rule 07: Impact 30, Technical 20, Innovation 15, Demo 15, Product & UX 10, Sponsor tech 10; at least 3 judges; ties → Impact, then submission time.
 - Rule 03: one primary track, changeable until the deadline; cross-track relevance is not scored twice.
+- Rule 01: 16+, one account per participant (duplicates disqualify the whole team); organizer/judging-sponsor employees not eligible for cash.
+- Rule 02: 1–5 members; the team locks when the first submission is created; one team per participant.
+- Rule 08: cash split equally unless the team submits another split in writing; paid by bank transfer within 30 days.
+- Rule 09: teams keep all rights; licence to the organizer (and the sponsor for sponsor-track submissions) to show demo, screenshots and description.
+- Rule 10: schedule changes announced on the page and in Discord; disqualification final, reason sent to the team lead.
+- Full brief with quotes, sources and discrepancies: §0.5.
 
 ### 5.2 Deliverable → points
 | Criterion (pts) | What earns it |
@@ -347,7 +457,7 @@ Split + VPS repoint (P9), doc sorting (D0), Contabo for NAVIGUIDE, OVH Ubuntu 25
 
 ### 5.3 Sponsor-tech evidence checklist (video + slides + README)
 - **Zetaris**: the five source tables registered; the gold Postgres registered as a datasource; one federated join live; `run_sql` tool calls by Nemotron; Method B result (works or not, said honestly).
-- **Meterless**: H-MEM in Python, citing `github.com/Meterless/Meterless` `engines/hmem` (Apache 2.0); recall on screen; **green conformance scorecard**; Markovian / World Model cited as not used on the filmed path.
+- **Meterless**: H-MEM in Python, citing `github.com/Meterless/Meterless` `engines/hmem` (Apache 2.0); recall on screen; **green conformance scorecard**; Markovian / World Model cited as not used on the filmed path. If the HackOS task board provides a Meterless model endpoint (C20), Nemotron calls also go through Meterless and the video shows it.
 - **Cursor** (also for "Best use of Cursor-built product"): all new code written in Cursor; commit trailers or branch names showing Cursor agents; the `.cursor/rules` used; one screenshot of an agent session (no secrets visible).
 - **NVIDIA** (also for "Best use of NVIDIA Nemotron"): exact model ids (`nvidia/nemotron-3.5-super-vl-120b-a12b`, `nvidia/nemotron-3-super-120b-a12b`), the endpoint, `reasoning_effort: "none"` and why, token counts per zone, VL on a real scanned or PDF page.
 - **Toloka** (not a sponsor): overlap 3, controls, agreement rule, cost forecast vs actual.
@@ -373,6 +483,11 @@ Split + VPS repoint (P9), doc sorting (D0), Contabo for NAVIGUIDE, OVH Ubuntu 25
 | Nebius/NAVIGUIDE deadlines eat the week | Medium | P22 time budget |
 | Secrets leak in video or screenshots | Low | `.env` 600; screenshots checked before upload; no terminal with `env` on screen |
 | Writing to Atlas or VPS Mongo by mistake | Low | Read-only client + a test forbidding insert/update/delete |
+| Judges read "integrate Meterless" as "Nemotron through Meterless" (C20) | Medium | P29 task-board check; ask at the call; H-MEM + green scorecard shown clearly; switch the model route if an endpoint appears |
+| Tracks/prizes changed at the 21 Oct call (C24) | Low-medium | P30 re-read; track can change until the deadline |
+| Submission draft created too early locks the team without the 5th member | Medium | P31 only after the team change is confirmed |
+| Duplicate HackOS account in the team (rule 01) | Low | P24 |
+| Form wants a video file, not a link | Low | MP4 kept ready (C22) |
 
 ### 6.2 Decision log (16–17 Oct, from S1/S2)
 16 Oct: (1) two repos, split by Clément; (2) Zetaris `source = "SqlEditor"`; (3) Toloka EN + translations, overlap 3; (4) no Mongo writes, Atlas frozen, VPS live; (5) track 01; (6) video on YouTube, English, made by Grok Bot; (8) Mayotte then New Caledonia; (9) no Gold row without a quote; (10) H-MEM in Python; (11) AMP through the existing FeatureServer, no bulk download; (12) fallback branch.
@@ -380,6 +495,7 @@ Split + VPS repoint (P9), doc sorting (D0), Contabo for NAVIGUIDE, OVH Ubuntu 25
 **17 Oct ~20:15 Toronto, (25) Conformité et confiance (Clément):** §3.8 adopted: CH-1…CH-16, €0, 22–27 Oct on `conformite/*` branches, declared as hygiene of the pre-existing product; never delays submission (submit before 16:00 Toronto); CH-16 in the NAVIGUIDE simulator (timing to be confirmed by Clément), not shown to GenAI judges; no transfer of rights. **The PR freeze on 27 Oct 08:00 Toronto in this decision is cancelled** (Berry, 17 Oct 2026: no code, PR or video freeze; merges continue until the end with green CI; demo on current `main`).
 **17 Oct 19:39 Toronto, (24) Toloka ASAP (Clément):** the Nemotron VL check is no longer a gate. The batch (~23 items: 18 priority-1 route URLs + 5 hidden controls, 2 onboarding examples; overlap 3, No QA, ≈ $48 of $50) is built before 22 Oct from pre-existing data only (existing Proposer/auto-review verdicts, read-only candidate export), no new code. Deploy at **22 Oct 00:00 UTC exactly** (21 Oct 20:00 Toronto), after Clément's explicit "yes" on the Cost breakdown. VL runs in parallel on 22 Oct; Toloka vs VL vs Proposer agreement table goes into the video and `evals/`. If verification is late: deploy the moment it lands.
 **Proposed today (pending Clément):** C1–C18 resolutions above (C4 and C10 now settled).
+**17 Oct ~21:00 Toronto, (26) Rules review (Clément's request):** §0.5 added; registration close taken as 23:45 UTC; HackOS Help desk as the primary question channel; no code on BI before 22 Oct 00:00 UTC (confirmed again); no freeze (see PR #568); CH-16 marked likely done / to verify (PR #566); Clément available 21 Oct 20:00 Toronto for the Toloka cost approval and deploy at 22 Oct 00:00 UTC.
 
 ### 6.3 Open questions for Clément (genuinely open)
 1. **Toloka**: OK for a single URL-level batch (23 items), with port-level doubts reviewed by you as operator? Or will you top up the balance for a second, port-level batch?
@@ -392,7 +508,10 @@ Split + VPS repoint (P9), doc sorting (D0), Contabo for NAVIGUIDE, OVH Ubuntu 25
 8. **Product & UX**: is a small "Gold" card in the existing Formalities/Review screen the right surface, or do you want a separate agent page?
 9. **Screenshot hosting** for Toloka (public HTTPS outside the repo): where?
 10. **Are the 11 "stable" polygons certified Gold** in `review_gold` on the VPS? (Their exact URLs serve as controls.)
-11. **CH-16 timing**: when do you want the AI notice added to the NAVIGUIDE simulator (before 30 Oct, at a date of your choice)?
+11. **CH-16**: is the AI notice in the NAVIGUIDE simulator done? PR #566 is open; verify and merge it, then CH-16 is closed.
+12. **Meterless route (C20)**: if the HackOS task board offers a Meterless credit/endpoint, do we also route Nemotron through Meterless (recommended as a hedge), or stay on NVIDIA's free API only?
+13. **Prize split (rule 08)**: equal split among the 5 members (default), or a written split (e.g. to the association)?
+14. **Submission timing**: if the form can be edited after submitting, submit a complete version before 27 Oct 00:00 UTC (judging opens) and update later?
 
 ### 6.4 Organizer questions (✅ SENT 17 Oct 19:38 Toronto, text below for the record)
 **To:** support@academy.genai.works (thread "Open Agent Hackathon 2026 – Remove a team member and rename our team"), and/or the same text in HackOS `#general-admin`.
