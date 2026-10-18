@@ -16,12 +16,12 @@ STATE="$STATE_DIR/fails"
 
 state="$(systemctl show -p SubState --value "$UNIT" 2>/dev/null || true)"
 if [ "$state" != "running" ]; then
-  rm -f "$STATE"
+  rm -f "$STATE" 2>/dev/null || true
   exit 0
 fi
 
 if curl -fsS -m 8 -o /dev/null "$URL"; then
-  rm -f "$STATE"
+  rm -f "$STATE" 2>/dev/null || true
   exit 0
 fi
 
@@ -37,13 +37,22 @@ if [ "$prev_pid" != "$pid" ]; then
 fi
 fails=$((prev_fails + 1))
 
-mkdir -p "$STATE_DIR"
-if [ "$fails" -lt "$MAX_FAILS" ]; then
-  echo "$pid $fails" > "$STATE"
-  logger -t bi-healthcheck "Blue Intelligence ne répond pas sur $URL (échec $fails/$MAX_FAILS, pid $pid) — pas de relance"
-  exit 0
+# Échec sûr : si l'état ne peut être ni lu ni écrit, la sonde ne doit pas
+# se désactiver toute seule. On retombe sur l'ancien comportement (relance).
+if [ -e "$STATE" ] && [ ! -r "$STATE" ]; then
+  logger -t bi-healthcheck "état illisible ($STATE), relance par sécurité"
+  fails=$MAX_FAILS
 fi
 
-rm -f "$STATE"
+if [ "$fails" -lt "$MAX_FAILS" ]; then
+  if mkdir -p "$STATE_DIR" 2>/dev/null && { echo "$pid $fails" > "$STATE"; } 2>/dev/null; then
+    logger -t bi-healthcheck "Blue Intelligence ne répond pas sur $URL (échec $fails/$MAX_FAILS, pid $pid) — pas de relance"
+    exit 0
+  fi
+  logger -t bi-healthcheck "état non inscriptible ($STATE), relance par sécurité"
+  fails=$MAX_FAILS
+fi
+
+rm -f "$STATE" 2>/dev/null || true
 logger -t bi-healthcheck "Blue Intelligence ne répond plus sur $URL ($fails échecs consécutifs, pid $pid) — redémarrage"
 sudo -n systemctl restart "$UNIT"
