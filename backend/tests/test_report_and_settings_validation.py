@@ -384,3 +384,182 @@ def test_deeplink_cache_skips_non_public_urls_and_keeps_them(monkeypatch):
     assert "169.254.169.254" in msgs
     assert "127.0.0.1" in msgs
     assert "not yet extracted → queued" in msgs
+
+
+def _public_dns(host, port, *a, **k):
+    return [(None, None, None, None, ("8.8.8.8", 0))]
+
+
+def test_fetch_does_not_follow_redirect_to_link_local(monkeypatch):
+    import httpx
+    from app.core.public_url import PublicFetchError, fetch_checked
+
+    monkeypatch.setattr(public_url.socket, "getaddrinfo", _public_dns)
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if request.url.host == "169.254.169.254":
+            raise AssertionError("fetched link-local redirect target")
+        return httpx.Response(
+            302,
+            headers={"location": "http://169.254.169.254/latest/meta-data/"},
+        )
+
+    async def run():
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
+            with pytest.raises(PublicFetchError, match="not public"):
+                await fetch_checked(client, "https://ocean.example/start")
+
+    asyncio.run(run())
+    assert seen == ["https://ocean.example/start"]
+
+
+def test_fetch_rejects_hostname_that_resolves_to_loopback(monkeypatch):
+    import httpx
+    from app.core.public_url import PublicFetchError, fetch_checked
+
+    def loopback_dns(host, port, *a, **k):
+        assert host == "evil.example"
+        return [(None, None, None, None, ("127.0.0.1", 0))]
+
+    monkeypatch.setattr(public_url.socket, "getaddrinfo", loopback_dns)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"fetched {request.url}")
+
+    async def run():
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
+            with pytest.raises(PublicFetchError, match="not public"):
+                await fetch_checked(client, "https://evil.example/secret")
+
+    asyncio.run(run())
+
+
+def test_fetch_rejects_redirect_scheme_and_caps_hops(monkeypatch):
+    import httpx
+    from app.core.public_url import MAX_REDIRECTS, PublicFetchError, fetch_checked
+
+    monkeypatch.setattr(public_url.socket, "getaddrinfo", _public_dns)
+    seen = []
+
+    def ftp_handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(302, headers={"location": "ftp://files.example/secret"})
+
+    async def ftp_run():
+        transport = httpx.MockTransport(ftp_handler)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
+            with pytest.raises(PublicFetchError, match="scheme"):
+                await fetch_checked(client, "https://ocean.example/go")
+
+    asyncio.run(ftp_run())
+    assert seen == ["https://ocean.example/go"]
+
+    hops = []
+
+    def chain_handler(request: httpx.Request) -> httpx.Response:
+        hops.append(request.url.path)
+        n = len(hops)
+        return httpx.Response(302, headers={"location": f"https://ocean.example/hop-{n}"})
+
+    async def chain_run():
+        transport = httpx.MockTransport(chain_handler)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
+            with pytest.raises(PublicFetchError, match="Too many redirects"):
+                await fetch_checked(client, "https://ocean.example/hop-0")
+
+    asyncio.run(chain_run())
+    assert len(hops) == MAX_REDIRECTS + 1
+
+
+def test_fetch_raw_uses_checked_redirects(monkeypatch):
+    import httpx
+    from app.core import extract as ext
+    from app.core.public_url import PublicFetchError
+
+    monkeypatch.setattr(public_url.socket, "getaddrinfo", _public_dns)
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        return httpx.Response(
+            302,
+            headers={"location": "http://169.254.169.254/latest/meta-data/"},
+        )
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        kwargs["follow_redirects"] = False
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(ext.httpx, "AsyncClient", factory)
+
+    async def run():
+        with pytest.raises(PublicFetchError):
+            await ext.fetch_raw("https://ocean.example/page")
+
+    asyncio.run(run())
+    assert seen == ["ocean.example"]
+
+
+def test_list_internal_report_urls_is_read_only(monkeypatch):
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "list_internal_report_urls.py"
+    spec = importlib.util.spec_from_file_location("list_internal_report_urls", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    def dns(host, port, *a, **k):
+        if host == "evil.example":
+            return [(None, None, None, None, ("127.0.0.1", 0))]
+        return [(None, None, None, None, ("8.8.8.8", 0))]
+
+    monkeypatch.setattr(public_url.socket, "getaddrinfo", dns)
+
+    class _Coll:
+        def __init__(self, docs):
+            self.docs = docs
+            self.finds = 0
+
+        def find(self, query, projection):
+            self.finds += 1
+            assert query == {}
+            assert projection == {"_id": 1, "url": 1}
+            return list(self.docs)
+
+        def __getattr__(self, name):
+            def refuse(*a, **k):
+                raise AssertionError(f"unexpected write {name}")
+            return refuse
+
+    deeplink = _Coll([
+        {"_id": "d1", "url": "http://169.254.169.254/latest/meta-data/"},
+        {"_id": "d2", "url": "https://evil.example/hidden"},
+        {"_id": "d3", "url": "https://1.1.1.1/public"},
+    ])
+    reports = _Coll([
+        {"_id": "r1", "url": "http://127.0.0.1:27017/"},
+        {"_id": "r2", "url": "https://ocean.example/ok"},
+    ])
+
+    class _DB:
+        def __getitem__(self, name):
+            return {"deeplink_pages": deeplink, "reported_projects": reports}[name]
+
+    rows = mod.list_internal(_DB())
+    assert rows == [
+        ("deeplink_pages", "d1", "http://169.254.169.254/latest/meta-data/"),
+        ("deeplink_pages", "d2", "https://evil.example/hidden"),
+        ("reported_projects", "r1", "http://127.0.0.1:27017/"),
+    ]
+    assert deeplink.finds == 1
+    assert reports.finds == 1
+    source = path.read_text(encoding="utf-8")
+    for forbidden in ("delete_one", "delete_many", "update_one", "drop(", "insert_one"):
+        assert forbidden not in source

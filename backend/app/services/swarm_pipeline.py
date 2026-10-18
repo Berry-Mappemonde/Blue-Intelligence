@@ -16,7 +16,7 @@ from app.core.llm import (
 from app.static_data.categories import normalize_category
 from app.core.dedup import is_duplicate
 from app.core.extract import extract_cascade, path_looks_like_image, url_looks_like_image
-from app.core.public_url import public_url_error
+from app.core.public_url import PublicFetchError, fetch_checked, public_url_error
 from app.core.project_geo import geocode_project_site, site_publishable, valid_coords
 from app.core.rag import select_context
 from app.static_data.seeds import (
@@ -1428,8 +1428,16 @@ class Swarm:
             on_run=on_run, should_stop=should_stop)
 
     async def _crawl_page_links(self, seed):
-        async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=UA) as client:
-            r = await client.get(seed["url"])
+        async with httpx.AsyncClient(timeout=25, follow_redirects=False, headers=UA) as client:
+            try:
+                r = await fetch_checked(client, seed["url"])
+            except PublicFetchError as e:
+                self.log(
+                    f"[{seed.get('name')}] crawl skip non-public URL "
+                    f"(not fetched) {(seed.get('url') or '')[:180]} — {e}",
+                    "warn",
+                )
+                return []
             soup = BeautifulSoup(r.text, "html.parser")
         base_host = urlparse(seed["url"]).netloc
         urls, seen = [], set()

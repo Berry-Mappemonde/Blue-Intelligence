@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
+
+import httpx
 
 URL_MAX_LENGTH = 2048
+MAX_REDIRECTS = 5
 _ALLOWED_PORTS = (80, 443)
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _BLOCKED_HOSTS = {"localhost"}
 _BLOCKED_SUFFIXES = (".local", ".internal", ".localhost")
+
+
+class PublicFetchError(ValueError):
+    """The URL, or one of its redirect targets, must not be fetched."""
 
 
 def _ip_is_public(raw: str) -> bool:
@@ -99,3 +107,31 @@ def public_url_error(url: str, resolve_cache: dict | None = None) -> str | None:
             return "URL host is not public"
         return None
     return _resolve(host, resolve_cache)
+
+
+async def fetch_checked(client: httpx.AsyncClient, url: str, *,
+                        resolve_cache: dict | None = None, **kwargs):
+    """GET ``url`` and follow at most 5 redirects by hand.
+
+    Each hop, including the first, is resolved and refused when it is not a
+    public http(s) URL. The next request is not sent when the check fails.
+    Extra keyword arguments are sent only on the first request.
+    """
+    current = (url or "").strip()
+    cache = resolve_cache if resolve_cache is not None else {}
+    first_kwargs = dict(kwargs)
+    for hop in range(MAX_REDIRECTS + 1):
+        reason = public_url_error(current, resolve_cache=cache)
+        if reason:
+            raise PublicFetchError(reason)
+        response = await client.get(current, follow_redirects=False, **first_kwargs)
+        first_kwargs = {}
+        if response.status_code not in _REDIRECT_STATUSES:
+            return response
+        if hop == MAX_REDIRECTS:
+            raise PublicFetchError("Too many redirects")
+        location = (response.headers.get("location") or "").strip()
+        if not location:
+            raise PublicFetchError("Redirect without a location")
+        current = urljoin(current, location)
+    raise PublicFetchError("Too many redirects")
