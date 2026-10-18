@@ -94,10 +94,29 @@ class _HtmlClient:
     async def __aexit__(self, *a):
         return False
 
-    async def get(self, url):
+    async def get(self, url, **kwargs):
         class _Resp:
             text = _HtmlClient.html
+            status_code = 200
+            headers = {}
         return _Resp()
+
+
+def _install_offline_html(monkeypatch):
+    """The crawler checks the host, then GETs with follow_redirects=False.
+
+    These tests stay offline: DNS answers a public address and the HTML
+    client ignores the extra keyword.
+    """
+    import socket
+
+    import app.services.swarm_pipeline as sp
+
+    def _public(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(sp.httpx, "AsyncClient", _HtmlClient)
+    monkeypatch.setattr("app.core.public_url.socket.getaddrinfo", _public)
 
 
 def test_project_search_query_site_and_name():
@@ -428,7 +447,7 @@ def test_home_internal_links_are_not_n1_fiches(monkeypatch):
         return []
 
     import app.services.swarm_pipeline as sp
-    monkeypatch.setattr(sp.httpx, "AsyncClient", _HtmlClient)
+    _install_offline_html(monkeypatch)
     monkeypatch.setattr(sp, "tf_fetch", fake_fetch)
     monkeypatch.setattr(sp, "tf_search", fake_tf)
     monkeypatch.setattr(sp, "serper_search", fake_sp)
@@ -449,7 +468,7 @@ def test_crawl_pattern_html_does_not_call_search(monkeypatch):
         return {}
 
     import app.services.swarm_pipeline as sp
-    monkeypatch.setattr(sp.httpx, "AsyncClient", _HtmlClient)
+    _install_offline_html(monkeypatch)
     monkeypatch.setattr(sp, "tf_fetch", track)
     monkeypatch.setattr(sp, "tf_search", track)
     monkeypatch.setattr(sp, "serper_search", track)

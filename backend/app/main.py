@@ -49,7 +49,7 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 _PUBLIC_WRITE_PATHS = {"/api/report-project"}   # public project reports
 _PUBLIC_PATHS = {"/api/health"}
-_ADMIN_GET_PREFIXES = ("/api/review", "/api/admin")
+_ADMIN_GET_PREFIXES = ("/api/review", "/api/admin", "/api/reports")
 
 
 @app.middleware("http")

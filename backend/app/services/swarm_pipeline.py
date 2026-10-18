@@ -16,6 +16,7 @@ from app.core.llm import (
 from app.static_data.categories import normalize_category
 from app.core.dedup import is_duplicate
 from app.core.extract import extract_cascade, path_looks_like_image, url_looks_like_image
+from app.core.public_url import PublicFetchError, fetch_checked, public_url_error
 from app.core.project_geo import geocode_project_site, site_publishable, valid_coords
 from app.core.rag import select_context
 from app.static_data.seeds import (
@@ -655,8 +656,23 @@ class Swarm:
                 if cached:
                     existing = {p["url"] for p in await self.db.projects.find({}, {"url": 1}).to_list(30000)}
                     fresh = [c for c in cached if c["url"] not in existing]
-                    self.log(f"DeepLinkCache: {len(cached)} pages cached, {len(fresh)} not yet extracted → queued")
+                    resolutions: dict[str, str | None] = {}
+                    queued_pages = []
                     for c in fresh:
+                        reason = public_url_error(c["url"], resolve_cache=resolutions)
+                        if reason:
+                            self.log(
+                                "DeepLinkCache: skip non-public URL "
+                                f"(not fetched, kept) {c['url'][:180]} — {reason}",
+                                "warn",
+                            )
+                            continue
+                        queued_pages.append(c)
+                    self.log(
+                        f"DeepLinkCache: {len(cached)} pages cached, "
+                        f"{len(queued_pages)} not yet extracted → queued"
+                    )
+                    for c in queued_pages:
                         self.queued_count += 1
                         await self.queue.put({"url": c["url"], "funder": c.get("funder", ""), "source": c.get("source", "cache")})
             elif self.mode == "full" and getattr(self, "force_rescan", False):
@@ -1412,8 +1428,16 @@ class Swarm:
             on_run=on_run, should_stop=should_stop)
 
     async def _crawl_page_links(self, seed):
-        async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=UA) as client:
-            r = await client.get(seed["url"])
+        async with httpx.AsyncClient(timeout=25, follow_redirects=False, headers=UA) as client:
+            try:
+                r = await fetch_checked(client, seed["url"])
+            except PublicFetchError as e:
+                self.log(
+                    f"[{seed.get('name')}] crawl skip non-public URL "
+                    f"(not fetched) {(seed.get('url') or '')[:180]} — {e}",
+                    "warn",
+                )
+                return []
             soup = BeautifulSoup(r.text, "html.parser")
         base_host = urlparse(seed["url"]).netloc
         urls, seen = [], set()

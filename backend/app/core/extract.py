@@ -57,6 +57,7 @@ from bs4 import BeautifulSoup
 # The semaphore limits RAM (gazettes up to 180 pages); it is no longer a
 # safety lock: several PDFs can proceed in parallel.
 from app.config import BACKEND_DIR, DATA_DIR
+from app.core.public_url import fetch_checked
 
 PDF_CACHE_DIR = DATA_DIR / "cached_pdfs"
 # OCR of a scanned Gaceta (5 pages) far exceeds 25 s.
@@ -644,18 +645,18 @@ def _is_ssl_cert_error(exc: BaseException) -> bool:
 
 
 async def fetch_raw(url: str, timeout: int = 25) -> httpx.Response:
-    """Direct GET. Return the httpx Response (bytes, headers, final URL)."""
-    kwargs = dict(timeout=timeout, follow_redirects=True, headers=UA_BROWSER)
+    """GET with manual redirects. Each hop must be a public http(s) URL."""
+    kwargs = dict(timeout=timeout, follow_redirects=False, headers=UA_BROWSER)
     try:
         async with httpx.AsyncClient(**kwargs) as client:
-            r = await client.get(url)
+            r = await fetch_checked(client, url)
             r.raise_for_status()
             return r
     except httpx.RequestError as e:
         if not _is_ssl_cert_error(e):
             raise
     async with httpx.AsyncClient(**kwargs, verify=False) as client:
-        r = await client.get(url)
+        r = await fetch_checked(client, url)
         r.raise_for_status()
         return r
 
@@ -1775,15 +1776,15 @@ def should_follow_attachments(text: str, url: str) -> bool:
 
 
 async def _fetch_bytes(url: str, headers: dict, timeout: float):
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
-        r = await client.get(url)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers) as client:
+        r = await fetch_checked(client, url)
         r.raise_for_status()
         return r.content, (r.headers.get("content-type") or "").lower()
 
 
 async def _wayback_snapshot_url(url: str) -> str | None:
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=UA_BROWSER) as client:
-        r = await client.get("https://web.archive.org/cdx/search/cdx", params={
+    async with httpx.AsyncClient(timeout=20, follow_redirects=False, headers=UA_BROWSER) as client:
+        r = await fetch_checked(client, "https://web.archive.org/cdx/search/cdx", params={
             "url": url, "output": "json", "filter": "statuscode:200",
             "fl": "timestamp,original", "limit": 1,
         })
