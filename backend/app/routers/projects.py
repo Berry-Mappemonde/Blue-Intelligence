@@ -2,13 +2,17 @@
 on-demand enrichment, community reports."""
 import asyncio
 import difflib
+import html
+import ipaddress
 import os
 import time
 import uuid
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel
 
+from app.core.public_url import URL_MAX_LENGTH, public_url_error
+from app.core.report_rate import allow as allow_report
 from app.core.tasks import new_task, prune_tasks
 from app.db import db, get_settings
 from app.services.swarm_pipeline import now_iso
@@ -326,11 +330,66 @@ class ReportBody(BaseModel):
     description: str = ""
 
 
+_NAME_MAX = 200
+_DESCRIPTION_MAX = 5000
+
+
+def report_email_html(name: str, url: str, description: str) -> str:
+    """Notification body. Every user field is escaped before it enters HTML."""
+    safe_name = html.escape(name, quote=True)
+    safe_url = html.escape(url, quote=True)
+    safe_desc = html.escape((description or "—")[:1000], quote=True)
+    return f"""<table style="font-family:Arial,sans-serif;max-width:560px;"><tr><td>
+<h2 style="color:#0284c7;">🌊 Nouveau projet signalé sur Blue Intelligence</h2>
+<p><b>Nom du projet :</b> {safe_name}</p>
+<p><b>URL :</b> <a href="{safe_url}">{safe_url}</a></p>
+<p><b>Description :</b><br/>{safe_desc}</p>
+<p style="color:#64748b;font-size:12px;">Ce projet a été ajouté automatiquement à la file d'attente du Swarm et sera analysé lors du prochain run.</p>
+</td></tr></table>"""
+
+
+def _report_client_addr(request: Request) -> str:
+    """Socket peer, or the proxy's X-Real-IP when the peer is the local proxy."""
+    peer = (request.client.host if request.client else "") or ""
+    trusted = False
+    if peer in {"localhost", "testclient"}:
+        trusted = True
+    else:
+        try:
+            ip = ipaddress.ip_address(peer)
+        except ValueError:
+            ip = None
+        if ip is not None and (ip.is_loopback or ip.is_private or ip.is_link_local):
+            trusted = True
+    if trusted:
+        real = (request.headers.get("x-real-ip") or "").strip()
+        if real:
+            return real[:80]
+    return peer or "unknown"
+
+
 @router.post("/report-project")
-async def report_project(body: ReportBody):
+async def report_project(body: ReportBody, request: Request):
     name, url = body.name.strip(), body.url.strip()
-    if not name or not url.startswith("http"):
+    description = body.description or ""
+    if not name:
         raise HTTPException(400, "name required and url must start with http(s)")
+    if len(name) > _NAME_MAX:
+        raise HTTPException(422, "name is too long")
+    if len(url) > URL_MAX_LENGTH:
+        raise HTTPException(422, "url is too long")
+    if len(description) > _DESCRIPTION_MAX:
+        raise HTTPException(422, "description is too long")
+    if not url.lower().startswith("http"):
+        # "not-a-url" stays 400 for existing clients. An explicit other scheme is 422.
+        if ":" in url:
+            raise HTTPException(422, "URL scheme must be http or https")
+        raise HTTPException(400, "name required and url must start with http(s)")
+    reason = public_url_error(url)
+    if reason:
+        raise HTTPException(422, reason)
+    if not allow_report(_report_client_addr(request)):
+        raise HTTPException(429, "Too many reports from this address. Try again later.")
     rid = str(uuid.uuid4())
     email_status = "skipped"
     resend_key = (os.environ.get("RESEND_API_KEY") or "").strip()
@@ -338,24 +397,19 @@ async def report_project(body: ReportBody):
         try:
             import resend
             resend.api_key = resend_key
+            subject_name = name.replace("\r", " ").replace("\n", " ")[:80]
             params = {
                 "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
                 "to": [os.environ.get("REPORT_RECIPIENT", "clementfilisetti@berrymappemonde.org")],
-                "subject": f"[Blue Intelligence] Projet signalé : {name[:80]}",
-                "html": f"""<table style="font-family:Arial,sans-serif;max-width:560px;"><tr><td>
-<h2 style="color:#0284c7;">🌊 Nouveau projet signalé sur Blue Intelligence</h2>
-<p><b>Nom du projet :</b> {name}</p>
-<p><b>URL :</b> <a href="{url}">{url}</a></p>
-<p><b>Description :</b><br/>{(body.description or '—')[:1000]}</p>
-<p style="color:#64748b;font-size:12px;">Ce projet a été ajouté automatiquement à la file d'attente du Swarm et sera analysé lors du prochain run.</p>
-</td></tr></table>""",
+                "subject": f"[Blue Intelligence] Projet signalé : {subject_name}",
+                "html": report_email_html(name, url, description),
             }
             result = await asyncio.to_thread(resend.Emails.send, params)
             email_status = "sent" if result.get("id") else "failed"
         except Exception as e:
             email_status = f"failed: {str(e)[:120]}"
     await db.reported_projects.insert_one({
-        "_id": rid, "name": name, "url": url, "description": body.description[:1000],
+        "_id": rid, "name": name, "url": url, "description": description[:1000],
         "status": "queued", "email_status": email_status, "ts": now_iso(),
     })
     await db.deeplink_pages.update_one(

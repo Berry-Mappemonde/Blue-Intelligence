@@ -48,7 +48,7 @@ app = FastAPI(
 # X-Admin-Key header. Without ADMIN_KEY (dev / tests), everything stays open.
 # ---------------------------------------------------------------------------
 _PUBLIC_WRITE_PATHS = {"/api/report-project"}   # public project reports
-_ADMIN_GET_PREFIXES = ("/api/review", "/api/admin")
+_ADMIN_GET_PREFIXES = ("/api/review", "/api/admin", "/api/reports")
 
 
 @app.middleware("http")

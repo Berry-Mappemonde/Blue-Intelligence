@@ -1,6 +1,7 @@
 """app.routers.misc — Health, settings, user manual, official route,
 route EEZ crossings."""
 import asyncio
+import math
 import os
 import time
 
@@ -96,6 +97,48 @@ class SettingsBody(BaseModel):
     anthropic_api_key: str | None = None
     claude_budget_usd: float | None = None
 
+# Map controls are not catalog rules. The settings form already publishes these bounds.
+_MAP_SETTING_INTERVALS = {
+    "min_zoom": (1, 8),
+    "max_markers": (50, 5000),
+}
+
+
+def _settings_interval(key: str):
+    """(rule id, [lo, hi]) from run_rules.json, else the map-form bounds."""
+    extra = _MAP_SETTING_INTERVALS.get(key)
+    if extra is not None:
+        return key, extra
+    from app.core.run_rules import all_rules
+    for rule in all_rules():
+        if rule.get("settings_key") == key and rule.get("interval") is not None:
+            return rule["id"], rule["interval"]
+    return None, None
+
+
+def settings_out_of_range(updates: dict) -> str | None:
+    """English detail when a numeric update leaves the catalog interval."""
+    from app.core.run_rules import RuleError, _assert_in_interval
+    problems = []
+    for key, value in updates.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if isinstance(value, float) and not math.isfinite(value):
+            problems.append(f"{key} must be a finite number")
+            continue
+        rid, interval = _settings_interval(key)
+        if not interval:
+            continue
+        try:
+            _assert_in_interval(rid, value, interval)
+        except RuleError:
+            lo, hi = interval
+            problems.append(f"{key} must be between {lo} and {hi}")
+    if not problems:
+        return None
+    return "; ".join(problems)
+
+
 @router.get("/admin/check")
 async def admin_check():
     """Validate the admin key: the `_admin_gate` middleware returns 401 before
@@ -154,6 +197,9 @@ async def write_settings(body: SettingsBody):
         if k in updates and updates[k] == "":
             del updates[k]
     if updates:
+        detail = settings_out_of_range(updates)
+        if detail:
+            raise HTTPException(422, detail)
         await db.settings.update_one({"_id": "global"}, {"$set": updates}, upsert=True)
     return await read_settings()
 
