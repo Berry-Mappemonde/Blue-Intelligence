@@ -507,7 +507,7 @@ Top-Down 12-EEZ canaries: quality **NO-GO** (noise, listing ~10%, Venezuela at 0
 - `docs/archives/PRD.md` — original problem, non-destructiveness constraint, 2026-08 history.
 - `docs/ARCHITECTURE.md` — code layout after refactor.
 - `README.md` — the three modes (Projects, Marinas, Formalities).
-- Agent decisions: Top-Down pipeline, Claude strategy, Noonsite harvest, P0, listing-control, NO-GO canaries, Bottom-Up pivot, seed union, OSM Taginfo inventory, Word comments on the specification (#3 / #20: BU also discovers lists).
+- Earlier design decisions: Top-Down pipeline, Claude strategy, Noonsite harvest, P0, listing-control, NO-GO canaries, Bottom-Up pivot, seed union, OSM Taginfo inventory, Word comments on the specification (#3 / #20: BU also discovers lists).
 
 This specification **prevails** over implementation details as soon as there is a conflict (e.g. “all marinas” vs “marinas = seeds only”; “State cargo list” vs “recreational map”; “yes/no judge only” vs “BU list detector”).
 

@@ -68,7 +68,7 @@ Symptom: `blueintelligence.online` 500 (nginx) / 525 (Cloudflare), `/ici`
 bag empty, backend `Too many open files`, 2 200 sockets stuck on :8001.
 Cause: the simulator hook `useAtlasLookup` aborted and restarted its
 climatology fetches on **every film tick** (600-800 req/s from dev Vite,
-Playwright and Cloud agents, all through Cloudflare), while each
+Playwright and CI, all through Cloudflare), while each
 `/api/climatology/crossings` cost ~1 s of Python **inside the event loop**.
 Not a certificate problem. Locks, from the edge to the code:
 
@@ -209,8 +209,8 @@ protected by an admin key:
 
 - MongoDB listens only on 127.0.0.1, authentication required — never
   exposed on the Internet, no port to open.
-- Revoke Cursor agent access: delete the
-  `cursor-agent-blue-intelligence` line from `~/.ssh/authorized_keys` on the VPS.
+- Revoke the automation SSH access: delete its line from
+  `~/.ssh/authorized_keys` on the VPS.
 - Application logs: `sudo journalctl -u blue-intelligence -f`;
   MongoDB: `/var/log/mongodb/mongod.log`.
 
@@ -280,7 +280,7 @@ Internet → nginx (443, Let's Encrypt, SAN + simulator.naviguide.fr)
 | nginx frontend | `/var/www/naviguide-simulator` |
 | Optional secrets (Copernicus only) | `~/.config/naviguide/simulator.env` |
 | Simulator Mongo (stock officiel RF2, **base séparée**) | `SIMULATOR_MONGO_URL` in `~/.config/naviguide/simulator.env` — **never** `~/.config/blue-intelligence/mongo.env`, never `MONGO_URL_LOCAL` / `DB_NAME` |
-| Paid LLM calls (Nemotron via Nebius) — **28 Sept. policy: only when the owner says so or when it is useful** | `NAVIGUIDE_LLM_MODE` in `~/.config/naviguide/simulator.env`: `on-demand` (default — chat question, "Rédigé" click; **never** background: story warm-up, film writing, plan-review sentence, store filler), `off` (nothing, ever — lot agents, CI), `all` (everything, set by hand for a full demo). Daily caps: `NAVIGUIDE_LLM_DAILY_TOKENS_FAST` 200k, `_WRITE` 150k, `_JUDGE` 60k (lot RG19; agents keep `NAVIGUIDE_LLM_MODE=off` so Ultra stays unused). Chat Ultra also has `NAVIGUIDE_CHAT_ULTRA_PER_DAY` (default 10 calls). Truth judge stays off unless `NAVIGUIDE_TRUTH_JUDGE=1`. Tavily watch is **on** by default since 15 Oct. (one search per stop, once): `NAVIGUIDE_TAVILY_WATCH=0` to disable. Check usage: Nebius console → Billing → Usage; Tavily → `GET https://api.tavily.com/usage`; local counters → `/ici/warm/status` (`llm`, including `chatUltra`). **RG11A:** the filler writes the « Rédigé » film (Nemotron 3 Super / Token Factory) as a deferred on-demand step, at most once per day per (lang, variant) and at each new stop, under `NAVIGUIDE_LLM_DAILY_TOKENS_WRITE` (150k). Cost: `fill-worker.log` (tokens in/out, estimated $) and `/ici/warm/status` (`llm.write`). Force on the desk: `NAVIGUIDE_LLM_MODE=on-demand .venv/bin/python scripts/prepare_official_store.py --write-film`. **RG18:** event stories (`POST /ici/story`, Super) are written only on the « Rédigé » pill — never in the background, never on Brut. **RG19:** Lightning only parses the chat question; rules answer facts; Ultra reasons only if the skipper ticks « Raisonnement ». **NB1:** a Nebius email alert does not stop spend — the dollar brake is `NAVIGUIDE_LLM_DAILY_USD` on the desk after measuring (absent = no dollar cut-off; no amount in this repo); read estimated cost on `GET /ici/warm/status` (`llm.*.usd`). |
+| Paid LLM calls (Nemotron via Nebius) — **28 Sept. policy: only when the owner says so or when it is useful** | `NAVIGUIDE_LLM_MODE` in `~/.config/naviguide/simulator.env`: `on-demand` (default — chat question, "Rédigé" click; **never** background: story warm-up, film writing, plan-review sentence, store filler), `off` (nothing, ever — CI and automated tests), `all` (everything, set by hand for a full demo). Daily caps: `NAVIGUIDE_LLM_DAILY_TOKENS_FAST` 200k, `_WRITE` 150k, `_JUDGE` 60k (lot RG19; automated runs keep `NAVIGUIDE_LLM_MODE=off` so Ultra stays unused). Chat Ultra also has `NAVIGUIDE_CHAT_ULTRA_PER_DAY` (default 10 calls). Truth judge stays off unless `NAVIGUIDE_TRUTH_JUDGE=1`. Tavily watch is **on** by default since 15 Oct. (one search per stop, once): `NAVIGUIDE_TAVILY_WATCH=0` to disable. Check usage: Nebius console → Billing → Usage; Tavily → `GET https://api.tavily.com/usage`; local counters → `/ici/warm/status` (`llm`, including `chatUltra`). **RG11A:** the filler writes the « Rédigé » film (Nemotron 3 Super / Token Factory) as a deferred on-demand step, at most once per day per (lang, variant) and at each new stop, under `NAVIGUIDE_LLM_DAILY_TOKENS_WRITE` (150k). Cost: `fill-worker.log` (tokens in/out, estimated $) and `/ici/warm/status` (`llm.write`). Force on the desk: `NAVIGUIDE_LLM_MODE=on-demand .venv/bin/python scripts/prepare_official_store.py --write-film`. **RG18:** event stories (`POST /ici/story`, Super) are written only on the « Rédigé » pill — never in the background, never on Brut. **RG19:** Lightning only parses the chat question; rules answer facts; Ultra reasons only if the skipper ticks « Raisonnement ». **NB1:** a Nebius email alert does not stop spend — the dollar brake is `NAVIGUIDE_LLM_DAILY_USD` on the desk after measuring (absent = no dollar cut-off; no amount in this repo); read estimated cost on `GET /ici/warm/status` (`llm.*.usd`). |
 | Service | `naviguide-simulator` (systemd, `MemoryMax=1G`) |
 | Forced re-warm of official pearls (lot AM1A, AMP layer) | `sudo systemctl restart naviguide-simulator` — pearl keys include `GET /amp/stats` total; a new harvest re-samples on the next warm. |
 | Reverse proxy | `/etc/nginx/sites-available/naviguide-simulator` |
@@ -343,7 +343,7 @@ NAVIGUIDE_LLM_DAILY_TOKENS_JUDGE=60000
 NAVIGUIDE_CHAT_ULTRA_PER_DAY=10
 ```
 
-Agents and CI keep `NAVIGUIDE_LLM_MODE=off` : the 60k judge cap is then unused, Ultra never called.
+CI and automated runs keep `NAVIGUIDE_LLM_MODE=off` : the 60k judge cap is then unused, Ultra never called.
 
 The recette station already uses `~/.cache/naviguide/voyage_data` (26 sept.).
 Also `NAVIGUIDE_OM_DAILY_BUDGET` (default 3000): max Open-Meteo HTTP calls per
