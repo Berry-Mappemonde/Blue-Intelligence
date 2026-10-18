@@ -1,0 +1,8 @@
+[Unit]
+Description=Sonde Blue Intelligence — relance si /api/ ne répond plus
+After=blue-intelligence.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/usr/local/sbin/bi-healthcheck
