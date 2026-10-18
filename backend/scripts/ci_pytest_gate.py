@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
-SPLITS = int(os.environ.get("PYTEST_SPLITS", "4"))
+SPLITS = int(os.environ.get("PYTEST_SPLITS", "6"))
 
 
 def _junit_tests(path: Path) -> int:
