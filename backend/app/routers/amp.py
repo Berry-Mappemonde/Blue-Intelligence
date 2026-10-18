@@ -1,7 +1,12 @@
 """app.routers.amp — 4th mode: Marine Protected Areas (ProtectedSeas)."""
 import asyncio
+import json
+import time
+from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.from_scratch import resolve_from_scratch
@@ -44,18 +49,92 @@ def _parse_bbox(raw: str, **caps):
         raise HTTPException(400, str(e)) from e
 
 
-@router.get("/amp")
-async def list_amp(bbox: str = "", force: bool = False, visible: bool = False,
-                   review: bool = False):
-    """MPA polygons in the bbox (minx,miny,maxx,maxy, WGS84)."""
-    if not bbox:
-        raise HTTPException(400, "bbox required (minx,miny,maxx,maxy)")
-    # Worldwide caps: the zoomed-out view is served from the local cache;
-    # only the ProtectedSeas refresh keeps the strict limit.
-    box = _parse_bbox(bbox, max_w=360.0, max_h=180.0)
-    max_span = float(catalog_default("amp.bbox_max_deg", 8))
-    span = amp_svc.bbox_span_deg(box)
-    if span > max_span:
+# Vue large : la FeatureCollection est construite et encodée hors de la
+# boucle, puis servie déjà rendue. Le cache mémoire évite de recommencer
+# pour une bbox voisine. Les vues ≤ amp.bbox_max_deg ne passent pas ici.
+_WIDE_CACHE_TTL_S = 180.0
+_WIDE_CACHE_MAX_ENTRIES = 4
+_WIDE_CACHE_MAX_BYTES = 16_000_000
+_wide_cache: OrderedDict[tuple, tuple[float, bytes]] = OrderedDict()
+_wide_build_lock: asyncio.Lock | None = None
+_wide_build_lock_loop: asyncio.AbstractEventLoop | None = None
+
+
+def clear_wide_amp_response_cache() -> None:
+    _wide_cache.clear()
+
+
+def _wide_build_lock_for_loop() -> asyncio.Lock:
+    global _wide_build_lock, _wide_build_lock_loop
+    loop = asyncio.get_running_loop()
+    if _wide_build_lock is None or _wide_build_lock_loop is not loop:
+        _wide_build_lock = asyncio.Lock()
+        _wide_build_lock_loop = loop
+    return _wide_build_lock
+
+
+def _wide_cache_key(box, span: float, *, visible: bool, review: bool) -> tuple:
+    flags = (bool(visible), bool(review))
+    if span >= 60.0:
+        return ("world", flags)
+    rounded = tuple(round(float(v), 1) for v in box)
+    return ("bbox", rounded, flags)
+
+
+def _wide_cache_get(key: tuple) -> bytes | None:
+    item = _wide_cache.get(key)
+    if item is None:
+        return None
+    stored_at, payload = item
+    if time.monotonic() - stored_at > _WIDE_CACHE_TTL_S:
+        _wide_cache.pop(key, None)
+        return None
+    _wide_cache.move_to_end(key)
+    return payload
+
+
+def _wide_cache_put(key: tuple, payload: bytes) -> None:
+    if len(payload) > _WIDE_CACHE_MAX_BYTES:
+        return
+    _wide_cache[key] = (time.monotonic(), payload)
+    _wide_cache.move_to_end(key)
+    while len(_wide_cache) > _WIDE_CACHE_MAX_ENTRIES:
+        _wide_cache.popitem(last=False)
+
+
+def _json_response(payload: bytes) -> Response:
+    return Response(content=payload, media_type="application/json")
+
+
+def _render_wide_amp_json(docs: list, extra: dict) -> bytes:
+    """Sync. Détache la géométrie source pour relâcher les polygones bruts."""
+    rendered = []
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        geom = doc.pop("geometry", None)
+        item = dict(doc)
+        item["geometry"] = amp_svc.lighten_geometry_for_wide_view(geom)
+        rendered.append(item)
+    fc = amp_svc.to_feature_collection(rendered, extra=extra)
+    encoded = jsonable_encoder(fc)
+    return json.dumps(
+        encoded,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+async def _wide_amp_response(box, span: float, *, visible: bool, review: bool) -> Response:
+    key = _wide_cache_key(box, span, visible=visible, review=review)
+    cached = _wide_cache_get(key)
+    if cached is not None:
+        return _json_response(cached)
+    async with _wide_build_lock_for_loop():
+        cached = _wide_cache_get(key)
+        if cached is not None:
+            return _json_response(cached)
         # Zoomed-out view: serve sites already in the local cache (no
         # ProtectedSeas call). Beyond 60° a bbox polygon exceeds the hemisphere
         # Mongo accepts for $geoIntersects → list the whole cache.
@@ -68,12 +147,30 @@ async def list_amp(bbox: str = "", force: bool = False, visible: bool = False,
             docs = await filter_visible(
                 db, "amp", docs,
                 lambda d: d.get("site_id") or d.get("_id"))
-        return amp_svc.to_feature_collection(docs, extra={
+        extra = {
             "hint": "zoom" if not docs else None,
             "source": "cache",
             "truncated": len(docs) >= 8000,
             "fetched": 0,
-        })
+        }
+        payload = await asyncio.to_thread(_render_wide_amp_json, docs, extra)
+        _wide_cache_put(key, payload)
+        return _json_response(payload)
+
+
+@router.get("/amp")
+async def list_amp(bbox: str = "", force: bool = False, visible: bool = False,
+                   review: bool = False):
+    """MPA polygons in the bbox (minx,miny,maxx,maxy, WGS84)."""
+    if not bbox:
+        raise HTTPException(400, "bbox required (minx,miny,maxx,maxy)")
+    # Worldwide caps: the zoomed-out view is served from the local cache;
+    # only the ProtectedSeas refresh keeps the strict limit.
+    box = _parse_bbox(bbox, max_w=360.0, max_h=180.0)
+    max_span = float(catalog_default("amp.bbox_max_deg", 8))
+    span = amp_svc.bbox_span_deg(box)
+    if span > max_span:
+        return await _wide_amp_response(box, span, visible=visible, review=review)
     docs, meta = await amp_svc.sites_in_bbox(db, box, force=force)
     if visible or review:
         from app.services.review_gold import filter_visible

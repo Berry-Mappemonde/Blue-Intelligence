@@ -564,6 +564,102 @@ def repair_geometry_for_mongo(geom: dict | None, *, max_bytes: int = 800_000) ->
         return None
 
 
+# Vue large (emprise > amp.bbox_max_deg, 8°). Chaque contour reste assez
+# petit pour qu'une page de cache (8 000 aires) tienne en quelques Mo.
+WIDE_VIEW_GEOM_MAX_BYTES = 2_048
+_WIDE_VIEW_MAX_RING_POINTS = 96
+
+
+def _decimate_ring(ring, max_pts: int):
+    """Garde la fermeture de l'anneau. Les petits anneaux ne sont pas touchés."""
+    if not isinstance(ring, (list, tuple)) or len(ring) <= max_pts:
+        return ring
+    step = max(1, len(ring) // max_pts)
+    thin = list(ring[::step])
+    last = ring[-1]
+    if not thin or thin[-1] != last:
+        thin.append(last)
+    if len(thin) >= 2 and thin[0] != thin[-1]:
+        thin.append(thin[0])
+    if len(thin) < 4:
+        return ring
+    return thin
+
+
+def _decimate_dense_geometry(geom: dict, max_pts: int = _WIDE_VIEW_MAX_RING_POINTS) -> dict:
+    """Moins de sommets avant la réparation, pour une vue déjà très éloignée."""
+    kind = geom.get("type")
+    coords = geom.get("coordinates")
+    if kind == "Polygon" and isinstance(coords, list):
+        return {
+            "type": "Polygon",
+            "coordinates": [_decimate_ring(ring, max_pts) for ring in coords],
+        }
+    if kind == "MultiPolygon" and isinstance(coords, list):
+        polys = []
+        for poly in coords:
+            if isinstance(poly, list):
+                polys.append([_decimate_ring(ring, max_pts) for ring in poly])
+        return {"type": "MultiPolygon", "coordinates": polys}
+    return geom
+
+
+def _simplified_outline(geom: dict) -> dict | None:
+    """Rectangle englobant : dernier recours quand la réparation échoue."""
+    pts: list[tuple[float, float]] = []
+
+    def walk(node):
+        if not node or not isinstance(node, (list, tuple)):
+            return
+        if isinstance(node[0], (int, float)) and len(node) >= 2:
+            try:
+                pts.append((float(node[0]), float(node[1])))
+            except (TypeError, ValueError):
+                return
+            return
+        for child in node:
+            walk(child)
+
+    walk(geom.get("coordinates"))
+    if len(pts) < 3:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    minx, maxx = min(xs), max(xs)
+    miny, maxy = min(ys), max(ys)
+    if maxx - minx < 1e-4:
+        minx -= 0.01
+        maxx += 0.01
+    if maxy - miny < 1e-4:
+        miny -= 0.01
+        maxy += 0.01
+    outline = {
+        "type": "Polygon",
+        "coordinates": [[
+            [minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny],
+        ]],
+    }
+    return outline if is_area_geom(outline) else None
+
+
+def lighten_geometry_for_wide_view(
+    geom: dict | None, *, max_bytes: int = WIDE_VIEW_GEOM_MAX_BYTES,
+) -> dict | None:
+    """Contour allégé pour la carte zoomée arrière. Un point reste un point."""
+    parsed = _as_geojson_geom(geom) if isinstance(geom, dict) else None
+    if not isinstance(parsed, dict):
+        return None
+    if parsed.get("type") == "Point":
+        return parsed
+    prepared = parsed
+    if parsed.get("type") in ("Polygon", "MultiPolygon"):
+        prepared = _decimate_dense_geometry(parsed)
+    repaired = repair_geometry_for_mongo(prepared, max_bytes=max_bytes)
+    if is_area_geom(repaired):
+        return repaired
+    return _simplified_outline(parsed)
+
+
 def _span_ok_shape(g) -> bool:
     try:
         minx, miny, maxx, maxy = g.bounds
