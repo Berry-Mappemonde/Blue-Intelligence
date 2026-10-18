@@ -256,7 +256,7 @@ jobs:
           cat > ../frontend/.env <<'EOF'
           REACT_APP_BACKEND_URL=http://127.0.0.1:8001
           EOF
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: pytest-shard-*
           path: ${{ github.workspace }}/ci-shard-artifacts
