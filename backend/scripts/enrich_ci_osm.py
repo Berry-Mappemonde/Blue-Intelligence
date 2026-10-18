@@ -134,26 +134,29 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
         "lon": {"$ne": None},
         "osm_checked_at": {"$exists": False},
     }
-    for round_n in range(1, _ROUNDS + 1):
-        ports = await db.poe_ports.find(pending_filter).to_list(20_000)
-        if not ports:
-            break
-        stats = {"checked": 0, "failed": 0, "cache": 0, "errors": []}
-        started = time.time()
-        await asyncio.gather(*[
-            _validate_port(db, port, sem, cache, stats) for port in ports
-        ])
+    try:
+        for round_n in range(1, _ROUNDS + 1):
+            ports = await db.poe_ports.find(pending_filter).to_list(20_000)
+            if not ports:
+                break
+            stats = {"checked": 0, "failed": 0, "cache": 0, "errors": []}
+            started = time.time()
+            await asyncio.gather(*[
+                _validate_port(db, port, sem, cache, stats) for port in ports
+            ])
+            _save_cache(cache_file, cache)
+            print(
+                f"round {round_n}: {stats['checked']} validés, "
+                f"{stats['failed']} échecs, {stats['cache']} depuis le cache, "
+                f"{time.time() - started:.0f}s",
+                flush=True,
+            )
+            for line in stats["errors"][:8]:
+                print(f"  {line}", flush=True)
+            if stats["failed"] and round_n < _ROUNDS:
+                await asyncio.sleep(8)
+    finally:
         _save_cache(cache_file, cache)
-        print(
-            f"round {round_n}: {stats['checked']} validés, "
-            f"{stats['failed']} échecs, {stats['cache']} depuis le cache, "
-            f"{time.time() - started:.0f}s",
-            flush=True,
-        )
-        for line in stats["errors"][:8]:
-            print(f"  {line}", flush=True)
-        if stats["failed"] and round_n < _ROUNDS:
-            await asyncio.sleep(8)
 
     missing = await db.poe_ports.count_documents(pending_filter)
     total = await db.poe_ports.count_documents({})
