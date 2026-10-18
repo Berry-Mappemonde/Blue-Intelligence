@@ -1,6 +1,7 @@
 """app.routers.amp — 4th mode: Marine Protected Areas (ProtectedSeas)."""
 import asyncio
 import json
+import os
 import time
 from collections import OrderedDict
 
@@ -52,25 +53,45 @@ def _parse_bbox(raw: str, **caps):
 # Vue large : la FeatureCollection est construite et encodée hors de la
 # boucle, puis servie déjà rendue. Le cache mémoire évite de recommencer
 # pour une bbox voisine. Les vues ≤ amp.bbox_max_deg ne passent pas ici.
-_WIDE_CACHE_TTL_S = 180.0
+# Une heure : la première lecture Mongo reste la plus chère, les suivantes
+# resservent le JSON déjà allégé. Quatre entrées au plus, donc la durée
+# ne grossit pas le pic mémoire.
+_WIDE_CACHE_TTL_S = 3600.0
 _WIDE_CACHE_MAX_ENTRIES = 4
 _WIDE_CACHE_MAX_BYTES = 16_000_000
+_WIDE_WARMUP_ENV = "AMP_WIDE_VIEW_WARMUP"
 _wide_cache: OrderedDict[tuple, tuple[float, bytes]] = OrderedDict()
-_wide_build_lock: asyncio.Lock | None = None
-_wide_build_lock_loop: asyncio.AbstractEventLoop | None = None
+_wide_key_locks: dict[tuple, asyncio.Lock] = {}
+_wide_key_locks_loop: asyncio.AbstractEventLoop | None = None
+_wide_warmup_task: asyncio.Task | None = None
+_WIDE_KEY_LOCKS_MAX = 128
 
 
 def clear_wide_amp_response_cache() -> None:
     _wide_cache.clear()
 
 
-def _wide_build_lock_for_loop() -> asyncio.Lock:
-    global _wide_build_lock, _wide_build_lock_loop
+def _lock_for_wide_key(key: tuple) -> asyncio.Lock:
+    """Un verrou par bbox quantifiée : deux vues distinctes avancent ensemble."""
+    global _wide_key_locks, _wide_key_locks_loop
     loop = asyncio.get_running_loop()
-    if _wide_build_lock is None or _wide_build_lock_loop is not loop:
-        _wide_build_lock = asyncio.Lock()
-        _wide_build_lock_loop = loop
-    return _wide_build_lock
+    if _wide_key_locks_loop is not loop:
+        _wide_key_locks = {}
+        _wide_key_locks_loop = loop
+    lock = _wide_key_locks.get(key)
+    if lock is not None:
+        return lock
+    if len(_wide_key_locks) >= _WIDE_KEY_LOCKS_MAX:
+        _wide_key_locks = {k: v for k, v in _wide_key_locks.items() if v.locked()}
+    lock = asyncio.Lock()
+    _wide_key_locks[key] = lock
+    return lock
+
+
+def wide_view_warmup_enabled() -> bool:
+    return os.environ.get(_WIDE_WARMUP_ENV, "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
 
 
 def _wide_cache_key(box, span: float, *, visible: bool, review: bool) -> tuple:
@@ -131,17 +152,15 @@ async def _wide_amp_response(box, span: float, *, visible: bool, review: bool) -
     cached = _wide_cache_get(key)
     if cached is not None:
         return _json_response(cached)
-    async with _wide_build_lock_for_loop():
+    async with _lock_for_wide_key(key):
         cached = _wide_cache_get(key)
         if cached is not None:
             return _json_response(cached)
-        # Zoomed-out view: serve sites already in the local cache (no
-        # ProtectedSeas call). Beyond 60° a bbox polygon exceeds the hemisphere
-        # Mongo accepts for $geoIntersects → list the whole cache.
-        if span >= 60:
-            docs = await db.amp_sites.find({}).limit(8000).to_list(8000)
-        else:
-            docs = await amp_svc.query_cache(db, box, limit=8000)
+        # Vue éloignée : cache local seulement, pas d'appel ProtectedSeas.
+        # Les aires arrivent par lots (projection + batch_size).
+        docs = await amp_svc.collect_light_areas_for_wide_view(
+            db, box, span, limit=8000,
+        )
         if visible or review:
             from app.services.review_gold import filter_visible
             docs = await filter_visible(
@@ -156,6 +175,33 @@ async def _wide_amp_response(box, span: float, *, visible: bool, review: bool) -
         payload = await asyncio.to_thread(_render_wide_amp_json, docs, extra)
         _wide_cache_put(key, payload)
         return _json_response(payload)
+
+
+async def _warm_wide_amp_cache() -> None:
+    """Préchauffe la vue mondiale. Lecture seule : même chemin que GET /api/amp."""
+    try:
+        await _wide_amp_response(
+            (-180.0, -90.0, 180.0, 90.0), 360.0,
+            visible=False, review=False,
+        )
+    except Exception as exc:
+        print(f"[amp] warm-up vue large ignoré : {exc}")
+
+
+def start_wide_amp_warmup():
+    """Au démarrage, seulement si AMP_WIDE_VIEW_WARMUP est activé (sinon rien)."""
+    global _wide_warmup_task
+    if not wide_view_warmup_enabled():
+        return None
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    task = _wide_warmup_task
+    if task is not None and not task.done():
+        return task
+    _wide_warmup_task = asyncio.create_task(_warm_wide_amp_cache())
+    return _wide_warmup_task
 
 
 @router.get("/amp")

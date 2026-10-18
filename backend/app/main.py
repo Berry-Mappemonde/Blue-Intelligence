@@ -142,6 +142,10 @@ async def _startup():
     except Exception as e:
         print(f"[startup] amp index creation failed (non-fatal): {e}")
     try:
+        amp.start_wide_amp_warmup()
+    except Exception as e:
+        print(f"[startup] amp wide-view warmup failed (non-fatal): {e}")
+    try:
         from app.services.science_build import ensure_indexes as ensure_science_indexes
         await ensure_science_indexes(db.science_items)
         await db.science_runs.create_index("created_at")

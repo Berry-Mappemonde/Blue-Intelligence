@@ -12,6 +12,8 @@ stored in ``amp_sites`` (not the old ``mpa_cache``).
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -568,6 +570,44 @@ def repair_geometry_for_mongo(geom: dict | None, *, max_bytes: int = 800_000) ->
 # petit pour qu'une page de cache (8 000 aires) tienne en quelques Mo.
 WIDE_VIEW_GEOM_MAX_BYTES = 2_048
 _WIDE_VIEW_MAX_RING_POINTS = 96
+# En dessous, un morceau tient dans un pixel d'une carte continentale.
+WIDE_VIEW_DISPLAY_TOL_DEG = 0.02
+# Documents sources gardés en même temps pendant la lecture Mongo.
+WIDE_VIEW_BATCH_SIZE = 32
+WIDE_VIEW_FETCH_LIMIT = 8000
+# Au-delà, un polygone de bbox dépasse l'hémisphère accepté par l'index 2dsphere.
+WIDE_VIEW_WORLD_SPAN_DEG = 60.0
+_WIDE_VIEW_BYTES_PER_PART = 140
+
+# Champs lus par public_properties, plus la géométrie. Le reste du document
+# (texte ProtectedSeas, liens bruts) ne part pas dans la vue large.
+WIDE_VIEW_PROJECTION = {
+    "_id": 1,
+    "site_id": 1,
+    "name": 1,
+    "country": 1,
+    "state": 1,
+    "designation": 1,
+    "category_name": 1,
+    "iucn_cat": 1,
+    "purpose": 1,
+    "lfp": 1,
+    "entry": 1,
+    "speed": 1,
+    "managing_authority": 1,
+    "gov_level": 1,
+    "wdpa_id": 1,
+    "year_est": 1,
+    "manager_url": 1,
+    "visit_url": 1,
+    "visit_url_status": 1,
+    "visit_url_source": 1,
+    "lat": 1,
+    "lon": 1,
+    "fetched_at": 1,
+    "enriched_at": 1,
+    "geometry": 1,
+}
 
 
 def _decimate_ring(ring, max_pts: int):
@@ -642,6 +682,101 @@ def _simplified_outline(geom: dict) -> dict | None:
     return outline if is_area_geom(outline) else None
 
 
+def _area_parts(raw):
+    kind = getattr(raw, "geom_type", None)
+    if kind == "Polygon":
+        return [] if raw.is_empty else [raw]
+    if kind == "MultiPolygon":
+        return [g for g in raw.geoms if g.geom_type == "Polygon" and not g.is_empty]
+    if kind == "GeometryCollection":
+        parts = []
+        for piece in raw.geoms:
+            parts.extend(_area_parts(piece))
+        return parts
+    return []
+
+
+def _polygons_only(raw):
+    parts = _area_parts(raw)
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    from shapely.geometry import MultiPolygon
+    return MultiPolygon(parts)
+
+
+def _part_span_deg(part) -> float:
+    try:
+        minx, miny, maxx, maxy = part.bounds
+    except Exception:
+        return 0.0
+    return max(maxx - minx, maxy - miny)
+
+
+def _part_area(part) -> float:
+    try:
+        return float(part.area)
+    except Exception:
+        return 0.0
+
+
+def _drop_parts_below_tolerance(parts, tol: float):
+    """Retire les morceaux plus petits que la tolérance d'affichage."""
+    kept = [part for part in parts if _part_span_deg(part) >= tol]
+    if kept or not parts:
+        return kept
+    largest = max(parts, key=_part_area)
+    return [largest]
+
+
+def _simplify_wide_view_once(geom: dict, *, max_bytes: int) -> dict | None:
+    """Un seul passage Douglas-Peucker, sans buffer(0) répété."""
+    from shapely.geometry import MultiPolygon, mapping, shape
+    from shapely.validation import make_valid
+
+    raw = shape(geom)
+    if raw.is_empty:
+        return None
+    tol = WIDE_VIEW_DISPLAY_TOL_DEG
+    kept = _drop_parts_below_tolerance(_area_parts(raw), tol)
+    if not kept:
+        return None
+    n_keep = max(1, (int(max_bytes) - 32) // _WIDE_VIEW_BYTES_PER_PART)
+    if len(kept) > n_keep:
+        kept.sort(key=_part_area, reverse=True)
+        kept = kept[:n_keep]
+    merged = kept[0] if len(kept) == 1 else MultiPolygon(kept)
+    simple = merged.simplify(tol, preserve_topology=False)
+    simple = _polygons_only(simple)
+    if simple is None or simple.is_empty:
+        return None
+    if not simple.is_valid:
+        simple = _polygons_only(make_valid(simple))
+    if simple is None or simple.is_empty:
+        return None
+    gj = mapping(simple)
+    if len(json.dumps(gj)) > max_bytes:
+        budget = max(4, int(max_bytes) // 48)
+        gj = _decimate_dense_geometry(gj, max_pts=budget)
+    cleaned = sanitize_geometry(gj)
+    if not is_area_geom(cleaned) or len(json.dumps(cleaned)) > max_bytes:
+        return None
+    checked = shape(cleaned)
+    if not checked.is_valid:
+        checked = _polygons_only(make_valid(checked))
+        if checked is None or checked.is_empty:
+            return None
+        cleaned = sanitize_geometry(mapping(checked))
+        if (
+            not is_area_geom(cleaned)
+            or len(json.dumps(cleaned)) > max_bytes
+            or not shape(cleaned).is_valid
+        ):
+            return None
+    return cleaned
+
+
 def lighten_geometry_for_wide_view(
     geom: dict | None, *, max_bytes: int = WIDE_VIEW_GEOM_MAX_BYTES,
 ) -> dict | None:
@@ -651,13 +786,92 @@ def lighten_geometry_for_wide_view(
         return None
     if parsed.get("type") == "Point":
         return parsed
-    prepared = parsed
-    if parsed.get("type") in ("Polygon", "MultiPolygon"):
-        prepared = _decimate_dense_geometry(parsed)
-    repaired = repair_geometry_for_mongo(prepared, max_bytes=max_bytes)
-    if is_area_geom(repaired):
-        return repaired
+    if parsed.get("type") not in ("Polygon", "MultiPolygon", "GeometryCollection"):
+        return _simplified_outline(parsed)
+    cleaned = sanitize_geometry(parsed)
+    if (
+        is_area_geom(cleaned)
+        and len(json.dumps(cleaned)) <= max_bytes
+        and _area_span_ok(cleaned)
+    ):
+        return cleaned
+    try:
+        cheap = _simplify_wide_view_once(parsed, max_bytes=max_bytes)
+    except Exception:
+        cheap = None
+    if is_area_geom(cheap) and len(json.dumps(cheap)) <= max_bytes:
+        return cheap
     return _simplified_outline(parsed)
+
+
+def wide_view_area_query(bbox, span: float) -> dict:
+    """Filtre spatial seulement quand l'index 2dsphere peut l'utiliser.
+
+    ``ensure_amp_indexes`` pose un index 2dsphere sur ``geometry``.
+    ``$geoIntersects`` s'en sert. À partir de 60° le polygone de bbox
+    dépasse un hémisphère : Mongo le refuse, on lit donc la collection.
+    """
+    if float(span) >= WIDE_VIEW_WORLD_SPAN_DEG:
+        return {}
+    return {"geometry": {"$geoIntersects": {"$geometry": bbox_polygon(bbox)}}}
+
+
+def _lighten_wide_batch(docs: list) -> list:
+    out = []
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        item = dict(doc)
+        geom = item.pop("geometry", None)
+        try:
+            item["geometry"] = lighten_geometry_for_wide_view(geom)
+        except Exception:
+            item["geometry"] = _simplified_outline(geom) if isinstance(geom, dict) else None
+        out.append(item)
+    return out
+
+
+async def collect_light_areas_for_wide_view(
+    db, bbox, span: float, *, limit: int = WIDE_VIEW_FETCH_LIMIT,
+    batch_size: int | None = None,
+) -> list[dict]:
+    """Lit les aires par lots et n'en garde qu'un lot de géométries brutes.
+
+    Le curseur Mongo a le même ``batch_size`` : le tampon du pilote ne
+    dépasse pas ce lot. Chaque lot est allégé avant de lire le suivant.
+    """
+    limit = max(1, int(limit))
+    batch_size = max(1, int(batch_size or WIDE_VIEW_BATCH_SIZE))
+    query = wide_view_area_query(bbox, span)
+    try:
+        cursor = db.amp_sites.find(query, WIDE_VIEW_PROJECTION)
+    except Exception:
+        return []
+    if hasattr(cursor, "batch_size"):
+        sized = cursor.batch_size(batch_size)
+        if sized is not None:
+            cursor = sized
+    if hasattr(cursor, "limit"):
+        limited = cursor.limit(limit)
+        if limited is not None:
+            cursor = limited
+    light: list[dict] = []
+    batch: list[dict] = []
+    try:
+        async for doc in cursor:
+            batch.append(doc)
+            if len(batch) >= batch_size:
+                light.extend(await asyncio.to_thread(_lighten_wide_batch, batch))
+                batch = []
+                if len(light) >= limit:
+                    break
+        if batch and len(light) < limit:
+            light.extend(await asyncio.to_thread(_lighten_wide_batch, batch))
+    except AssertionError:
+        raise
+    except Exception:
+        return light[:limit]
+    return light[:limit]
 
 
 def _span_ok_shape(g) -> bool:

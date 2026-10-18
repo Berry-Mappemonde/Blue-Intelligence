@@ -79,7 +79,7 @@ def _install_thread_spy(monkeypatch):
 def _patch_reads(monkeypatch, docs):
     calls = {"query": 0, "sites": 0, "force": None}
 
-    async def query(db, box, limit=8000):
+    async def load(db, box, span, limit=8000, batch_size=None):
         calls["query"] += 1
         assert limit == 8000
         # Copie : le rendu large détache la géométrie du document qu'on lui donne.
@@ -95,7 +95,7 @@ def _patch_reads(monkeypatch, docs):
             "error": None,
         }
 
-    monkeypatch.setattr(amp_router.amp_svc, "query_cache", query)
+    monkeypatch.setattr(amp_router.amp_svc, "collect_light_areas_for_wide_view", load)
     monkeypatch.setattr(amp_router.amp_svc, "sites_in_bbox", sites)
     return calls
 
@@ -301,18 +301,37 @@ def test_world_span_reads_the_cache_without_writing(monkeypatch):
     class _Sites:
         def __init__(self):
             self.queries = []
+            self.projections = []
+            self.batches = []
 
-        def find(self, query, *args, **kwargs):
+        def find(self, query, projection=None, *args, **kwargs):
             self.queries.append(query)
+            self.projections.append(projection)
+            self._docs = [dict(d) for d in docs]
+            self._i = 0
+            return self
+
+        def batch_size(self, n):
+            self.batches.append(n)
             return self
 
         def limit(self, n):
             assert n == 8000
+            self._limit = n
             return self
 
-        async def to_list(self, n):
-            assert n == 8000
-            return docs
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._i >= len(self._docs) or self._i >= getattr(self, "_limit", 8000):
+                raise StopAsyncIteration
+            doc = self._docs[self._i]
+            self._i += 1
+            return doc
+
+        async def to_list(self, n=None):
+            raise AssertionError("la vue large ne charge pas tous les documents d'un coup")
 
         def __getattr__(self, name):
             raise AssertionError(f"écriture ou lecture inattendue: {name}")
@@ -337,8 +356,347 @@ def test_world_span_reads_the_cache_without_writing(monkeypatch):
     resp = asyncio.run(amp_router.list_amp(bbox="-180,-80,180,80"))
 
     assert fake.amp_sites.queries == [{}]
-    assert seen == ["_render_wide_amp_json"]
+    assert fake.amp_sites.batches == [amp_svc.WIDE_VIEW_BATCH_SIZE]
+    projection = fake.amp_sites.projections[0]
+    assert projection["geometry"] == 1
+    assert "ps_website_raw" not in projection
+    assert seen == ["_lighten_wide_batch", "_render_wide_amp_json"]
     data = json.loads(resp.body)
     assert data["features"][0]["properties"]["site_id"] == "PS-WORLD"
     assert data["source"] == "cache"
     assert amp_svc.is_area_geom(data["features"][0]["geometry"])
+
+
+def test_wide_cache_ttl_lasts_at_least_one_hour():
+    assert amp_router._WIDE_CACHE_TTL_S >= 3600
+    assert amp_router._WIDE_CACHE_TTL_S > 180
+
+
+def test_wide_view_query_uses_the_sphere_index_below_sixty_degrees():
+    query = amp_svc.wide_view_area_query((0.0, 40.0, 24.0, 48.0), 24.0)
+    assert query["geometry"]["$geoIntersects"]["$geometry"]["type"] == "Polygon"
+    assert amp_svc.wide_view_area_query((-180.0, -90.0, 180.0, 90.0), 360.0) == {}
+    assert amp_svc.wide_view_area_query((-180.0, -90.0, 180.0, 90.0), 60.0) == {}
+
+
+def _heavy_multipolygon(n_parts: int = 80, pts: int = 40, shift: float = 0.0) -> dict:
+    """Plusieurs contours dentelés, plus autant d'îlots sous la tolérance d'affichage."""
+    coords = []
+    for i in range(n_parts):
+        x = shift + (i % 20) * 0.2
+        y = (i // 20) * 0.2
+        ring = []
+        for k in range(pts):
+            radius = 0.04 + (0.008 if k % 2 == 0 else 0.0)
+            ring.append([
+                x + radius * (0.3 if k % 5 == 0 else 1.0) * (k / pts),
+                y + ((k % 9) - 4) * 0.004,
+            ])
+        ring.append(ring[0])
+        coords.append([ring])
+        tx = x + 0.01
+        ty = y + 0.01
+        tiny = 1e-5
+        coords.append([[
+            [tx, ty], [tx + tiny, ty], [tx + tiny, ty + tiny],
+            [tx, ty + tiny], [tx, ty],
+        ]])
+    return {"type": "MultiPolygon", "coordinates": coords}
+
+
+def _legacy_wide_lighten(geom: dict):
+    """Ancien chemin : décimation puis réparation Mongo (boucle de simplification)."""
+    prepared = geom
+    if geom.get("type") in ("Polygon", "MultiPolygon"):
+        prepared = amp_svc._decimate_dense_geometry(geom)
+    repaired = amp_svc.repair_geometry_for_mongo(
+        prepared, max_bytes=amp_svc.WIDE_VIEW_GEOM_MAX_BYTES)
+    if amp_svc.is_area_geom(repaired):
+        return repaired
+    return amp_svc._simplified_outline(geom)
+
+
+def test_lighten_drops_tiny_parts_and_stays_valid():
+    from shapely.geometry import shape
+    from shapely.geometry.base import BaseGeometry
+
+    geom = _heavy_multipolygon()
+    calls = []
+    original = BaseGeometry.buffer
+
+    def _buffer(self, distance, *args, **kwargs):
+        calls.append(distance)
+        return original(self, distance, *args, **kwargs)
+
+    BaseGeometry.buffer = _buffer
+    try:
+        out = amp_svc.lighten_geometry_for_wide_view(geom)
+    finally:
+        BaseGeometry.buffer = original
+    assert calls == []
+    assert amp_svc.is_area_geom(out)
+    assert len(json.dumps(out)) <= amp_svc.WIDE_VIEW_GEOM_MAX_BYTES
+    checked = shape(out)
+    assert checked.is_valid
+    out_parts = 1 if out["type"] == "Polygon" else len(out["coordinates"])
+    assert out_parts < len(geom["coordinates"])
+    assert out_parts <= max(1, (amp_svc.WIDE_VIEW_GEOM_MAX_BYTES - 32) // amp_svc._WIDE_VIEW_BYTES_PER_PART)
+
+
+def test_lighten_falls_back_to_an_outline_when_the_single_pass_fails(monkeypatch):
+    monkeypatch.setattr(amp_svc, "_simplify_wide_view_once", lambda *a, **k: None)
+    dense = _dense_polygon()
+    outline = amp_svc.lighten_geometry_for_wide_view(dense)
+    assert outline["type"] == "Polygon"
+    ring = outline["coordinates"][0]
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    assert min(xs) == 3.0 and max(xs) == 3.4
+    assert min(ys) == 42.0 and max(ys) == 42.3
+    assert len(json.dumps(outline)) <= amp_svc.WIDE_VIEW_GEOM_MAX_BYTES
+
+
+def test_wide_view_streams_areas_in_bounded_batches(monkeypatch):
+    amp_router.clear_wide_amp_response_cache()
+    total = 100
+    docs = [
+        _doc(f"PS-{i}", POLY, lon=3.0 + (i % 10) * 0.01, lat=42.0 + (i // 10) * 0.01)
+        for i in range(total)
+    ]
+    batch_sizes = []
+    real_batch = amp_svc._lighten_wide_batch
+
+    def _spy_batch(chunk):
+        batch_sizes.append(len(chunk))
+        return real_batch(chunk)
+
+    monkeypatch.setattr(amp_svc, "_lighten_wide_batch", _spy_batch)
+    threaded = []
+    real_to_thread = asyncio.to_thread
+
+    async def _spy_thread(fn, *args, **kwargs):
+        threaded.append(getattr(fn, "__name__", ""))
+        return await real_to_thread(fn, *args, **kwargs)
+
+    monkeypatch.setattr(amp_svc.asyncio, "to_thread", _spy_thread)
+
+    class _Sites:
+        def __init__(self):
+            self.query = None
+            self.projection = None
+            self.batch_size_n = None
+            self.to_listed = False
+            self._i = 0
+            self._limit = 10 ** 9
+
+        def find(self, query, projection=None, *args, **kwargs):
+            self.query = query
+            self.projection = projection
+            self._i = 0
+            return self
+
+        def batch_size(self, n):
+            self.batch_size_n = n
+            return self
+
+        def limit(self, n):
+            self._limit = n
+            return self
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._i >= len(docs) or self._i >= self._limit:
+                raise StopAsyncIteration
+            doc = dict(docs[self._i])
+            self._i += 1
+            return doc
+
+        async def to_list(self, n=None):
+            self.to_listed = True
+            raise AssertionError("to_list charge toute la collection")
+
+    sites = _Sites()
+
+    class _DB:
+        amp_sites = sites
+
+    monkeypatch.setattr(amp_router, "db", _DB())
+    resp = asyncio.run(amp_router.list_amp(bbox="0,40,24,48"))
+
+    assert sites.to_listed is False
+    assert sites.batch_size_n == amp_svc.WIDE_VIEW_BATCH_SIZE
+    assert sites.batch_size_n < total
+    assert batch_sizes
+    assert max(batch_sizes) <= amp_svc.WIDE_VIEW_BATCH_SIZE
+    assert sum(batch_sizes) == total
+    assert len(batch_sizes) > 1
+    assert "$geoIntersects" in sites.query["geometry"]
+    assert sites.projection["geometry"] == 1
+    assert "ps_website_raw" not in sites.projection
+    assert "_spy_batch" in threaded
+    data = json.loads(resp.body)
+    assert len(data["features"]) == total
+    assert data["source"] == "cache"
+    assert data["fetched"] == 0
+    for feat in data["features"]:
+        assert len(json.dumps(feat["geometry"])) <= amp_svc.WIDE_VIEW_GEOM_MAX_BYTES
+
+
+def test_distinct_bboxes_build_at_the_same_time(monkeypatch):
+    amp_router.clear_wide_amp_response_cache()
+    state = {"n": 0}
+    both = asyncio.Event()
+    release = asyncio.Event()
+
+    async def load(db, box, span, limit=8000, batch_size=None):
+        state["n"] += 1
+        if state["n"] >= 2:
+            both.set()
+        await release.wait()
+        return [_doc("PS-1", POLY)]
+
+    monkeypatch.setattr(amp_router.amp_svc, "collect_light_areas_for_wide_view", load)
+
+    async def go():
+        first = asyncio.create_task(amp_router.list_amp(bbox="0,0,20,10"))
+        second = asyncio.create_task(amp_router.list_amp(bbox="40,0,60,10"))
+        await asyncio.wait_for(both.wait(), timeout=1.0)
+        release.set()
+        await asyncio.gather(first, second)
+
+    asyncio.run(go())
+    assert state["n"] == 2
+
+
+def test_same_quantised_bbox_is_built_once(monkeypatch):
+    amp_router.clear_wide_amp_response_cache()
+    state = {"n": 0}
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def load(db, box, span, limit=8000, batch_size=None):
+        state["n"] += 1
+        entered.set()
+        await release.wait()
+        return [_doc("PS-1", POLY)]
+
+    monkeypatch.setattr(amp_router.amp_svc, "collect_light_areas_for_wide_view", load)
+
+    async def go():
+        first = asyncio.create_task(amp_router.list_amp(bbox="0,0,20,10"))
+        await asyncio.wait_for(entered.wait(), timeout=1.0)
+        second = asyncio.create_task(amp_router.list_amp(bbox="0.04,0.01,20.04,10.01"))
+        await asyncio.sleep(0.05)
+        assert state["n"] == 1
+        release.set()
+        left, right = await asyncio.gather(first, second)
+        assert left.body == right.body
+
+    asyncio.run(go())
+    assert state["n"] == 1
+
+
+def test_warmup_is_off_unless_the_env_flag_is_set(monkeypatch):
+    monkeypatch.delenv(amp_router._WIDE_WARMUP_ENV, raising=False)
+    assert amp_router.wide_view_warmup_enabled() is False
+    assert amp_router.start_wide_amp_warmup() is None
+    for raw in ("", "0", "false", "no", "off"):
+        monkeypatch.setenv(amp_router._WIDE_WARMUP_ENV, raw)
+        assert amp_router.wide_view_warmup_enabled() is False
+        assert amp_router.start_wide_amp_warmup() is None
+
+
+def test_warmup_only_reads_the_area_cache(monkeypatch):
+    amp_router.clear_wide_amp_response_cache()
+    amp_router._wide_warmup_task = None
+    monkeypatch.setenv(amp_router._WIDE_WARMUP_ENV, "1")
+    writes = []
+
+    class _Sites:
+        def find(self, query, projection=None, *args, **kwargs):
+            assert query == {}
+            self._i = 0
+            self._docs = [_doc("PS-WARM", POLY)]
+            return self
+
+        def batch_size(self, n):
+            return self
+
+        def limit(self, n):
+            return self
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._i >= len(self._docs):
+                raise StopAsyncIteration
+            doc = dict(self._docs[self._i])
+            self._i += 1
+            return doc
+
+        def __getattr__(self, name):
+            writes.append(name)
+            raise AssertionError(f"écriture inattendue: {name}")
+
+    class _DB:
+        amp_sites = _Sites()
+
+    monkeypatch.setattr(amp_router, "db", _DB())
+
+    async def go():
+        task = amp_router.start_wide_amp_warmup()
+        assert task is not None
+        await task
+
+    asyncio.run(go())
+    assert writes == []
+    assert amp_router._wide_cache
+    cached = next(iter(amp_router._wide_cache.values()))[1]
+    data = json.loads(cached)
+    assert data["features"][0]["properties"]["site_id"] == "PS-WARM"
+    assert data["source"] == "cache"
+    assert data["fetched"] == 0
+
+
+def test_wide_simplify_benchmark_is_faster_and_lighter():
+    import time
+    import tracemalloc
+
+    from shapely.geometry import shape
+
+    geoms = [_heavy_multipolygon(n_parts=60, pts=36, shift=float(i)) for i in range(3)]
+
+    def _run(fn):
+        started = time.perf_counter()
+        outs = [fn(geom) for geom in geoms]
+        return time.perf_counter() - started, outs
+
+    def _peak(fn):
+        tracemalloc.start()
+        try:
+            outs = [fn(geom) for geom in geoms]
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        return peak, outs
+
+    before_s, before_outs = _run(_legacy_wide_lighten)
+    after_s, after_outs = _run(amp_svc.lighten_geometry_for_wide_view)
+    before_peak, _ = _peak(_legacy_wide_lighten)
+    after_peak, _ = _peak(amp_svc.lighten_geometry_for_wide_view)
+    print(
+        "wide-view simplify benchmark: "
+        f"areas={len(geoms)} "
+        f"before={before_s:.4f}s peak={before_peak} "
+        f"after={after_s:.4f}s peak={after_peak}"
+    )
+    assert before_s > 0
+    assert after_s < before_s / 3
+    assert after_peak < before_peak
+    for out in before_outs + after_outs:
+        assert amp_svc.is_area_geom(out)
+        assert len(json.dumps(out)) <= amp_svc.WIDE_VIEW_GEOM_MAX_BYTES
+        assert shape(out).is_valid
