@@ -131,11 +131,11 @@ DOC_BI = {
     "docs/CATALOGUE_SEAMARK.md",
     "docs/CONTRATS_MODES.md",
     "docs/CONTRATS_REVIEW_PAR_MODE.md",
-    "docs/ETAT_DES_LIEUX_DOCS.md",
+    "docs/archives/ETAT_DES_LIEUX_DOCS.md",
     "docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md",
     "docs/MASTER_PLAN_GENAI_HACKATHON_BI.md",
     "docs/MENAGE_DOCUMENTAIRE_PROPOSITION.md",
-    "docs/PRD.md",
+    "docs/archives/PRD.md",
     "docs/design_guidelines.json",
     "docs/poe-confirmed-gps-audit.md",
     "docs/poe-name-only-33.md",
@@ -299,7 +299,7 @@ HIST_NG_FILES = (
 # Restent dans l'archive seulement. .env.example contenait une valeur de
 # clé ; memory/test_credentials.md est un aide-mémoire de noms de clés.
 # memory/PRD.md n'est pas dans cette liste : son historique va dans
-# Blue Intelligence (renommé ensuite docs/PRD.md).
+# Blue Intelligence (renommé ensuite docs/archives/PRD.md).
 HIST_EXCLUDED_PREFIXES = (
     ".emergent/",
 )
@@ -326,7 +326,7 @@ BI_REQUIRED = (
     "infra/vps/ci/plan_deploy.py",
     "infra/vps/nginx-bi-climatology-cache.conf",
     "infra/agents/gh_token.py",
-    "docs/PRD.md",
+    "docs/archives/PRD.md",
     "docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md",
     "docs/PLAN_SEPARATION_DEPOTS.md",
     "docs/REGLES_PARAMETRES.md",
@@ -405,8 +405,8 @@ NG_FORBIDDEN = (
     ".cursor/environment.json",
     ".cursor/install.sh",
     "infra/vps/ci/README.md",
-    "docs/ETAT_DES_LIEUX_DOCS.md",
-    "docs/PRD.md",
+    "docs/archives/ETAT_DES_LIEUX_DOCS.md",
+    "docs/archives/PRD.md",
     "Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md",
     "Archives/naviguide-nova/docs/SETUP_NOVA_CREDITS.md",
     "docs/data/",
@@ -634,7 +634,7 @@ def self_test() -> int:
         "infra/searxng/docker-compose.yml": "bi",
         "docs/recette/lot-f1/a.jpg": "ng",
         "docs/data/poe-gps-arbitrated.json": "bi",
-        "docs/PRD.md": "bi",
+        "docs/archives/PRD.md": "bi",
         "docs/REGLES_PARAMETRES.md": "both",
         "docs/LOTS_ORDRE_ET_PROMPTS.md": "ng",
         "docs/REPETITION_SPLIT_RAPPORT.md": "ng",
@@ -645,7 +645,7 @@ def self_test() -> int:
         ".cursor/environment.json": "bi",
         ".cursor/hooks/simulator-ensure-dev.sh": "ng",
         ".cursor/rules/base-de-donnees-vps.mdc": "both",
-        "docs/ETAT_DES_LIEUX_DOCS.md": "bi",
+        "docs/archives/ETAT_DES_LIEUX_DOCS.md": "bi",
         "docs/archives/nvidia-llm-audit.md": "ng",
         "docs/nvidia-llm-audit.md": "ng",
         ".cursor/rules/pas-de-verification-video.mdc": "both",
@@ -683,7 +683,7 @@ def self_test() -> int:
     if overlap:
         print(f"self-test : docs classés deux fois : {sorted(overlap)}", file=sys.stderr)
         failed += 1
-    bi_lines = emit("bi", ["docs/PRD.md", "docs/design_guidelines.json", "seed/projects.geojson"])
+    bi_lines = emit("bi", ["docs/archives/PRD.md", "docs/design_guidelines.json", "seed/projects.geojson"])
     ng_lines = emit("ng", ["docs/archives/PLAN_UI_PRODUIT_SIMULATEUR.md"])
     held = {
         "backend/poe.py": ("bi", True),
@@ -704,7 +704,7 @@ def self_test() -> int:
     sample = rename_gaps(
         [
             ("backend/poe.py", "backend/app/services/poe_pipeline.py"),
-            ("memory/PRD.md", "docs/PRD.md"),
+            ("memory/PRD.md", "docs/archives/PRD.md"),
             ("docs/PLAN_UI_PRODUIT_SIMULATEUR.md", "docs/archives/PLAN_UI_PRODUIT_SIMULATEUR.md"),
         ],
         bi_lines,

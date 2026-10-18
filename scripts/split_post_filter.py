@@ -47,8 +47,8 @@ NG_DOC_MOVES = (
     "docs/SPECS_E2E_TRIAGE_2026-09-29.md",
 )
 BI_DOC_MOVES = (
-    "docs/ETAT_DES_LIEUX_DOCS.md",
-    "docs/PRD.md",
+    "docs/archives/ETAT_DES_LIEUX_DOCS.md",
+    "docs/archives/PRD.md",
 )
 
 EXPLICIT_PUSH = """git push origin refs/heads/main:refs/heads/main

@@ -390,7 +390,7 @@ We do **not** implement a “snap bounded at 50 km”: the review decided, it is
 
 ## 15. Documents and conversations this specification inherits from
 
-- `docs/PRD.md`, `docs/ARCHITECTURE.md`, `README.md`.
+- `docs/archives/PRD.md`, `docs/ARCHITECTURE.md`, `README.md`.
 - `docs/CAHIER_DES_CHARGES_POE.md` — same form; **run model** to copy.
 - `seed/projects.geojson` — 4,463 features.
 - Projects specification **v1.0** (7 Sep 2026) and **32** Berry-Mappemonde **comments** (same day) — § 29.

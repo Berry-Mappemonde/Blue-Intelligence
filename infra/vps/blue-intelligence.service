@@ -6,9 +6,9 @@ Wants=mongod.service
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/blue-intelligence-map/backend
+WorkingDirectory=/home/ubuntu/blue-intelligence/backend
 Environment=SERVE_FRONTEND=1
-ExecStart=/home/ubuntu/blue-intelligence-map/backend/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001
+ExecStart=/home/ubuntu/blue-intelligence/backend/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=3
 TimeoutStartSec=180

@@ -4,7 +4,7 @@
 # (les nouveaux plafonds systemd ne s'appliquent qu'après restart).
 set -euo pipefail
 
-APP="${APP:-$HOME/blue-intelligence-map}"
+APP="${APP:-$HOME/blue-intelligence}"
 SRC="$APP/infra/vps"
 
 if [ ! -f "$SRC/bi-healthcheck.sh" ]; then

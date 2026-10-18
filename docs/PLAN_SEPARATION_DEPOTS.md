@@ -796,7 +796,7 @@ la copie qui n'est pas l'original (section 6.0) :
 - `docs/check_md_links.py` — outil, hors des 132 documents. Les deux
   index en ont besoin. Il reste entier dans les deux dépôts.
 
-`docs/ETAT_DES_LIEUX_DOCS.md` et `docs/PRD.md` restent dans Blue
+`docs/archives/ETAT_DES_LIEUX_DOCS.md` et `docs/archives/PRD.md` restent dans Blue
 Intelligence, à leur chemin actuel. La classification #553 les range (d) :
 une PR ultérieure pourra les déplacer dans `docs/archives/` de ce dépôt.
 Cette PR ne les déplace pas.
@@ -899,7 +899,7 @@ Fichiers exacts ajoutés seulement pour l'historique Blue Intelligence
 `docs/PLAN_IMPLEMENTATION_CLIMATOLOGIE.md`,
 `docs/PLAN_IMPLEMENTATION_FILIERES_CARTO.md`.
 
-`memory/PRD.md` a été renommé en `docs/PRD.md`. Sans cette ligne, le
+`memory/PRD.md` a été renommé en `docs/archives/PRD.md`. Sans cette ligne, le
 début du PRD disparaît. `memory/test_credentials.md` ne part pas avec :
 c'est un aide-mémoire de noms de clés, pas le PRD.
 
@@ -940,7 +940,7 @@ documents, 0 écart.** Un document (d) suit le dépôt nommé dans la #553
 et **garde son chemin actuel**. Les 18 déjà sous `docs/archives/` y
 restent (15 NAVIGUIDE, 3 Blue Intelligence). Les 19 encore à la racine
 de `docs/` y restent aussi : 17 plans NAVIGUIDE, plus
-`docs/ETAT_DES_LIEUX_DOCS.md` et `docs/PRD.md` pour Blue Intelligence.
+`docs/archives/ETAT_DES_LIEUX_DOCS.md` et `docs/archives/PRD.md` pour Blue Intelligence.
 Les ranger dans `docs/archives/` est une PR ultérieure.
 
 Les 12 communs. `git filter-repo` copie le fichier entier dans les deux
@@ -958,7 +958,7 @@ Ils sont alignés :
 | Chemin | Avant | Après |
 |---|---|---|
 | `.cursor/rules/base-de-donnees-vps.mdc` | Blue Intelligence seul | Les deux. Original Blue Intelligence. |
-| `docs/ETAT_DES_LIEUX_DOCS.md` | Les deux | Blue Intelligence seul, chemin actuel. |
+| `docs/archives/ETAT_DES_LIEUX_DOCS.md` | Les deux | Blue Intelligence seul, chemin actuel. |
 | `docs/archives/nvidia-llm-audit.md` et l'ancien chemin `docs/nvidia-llm-audit.md` | Blue Intelligence | NAVIGUIDE. |
 | `infra/vps/ci/README.md` | Les deux, parce que le dossier `infra/vps/ci/` l'emportait | Blue Intelligence seul. Les scripts du même dossier restent dans les deux. |
 | `Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md` et `SETUP_NOVA_CREDITS.md` | NAVIGUIDE, parce que le dossier entier partait | Aucun des deux dépôts neufs. Les copies canoniques sous `Archives/naviguide-navsecops/docs/` partent dans NAVIGUIDE. Le dossier nova n'est pas modifié. |
@@ -1623,8 +1623,8 @@ le monodépôt.
 
 Blue Intelligence :
 
-- `docs/ETAT_DES_LIEUX_DOCS.md`
-- `docs/PRD.md`
+- `docs/archives/ETAT_DES_LIEUX_DOCS.md`
+- `docs/archives/PRD.md`
 
 NAVIGUIDE :
 
@@ -4050,7 +4050,7 @@ note sur l'outillage CI/CD. « Avant-split » = plan d'avant-split du
 | `docs/PLAN_BATCH_2026-10-16.md` et `.cursor/rules/specs-suivent-l-interface.mdc` sont sur `main` (`7d1f8d14`, PR #545 fusionnée). Le classeur les envoie dans NAVIGUIDE. | Arbre `6dabfb84` ; `--emit ng` |
 | Les 132 documents de la PR #553 suivent le classeur, chemin par chemin : 46 NAVIGUIDE, 35 Blue Intelligence, 12 les deux, 37 dans le dépôt nommé par la #553 en gardant leur chemin actuel, 2 doublons nova hors des dépôts neufs. 0 écart. Cette PR ne les déplace pas et ne fusionne pas la #553. | PR #553, `docs/MENAGE_DOCUMENTAIRE_PROPOSITION.md`, commit `9c6f6e0d` |
 | `.cursor/rules/base-de-donnees-vps.mdc` va dans les deux. Original Blue Intelligence. La copie NAVIGUIDE dit que le simulateur n'a pas de Mongo. | #553 §1 et §11 ; relevé OVH du 17 oct. |
-| `docs/ETAT_DES_LIEUX_DOCS.md` et `docs/PRD.md` restent dans Blue Intelligence, à leur chemin actuel. | #553 §3 et §11 |
+| `docs/archives/ETAT_DES_LIEUX_DOCS.md` et `docs/archives/PRD.md` restent dans Blue Intelligence, à leur chemin actuel. | #553 §3 et §11 |
 | `docs/archives/nvidia-llm-audit.md` et l'ancien chemin `docs/nvidia-llm-audit.md` vont dans NAVIGUIDE. | #553 §4 |
 | `infra/vps/ci/README.md` va dans Blue Intelligence seul. Les scripts de `infra/vps/ci/` restent dans les deux. | #553 §7 |
 | `Archives/naviguide-nova/docs/PLAN_DEV_NOVA.md` et `SETUP_NOVA_CREDITS.md` ne vont dans aucun dépôt neuf. Les copies navsecops vont dans NAVIGUIDE. Le dossier nova n'est pas réécrit. | #553 §10 et §12 ; correction du propriétaire, 17 oct. au soir |

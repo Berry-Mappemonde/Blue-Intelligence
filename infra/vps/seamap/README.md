@@ -31,7 +31,7 @@ sudo mkdir -p /srv/tiles/seamap/public
 sudo chown -R ubuntu:ubuntu /srv/tiles
 
 # 2. Sync script
-cp ~/blue-intelligence-map/infra/vps/seamap/sync-seamap.sh /srv/tiles/seamap/
+cp ~/blue-intelligence/infra/vps/seamap/sync-seamap.sh /srv/tiles/seamap/
 chmod +x /srv/tiles/seamap/sync-seamap.sh
 
 # 3. Dry check: discover the upstream version (dated ETag)
@@ -71,7 +71,7 @@ curl -sI https://blueintelligence.online/tiles/seamap/style.json | head -5
 ### Weekly cron
 
 ```bash
-sudo cp ~/blue-intelligence-map/infra/vps/seamap/seamap-sync.cron /etc/cron.d/seamap-sync
+sudo cp ~/blue-intelligence/infra/vps/seamap/seamap-sync.cron /etc/cron.d/seamap-sync
 ```
 
 On Monday 06:30 UTC (upstream rebuilds its chart on Monday 03:00 UTC), the mirror
@@ -87,7 +87,7 @@ into `frontend/.env`. Redeploy after the first
 sync:
 
 ```bash
-cd ~/blue-intelligence-map && bash infra/vps/deploy-app.sh
+cd ~/blue-intelligence && bash infra/vps/deploy-app.sh
 ```
 
 Without a mirror, the frontend keeps the public `tiles.openwaters.io` style — the

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Copie le code d'un site vers le VPS (sans --delete dangereux à la racine).
-# Usage : rsync-to-vps.sh blue-intelligence|naviguide|simulator
+# Usage : rsync-to-vps.sh blue-intelligence
 # Env : VPS_HOST, VPS_SSH_IDENTITY, REMOTE_APP
 set -euo pipefail
 
-SITE="${1:?usage: rsync-to-vps.sh blue-intelligence|naviguide|simulator}"
+SITE="${1:?usage: rsync-to-vps.sh blue-intelligence}"
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 VPS="${VPS_HOST:?VPS_HOST manquant}"
-REMOTE="${REMOTE_APP:-/home/ubuntu/blue-intelligence-map}"
+REMOTE="${REMOTE_APP:-/home/ubuntu/blue-intelligence}"
 IDENTITY="${VPS_SSH_IDENTITY:?VPS_SSH_IDENTITY manquant}"
 
 RSH=(ssh -i "$IDENTITY" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20)
@@ -21,7 +21,7 @@ rsync_to() {
 }
 
 echo "→ rsync $SITE → $VPS:$REMOTE"
-remote "mkdir -p $REMOTE/infra/vps/ci $REMOTE/infra/vps/naviguide $REMOTE/backend $REMOTE/frontend $REMOTE/naviguide $REMOTE/naviguide-simulator"
+remote "mkdir -p $REMOTE/infra/vps/ci $REMOTE/backend $REMOTE/frontend"
 
 # Toujours envoyer la sonde et apply-*.sh (rattrapage + premier déploiement).
 rsync_to "$ROOT/infra/vps/ci/" "$VPS:$REMOTE/infra/vps/ci/"
@@ -51,50 +51,6 @@ case "$SITE" in
       "$ROOT/infra/vps/blue-intelligence.service" \
       "$ROOT/infra/vps/blue-intelligence-backup.cron" \
       "$ROOT/infra/vps/nginx-blue-intelligence.conf" \
-      "$VPS:$REMOTE/infra/vps/"
-    ;;
-  naviguide)
-    rsync_to --delete \
-      --exclude .venv \
-      --exclude node_modules \
-      --exclude .env \
-      --exclude .env.production \
-      --exclude __pycache__ \
-      --exclude "*.pyc" \
-      --exclude .pytest_cache \
-      "$ROOT/naviguide/" "$VPS:$REMOTE/naviguide/"
-    rsync_to "$ROOT/infra/vps/sync-public-nginx.sh" "$VPS:$REMOTE/infra/vps/"
-    rsync_to \
-      "$ROOT/infra/vps/naviguide/deploy-naviguide.sh" \
-      "$ROOT/infra/vps/naviguide/nginx-naviguide.conf" \
-      "$ROOT/infra/vps/naviguide/naviguide-api.service" \
-      "$ROOT/infra/vps/naviguide/naviguide-orchestrator.service" \
-      "$ROOT/infra/vps/naviguide/naviguide-polar.service" \
-      "$ROOT/infra/vps/naviguide/naviguide.env.example" \
-      "$VPS:$REMOTE/infra/vps/naviguide/"
-    ;;
-  simulator)
-    rsync_to --delete \
-      --exclude node_modules \
-      --exclude .venv \
-      --exclude .pytest_cache \
-      --exclude __pycache__ \
-      --exclude .env \
-      --exclude server/polar_data/ \
-      --exclude server/voyage_data/ \
-      "$ROOT/naviguide-simulator/" "$VPS:$REMOTE/naviguide-simulator/"
-    rsync_to \
-      "$ROOT/infra/vps/naviguide/nginx-simulator.conf" \
-      "$ROOT/infra/vps/naviguide/naviguide-simulator.service" \
-      "$ROOT/infra/vps/naviguide/naviguide-film-front.service" \
-      "$ROOT/infra/vps/naviguide/deploy-simulator.sh" \
-      "$ROOT/infra/vps/naviguide/simulator.env.example" \
-      "$ROOT/infra/vps/naviguide/publish-simulator-from-mac.sh" \
-      "$VPS:$REMOTE/infra/vps/naviguide/"
-    # Cache nginx climatologie BI (installé par deploy-simulator.sh).
-    rsync_to \
-      "$ROOT/infra/vps/nginx-bi-climatology-cache.conf" \
-      "$ROOT/infra/vps/nginx-snippet-bi-climatology.conf" \
       "$VPS:$REMOTE/infra/vps/"
     ;;
   *)

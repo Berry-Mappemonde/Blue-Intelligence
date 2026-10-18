@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # (Re)deploy the application on the VPS: backend dependencies (Python 3.12
 # via uv), Playwright Chromium, frontend build, systemd service, backup
-# cron. Assumes the code is in ~/blue-intelligence-map and
+# cron. Assumes the code is in ~/blue-intelligence and
 # install-mongodb.sh already ran.
 set -euo pipefail
 
-APP="$HOME/blue-intelligence-map"
+APP="$HOME/blue-intelligence"
 CONF_DIR="$HOME/.config/blue-intelligence"
 UV="$HOME/.local/bin/uv"
 SKIP_FRONTEND_BUILD="${SKIP_FRONTEND_BUILD:-0}"

@@ -4,19 +4,6 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: /naviguide-simulator
-    schedule: { interval: weekly, day: monday, time: "07:00", timezone: Europe/Paris }
-    open-pull-requests-limit: 5
-    groups:
-      # Vite et ses plugins avancent ensemble (27 sept. : plugin-react 6 seul → rouge, il exige Vite 8).
-      vite:
-        patterns: ["vite", "@vitejs/*"]
-        update-types: [major, minor, patch]
-      simulateur-mineures-et-patchs:
-        update-types: [minor, patch]
-    commit-message: { prefix: "chore(deps)" }
-    labels: [dependances]
-  - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly, day: monday, time: "07:00", timezone: Europe/Paris }
     open-pull-requests-limit: 5
@@ -35,11 +22,11 @@ updates:
     commit-message: { prefix: "chore(deps)" }
     labels: [dependances]
   - package-ecosystem: pip
-    directory: /naviguide-simulator/server
+    directory: /backend
     schedule: { interval: weekly, day: monday, time: "07:00", timezone: Europe/Paris }
     open-pull-requests-limit: 5
     groups:
-      serveur-mineures-et-patchs:
+      backend-mineures-et-patchs:
         update-types: [minor, patch]
     commit-message: { prefix: "chore(deps)" }
     labels: [dependances]

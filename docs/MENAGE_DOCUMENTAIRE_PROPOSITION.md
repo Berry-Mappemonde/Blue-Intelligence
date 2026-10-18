@@ -61,7 +61,7 @@ Le tableau des modes dit encore « Simulation » (FR ligne 35, EN ligne 119). `i
 | `docs/CONTRATS_MODES.md` | 2026-09-14 | (b) Blue Intelligence | Contrats des familles Blue Intelligence ; la carte montre l’atlas, NAVIGUIDE l’interroge. |
 | `docs/CONTRATS_REVIEW_PAR_MODE.md` | 2026-09-22 | (b) Blue Intelligence | Même geste Review pour chaque mode ; Formalités est le mode de référence. |
 | `docs/ESPRIT_DE_L_APPLICATION.md` | 2026-09-20 | (a) NAVIGUIDE | Chaîne sources → écran du simulateur (20 sept., avant le mot Tracer) ; Blue Intelligence y est la mémoire des sources. |
-| `docs/ETAT_DES_LIEUX_DOCS.md` | 2026-09-22 | (d) `docs/archives/` — dépôt Blue Intelligence | Inventaire du 22 sept. (lot D0), figé ; l’arbre `plans/` · `hackathon/` · `cdc/` qu’il propose n’a pas été appliqué. |
+| `docs/archives/ETAT_DES_LIEUX_DOCS.md` | 2026-09-22 | (d) `docs/archives/` — dépôt Blue Intelligence | Inventaire du 22 sept. (lot D0), figé ; l’arbre `plans/` · `hackathon/` · `cdc/` qu’il propose n’a pas été appliqué. |
 | `docs/FILM_DISCOURS_ETAT_2026-09-28.md` | 2026-09-28 | (a) NAVIGUIDE | Le gabarit § 4 est encore cité par `naviguide-simulator/server/film_script.py` et par `server/tests/test_film_discours.py` ; la transcription § 1 est une photo du 28 sept. |
 | `docs/HACKATHON_DEVPOST_SOUMISSION.md` | 2026-09-29 | (a) NAVIGUIDE | Textes anglais à coller dans Devpost ; le plan Nebius du 17 oct. demande de les aligner sur Suivre / Tracer et de remesurer la part de code. |
 | `docs/HACKATHON_PLAN.md` | 2026-10-17 | (c) les deux — original Blue Intelligence | Index d’une page des trois plans du 17 oct. (séparation, Nebius, GenAI). |
@@ -88,7 +88,7 @@ Le tableau des modes dit encore « Simulation » (FR ligne 35, EN ligne 119). `i
 | `docs/PLAN_MIGRATION_ANCIEN_NAVIGUIDE.md` | 2026-09-21 | (d) `docs/archives/` — dépôt NAVIGUIDE | Lots N1–N4 ; à garder en mémoire : lire `naviguide/`, ne pas y porter le simulateur. |
 | `docs/PLAN_NEMOTRON_NEBIUS_TAVILY.md` | 2026-09-22 | (a) NAVIGUIDE | Grille de prix et garde-fous encore cités par le plan Nebius du 17 oct. ; les lieux d’appel ont changé (clic, question, questionnaire). |
 | `docs/PLAN_SEPARATION_DEPOTS.md` | 2026-10-17 | (c) les deux — original Blue Intelligence | Plan du week-end ; copie NAVIGUIDE des sections dépôt, historique et huit tests. Le filtre « tout `docs/` dans Blue Intelligence » est à réaligner sur ce tableau. |
-| `docs/PRD.md` | 2026-09-14 | (d) `docs/archives/` — dépôt Blue Intelligence | PRD du 26 août (`llm_core.py`, Emergent) ; contrainte encore valable : pas de purge, upsert non destructif. |
+| `docs/archives/PRD.md` | 2026-09-14 | (d) `docs/archives/` — dépôt Blue Intelligence | PRD du 26 août (`llm_core.py`, Emergent) ; contrainte encore valable : pas de purge, upsert non destructif. |
 | `docs/README.md` | 2026-10-17 | (c) les deux — original NAVIGUIDE | Index actuel, surtout simulateur, section « En cours » calée sur septembre ; Blue Intelligence reçoit un index court (CDC, PoE, plan GenAI). |
 | `docs/REGLES_PARAMETRES.md` | 2026-09-22 | (c) les deux — original Blue Intelligence | Principe et seuils BI (`backend/data/run_rules.json`) ; NAVIGUIDE reçoit le principe et les § 3.7 et suivants (horloge, polaire). |
 | `docs/REGLES_WORKFLOW_AGENT.md` | 2026-09-29 | (a) NAVIGUIDE | Contrat des agents du simulateur : plancher `main`, pas de chiffre inventé, pas de merge par le worker. |
@@ -249,7 +249,7 @@ Les 37 archives, selon qu’elles sont déjà rangées :
 
 Les 19 à déplacer (dans une PR ultérieure, pas dans celle-ci) :
 
-- Blue Intelligence : `docs/ETAT_DES_LIEUX_DOCS.md`, `docs/PRD.md`.
+- Blue Intelligence : `docs/archives/ETAT_DES_LIEUX_DOCS.md`, `docs/archives/PRD.md`.
 - NAVIGUIDE : `docs/PLAN_AUDIT_CALCULS.md`, `docs/PLAN_BATCH_2026-10-14.md`, `docs/PLAN_BATCH_SUIVANT_2026-09-29.md`, `docs/PLAN_CORRECTIONS_2026-09-22.md`, `docs/PLAN_CORRECTIONS_2026-09-23.md`, `docs/PLAN_CORRECTIONS_2026-09-26-s2.md`, `docs/PLAN_CORRECTIONS_2026-09-26-s4.md`, `docs/PLAN_CORRECTIONS_2026-09-27-s5.md`, `docs/PLAN_CORRECTIONS_2026-09-28-film.md`, `docs/PLAN_CORRECTIONS_REVUE_21_SEPT.md`, `docs/PLAN_CORRECTIONS_REVUE_21_SEPT_SOIR.md`, `docs/PLAN_DEUX_MODES_2026-09-29.md`, `docs/PLAN_FILM_REVOIR_EXPEDITION.md`, `docs/PLAN_ICI_JOURNAL_EXPERT.md`, `docs/PLAN_LOTS_COMPLEMENTAIRE_SIMULATEUR.md`, `docs/PLAN_MIGRATION_ANCIEN_NAVIGUIDE.md`, `docs/SPECS_E2E_TRIAGE_2026-09-29.md`.
 
 `frontend/` et `seed/` n’ont aucun markdown. `docs/check_md_links.py` est un outil, pas un document.
@@ -278,7 +278,7 @@ Aucun fichier de ce relevé n’est vide.
 5. **Ancien planificateur.** `naviguide/README.md` (12 sept.) pointe `https://csw6hpki.run.complete.dev` et une cascade qui commence par NVIDIA NIM. `README.md` (15 oct.) pointe `https://www.naviguide.fr` et met Token Factory en tête. Les deux pages n’ont pas été sondées.
 6. **Index.** `docs/README.md` a été touché le 17 oct. pour les trois plans hackathon. Sa section « En cours » liste encore des plans du 20–22 sept. Onze fichiers de la racine de `docs/` n’y figurent pas (liste en section 3).
 7. **Deux plans pour le même batch.** `PLAN_BATCH_SUIVANT_2026-09-29.md` dit être remplacé par `PLAN_BATCH_2026-10-14.md`. Les deux sont encore à la racine de `docs/`, et aucun n’est dans l’index.
-8. **Architecture Blue Intelligence.** `docs/ARCHITECTURE.md` § 1 décrit `server.py` (~1 750 lignes) et `llm_core.py` à la racine de `backend/`. Le § 3 du même fichier dit que le rangement `backend/app/` est appliqué. Constat du 17 oct. : `backend/server.py` fait 5 lignes (shim), `backend/app/main.py` fait 205 lignes, `backend/llm_core.py` est absent, `backend/app/core/llm.py` existe (651 lignes). `frontend/src/components/MapView.js` existe (451 lignes). `docs/PRD.md` décrit encore `llm_core.py` et Emergent.
+8. **Architecture Blue Intelligence.** `docs/ARCHITECTURE.md` § 1 décrit `server.py` (~1 750 lignes) et `llm_core.py` à la racine de `backend/`. Le § 3 du même fichier dit que le rangement `backend/app/` est appliqué. Constat du 17 oct. : `backend/server.py` fait 5 lignes (shim), `backend/app/main.py` fait 205 lignes, `backend/llm_core.py` est absent, `backend/app/core/llm.py` existe (651 lignes). `frontend/src/components/MapView.js` existe (451 lignes). `docs/archives/PRD.md` décrit encore `llm_core.py` et Emergent.
 9. **Où vont les docs au split.** `PLAN_SEPARATION_DEPOTS.md` § 3 garde tout `docs/` dans Blue Intelligence, envoie `Archives/` et `.cursor/` entiers vers NAVIGUIDE, et dit en même temps que NAVIGUIDE emporte les docs du simulateur. Suivre le filtre tel quel met les plans simulateur dans les deux dépôts et envoie `Archives/Blue-Intelligence/` avec NAVIGUIDE.
 10. **Cascade des modèles.** `docs/archives/nvidia-llm-audit.md` décrit des replis NIM et porte un bandeau « remplacé ». `PLAN_NEMOTRON_NEBIUS_TAVILY.md` et `README.md` mettent Token Factory en tête. `naviguide/README.md` commence encore par NIM.
 11. **Hindcast.** `PLAN_AUDIT_CALCULS.md` (lot C2) décrit une fusion médiane Open-Meteo + Copernicus. `PLAN_BATCH_2026-10-14.md` (HC1) fait venir le passé du bateau d’ERA5 téléchargé une fois. `docs/audits/CALCULS.md` date du 20 sept. Le fichier `naviguide-simulator/server/hindcast.py` existe. L’écart de formule n’a pas été relu ligne à ligne.
@@ -299,7 +299,7 @@ Contrôle élargi sur les 132 documents, y compris `Archives/` et les liens vers
 - `Archives/naviguide-navsecops/README.source.md` → `LICENSE` (à la racine du monodépôt : `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`).
 - `Archives/naviguide-navsecops/docs/DATA.md` → `../naviguide_workspace/start_local.sh`.
 
-Fichiers nommés par `docs/ARCHITECTURE.md` § 1 et absents : `backend/llm_core.py`, `backend/pipeline.py`, `backend/poe.py`, `backend/poe_routes.py`, `backend/geo_core.py`, `backend/ai.py`, `backend/geo.py`. Les équivalents du § 3 existent (contrôle ponctuel : `backend/app/services/poe_pipeline.py`, `backend/app/services/swarm_pipeline.py`, `backend/app/routers/formalities.py`, `frontend/src/components/MapView.js`). `docs/PRD.md` cite la même génération de noms plats.
+Fichiers nommés par `docs/ARCHITECTURE.md` § 1 et absents : `backend/llm_core.py`, `backend/pipeline.py`, `backend/poe.py`, `backend/poe_routes.py`, `backend/geo_core.py`, `backend/ai.py`, `backend/geo.py`. Les équivalents du § 3 existent (contrôle ponctuel : `backend/app/services/poe_pipeline.py`, `backend/app/services/swarm_pipeline.py`, `backend/app/routers/formalities.py`, `frontend/src/components/MapView.js`). `docs/archives/PRD.md` cite la même génération de noms plats.
 
 `scripts/verify_fiche_urls.py` est absent de `main`. Il était ajouté par la PR #227, fermée sans merge (section 15).
 

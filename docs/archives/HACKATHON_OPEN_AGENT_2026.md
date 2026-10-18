@@ -470,7 +470,7 @@ a better *external tool* for the agent.
 
 **Data — Impact and demo**
 
-- Advance the backlog already listed in `docs/PRD.md`: re-import of
+- Advance the backlog already listed in `docs/archives/PRD.md`: re-import of
   the ~695 ungeocoded PoE, OSM validation on the new ones, weekly
   exports up to date.
 - Check that API responses carry **provenance** everywhere
@@ -564,5 +564,5 @@ evals and a mandatory `FAILURES.md`.
 - https://github.com/param-kasana/Minizica-genai-agentos
 - LinkedIn posts #LeadWithAIAgents (Minizica 1st; clinical-trial
   matching 2nd)
-- Internal repo: `README.md`, `docs/PRD.md`, `naviguide/README.md`,
+- Internal repo: `README.md`, `docs/archives/PRD.md`, `naviguide/README.md`,
   `backend/app/main.py`
