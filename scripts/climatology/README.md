@@ -22,7 +22,7 @@ cube in RAM. Do not run this on the VPS.
 In Terminal (replace the path if your folder is elsewhere):
 
 ```bash
-cd ~/Blue-Intelligence-Map
+cd ~/Blue-Intelligence
 source backend/.venv/bin/activate
 pip install copernicusmarine xarray netCDF4 numpy python-dotenv
 bash scripts/climatology/gen_wind_atlas_mac.sh
@@ -31,7 +31,7 @@ bash scripts/climatology/gen_wind_atlas_mac.sh
 If the Mac does not have a venv yet:
 
 ```bash
-cd ~/Blue-Intelligence-Map
+cd ~/Blue-Intelligence
 python3 -m venv backend/.venv
 source backend/.venv/bin/activate
 pip install copernicusmarine xarray netCDF4 numpy python-dotenv

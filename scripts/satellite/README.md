@@ -14,7 +14,7 @@ Images are heavy (~1 GB each). We start with **one** scene.
 2. Go to the project folder. Change the path if yours is elsewhere:
 
 ```bash
-cd ~/Documents/Blue-Intelligence-Map
+cd ~/Documents/Blue-Intelligence
 ```
 
 3. Create the secret file (if it does not exist yet):
@@ -153,7 +153,7 @@ One line (or a few lines) is enough. This is **not** a nautical chart.
 ## Step 4 — Depth only if ICESat-2 (S4)
 
 ```bash
-cd ~/Documents/Blue-Intelligence-Map
+cd ~/Documents/Blue-Intelligence
 python3 scripts/satellite/check_icesat2.py
 ```
 

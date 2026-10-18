@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent SearXNG install (venv /opt/searxng) WITHOUT starting the server.
 # Doc : https://docs.searxng.org/admin/installation-searxng.html
-# Called by .cursor/install.sh (snapshot) and by .cursor/start.sh if the venv is missing.
+# Called by the local install/start scripts if the venv is missing.
 set -euo pipefail
 
 SEARXNG_HOME="${SEARXNG_HOME:-/opt/searxng}"
@@ -28,7 +28,7 @@ install_searxng_venv() {
   else
     echo "    $SEARXNG_HOME already a git clone"
   fi
-  # Jamais un tree root-only : le process Cloud Agent (ubuntu) doit pouvoir pip/run.
+  # Jamais un tree root-only : le process de l'environnement de dev (ubuntu) doit pouvoir pip/run.
   sudo chown -R "$OWNER" "$SEARXNG_HOME"
 
   if [ ! -x "$SEARXNG_HOME/.venv/bin/python" ]; then

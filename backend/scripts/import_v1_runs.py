@@ -11,8 +11,8 @@ Idempotent: rerunning the script updates the same `v1` run.
 Usage:
     python scripts/import_v1_runs.py --projects-geojson /path/to/projects.geojson --amp
 
-Guardrail: refuse a localhost MONGO_URL (ephemeral Cloud Agent
-pod database) unless --allow-local is passed explicitly.
+Guardrail: refuse a localhost MONGO_URL (ephemeral development
+database) unless --allow-local is passed explicitly.
 """
 from __future__ import annotations
 

@@ -22,20 +22,7 @@ stays empty; no figure is invented.
 The live voyage application **NAVIGUIDE** is a separate repository:
 [github.com/Berry-Mappemonde/NAVIGUIDE](https://github.com/Berry-Mappemonde/NAVIGUIDE)
 ([naviguide.fr](https://naviguide.fr)). It reads Blue Intelligence over its
-public API, `https://blueintelligence.online/api`. The history of both
-products before 18 October 2026 is in the read-only archive
-[Blue-Intelligence-Map](https://github.com/Berry-Mappemonde/Blue-Intelligence-Map).
-
-## GenAI.works — Open Agent Hackathon: pre-existing and new
-
-Graded code starts on **22 October 2026 at 00:00 UTC**. Everything in this
-repository before that time is pre-existing (production since 2026, history
-preserved by the split).
-
-| | Path | Status |
-|---|---|---|
-| Pre-existing | `backend/` (FastAPI + MongoDB API, PoE pipeline, marinas, science, projects), `frontend/` (React map), `infra/`, `scripts/`, `seed/`, `docs/` | in production on blueintelligence.online |
-| New (planned) | `backend/app/agent_poe/` | not in the tree yet — see [docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md](docs/PLAN_HACKATHON_GENAI_BLUE_INTELLIGENCE.md) |
+public API, `https://blueintelligence.online/api`.
 
 ## Dependencies
 

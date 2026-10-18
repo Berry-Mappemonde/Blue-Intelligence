@@ -390,7 +390,7 @@ free). First deploy from a machine with Node + SSH (local Vite
 build, no `npm` on the VPS):
 
 ```bash
-cd /path/to/Blue-Intelligence-Map
+cd /path/to/Blue-Intelligence
 bash infra/vps/naviguide/publish-simulator-from-mac.sh
 ```
 

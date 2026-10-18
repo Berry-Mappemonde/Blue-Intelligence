@@ -578,7 +578,7 @@ def test_meteo_agent_cites_ibtracs_integer():
 
 
 # ---------------------------------------------------------------------------
-# XYZ tiles (lot RD8)
+# XYZ tiles
 # ---------------------------------------------------------------------------
 
 def test_tile_bbox_four_known_leaflet_tiles():

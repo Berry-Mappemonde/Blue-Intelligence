@@ -85,7 +85,7 @@ SEARX_PUBLIC_INSTANCES = [
     "https://search.sapti.me",
 ]
 
-# Our local process (see infra/searxng/, .cursor/start.sh). Not a vendor key.
+# Our local process (see infra/searxng/). Not a vendor key.
 LOCAL_SEARXNG_URL = "http://127.0.0.1:8888"
 
 PIPELINE_VARIANTS = ("v1", "v2", "tinyfish")
