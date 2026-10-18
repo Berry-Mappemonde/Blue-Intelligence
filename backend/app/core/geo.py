@@ -18,7 +18,6 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from global_land_mask import globe
 
 UA = "BerryMappemonde-BlueIntelligence/1.0 (+https://berrymappemonde.org; contact: clementfilisetti@berrymappemonde.org)"
 
@@ -63,9 +62,10 @@ def destination_point(lat, lon, bearing_deg, dist_km):
 # Land / ocean mask
 # ---------------------------------------------------------------------------
 def is_ocean(lat: float, lon: float) -> bool:
+    from app.services.land_mask import is_ocean as _mask_is_ocean
     lat = max(-89.9, min(89.9, lat))
     lon = ((lon + 180) % 360) - 180
-    return bool(globe.is_ocean(lat, lon))
+    return bool(_mask_is_ocean(lat, lon))
 
 
 def snap_to_ocean(lat: float, lon: float, max_km: float = 500.0):

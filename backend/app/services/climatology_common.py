@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,7 @@ MS_TO_KN = 1.94384
 SECTORS = 8
 SECTOR_DEG = 45.0
 
-# Land boxes (fallback if global_land_mask is not installed).
+# Land boxes (fallback if the packaged mask cannot be read).
 # Recette : Sahara et Andes doivent tomber dedans ; 15°N 25°W, 40°S, 26°N 80°W hors.
 _LAND_BOXES = [
     (30, 72, -130, -60),     # Interior North America
@@ -103,12 +104,22 @@ _LAND_BOXES = [
 ]
 
 
-try:
-    from global_land_mask import globe as _globe
-    _HAS_LAND_MASK = True
-except Exception:  # pragma: no cover - optionnel
-    _globe = None
-    _HAS_LAND_MASK = False
+class LoopPauser:
+    """Release the GIL during a long pure-Python walk so ``/api/`` stays up."""
+
+    def __init__(self, interval: float = 0.2):
+        self.interval = interval
+        self._t = time.perf_counter()
+
+    def tick(self) -> None:
+        now = time.perf_counter()
+        if now - self._t >= self.interval:
+            time.sleep(0)
+            self._t = time.perf_counter()
+
+
+def loop_pauser() -> LoopPauser:
+    return LoopPauser()
 
 
 def climatology_dir() -> Path:
@@ -194,15 +205,32 @@ def iter_cells(bundle: dict, bbox: tuple[float, float, float, float] | None, ste
     west = south = east = north = None
     if bbox is not None:
         west, south, east, north = (float(v) for v in bbox)
+    rows: list[tuple[int, float]] = []
     for i in range(0, len(lats), stride):
         lat = float(lats[i])
         if south is not None and (lat < south or lat > north):
             continue
-        for j in range(0, len(lons), stride):
-            lon = float(lons[j])
-            if west is not None and not _lon_in_span(lon, west, east):
-                continue
-            if is_land(lat, lon):
+        rows.append((i, lat))
+    cols: list[tuple[int, float]] = []
+    for j in range(0, len(lons), stride):
+        lon = float(lons[j])
+        if west is not None and not _lon_in_span(lon, west, east):
+            continue
+        cols.append((j, lon))
+    if not rows or not cols:
+        return
+    flags = None
+    try:
+        from app.services.land_mask import land_flags
+        flags = land_flags([lat for _, lat in rows], [lon for _, lon in cols])
+    except Exception:
+        flags = None
+    for r, (i, lat) in enumerate(rows):
+        for c, (j, lon) in enumerate(cols):
+            if flags is not None:
+                if flags[r, c]:
+                    continue
+            elif is_land(lat, lon):
                 continue
             yield i, j, lat, lon
 
@@ -212,11 +240,11 @@ def is_land(lat: float, lon: float) -> bool:
     if not (-90.0 <= lat <= 90.0):
         return True
     lon = wrap_lon(lon)
-    if _HAS_LAND_MASK and _globe is not None:
-        try:
-            return bool(_globe.is_land(float(lat), float(lon)))
-        except Exception:
-            pass
+    try:
+        from app.services.land_mask import is_land as _mask_is_land
+        return bool(_mask_is_land(float(lat), float(lon)))
+    except Exception:
+        pass
     for la, lb, loa, lob in _LAND_BOXES:
         if la <= lat <= lb and loa <= lon <= lob:
             return True

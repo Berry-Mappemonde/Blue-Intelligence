@@ -13,6 +13,7 @@ from app.services.climatology_common import (
     grid_step,
     is_land,
     iter_cells,
+    loop_pauser,
     parse_month,
     product_meta,
     rule,
@@ -48,8 +49,8 @@ def _load_month(month: int, mtime: float):
     path = wave_npz_path(month)
     if not path.is_file():
         return None
-    data = np.load(path, allow_pickle=False)
-    return {k: data[k] for k in data.files}
+    with np.load(path, allow_pickle=False) as data:
+        return {k: np.copy(data[k]) for k in data.files}
 
 
 def _bundle(month: int):
@@ -164,7 +165,9 @@ def _wave_features(month: int, bundle: dict, bbox, step: int, want: str, *, ligh
     if arr is None:
         return features, snapshot_stat
     shown_stat = want if want != "p90" or snapshot_stat != "mean" else "mean"
+    pauser = loop_pauser()
     for i, j, lat, lon in iter_cells(bundle, bbox, step):
+        pauser.tick()
         v = float(arr[i, j])
         if np.isnan(v) or v <= 0:
             continue
