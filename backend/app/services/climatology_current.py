@@ -14,6 +14,7 @@ from app.services.climatology_common import (
     grid_step,
     is_land,
     iter_cells,
+    loop_pauser,
     parse_month,
     product_meta,
     rule,
@@ -49,8 +50,8 @@ def _load_month(month: int):
     path = current_npz_path(month)
     if not path.is_file():
         return None
-    data = np.load(path, allow_pickle=False)
-    return {k: data[k] for k in data.files}
+    with np.load(path, allow_pickle=False) as data:
+        return {k: np.copy(data[k]) for k in data.files}
 
 
 def _nearest_index(arr, value) -> int:
@@ -94,7 +95,9 @@ def current_at(lat: float, lon: float, month: int) -> dict | None:
 
 def _current_features(month: int, bundle: dict, bbox, step: int, *, light: bool) -> list[dict]:
     features: list[dict] = []
+    pauser = loop_pauser()
     for _i, _j, lat, lon in iter_cells(bundle, bbox, step):
+        pauser.tick()
         rec = current_at(lat, lon, month)
         if rec is None:
             continue
