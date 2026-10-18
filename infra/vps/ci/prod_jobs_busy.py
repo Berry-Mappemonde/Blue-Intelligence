@@ -93,7 +93,7 @@ def load_admin_key(explicit: str | None = None) -> str:
     env = (os.environ.get("ADMIN_KEY") or "").strip()
     if env:
         return env
-    app = os.environ.get("APP") or str(Path.home() / "blue-intelligence-map")
+    app = os.environ.get("APP") or str(Path.home() / "blue-intelligence")
     env_file = Path(app) / "backend" / ".env"
     if not env_file.is_file():
         return ""

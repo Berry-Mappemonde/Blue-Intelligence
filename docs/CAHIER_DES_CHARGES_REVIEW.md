@@ -512,7 +512,7 @@ Listing-control queue in Review. *Split screen* run A \| run B comparator (repla
 - `docs/CAHIER_DES_CHARGES_POE.md` v1.4 — VLIZ grain, D∩P, §12, WPI counter-list. **Except** “display only one TD”: Review 1.1 shows all.
 - `docs/CAHIER_DES_CHARGES_PROJETS.md` v2.0 — v1 treasure, phase D review / Gold.
 - `docs/REGLES_PARAMETRES.md` — the rules that review must be able to **write**.
-- `docs/ARCHITECTURE.md`, `docs/PRD.md`.
+- `docs/ARCHITECTURE.md`, `docs/archives/PRD.md`.
 - `docs/CONTRATS_REVIEW_PAR_MODE.md` — same Review gesture for the five modes; Gold = certified run; Map via **Show the review**.
 - PR #34 — first tab, comment API.
 

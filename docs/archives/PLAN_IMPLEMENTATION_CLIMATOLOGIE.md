@@ -623,7 +623,7 @@ unchanged).
   7th BI mode; NAVIGUIDE invisible + map fusion; four products opened.
 - OpenCPN plugin `climatology_pi` (manual, `gendata/`, `ClimatologyOverlayFactory.h`)
   and `weather_routing_pi` (MOST_LIKELY, crossings).
-- `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/PRD.md`.
+- `docs/REGLES_PARAMETRES.md`, `docs/CONTRATS_MODES.md`, `docs/archives/PRD.md`.
 - `docs/archives/PLAN_IMPLEMENTATION_FILIERES_CARTO.md` — EMODnet / GEBCO / Science
   satellite: jobs distinct from the monthly atlas.
 - `docs/archives/PLAN_IMPLEMENTATION_SIMULATION_A.md` — simulator-film ETA

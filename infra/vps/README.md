@@ -15,10 +15,10 @@ Internet → Cloudflare → nginx (443, Let's Encrypt certificate)
 
 | What | Where |
 |------|-------|
-| Application code | `~/blue-intelligence-map/` |
+| Application code | `~/blue-intelligence/` |
 | Local MongoDB secrets (`admin` and `blue` accounts) | `~/.config/blue-intelligence/mongo.env` (chmod 600) |
 | Atlas connection string (for resync) | `~/.config/blue-intelligence/atlas.env` (chmod 600) |
-| Application API keys | `~/blue-intelligence-map/backend/.env` (chmod 600) |
+| Application API keys | `~/blue-intelligence/backend/.env` (chmod 600) |
 | Daily backups (04:00, 14-day rotation) | `~/backups/mongodb/` + `/etc/cron.d/blue-intelligence-backup` |
 | Application service | `/etc/systemd/system/blue-intelligence.service` |
 | Reverse proxy | `/etc/nginx/sites-available/blue-intelligence` (TLS managed by certbot) |
@@ -87,9 +87,9 @@ in `~/.config/naviguide/simulator.env`).
 ## Redeploy after a code update
 
 ```bash
-cd ~/blue-intelligence-map
+cd ~/blue-intelligence
 # code up to date (rsync from a workstation, or git pull if a remote is configured).
-# After an rsync -a from a 700 workspace: chmod o+x ~/blue-intelligence-map
+# After an rsync -a from a 700 workspace: chmod o+x ~/blue-intelligence
 # (NAVIGUIDE nginx reads /var/www/naviguide, but other tools may still
 # walk the repository).
 bash infra/vps/deploy-app.sh
@@ -195,7 +195,7 @@ The Console and Review tabs, plus every API write
 (`POST/PUT/PATCH/DELETE /api/*`, except the public project report) are
 protected by an admin key:
 
-- The key lives in `~/blue-intelligence-map/backend/.env` on the VPS
+- The key lives in `~/blue-intelligence/backend/.env` on the VPS
   (`ADMIN_KEY=...`). Without this variable (local dev), everything stays open.
 - To unlock the UI: open once
   `https://blueintelligence.online/?admin=<key>`. The key is stored in the
@@ -252,7 +252,7 @@ was removed from `sites-enabled` on 2026-09-10 — backup in
 `sites-available/default`. The frontend is copied to `/var/www/naviguide`
 (readable by `www-data`): an `rsync -a` or `chmod 700` of the repo must no longer
 take the site down (incident of 2026-09-13: nginx 500 / `try_files` loop
-because `~/blue-intelligence-map` was `drwx------`).
+because `~/blue-intelligence` was `drwx------`).
 
 NAVIGUIDE map “Blue Intelligence” layers consume the local Blue Intelligence
 GeoJSON exports via the nginx `/bi/*` route — no

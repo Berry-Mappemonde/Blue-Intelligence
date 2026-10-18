@@ -28,7 +28,7 @@ fi
 {
   echo "VPS_HOST=$VPS_HOST"
   echo "VPS_SSH_IDENTITY=$KEY_FILE"
-  echo "REMOTE_APP=/home/ubuntu/blue-intelligence-map"
+  echo "REMOTE_APP=/home/ubuntu/blue-intelligence"
 } >> "${GITHUB_ENV:-/dev/stdout}"
 
 echo "SSH prêt pour $VPS_HOST"

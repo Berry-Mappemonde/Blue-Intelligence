@@ -3,14 +3,10 @@ name: CI
 #   - jest verrouille l'ordre des couches carte et le registre des fonds ;
 #   - le build CRA attrape les régressions de bundling (maplibre chargé à la demande) ;
 #   - le script d'audit des tags tourne en mode GeoJSON sur les seeds (stdlib pur) ;
-#   - API Blue Intelligence : pytest de backend/tests contre un Mongo de CI
-#     (image mongo, 127.0.0.1:27017, base bi_ci). Aucun secret, aucun accès
-#     à la base OVH, à Atlas ou à Nebius. Le seed vient des fichiers du dépôt.
-#     La confiance OSM est celle d'Overpass (mêmes fonctions que le produit),
-#     pas un score écrit à la main. Le cache ne rejoue que ces réponses.
-#   - simulateur : si la PR touche naviguide-simulator/, `npm test` (node --test),
-#     `vite build` et `pytest` (fetch mocké) — une croix rouge sur la PR avant
-#     qu'un lot casse S1–S7, le juge ou le sac ici() sans qu'on le voie.
+#   - API Blue Intelligence : six shards pytest parallèles (Mongo + uvicorn isolés),
+#     cache Overpass, venv et modèle HF en cache, puis agrégateur requis
+#     « API Blue Intelligence — pytest » (ci_pytest_gate.py, exhaustivité).
+# Copie Blue Intelligence. Les jobs simulateur ne sont pas dans ce dépôt.
 
 on:
   pull_request:
@@ -46,131 +42,6 @@ jobs:
 
   # Le simulateur n'est testé que si la PR (ou le push) le touche : les PR
   # Blue Intelligence / NAVIGUIDE restent aussi rapides qu'avant.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      simulator: ${{ steps.filter.outputs.simulator }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            simulator:
-              - 'naviguide-simulator/**'
-              - '.github/workflows/ci.yml'
-
-  simulator:
-    name: simulateur — tests JS, build, pytest
-    runs-on: ubuntu-latest
-    # Un test qui ne rend pas la main doit échouer vite, pas bloquer 6 h.
-    timeout-minutes: 20
-    needs: changes
-    if: needs.changes.outputs.simulator == 'true'
-    defaults:
-      run:
-        working-directory: naviguide-simulator
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: naviguide-simulator/package-lock.json
-      - run: npm ci
-      - name: Tests JS (moteur, juge, skipper, briefing, contrats UI)
-        run: npm test
-      - name: Build Vite
-        run: npm run build
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: naviguide-simulator/server/requirements.txt
-      - run: pip install -r server/requirements.txt
-      - name: Tests Python (API 8010, sac ici(), pipeline météo, récit)
-        run: python -m pytest -q
-        env:
-          # Aucun secret : Copernicus et les LLM restent en repli / mock.
-          PYTHONDONTWRITEBYTECODE: "1"
-      # Sécurité P1 (lot H) : une dépendance avec une faille connue bloque la
-      # PR — critique côté npm (prod seulement), toute faille côté pip.
-      - name: Audit npm (dépendances de prod, critique = bloquant)
-        run: npm audit --omit=dev --audit-level=critical
-      - name: Audit pip (server/requirements.txt)
-        run: |
-          pip install -q pip-audit
-          python -m pip_audit -r server/requirements.txt --progress-spinner off
-
-  # Recette automatique des lots (RG16 / D11) : une invocation Playwright
-  # (fumée + lots) sur le build de prod, API hors ligne, stock figé.
-  # Un spec rouge bloque la PR. Specs `poste` (hindcast, LLM, réseau) ignorés en CI.
-  simulator-e2e:
-    # 28 sept. : la suite (101 specs, ~6 min en un job) est coupée en six tranches parallèles (--shard) :
-    # même contenu, même API sur le stock figé, ~1 min de tests chacune + ~1 min 30 de mise en place.
-    # Six jobs verts = recette verte. Dépôt public : les runners Actions sont gratuits et illimités.
-    name: simulateur — recette automatique (Playwright, stock figé) ${{ matrix.shard }}/6
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    needs: changes
-    if: needs.changes.outputs.simulator == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6]
-    defaults:
-      run:
-        working-directory: naviguide-simulator
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: naviguide-simulator/package-lock.json
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: naviguide-simulator/server/requirements.txt
-      - run: npm ci
-      - run: npm run build
-      - run: pip install -r server/requirements.txt
-      - name: Version Playwright (clé de cache)
-        id: pw
-        run: |
-          echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-      - run: npx playwright install --with-deps chromium
-      - name: Recette automatique (fumée + lots, stock figé) — tranche ${{ matrix.shard }}/6
-        env:
-          PW_WITH_API: "1"
-        run: npx playwright test e2e/smoke.spec.js e2e/lots --shard=${{ matrix.shard }}/6
-      - name: Résumé d'étape
-        if: always()
-        run: node scripts/e2e-summary.mjs test-results/e2e.json >> "$GITHUB_STEP_SUMMARY"
-      # Le rapport JSON (quelques dizaines de ko) est toujours conservé : c'est lui qui liste
-      # les « verts avec réserve » (chemins à vide) relus dans docs/SPECS_E2E_TRIAGE_2026-09-29.md.
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: e2e-json-${{ matrix.shard }}
-          path: naviguide-simulator/test-results/e2e.json
-          retention-days: 3
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: playwright-report-${{ matrix.shard }}
-          path: naviguide-simulator/playwright-report
-          retention-days: 7
-          if-no-files-found: ignore
-
   audit-tags:
     runs-on: ubuntu-latest
     steps:
@@ -411,7 +282,7 @@ jobs:
         run: python scripts/ci_pytest_gate.py
 
   deploy-gate:
-    needs: [frontend, audit-tags, backend, changes, simulator, simulator-e2e]
+    needs: [frontend, audit-tags, backend]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -420,9 +291,6 @@ jobs:
           R_FRONTEND: ${{ needs.frontend.result }}
           R_AUDIT: ${{ needs.audit-tags.result }}
           R_BACKEND: ${{ needs.backend.result }}
-          R_CHANGES: ${{ needs.changes.result }}
-          R_SIMULATOR: ${{ needs.simulator.result }}
-          R_E2E: ${{ needs.simulator-e2e.result }}
         run: |
           fail=0
           echo "R_BACKEND=$R_BACKEND"
@@ -430,7 +298,7 @@ jobs:
             success) ;;
             *) echo "L'agrégateur pytest (backend) doit être success, pas skipped ni absent." >&2; fail=1 ;;
           esac
-          for name in R_FRONTEND R_AUDIT R_CHANGES R_SIMULATOR R_E2E; do
+          for name in R_FRONTEND R_AUDIT; do
             result="${!name}"
             echo "$name=$result"
             case "$result" in
@@ -448,8 +316,6 @@ jobs:
           bash -n infra/vps/bi-healthcheck.sh
           bash -n infra/vps/install-memory-guards.sh
           bash -n infra/vps/sync-public-nginx.sh
-          bash -n infra/vps/naviguide/deploy-naviguide.sh
-          bash -n infra/vps/naviguide/deploy-simulator.sh
           bash -n infra/vps/ci/prepare-ssh.sh
           bash -n infra/vps/ci/rsync-to-vps.sh
           bash -n infra/vps/ci/apply-site.sh

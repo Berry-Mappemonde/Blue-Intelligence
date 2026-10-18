@@ -67,7 +67,7 @@ cleanup that was done, (3) the target layout and split that was applied.
 
 ### Moved
 
-- `memory/PRD.md` → `docs/PRD.md`
+- `memory/PRD.md` → `docs/archives/PRD.md`
 - `design_guidelines.json` → `docs/design_guidelines.json`
 
 ---
