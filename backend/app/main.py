@@ -18,7 +18,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.db import client
-from app.routers import amp, capitaineries, climatology, exports, formalities, marinas, misc, ml, project_runs, projects, review, runs, science, swarm
+from app.routers import amp, capitaineries, climatology, exports, formalities, health, marinas, misc, ml, project_runs, projects, review, runs, science, swarm
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FRONTEND_BUILD = _REPO_ROOT / "frontend" / "build"
@@ -48,6 +48,7 @@ app = FastAPI(
 # X-Admin-Key header. Without ADMIN_KEY (dev / tests), everything stays open.
 # ---------------------------------------------------------------------------
 _PUBLIC_WRITE_PATHS = {"/api/report-project"}   # public project reports
+_PUBLIC_PATHS = {"/api/health"}
 _ADMIN_GET_PREFIXES = ("/api/review", "/api/admin", "/api/reports")
 
 
@@ -56,6 +57,8 @@ async def _admin_gate(request, call_next):
     admin_key = os.environ.get("ADMIN_KEY", "").strip()
     if admin_key:
         path = request.url.path
+        if path in _PUBLIC_PATHS:
+            return await call_next(request)
         needs_key = False
         if path.startswith("/api/"):
             if (request.method in ("POST", "PUT", "PATCH", "DELETE")
@@ -70,7 +73,7 @@ async def _admin_gate(request, call_next):
     return await call_next(request)
 
 
-for module in (project_runs, projects, swarm, marinas, capitaineries, formalities, amp, science, climatology, runs, review, ml, misc, exports):
+for module in (health, project_runs, projects, swarm, marinas, capitaineries, formalities, amp, science, climatology, runs, review, ml, misc, exports):
     app.include_router(module.router)
 
 
@@ -141,6 +144,10 @@ async def _startup():
         await ensure_amp_indexes(db)
     except Exception as e:
         print(f"[startup] amp index creation failed (non-fatal): {e}")
+    try:
+        amp.start_wide_amp_warmup()
+    except Exception as e:
+        print(f"[startup] amp wide-view warmup failed (non-fatal): {e}")
     try:
         from app.services.science_build import ensure_indexes as ensure_science_indexes
         await ensure_science_indexes(db.science_items)
