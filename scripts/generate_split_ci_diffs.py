@@ -53,6 +53,28 @@ def job_ranges(lines: list[str]) -> dict[str, tuple[int, int]]:
     return ranges
 
 
+def replace_one_of(body: str, olds: tuple[str, ...], new: str, what: str) -> str:
+    """Remplace la première forme trouvée ; s'arrête si aucune n'est dans ci.yml.
+
+    Un .replace() muet a laissé le deploy-gate NAVIGUIDE exiger l'agrégateur
+    backend (premier push NAVIGUIDE, 18 oct. 2026) : on refuse désormais
+    de générer un diff qui n'a pas changé ce qu'il devait changer.
+    """
+    for old in olds:
+        if old in body:
+            return body.replace(old, new)
+    raise SystemExit(f"generate_split_ci_diffs : {what} introuvable dans ci.yml")
+
+
+BACKEND_CASE = (
+    '          echo "R_BACKEND=$R_BACKEND"\n'
+    '          case "$R_BACKEND" in\n'
+    "            success) ;;\n"
+    "            *) echo \"L'agrégateur pytest (backend) doit être success, pas skipped ni absent.\" >&2; fail=1 ;;\n"
+    "          esac\n"
+)
+
+
 def build_ci(side: str, lines: list[str], ranges: dict[str, tuple[int, int]]) -> str:
     jobs_idx = next(i for i, line in enumerate(lines) if line.strip() == "jobs:")
     on_start = next(i for i, line in enumerate(lines) if line.startswith("on:"))
@@ -77,9 +99,16 @@ def build_ci(side: str, lines: list[str], ranges: dict[str, tuple[int, int]]) ->
             "needs: [frontend, audit-tags, backend, changes, simulator, simulator-e2e]",
             "needs: [frontend, audit-tags, backend]",
         )
-        body = body.replace(
-            "for name in R_FRONTEND R_AUDIT R_BACKEND R_CHANGES R_SIMULATOR R_E2E; do",
-            "for name in R_FRONTEND R_AUDIT R_BACKEND; do",
+        body = replace_one_of(
+            body,
+            (
+                "for name in R_FRONTEND R_AUDIT R_CHANGES R_SIMULATOR R_E2E; do",
+                "for name in R_FRONTEND R_AUDIT R_BACKEND R_CHANGES R_SIMULATOR R_E2E; do",
+            ),
+            "for name in R_FRONTEND R_AUDIT; do"
+            if BACKEND_CASE in body
+            else "for name in R_FRONTEND R_AUDIT R_BACKEND; do",
+            "boucle du deploy-gate (bi)",
         )
         body = re.sub(
             r"          R_CHANGES: \$\{\{ needs\.changes\.result \}\}\n"
@@ -104,10 +133,18 @@ def build_ci(side: str, lines: list[str], ranges: dict[str, tuple[int, int]]) ->
             "          R_BACKEND: ${{ needs.backend.result }}\n",
             "",
         )
-        body = body.replace(
-            "for name in R_FRONTEND R_AUDIT R_BACKEND R_CHANGES R_SIMULATOR R_E2E; do",
+        body = body.replace(BACKEND_CASE, "")
+        body = replace_one_of(
+            body,
+            (
+                "for name in R_FRONTEND R_AUDIT R_CHANGES R_SIMULATOR R_E2E; do",
+                "for name in R_FRONTEND R_AUDIT R_BACKEND R_CHANGES R_SIMULATOR R_E2E; do",
+            ),
             "for name in R_CHANGES R_SIMULATOR R_E2E; do",
+            "boucle du deploy-gate (ng)",
         )
+        if "R_BACKEND" in body:
+            raise SystemExit("generate_split_ci_diffs : R_BACKEND reste dans le ci.yml NAVIGUIDE")
         body = body.replace(
             "          bash -n infra/vps/deploy-app.sh\n"
             "          bash -n infra/vps/bi-healthcheck.sh\n"
