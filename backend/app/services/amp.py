@@ -520,7 +520,7 @@ def repair_geometry_for_mongo(geom: dict | None, *, max_bytes: int = 800_000) ->
     if geom.get("type") not in ("Polygon", "MultiPolygon", "GeometryCollection"):
         return None
     try:
-        from shapely.geometry import MultiPoint, mapping, shape
+        from shapely.geometry import mapping, shape
         from shapely.ops import unary_union
     except Exception:
         return None

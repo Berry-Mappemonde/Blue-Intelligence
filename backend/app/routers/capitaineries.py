@@ -6,7 +6,6 @@ import time
 import uuid
 
 from fastapi import APIRouter, Body, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.core.from_scratch import resolve_from_scratch

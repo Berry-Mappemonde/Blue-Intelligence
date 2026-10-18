@@ -18,7 +18,6 @@ from pathlib import Path
 
 from app.services.climatology_common import (
     CYCLONE_PERIOD,
-    IBTRACS_CREDIT,
     KIND,
     LICENSE_IBTRACS,
     SOURCE_IDS,
