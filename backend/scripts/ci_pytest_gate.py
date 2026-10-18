@@ -33,10 +33,16 @@ def _collect_only_total() -> int:
     if proc.returncode != 0:
         print(blob, file=sys.stderr)
         raise SystemExit(proc.returncode)
-    last = blob.splitlines()[-1]
-    m = re.match(r"(\d+)\s+tests?\s+collected", last)
+    collected_line = next(
+        (ln for ln in reversed(blob.splitlines()) if re.search(r"\d+\s+tests?\s+collected", ln)),
+        "",
+    )
+    m = re.search(r"(\d+)\s+tests?\s+collected", collected_line)
     if not m:
-        raise SystemExit(f"impossible de lire le collect-only: {last!r}")
+        raise SystemExit(f"impossible de lire le collect-only: {collected_line!r}")
+    if proc.returncode not in (0, 5):
+        print(blob, file=sys.stderr)
+        raise SystemExit(proc.returncode)
     return int(m.group(1))
 
 
