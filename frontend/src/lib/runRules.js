@@ -22,13 +22,25 @@ export function loc(obj, lang) {
   return obj[lang] || obj.fr || obj.en || "";
 }
 
+// Un défaut JSON ne distingue pas 1.0 de 1 : `Number.isInteger(rule.value)` est
+// donc vrai pour une règle *flottante* dont le défaut est entier (ex.
+// `formalities.wpi_proximity_km` = 1.0 dans [0.5, 2.0]). L'intervalle est le vrai
+// signe : s'il admet des bornes fractionnaires, la règle est flottante.
+export function isIntRule(rule) {
+  return (
+    typeof rule.value === "number" &&
+    Number.isInteger(rule.value) &&
+    (!rule.interval || rule.interval.every(Number.isInteger))
+  );
+}
+
 export function coerceValue(rule, raw) {
   if (typeof rule.value === "boolean") {
     if (typeof raw === "boolean") return raw;
     if (raw === "true" || raw === "1" || raw === true) return true;
     return false;
   }
-  if (typeof rule.value === "number" && Number.isInteger(rule.value) && !String(rule.value).includes(".")) {
+  if (typeof rule.value === "number" && isIntRule(rule)) {
     const n = parseInt(raw, 10);
     return Number.isFinite(n) ? n : rule.value;
   }

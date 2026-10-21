@@ -142,6 +142,36 @@ def test_unwrap_coords_keeps_one_line_past_180():
         assert abs(a[0] - b[0]) <= 180.0
 
 
+def test_in_dayrange_matches_december_storm_in_january():
+    """Un cyclone déc→jan est actif le 5 janvier : il faut tester l'année de fin.
+
+    L'ancien code ancrait toujours la fenêtre sur `s.year`, donc cherchait le
+    5 janvier de l'année de début et écartait silencieusement la tempête.
+    """
+    storm = {"start": "2024-12-27", "end": "2025-01-08", "months": [12, 1]}
+    assert cyc._in_dayrange(storm, 1, 5, 5) is True
+    assert cyc._in_dayrange(storm, 12, 30, 5) is True
+    assert cyc._in_dayrange(storm, 1, 20, 5) is False
+    assert cyc._in_dayrange(storm, 6, 10, 5) is False
+
+
+def test_in_dayrange_single_year_storm_is_unchanged():
+    storm = {"start": "2024-08-10", "end": "2024-08-20", "months": [8]}
+    assert cyc._in_dayrange(storm, 8, 15, 5) is True
+    assert cyc._in_dayrange(storm, 9, 15, 5) is False
+
+
+def test_in_dayrange_accepts_february_29_in_leap_year():
+    storm = {"start": "2024-02-20", "end": "2024-03-05", "months": [2, 3]}
+    assert cyc._in_dayrange(storm, 2, 29, 10) is True
+
+
+def test_in_dayrange_without_day_falls_back_to_months():
+    storm = {"start": "2024-12-27", "end": "2025-01-08", "months": [12, 1]}
+    assert cyc._in_dayrange(storm, 1, None, 5) is True
+    assert cyc._in_dayrange(storm, 7, None, 5) is False
+
+
 def test_cyclones_geojson_one_unwrapped_line_per_storm():
     data = _client().get("/api/climatology/cyclones.geojson", params={"month": 9}).json()
     sids = [f["properties"]["sid"] for f in data["features"]]

@@ -208,3 +208,40 @@ class TestCapitaineriesDoNotUseSiteMerge:
         assert len(coll.docs) == 2
         orphan = next(d for d in coll.docs if d.get("shom_id") == "shom:far")
         assert "osm_id" not in orphan
+
+
+class TestHaversineDomainClamp:
+    """`asin(sqrt(a))` reçoit parfois une valeur > 1.0 : deux points quasi
+    antipodaux font dépasser 1.0 à l'arrondi flottant près.
+
+    Sans `min(1.0, ...)` — la protection qu'a déjà
+    `climatology_common.haversine_nm` — `haversine_km` lève alors
+    `ValueError: math domain error`.
+    """
+
+    # Couple qui fait sortir `sqrt(a)` du domaine de asin (`a` vaut
+    # 1.0000000000000004). Reproduit sur CPython x86-64 ; ailleurs le test reste
+    # vert : il ne peut que se faire moins incisif, jamais faux.
+    ANTIPODAL_TRIGGER = (
+        58.1602059533397, 164.643942223191,
+        -58.1602059498364, 344.64394216128903,
+    )
+
+    def test_known_antipodal_trigger_does_not_raise(self):
+        dist = haversine_km(*self.ANTIPODAL_TRIGGER)
+        assert dist == pytest.approx(20015.086, abs=1.0)
+
+    def test_antipodal_domain_never_raises(self):
+        # propriété : aucune paire de coordonnées ne doit faire sortir asin de son
+        # domaine. Balayage déterministe sur tout le domaine géographique.
+        for i in range(2000):
+            t = i / 2000.0
+            lat = -89.0 + 178.0 * t
+            lon = -180.0 + 360.0 * ((i * 7919) % 2000) / 2000.0
+            dist = haversine_km(lat, lon, -lat, lon + 180.0)
+            assert 15000.0 < dist <= 20020.0
+
+    def test_ordinary_distance_is_unchanged(self):
+        # les règles 500 m / 250 m reposent sur cette distance : elle doit rester juste
+        assert haversine_km(48.0, -4.0, 48.0045, -4.0) == pytest.approx(0.5, abs=0.01)
+        assert haversine_km(48.0, -4.0, 48.0, -4.0) == pytest.approx(0.0, abs=1e-9)

@@ -92,6 +92,37 @@ class TestGeocodeDualParallel:
         assert dual["agree"] is None
         assert dual["nominatim"] and not dual["geonames"]
 
+    def test_identical_points_keep_both_providers(self, monkeypatch):
+        """Deux géocodeurs tombant sur le même point = le meilleur cas possible.
+
+        Une clé de dédup purement géographique écartait le second : la double
+        concordance était alors signalée « single » (agree=None) et perdait le
+        bonus « géocodeurs d'accord » du score PoE.
+        """
+        calls = _patch_rows(
+            monkeypatch,
+            [_nomi_row(10.0, 20.0, "Alpha")],
+            [_geon_row(10.0, 20.0, "Alpha")],
+        )
+        dual = _run(geocode_dual("Port Alpha"))
+        assert calls["nominatim"] == 1 and calls["geonames"] == 1
+        assert dual["nominatim"] == [10.0, 20.0]
+        assert dual["geonames"] == [10.0, 20.0]
+        assert dual["agree"] is True
+        assert dual["agreement_km"] < 0.01
+
+    def test_same_provider_duplicates_are_still_deduped(self, monkeypatch):
+        # la dédup intra-source doit rester en place
+        _patch_rows(
+            monkeypatch,
+            [_nomi_row(10.0, 20.0, "Alpha"), _nomi_row(10.0, 20.0, "Alpha bis")],
+            [],
+        )
+        dual = _run(geocode_dual("Port Alpha"))
+        assert dual["nominatim"] == [10.0, 20.0]
+        assert dual["geonames"] is None
+        assert dual["agree"] is None
+
     def test_does_not_score_eez_or_havre(self):
         src = inspect.getsource(geocode_dual) + inspect.getsource(geocode_name)
         src += inspect.getsource(pack_geocode_dual)
