@@ -162,6 +162,37 @@ def test_chat_retries_at_most_once_then_falls_back(transport):
     assert hosts == ['127.0.0.1', '127.0.0.1', '127.0.0.1', 'integrate.api.nvidia.com']
 
 
+@pytest.mark.parametrize('content, expected', [
+    ('The user wants a brief. Draft...</think>Confirmed ports: none.', 'Confirmed ports: none.'),
+    ('<think>plan the answer</think>\nConfirmed ports: none.', 'Confirmed ports: none.'),
+    ('<THINK>a</THINK>x</think>  Final text  ', 'Final text'),
+    ('No reasoning here.', 'No reasoning here.'),
+])
+def test_reasoning_is_stripped_from_content(content, expected, transport):
+    transport(lambda r: httpx.Response(200, json={'data': []}) if r.method == 'GET' else answer(content))
+    result = run()
+    assert result['text'] == expected and result['provider'] == 'nightshift'
+
+
+def test_reasoning_stripped_before_json_parse(transport):
+    transport(lambda r: httpx.Response(200, json={'data': []}) if r.method == 'GET'
+              else answer('{"draft": true} thinking</think>{"ports": [{"name": "Papeete"}]}'))
+    assert run(json_mode=True)['parsed'] == {'ports': [{'name': 'Papeete'}]}
+
+
+def test_reasoning_only_answer_is_invalid_and_falls_back(transport):
+    def handler(request):
+        if request.method == 'GET':
+            return httpx.Response(200, json={'data': []})
+        if request.url.host == '127.0.0.1':
+            return answer('only reasoning</think>   ')
+        return answer('Final from NVIDIA')
+    transport(handler)
+    result = run()
+    assert result['provider'] == 'nvidia' and result['text'] == 'Final from NVIDIA'
+    assert result['fallback_reason'] == 'nightshift: invalid_response'
+
+
 def test_probe_cache_ttl_configuration_and_concurrent_calls(transport, monkeypatch):
     now = [1000.0]
     monkeypatch.setattr(generator.time, 'monotonic', lambda: now[0])
