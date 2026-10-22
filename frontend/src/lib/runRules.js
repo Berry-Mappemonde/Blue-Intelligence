@@ -22,13 +22,25 @@ export function loc(obj, lang) {
   return obj[lang] || obj.fr || obj.en || "";
 }
 
+// `JSON.parse` efface la différence entre `15.0` et `15`, et un intervalle
+// `[8.0, 25.0]` ne la rétablit pas : aucune inférence côté client n'est fiable.
+// Le catalogue porte donc `numeric: "int" | "float"` (backend/data/run_rules.json),
+// validé côté serveur contre le type littéral de `value` (la même source que
+// `_coerce`). Sans ce champ — valeur non numérique ou catalogue ancien — on
+// retombe sur `value`, qui sait au moins distinguer un booléen d'un nombre.
+export function isIntRule(rule) {
+  if (rule.numeric === "float") return false;
+  if (rule.numeric === "int") return true;
+  return typeof rule.value === "number" && Number.isInteger(rule.value);
+}
+
 export function coerceValue(rule, raw) {
   if (typeof rule.value === "boolean") {
     if (typeof raw === "boolean") return raw;
     if (raw === "true" || raw === "1" || raw === true) return true;
     return false;
   }
-  if (typeof rule.value === "number" && Number.isInteger(rule.value) && !String(rule.value).includes(".")) {
+  if (typeof rule.value === "number" && isIntRule(rule)) {
     const n = parseInt(raw, 10);
     return Number.isFinite(n) ? n : rule.value;
   }

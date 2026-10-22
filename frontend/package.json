@@ -7,7 +7,6 @@
     "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "axios": "^1.7.9",
     "leaflet": "^1.9.4",
-    "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^1.54.0",
     "maplibre-gl": "^6.13.0",
     "pmtiles": "^4.5.0",

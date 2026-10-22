@@ -9,6 +9,7 @@ unchanged — the prefilter is conservative (see tests).
 """
 from __future__ import annotations
 
+import calendar
 import copy
 import json
 import math
@@ -209,14 +210,19 @@ def _in_dayrange(storm: dict, month: int, day: int | None, dayrange: int) -> boo
         e = datetime.fromisoformat(str(end)[:10]).date()
     except ValueError:
         return month in (storm.get("months") or [])
-    # Window around the calendar day, storm year.
-    year = s.year
-    try:
-        center = date(year, month, min(day, 28 if month == 2 else 30 if month in (4, 6, 9, 11) else 31))
-    except ValueError:
-        center = date(year, month, 15)
-    lo, hi = center - timedelta(days=dayrange), center + timedelta(days=dayrange)
-    return s <= hi and e >= lo
+    # Fenêtre autour du jour calendaire. Un cyclone peut franchir le Nouvel An :
+    # on teste donc l'année de début *et* l'année de fin, et on retient la fenêtre
+    # qui intersecte réellement l'activité de la tempête. Sinon un cyclone déc→jan
+    # est cherché dans l'année de début et silencieusement écarté.
+    for year in {s.year, e.year}:
+        try:
+            center = date(year, month, min(day, calendar.monthrange(year, month)[1]))
+        except ValueError:
+            continue
+        lo, hi = center - timedelta(days=dayrange), center + timedelta(days=dayrange)
+        if s <= hi and e >= lo:
+            return True
+    return False
 
 
 def crossings(

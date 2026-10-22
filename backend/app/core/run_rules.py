@@ -73,6 +73,23 @@ def _validate_catalog(cat: dict) -> None:
             raise RuleError(f"{rid}: une loi va dans Contrats")
         if rule.get("kind") != "loi":
             _assert_in_interval(rid, rule.get("value"), rule.get("interval"))
+        _assert_numeric_matches_value(rid, rule)
+
+
+def _assert_numeric_matches_value(rid: str, rule: dict) -> None:
+    """`numeric` est la seule chose que le client peut lire : `JSON.parse` efface
+    la différence entre `15.0` et `15`. On refuse donc tout désaccord avec le type
+    littéral du catalogue, que `_coerce` utilise déjà.
+    """
+    value = rule.get("value")
+    num = rule.get("numeric")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if num is not None:
+            raise RuleError(f"{rid}: numeric superflu sur une valeur non numérique")
+        return
+    expected = "float" if isinstance(value, float) else "int"
+    if num != expected:
+        raise RuleError(f"{rid}: numeric={num!r} ne colle pas à la valeur ({expected})")
 
 
 def reload_catalog() -> dict:
@@ -269,6 +286,7 @@ def public_catalog(mode: str | None = None) -> dict:
                 "kind": r["kind"],
                 "group": r.get("group"),
                 "value": r["value"],
+                "numeric": r.get("numeric"),
                 "unit": r.get("unit"),
                 "interval": r.get("interval"),
                 "vary": bool(r.get("vary")),

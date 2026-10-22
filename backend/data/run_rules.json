@@ -174,6 +174,7 @@
       "mode": "shared",
       "kind": "geometrie",
       "value": 0.5,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         0.3,
@@ -201,6 +202,7 @@
       "mode": "shared",
       "kind": "score",
       "value": 0.6,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.5,
@@ -227,6 +229,7 @@
       "mode": "shared",
       "kind": "score",
       "value": 0.9,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.8,
@@ -253,6 +256,7 @@
       "mode": "shared",
       "kind": "score",
       "value": 0.55,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.4,
@@ -279,6 +283,7 @@
       "mode": "shared",
       "kind": "score",
       "value": 0.4,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.2,
@@ -305,6 +310,7 @@
       "mode": "shared",
       "kind": "score",
       "value": 0.95,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.85,
@@ -332,6 +338,7 @@
       "mode": "shared",
       "kind": "budget",
       "value": 0.9,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.8,
@@ -359,6 +366,7 @@
       "mode": "shared",
       "kind": "budget",
       "value": 0.0,
+      "numeric": "float",
       "unit": "USD",
       "interval": [
         0.0,
@@ -383,6 +391,7 @@
       "mode": "shared",
       "kind": "budget",
       "value": 1.1,
+      "numeric": "float",
       "unit": "s",
       "interval": [
         1.1,
@@ -409,6 +418,7 @@
       "mode": "shared",
       "kind": "budget",
       "value": 30,
+      "numeric": "int",
       "unit": "req/min",
       "interval": [
         5,
@@ -435,6 +445,7 @@
       "mode": "shared",
       "kind": "budget",
       "value": 150,
+      "numeric": "int",
       "unit": "url/min",
       "interval": [
         20,
@@ -480,6 +491,7 @@
       "mode": "projects",
       "kind": "geometrie",
       "value": 15.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         8.0,
@@ -508,6 +520,7 @@
       "mode": "projects",
       "kind": "geometrie",
       "value": 50.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         15.0,
@@ -536,6 +549,7 @@
       "mode": "projects",
       "kind": "score",
       "value": 0.5,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.3,
@@ -564,6 +578,7 @@
       "mode": "projects",
       "kind": "score",
       "value": 0.85,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.7,
@@ -592,6 +607,7 @@
       "mode": "projects",
       "kind": "score",
       "value": 0.12,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.05,
@@ -620,6 +636,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 15,
+      "numeric": "int",
       "unit": "orgs",
       "interval": [
         3,
@@ -647,6 +664,7 @@
       "mode": "projects",
       "kind": "score",
       "value": 0.7,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.4,
@@ -675,6 +693,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 6,
+      "numeric": "int",
       "unit": "urls",
       "interval": [
         3,
@@ -702,6 +721,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 20,
+      "numeric": "int",
       "unit": "urls",
       "interval": [
         10,
@@ -729,6 +749,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 50,
+      "numeric": "int",
       "unit": "empty_extracts",
       "interval": [
         10,
@@ -756,6 +777,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 7,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         1,
@@ -807,6 +829,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 2,
+      "numeric": "int",
       "unit": "workers",
       "interval": [
         1,
@@ -834,6 +857,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 2,
+      "numeric": "int",
       "unit": "calls",
       "interval": [
         1,
@@ -862,6 +886,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 1,
+      "numeric": "int",
       "unit": "judges",
       "interval": [
         1,
@@ -890,6 +915,7 @@
       "mode": "projects",
       "kind": "budget",
       "value": 2,
+      "numeric": "int",
       "unit": "agents",
       "interval": [
         1,
@@ -975,6 +1001,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 2.2,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         1.5,
@@ -1001,6 +1028,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 15.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         8.0,
@@ -1027,6 +1055,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 400.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         200.0,
@@ -1053,6 +1082,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 2.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         1.0,
@@ -1080,6 +1110,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 800,
+      "numeric": "int",
       "unit": "m",
       "interval": [
         400,
@@ -1107,6 +1138,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 1.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         0.5,
@@ -1133,6 +1165,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 3000,
+      "numeric": "int",
       "unit": "m",
       "interval": [
         1000,
@@ -1159,6 +1192,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 3,
+      "numeric": "int",
       "unit": "ports",
       "interval": [
         2,
@@ -1185,6 +1219,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 1,
+      "numeric": "int",
       "unit": "ports",
       "interval": [
         1,
@@ -1211,6 +1246,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 8,
+      "numeric": "int",
       "unit": "hits",
       "interval": [
         5,
@@ -1237,6 +1273,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 150,
+      "numeric": "int",
       "unit": "ports",
       "interval": [
         50,
@@ -1263,6 +1300,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 30.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         20.0,
@@ -1289,6 +1327,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 8.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         4.0,
@@ -1315,6 +1354,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 300.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         150.0,
@@ -1342,6 +1382,7 @@
       "mode": "formalities",
       "kind": "geometrie",
       "value": 1500.0,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         800.0,
@@ -1369,6 +1410,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.9,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.8,
@@ -1395,6 +1437,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.6,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.5,
@@ -1421,6 +1464,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.82,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.7,
@@ -1447,6 +1491,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.86,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.75,
@@ -1473,6 +1518,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.72,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.6,
@@ -1499,6 +1545,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.9,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.8,
@@ -1525,6 +1572,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 0.5,
+      "numeric": "float",
       "unit": "ratio",
       "interval": [
         0.35,
@@ -1551,6 +1599,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 30,
+      "numeric": "int",
       "unit": "points",
       "interval": [
         20,
@@ -1577,6 +1626,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 25,
+      "numeric": "int",
       "unit": "points",
       "interval": [
         15,
@@ -1603,6 +1653,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 25,
+      "numeric": "int",
       "unit": "points",
       "interval": [
         15,
@@ -1629,6 +1680,7 @@
       "mode": "formalities",
       "kind": "score",
       "value": 20,
+      "numeric": "int",
       "unit": "points",
       "interval": [
         10,
@@ -1655,6 +1707,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 900,
+      "numeric": "int",
       "unit": "s",
       "interval": [
         300,
@@ -1681,6 +1734,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 180,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         60,
@@ -1707,6 +1761,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 30,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         7,
@@ -1733,6 +1788,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 7,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         1,
@@ -1759,6 +1815,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 12,
+      "numeric": "int",
       "unit": "h",
       "interval": [
         6,
@@ -1785,6 +1842,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 60,
+      "numeric": "int",
       "unit": "zones",
       "interval": [
         10,
@@ -1811,6 +1869,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 180,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         30,
@@ -1837,6 +1896,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 14,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         3,
@@ -1863,6 +1923,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 10,
+      "numeric": "int",
       "unit": "hits",
       "interval": [
         5,
@@ -1889,6 +1950,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 200,
+      "numeric": "int",
       "unit": "seeds",
       "interval": [
         20,
@@ -1915,6 +1977,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 15,
+      "numeric": "int",
       "unit": "domains",
       "interval": [
         5,
@@ -1941,6 +2004,7 @@
       "mode": "formalities",
       "kind": "budget",
       "value": 4,
+      "numeric": "int",
       "unit": "runs",
       "interval": [
         1,
@@ -1967,6 +2031,7 @@
       "mode": "marinas",
       "kind": "geometrie",
       "value": 25.0,
+      "numeric": "float",
       "unit": "NM",
       "interval": [
         15.0,
@@ -1994,6 +2059,7 @@
       "mode": "marinas",
       "kind": "geometrie",
       "value": 25.0,
+      "numeric": "float",
       "unit": "NM",
       "interval": [
         10.0,
@@ -2020,6 +2086,7 @@
       "mode": "marinas",
       "kind": "geometrie",
       "value": 10.0,
+      "numeric": "float",
       "unit": "NM",
       "interval": [
         5.0,
@@ -2048,6 +2115,7 @@
       "mode": "marinas",
       "kind": "geometrie",
       "value": 15.0,
+      "numeric": "float",
       "unit": "NM",
       "interval": [
         10.0,
@@ -2074,6 +2142,7 @@
       "mode": "marinas",
       "kind": "geometrie",
       "value": 8000,
+      "numeric": "int",
       "unit": "m",
       "interval": [
         2000,
@@ -2100,6 +2169,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 500.0,
+      "numeric": "float",
       "unit": "NM",
       "interval": [
         100.0,
@@ -2126,6 +2196,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 365,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         90,
@@ -2153,6 +2224,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 2,
+      "numeric": "int",
       "unit": "workers",
       "interval": [
         1,
@@ -2180,6 +2252,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 0.5,
+      "numeric": "float",
       "unit": "USD",
       "interval": [
         0.1,
@@ -2207,6 +2280,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 150.0,
+      "numeric": "float",
       "unit": "s",
       "interval": [
         30.0,
@@ -2233,6 +2307,7 @@
       "mode": "marinas",
       "kind": "budget",
       "value": 3.0,
+      "numeric": "float",
       "unit": "s",
       "interval": [
         1.2,
@@ -2259,6 +2334,7 @@
       "mode": "capitaineries",
       "kind": "budget",
       "value": 3.0,
+      "numeric": "float",
       "unit": "s",
       "interval": [
         1.2,
@@ -2285,6 +2361,7 @@
       "mode": "capitaineries",
       "kind": "geometrie",
       "value": 0.25,
+      "numeric": "float",
       "unit": "km",
       "interval": [
         0.1,
@@ -2334,6 +2411,7 @@
       "mode": "amp",
       "kind": "budget",
       "value": 5,
+      "numeric": "int",
       "unit": "zoom",
       "interval": [
         4,
@@ -2361,6 +2439,7 @@
       "mode": "amp",
       "kind": "budget",
       "value": 8.0,
+      "numeric": "float",
       "unit": "deg",
       "interval": [
         2.0,
@@ -2387,6 +2466,7 @@
       "mode": "amp",
       "kind": "budget",
       "value": 30,
+      "numeric": "int",
       "unit": "days",
       "interval": [
         7,
@@ -2413,6 +2493,7 @@
       "mode": "amp",
       "kind": "budget",
       "value": 400,
+      "numeric": "int",
       "unit": "features",
       "interval": [
         50,
@@ -2439,6 +2520,7 @@
       "mode": "science",
       "kind": "budget",
       "value": 2000,
+      "numeric": "int",
       "unit": "fiches",
       "interval": [
         100,
@@ -2465,6 +2547,7 @@
       "mode": "science",
       "kind": "budget",
       "value": 30,
+      "numeric": "int",
       "unit": "jours",
       "interval": [
         7,
@@ -2491,6 +2574,7 @@
       "mode": "science",
       "kind": "budget",
       "value": 500,
+      "numeric": "int",
       "unit": "fiches",
       "interval": [
         50,
@@ -2563,6 +2647,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 3,
+      "numeric": "int",
       "unit": "kn",
       "interval": [
         2,
@@ -2590,6 +2675,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 34,
+      "numeric": "int",
       "unit": "kn",
       "interval": [
         34,
@@ -2617,6 +2703,7 @@
       "mode": "climatology",
       "kind": "loi",
       "value": 8,
+      "numeric": "int",
       "unit": "secteurs",
       "vary": false,
       "principle": "Rose à 8 secteurs de 45°. Pas 16 en V1 (bins 40+ kn hors périmètre).",
@@ -2639,6 +2726,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 2.5,
+      "numeric": "float",
       "unit": "%",
       "interval": [
         1,
@@ -2665,6 +2753,7 @@
       "mode": "climatology",
       "kind": "budget",
       "value": 0.5,
+      "numeric": "float",
       "unit": "deg",
       "interval": [
         0.25,
@@ -2691,6 +2780,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 2.5,
+      "numeric": "float",
       "unit": "m",
       "interval": [
         2.0,
@@ -2761,6 +2851,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 0.15,
+      "numeric": "float",
       "unit": "kn",
       "interval": [
         0.05,
@@ -2787,6 +2878,7 @@
       "mode": "climatology",
       "kind": "loi",
       "value": 0.5,
+      "numeric": "float",
       "unit": "m",
       "vary": false,
       "principle": "Premier niveau GLORYS ≈ 0,494 m, comme getCurrent.py (minimum_depth=0.5).",
@@ -2831,6 +2923,7 @@
       "mode": "climatology",
       "kind": "loi",
       "value": 1980,
+      "numeric": "int",
       "unit": "year",
       "vary": false,
       "principle": "Fichier ibtracs.since1980.list.v04r01.csv. Pas Unisys.",
@@ -2854,6 +2947,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 21,
+      "numeric": "int",
       "unit": "jours",
       "interval": [
         7,
@@ -2880,6 +2974,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 120,
+      "numeric": "int",
       "unit": "NM",
       "interval": [
         60,
@@ -2906,6 +3001,7 @@
       "mode": "climatology",
       "kind": "geometrie",
       "value": 34,
+      "numeric": "int",
       "unit": "kn",
       "interval": [
         34,

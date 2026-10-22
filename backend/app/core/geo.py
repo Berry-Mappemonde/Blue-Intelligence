@@ -44,7 +44,9 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     dp = math.radians(lat2 - lat1)
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+    # min(): pour deux points quasi antipodaux, `a` peut dépasser 1.0 à cause de
+    # l'arrondi flottant, et asin(sqrt(a)) lèverait ValueError (math domain error).
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
 
 
 def destination_point(lat, lon, bearing_deg, dist_km):
@@ -993,9 +995,13 @@ def _geonames_cand(row: dict) -> dict | None:
 def _add_unique_cand(pool: list[dict], cand: dict | None) -> None:
     if not cand:
         return
-    key = (round(cand["lat"], 4), round(cand["lon"], 4))
+    # La clé inclut la source : deux géocodeurs qui tombent sur le même point (le
+    # meilleur cas possible) doivent rester deux candidats distincts. Avec une clé
+    # purement géographique, le second est écarté et `geocode_dual` déclare
+    # « single » au lieu d'une double concordance.
+    key = (cand.get("source"), round(cand["lat"], 4), round(cand["lon"], 4))
     for c in pool:
-        if (round(c["lat"], 4), round(c["lon"], 4)) == key:
+        if (c.get("source"), round(c["lat"], 4), round(c["lon"], 4)) == key:
             return
     pool.append(cand)
 
