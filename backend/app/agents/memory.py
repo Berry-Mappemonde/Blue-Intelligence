@@ -122,6 +122,11 @@ def recall_node(state):
     return _trace(out, entries)
 
 
+def _official_source_of(memory):
+    match = re.search(r'; official source (.*?); reasons ', memory.get('content') or '')
+    return match.group(1) if match else None
+
+
 def remember_node(state):
     out, entries = _state(state), []
     # Validate the whole batch before writing any memories.
@@ -135,6 +140,13 @@ def remember_node(state):
             urls = [u for u in (port.get('source_urls') or []) if u]
             official = next((u for u in urls if any(s in u.lower() for s in ('gov', 'gouv', 'gob'))), 'none')
             zone = port.get('zone_name') or ''
+            if (previous and f'verdict:{verdict}' in previous['tags']
+                    and _official_source_of(previous) == official):
+                # Unchanged verdict and official source: reinforce, do not duplicate.
+                engine.feedback(previous['id'], 'helpful')
+                entries.append(_event(out, port, 'remember', memory_id=previous['id'], outcome='reinforced',
+                                      handoff={'from': 'EvaluatorAgent', 'to': 'HMemAgent'}))
+                continue
             record = engine.add(dict(
                 content=f"Port {port.get('name', '')} ({zone}): verdict {verdict}; official source {official}; reasons {'; '.join(port.get('reasons_en') or [])}",
                 type='factual', layer='long_term', source=urls[0] if urls else 'evaluator',
@@ -143,9 +155,6 @@ def remember_node(state):
                 tags=['project:blue-intelligence', f'zone:{zone}', f'verdict:{verdict}', tag],
                 missionId=out['run_id']))
             action = 'created'
-            if previous and f'verdict:{verdict}' in previous['tags']:
-                engine.feedback(previous['id'], 'helpful')
-                action = 'helpful'
             # Resolve every active older contradictory verification, including repeats.
             for old in prior:
                 if f'verdict:{verdict}' not in old['tags']:
