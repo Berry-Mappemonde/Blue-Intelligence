@@ -14,10 +14,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.services.poe_confidence import apply_score, score_port
+from app.core import paths
 
 AGENT_NAME = "EvaluatorAgent"
 RETRY_LIMIT = 2
-DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
+DEFAULT_TRACE_LOG_DIR = paths.LOGS_DIR
 
 _REASONS_EN = {
     "source d'État": "government source",
