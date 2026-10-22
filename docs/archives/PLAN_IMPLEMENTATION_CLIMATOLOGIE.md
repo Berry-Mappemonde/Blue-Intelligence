@@ -602,9 +602,9 @@ unchanged).
 
 - GFS / IFS / ICON / AIFS forecast and “this week” overlay **in the
   7th BI mode**. The **simulator** forecast workshop is
-  [PLAN_IMPLEMENTATION_SIMULATION_B.md](./PLAN_IMPLEMENTATION_SIMULATION_B.md)
-  (after
-  [PLAN_IMPLEMENTATION_SIMULATION_A.md](./PLAN_IMPLEMENTATION_SIMULATION_A.md)).
+  `naviguide-simulator/PLAN_IMPLEMENTATION_SIMULATION_B.md`
+  (after `naviguide-simulator/PLAN_IMPLEMENTATION_SIMULATION_A.md`) —
+  simulator-side plans, kept in `naviguide-simulator/`, not archived here.
 - Unlocking `valid_time` of `getWave.py` / `getCurrent.py` (separate forecast
   workshop — B on the simulator side, not the NRT click).
 - Self-hosting Open-Meteo, NOMADS GRIB ingestion.
