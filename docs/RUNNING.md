@@ -14,7 +14,7 @@ ZetarisAdapter → HMemAgent (recall) → EvaluatorAgent ⇄ ResearchAgent (retr
 ```bash
 git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
 cd Blue-Intelligence
-python3.12 -m venv backend/.venv
+python3 -m venv backend/.venv      # Python 3.12 or newer
 # The agent pipeline needs only these five packages (pinned as in backend/requirements.txt):
 backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
     python-dotenv==1.2.3 uvicorn==0.25.0
@@ -81,10 +81,16 @@ backend/.venv/bin/python backend/run.py --input input_examples/03_azores.json --
 
 # HTTP: POST /run and GET /healthz on PORT (default 8000, host 127.0.0.1; set HOST=0.0.0.0 in a container)
 backend/.venv/bin/python backend/run.py --serve
+# in a second terminal:
 curl -s localhost:8000/healthz
 curl -s -X POST localhost:8000/run -H 'Content-Type: application/json' \
      -d '{"zone_name": "Bermuda", "run_id": "demo-1"}'
 ```
+
+If port 8000 is already in use, the server exits with "address already in use", and
+`curl` would reach whichever program holds the port. Start it with another port,
+for example `PORT=8001 backend/.venv/bin/python backend/run.py --serve`, and use
+`localhost:8001` in the `curl` commands.
 
 Input: `{"zone_name": str, "run_id": optional str}` (`run_id`: letters, digits, `_`, `-`).
 Output: `run_id`, `zone`, `mode` (`live` or `sample`), `ports` (name, verdict,
