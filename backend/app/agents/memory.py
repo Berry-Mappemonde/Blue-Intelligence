@@ -43,7 +43,8 @@ def _acquire_lock(directory):
     except ImportError:
         # No filelock, no fcntl: rely on RLock for thread safety only.
         # Document: NOT safe for true multi-process without OS locking.
-        return _LOCK
+        _LOCK.acquire()
+        return _LOCK  # caller must release via .release()
 
 
 @contextmanager
@@ -57,18 +58,15 @@ def _engine():
             with lock:
                 yield HMEM(persist_dir=directory, actor='HMemAgent')
         else:
-            # fcntl path: lock_fd is returned; release in finally
-            try:
-                yield HMEM(persist_dir=directory, actor='HMemAgent')
-            finally:
-                lock.close()
+            # fcntl path: lock_fd is held; thread-only path: _LOCK is held.
+            yield HMEM(persist_dir=directory, actor='HMemAgent')
     finally:
-        # If filelock, context manager already released; if fcntl, close fd.
+        # If filelock, context manager already released; otherwise release once.
         if not HAS_FILELOCK:
-            try:
-                lock.close()
-            except Exception:
-                pass
+            if lock is _LOCK:
+                _LOCK.release()
+            else:
+                lock.close()  # closing the fd releases the fcntl lock
 
 
 def _state(state):

@@ -193,3 +193,79 @@ def test_latest_feedback_after_double_digit_id_restart():
     h = HMEM()
     assert len(h.store.all()) == 13
     assert all(h.store.get(f'mem-{i}')['supersededBy'] == 'mem-13' for i in range(1, 13))
+
+
+def _held_by_another_thread(try_acquire):
+    """Run try_acquire() in a fresh thread; True if the lock was free there."""
+    import threading
+    result = []
+    worker = threading.Thread(target=lambda: result.append(try_acquire()))
+    worker.start()
+    worker.join(5)
+    return result[0]
+
+
+def _rlock_free():
+    from app.agents import memory
+    if memory._LOCK.acquire(blocking=False):
+        memory._LOCK.release()
+        return True
+    return False
+
+
+def test_thread_only_lock_without_filelock_or_fcntl(monkeypatch):
+    import sys
+    from app.agents import memory
+    monkeypatch.setattr(memory, 'HAS_FILELOCK', False)
+    monkeypatch.setitem(sys.modules, 'fcntl', None)  # `import fcntl` now raises ImportError
+    remember_node(dict(ports=[port()], run_id='thread-only'))
+    assert len(recall_node(dict(ports=[port()], run_id='thread-only-2'))['ports'][0]['memory']) == 1
+    with memory._engine():
+        assert _held_by_another_thread(_rlock_free) is False  # held while the engine is open
+    assert _held_by_another_thread(_rlock_free) is True  # released afterwards
+    with pytest.raises(RuntimeError):
+        with memory._engine():
+            raise RuntimeError('node failure')
+    assert _held_by_another_thread(_rlock_free) is True  # released after an exception too
+
+
+def test_fcntl_lock_released_exactly_once(monkeypatch, storage):
+    fcntl = pytest.importorskip('fcntl')
+    from app.agents import memory
+    monkeypatch.setattr(memory, 'HAS_FILELOCK', False)
+    closes = []
+    original = memory._acquire_lock
+
+    class CountingLock:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def close(self):
+            closes.append(1)
+            self.handle.close()
+
+    monkeypatch.setattr(memory, '_acquire_lock', lambda directory: CountingLock(original(directory)))
+    remember_node(dict(ports=[port()], run_id='fcntl'))
+    assert closes == [1]
+    with (storage / 'memory' / '.lock').open('a') as other:  # free again for another descriptor
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(other, fcntl.LOCK_UN)
+
+
+def test_filelock_path_holds_and_releases(monkeypatch, storage):
+    filelock = pytest.importorskip('filelock')
+    from app.agents import memory
+    monkeypatch.setattr(memory, 'HAS_FILELOCK', True)
+    lock_path = str(storage / 'memory' / '.lock')
+
+    def free():
+        try:
+            filelock.FileLock(lock_path).acquire(timeout=0).lock.release()
+            return True
+        except filelock.Timeout:
+            return False
+
+    remember_node(dict(ports=[port()], run_id='filelock'))
+    with memory._engine():
+        assert _held_by_another_thread(free) is False
+    assert _held_by_another_thread(free) is True
