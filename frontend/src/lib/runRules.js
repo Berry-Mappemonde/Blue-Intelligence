@@ -22,16 +22,16 @@ export function loc(obj, lang) {
   return obj[lang] || obj.fr || obj.en || "";
 }
 
-// Un défaut JSON ne distingue pas 1.0 de 1 : `Number.isInteger(rule.value)` est
-// donc vrai pour une règle *flottante* dont le défaut est entier (ex.
-// `formalities.wpi_proximity_km` = 1.0 dans [0.5, 2.0]). L'intervalle est le vrai
-// signe : s'il admet des bornes fractionnaires, la règle est flottante.
+// `JSON.parse` efface la différence entre `15.0` et `15`, et un intervalle
+// `[8.0, 25.0]` ne la rétablit pas : aucune inférence côté client n'est fiable.
+// Le catalogue porte donc `numeric: "int" | "float"` (backend/data/run_rules.json),
+// validé côté serveur contre le type littéral de `value` (la même source que
+// `_coerce`). Sans ce champ — valeur non numérique ou catalogue ancien — on
+// retombe sur `value`, qui sait au moins distinguer un booléen d'un nombre.
 export function isIntRule(rule) {
-  return (
-    typeof rule.value === "number" &&
-    Number.isInteger(rule.value) &&
-    (!rule.interval || rule.interval.every(Number.isInteger))
-  );
+  if (rule.numeric === "float") return false;
+  if (rule.numeric === "int") return true;
+  return typeof rule.value === "number" && Number.isInteger(rule.value);
 }
 
 export function coerceValue(rule, raw) {

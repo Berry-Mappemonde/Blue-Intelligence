@@ -12,9 +12,9 @@ import pytest
 
 from app.core import dedup, extract, geo
 from app.core.run_rules import (
-    RuleError, attach_rules, bind_rules, catalog_default, get_rule, load_catalog,
-    public_catalog, reload_catalog, reset_rules, resolve_rules, rules_for_mode,
-    rules_hash, snapshot_for_run,
+    RuleError, _coerce, attach_rules, bind_rules, catalog_default, get_rule,
+    load_catalog, public_catalog, reload_catalog, reset_rules, resolve_rules,
+    rules_for_mode, rules_hash, snapshot_for_run,
 )
 from app.services import marina_world, osm_seeds, poe_runs, wpi_ports
 
@@ -196,6 +196,48 @@ def test_public_catalog_has_principle():
     assert "phénomène" in pub["principle"] or "loi" in pub["principle"]
     assert "cdc_default" in pub["profiles"]
     assert any(r["id"] == "marinas.corridor_radius_nm" for r in pub["rules"])
+
+
+def test_numeric_matches_the_literal_type():
+    """`numeric` est la seule chose que le client peut lire.
+
+    `JSON.parse` efface `15.0` vs `15`, et un intervalle `[8.0, 25.0]` ne la
+    rétablit pas : sans ce champ, le client reprend `parseInt` sur une distance.
+    Ici on refuse tout désaccord avec le type littéral, que `_coerce` utilise.
+    """
+    for rule in load_catalog()["rules"]:
+        value = rule.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            assert rule.get("numeric") is None, rule["id"]
+        else:
+            expected = "float" if isinstance(value, float) else "int"
+            assert rule.get("numeric") == expected, rule["id"]
+
+
+def test_numeric_is_explicit_not_inferred():
+    """Ces trois règles ont valeur *et* bornes entières : l'inférence par
+    `Number.isInteger` ou par l'intervalle les prend pour des entiers, alors que
+    ce sont des distances que le backend `_coerce` traite en flottant.
+    """
+    cat = {r["id"]: r for r in load_catalog()["rules"]}
+    for rid in ("projects.max_inland_km", "formalities.inland_river_max_km",
+                "marinas.max_bbox_span_nm"):
+        rule = cat[rid]
+        assert rule["numeric"] == "float", rid
+        # preuve que l'inférence par intervalle aurait échoué
+        assert float(rule["value"]).is_integer(), rid
+        assert all(float(x).is_integer() for x in rule["interval"]), rid
+        # et que le backend, lui, les traite déjà en flottant
+        coerced = _coerce(rule, "15.5")
+        assert isinstance(coerced, float) and coerced == 15.5, rid
+
+
+def test_public_catalog_exposes_numeric():
+    pub = public_catalog("projects")
+    by_id = {r["id"]: r for r in pub["rules"]}
+    assert by_id["projects.max_inland_km"]["numeric"] == "float"
+    assert by_id["projects.max_partner_orgs"]["numeric"] == "int"
+    assert by_id["projects.gatekeeper_accept"]["numeric"] == "float"
 
 
 def test_catalog_title_help_group():
