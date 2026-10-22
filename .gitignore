@@ -44,3 +44,4 @@ backend/data/climatology/**/*.partial.npz
 backend/data/climatology/**/*.npz.tmp
 logs/*.jsonl
 data/hmem/
+data/.lock
