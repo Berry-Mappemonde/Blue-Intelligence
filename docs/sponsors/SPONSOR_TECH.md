@@ -350,8 +350,14 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
 - H-MEM tier files and the ledger are not a multi-file transaction. Dream
   proposals, conflict queues and sleep backups are instance-local. Evidence:
   [`README.md`](../../backend/app/engines/hmem/README.md).
-- The memory node uses `fcntl.flock`, so it runs on Linux and macOS only.
-  Evidence: `_engine` in [`memory.py`](../../backend/app/agents/memory.py).
+- The memory node's process lock uses `filelock` when it is installed (it is
+  pinned in [`requirements.txt`](../../backend/requirements.txt)); this works on
+  Windows, Linux and macOS. Without `filelock` it uses `fcntl`, which exists on
+  Linux and macOS only. With neither (Windows with only the five packages listed
+  in [`RUNNING.md`](../RUNNING.md)), the remaining thread-only fallback currently
+  raises `AttributeError` when the lock is released, so `filelock` must be
+  installed on Windows. Evidence: `_acquire_lock` and `_engine` in
+  [`memory.py`](../../backend/app/agents/memory.py).
 - `is_official_source` is a hostname naming heuristic, not proof of government
   ownership and not an exhaustive allowlist. Evidence: `is_official_source` in
   [`evaluator.py`](../../backend/app/agents/evaluator.py) and its cases in
