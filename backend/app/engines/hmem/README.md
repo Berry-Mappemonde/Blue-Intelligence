@@ -30,8 +30,10 @@ Requested persistence adaptation: working.jsonl and long_term.jsonl are atomical
 replaced, while ledger.jsonl is append-only. Short-term records are not reloaded.
 ID high-water marks survive restart/restore. Tier files and the ledger are not a
 multi-file database transaction; backups remain in memory. The standalone engine
-is single-writer; memory nodes serialize operations with a thread lock and a local
-filesystem advisory lock (Linux/macOS). This is not distributed storage.
+is single-writer; memory nodes serialize operations with a local filesystem lock:
+`filelock` when installed (Windows, Linux, macOS), else `fcntl` (Linux, macOS), else
+a thread-only lock that does not protect against other processes. This is not
+distributed storage.
 
 Blue Intelligence's `recall_node` filters by normalized port name and zone, then
 ranks the top five with H-MEM. A zero threshold is intentional for that exact
