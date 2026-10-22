@@ -55,6 +55,8 @@ PROBE_TTL_S = 60
 GENERATE_BUDGET_S = 150.0  # hard cap for the whole call before sample
 MIN_ATTEMPT_S = 5.0        # do not start a provider with less time than this
 SECRET_ENV = ('METERLESS_RUNTIME_TOKEN', 'MODEL_API_KEY', 'NVIDIA_API_KEY')
+_THINK_BLOCK = re.compile(r'<think>.*?</think>', re.S | re.I)
+_THINK_END = '</think>'
 _probe_cache = {}  # One configuration at a time; includes a credential fingerprint.
 _probe_locks = weakref.WeakKeyDictionary()
 
@@ -71,6 +73,15 @@ def _setting(official, legacy, default=''):
 def worst_case_seconds() -> dict:
     """Upper bounds, in seconds, before each fallback (asserted by tests)."""
     return dict(nightshift=PROBE_TIMEOUT_S + REQUEST_TIMEOUT_S, total=GENERATE_BUDGET_S)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Drop reasoning a model returns inside content (Nemotron ends it with </think>)."""
+    text = _THINK_BLOCK.sub('', text)
+    end = text.lower().rfind(_THINK_END)
+    if end != -1:
+        text = text[end + len(_THINK_END):]
+    return text.strip()
 
 
 class _ProviderFailure(Exception):
@@ -136,7 +147,9 @@ async def _complete(client, url, headers, model, prompt, system, json_mode, budg
         body = response.json()
         text = body['choices'][0]['message']['content']
         served_model = body['model']
-        if not isinstance(text, str) or not text.strip() or not isinstance(served_model, str) or not served_model:
+        if isinstance(text, str):
+            text = _strip_reasoning(text)
+        if not isinstance(text, str) or not text or not isinstance(served_model, str) or not served_model:
             raise ValueError
     except (ValueError, KeyError, IndexError, TypeError):
         raise _ProviderFailure('invalid_response') from None
