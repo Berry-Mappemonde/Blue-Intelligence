@@ -78,7 +78,7 @@ def test_sample_ports_land_in_expected_score_bands():
 
 
 def test_evaluator_reuses_the_original_backend_scorer():
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     assert evaluator.score_port is score_port
     assert Path(getsourcefile(score_port)).resolve() == (
         repo_root / "backend" / "app" / "services" / "poe_confidence.py"
@@ -290,7 +290,7 @@ def test_trace_file_and_stdout_match_state_and_append(trace_log_path, capsys):
 
 
 def test_default_trace_path_is_root_relative(tmp_path, monkeypatch):
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     assert evaluator.DEFAULT_TRACE_LOG_DIR == repo_root / "logs"
     # Exercise the default without writing outside the temporary test directory.
     default_dir = tmp_path / "repo" / "logs"

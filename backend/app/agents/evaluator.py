@@ -17,7 +17,7 @@ from app.services.poe_confidence import score_port
 
 AGENT_NAME = "EvaluatorAgent"
 RETRY_LIMIT = 2
-DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
 
 _REASONS_EN = {
     "source d'État": "government source",
