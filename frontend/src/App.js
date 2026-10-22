@@ -821,6 +821,7 @@ export default function App() {
         {view !== "review" && mode === "formalities" && (
           <FormalitiesPanel
             t={t}
+            lang={lang}
             zones={poeZones}
             zonesLoading={poeZonesLoading}
             selectedZone={selectedZone}
@@ -922,7 +923,7 @@ export default function App() {
                 </p>
               </div>
             ) : (
-              <ReviewView t={t} mode={mode} onMapDirty={refreshMapData} />
+              <ReviewView t={t} lang={lang} mode={mode} onMapDirty={refreshMapData} />
             )
           ) : null}
         </main>

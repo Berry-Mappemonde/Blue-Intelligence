@@ -47,7 +47,7 @@ from app.core.extract import (
 from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception_flags
 from app.core.llm import extract_ports, grounded_search, llm_geocode_port
 from app.core.rag import select_list_context, semantic_similarity
-from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
+from app.services.poe_confidence import apply_score, listing_role, reasons_en, score_port, zone_confidence_avg
 from app.services.poe_zone_label import (
     keep_extracted_in_zone, search_polygon_name, serp_place_name,
     zone_qualifier, zone_search_location,
@@ -2629,6 +2629,7 @@ def ports_to_geojson(docs: list[dict]) -> dict:
     for d in docs:
         if d.get("lat") is None or d.get("lon") is None:
             continue
+        reasons = d.get("confidence_reasons") or []
         feats.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [d["lon"], d["lat"]]},
@@ -2645,7 +2646,9 @@ def ports_to_geojson(docs: list[dict]) -> dict:
                 "osm_tags": d.get("osm_tags"),
                 "spatial_anomaly": d.get("spatial_anomaly"),
                 "confidence": d.get("confidence"),
+                "confidence_parts": d.get("confidence_parts"),
                 "confidence_reasons": d.get("confidence_reasons"),
+                "reasons_en": reasons_en(reasons) if reasons else None,
                 "spatial_kind": d.get("spatial_kind"),
             },
         })

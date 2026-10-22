@@ -13,53 +13,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.services.poe_confidence import apply_score, score_port
+from app.services.poe_confidence import apply_score, reasons_en, score_port
 
 AGENT_NAME = "EvaluatorAgent"
 RETRY_LIMIT = 2
 DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
-
-_REASONS_EN = {
-    "source d'État": "government source",
-    "synthèse web sans page": "web synthesis without a source page",
-    "source nationale non whitelistée": "national source not on the allowlist",
-    "source indéterminée": "unknown source",
-    "Claude et OpenRouter d'accord": "Claude and OpenRouter agree",
-    "catalogue + LLM + NER": "catalogue + LLM + NER",
-    "catalogue officiel": "official catalogue",
-    "LLM ∩ NER ∩ Claude": "LLM, NER and Claude agree",
-    "LLM et NER d'accord": "LLM and NER agree",
-    "deux lecteurs LLM": "two LLM readers",
-    "NER seul": "NER only",
-    "tournure légale": "legal wording",
-    "un seul extracteur": "single extractor",
-    "non géocodé": "not geocoded",
-    "hors ZEE et hors bord terrestre": "outside the EEZ and its land boundary",
-    "dans la ZEE, géocodeurs d'accord": "inside the EEZ, geocoders agree",
-    "bord terrestre de la ZEE, géocodeurs d'accord": "EEZ land boundary, geocoders agree",
-    "port fluvial du pays, géocodeurs d'accord": "domestic river port, geocoders agree",
-    "dans la ZEE": "inside the EEZ",
-    "bord terrestre de la ZEE": "EEZ land boundary",
-    "port fluvial hors ZEE (exception)": "river port outside the EEZ (exception)",
-    "point accepté dans la zone": "position accepted within the zone",
-    "position incertaine": "uncertain position",
-    "connu du listing communautaire (PoE)": "known in the community listing (PoE)",
-    "listing : autre port (pas un PoE)": "listing: other port (not a PoE)",
-    "OSM : infrastructure portuaire / douane": "OSM: port infrastructure / customs",
-    "OSM : correspondance faible": "OSM: weak match",
-    "OSM : aucun tag proche": "OSM: no nearby tags",
-    "vu dans plusieurs runs": "seen in multiple runs",
-    "WPI commerce (contre-liste, pas une preuve PoE)":
-        "WPI commercial port (cross-check list, not proof of PoE status)",
-}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _reasons_en(reasons: list[str]) -> list[str]:
-    return [_REASONS_EN.get(reason, reason) for reason in reasons]
 
 
 def _with_run_id(state: dict) -> dict:
@@ -85,7 +49,7 @@ def _trace_port(port: dict, retry_count: int, action: str,
         "port_name": port.get("name"),
         "input_summary": {"port_name": port.get("name"), "retry_count": retry_count},
         "verdict": port.get("verdict"),
-        "reasons": _reasons_en(
+        "reasons": reasons_en(
             list(port.get("confidence_reasons") or []) + list(port.get("check_reasons") or [])
         ),
     }
@@ -171,7 +135,7 @@ def evaluate(state: dict) -> dict:
         verdict = _verdict(confidence, checks_ok, retry_hint)
         port["verdict"] = verdict
         port["check_reasons"] = check_reasons
-        port["reasons_en"] = _reasons_en(port["confidence_reasons"] + check_reasons)
+        port["reasons_en"] = reasons_en(port["confidence_reasons"] + check_reasons)
         out_ports.append(port)
         if verdict == "retry":
             port["retry_hint"] = retry_hint
@@ -231,7 +195,7 @@ def finalise(state: dict) -> dict:
             port["check_reasons"] = list(port.get("check_reasons") or []) + [
                 "unconfirmed after max retries",
             ]
-            port["reasons_en"] = _reasons_en(
+            port["reasons_en"] = reasons_en(
                 list(port.get("confidence_reasons") or []) + port["check_reasons"]
             )
             entries.append(_trace_port(port, retry_count, "finalise_port", run_id=out["run_id"]))

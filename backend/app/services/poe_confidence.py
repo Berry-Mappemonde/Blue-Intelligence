@@ -191,3 +191,58 @@ def zone_confidence_avg(ports: list[dict]) -> int | None:
     if not vals:
         return None
     return int(round(sum(vals) / len(vals)))
+
+
+# ---------------------------------------------------------------------------
+# Traduction des raisons
+# ---------------------------------------------------------------------------
+# `score_port` produit des libellés français. L'API les expose aussi en anglais
+# pour que la carte et les fiches puissent parler la langue de l'utilisateur.
+# Une raison inconnue est renvoyée telle quelle : on ne réécrit jamais un texte
+# qu'on ne connaît pas.
+
+REASONS_EN: dict[str, str] = {
+    "source d'État": "government source",
+    "synthèse web sans page": "web synthesis without a source page",
+    "source nationale non whitelistée": "national source not on the allowlist",
+    "source indéterminée": "unknown source",
+    "Claude et OpenRouter d'accord": "Claude and OpenRouter agree",
+    "catalogue + LLM + NER": "catalogue + LLM + NER",
+    "catalogue officiel": "official catalogue",
+    "LLM ∩ NER ∩ Claude": "LLM, NER and Claude agree",
+    "LLM et NER d'accord": "LLM and NER agree",
+    "deux lecteurs LLM": "two LLM readers",
+    "NER seul": "NER only",
+    "tournure légale": "legal wording",
+    "un seul extracteur": "single extractor",
+    "non géocodé": "not geocoded",
+    "hors ZEE et hors bord terrestre": "outside the EEZ and its land boundary",
+    "dans la ZEE, géocodeurs d'accord": "inside the EEZ, geocoders agree",
+    "bord terrestre de la ZEE, géocodeurs d'accord": "EEZ land boundary, geocoders agree",
+    "port fluvial du pays, géocodeurs d'accord": "domestic river port, geocoders agree",
+    "dans la ZEE": "inside the EEZ",
+    "bord terrestre de la ZEE": "EEZ land boundary",
+    "port fluvial hors ZEE (exception)": "river port outside the EEZ (exception)",
+    "point accepté dans la zone": "position accepted within the zone",
+    "position incertaine": "uncertain position",
+    "connu du listing communautaire (PoE)": "known in the community listing (PoE)",
+    "listing : autre port (pas un PoE)": "listing: other port (not a PoE)",
+    "OSM : infrastructure portuaire / douane": "OSM: port infrastructure / customs",
+    "OSM : correspondance faible": "OSM: weak match",
+    "OSM : aucun tag proche": "OSM: no nearby tags",
+    "vu dans plusieurs runs": "seen in multiple runs",
+    "WPI commerce (contre-liste, pas une preuve PoE)":
+        "WPI commercial port (cross-check list, not proof of PoE status)",
+    # raisons ajoutées par l'évaluateur (backend/app/agents/evaluator.py)
+    "source non réelle (URLs vides ou synthèse seule)":
+        "no direct source (empty URLs or synthesis only)",
+    "carte incomplète (lat/lon manquants ou géocodeurs pas d'accord)":
+        "incomplete map (missing lat/lon or geocoders disagree)",
+    "non confirmé après le nombre maximal de tentatives":
+        "unconfirmed after max retries",
+}
+
+
+def reasons_en(reasons: list[str] | None) -> list[str]:
+    """Traduit les raisons en anglais ; une raison inconnue passe inchangée."""
+    return [REASONS_EN.get(reason, reason) for reason in (reasons or [])]
