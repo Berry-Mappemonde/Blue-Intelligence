@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from uuid import UUID
 
@@ -11,6 +13,8 @@ import pytest
 
 from app.adapters import zetaris
 from app.adapters.zetaris import ReadOnlyViolation, ZetarisClient, ZetarisUnavailable
+from app.core import paths
+from scripts import zetaris_setup
 
 TEST_KEY = "adapter-test-secret-8472"
 
@@ -56,6 +60,9 @@ def _entries(path):
     'SELECT "port name", updated_at FROM ports',
     "-- harmless comment\nSELECT 1; -- end",
     "/* harmless comment */ SELECT 1", "SELECT 6 / 2, 2 * 3",
+    r"SELECT 'it\'s'", r'SELECT "say \"hi\""',
+    r"SELECT 'a\'; DROP TABLE x'", r"SELECT 'back\slash'",
+    r"SELECT 'a\\'", r'SELECT "a\"; DROP TABLE x"',
 ])
 def test_read_only_allowed_without_io(client, sql, trace_path):
     assert client.dry_run(sql) is True
@@ -72,7 +79,10 @@ def test_read_only_allowed_without_io(client, sql, trace_path):
     "EXPLAIN cReAtE TABLE x (id INT)", "SELECT * FROM x FOR UPDATE",
     "CALL dangerous_function()", "", "-- comment only", "SELECT 'unterminated",
     "SELECT 1 /* unterminated", "SELECT 1 /*! DROP TABLE x */",
-    "SELECT 'back\\slash'", "SELECT 1 /* DROP TABLE x */",
+    "SELECT 1 /* DROP TABLE x */",
+    r"SELECT 'a\\'; DROP TABLE x", "SELECT 'a'; DROP",
+    r'SELECT "a\\"; DROP TABLE x', r"SELECT 'a\'", r'SELECT "a\"',
+    r"SELECT 'it\'s'; SELECT 2", r"SELECT 'it\'s'; DROP TABLE x",
 ])
 def test_read_only_rejected_without_io(client, sql, trace_path):
     with pytest.raises(ReadOnlyViolation):
@@ -224,7 +234,7 @@ def test_missing_sample_and_path_traversal(unit_env, monkeypatch, trace_path):
     assert [e["status"] for e in _entries(trace_path)] == ["error", "error"]
 
 
-@pytest.mark.parametrize("probe", [[[1]], [["1"]]])
+@pytest.mark.parametrize("probe", [[[1]], [["1"]], [[1.0]], [["1.0"]]])
 def test_connection_contract_and_custom_url(unit_env, monkeypatch, probe):
     monkeypatch.setenv("ZETARIS_REST_URL", "http://zetaris.test/api/v1.0/")
     calls = []
@@ -248,6 +258,48 @@ def test_test_connection_reports_unavailable(client, monkeypatch):
     assert result["status"] == "unavailable"
     assert result["databases"] == []
     assert TEST_KEY not in json.dumps(result)
+
+
+@pytest.mark.parametrize("probe", [[], [[]], [[1, 1]], [[True]], [[None]], [["oops"]], [["NaN"]], [["Infinity"]], [["1.0000000000000001"]]])
+def test_connection_rejects_invalid_numeric_probe(client, monkeypatch, probe):
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(200, json={"data": probe}))
+    assert client.test_connection()["status"] == "unavailable"
+
+
+def test_central_paths_resolve_without_config_or_credentials():
+    repo = Path(__file__).resolve().parents[2]
+    assert paths.REPO_ROOT == repo
+    assert paths.BACKEND_DIR == repo / "backend"
+    assert paths.LOGS_DIR == repo / "logs"
+    assert paths.SAMPLE_DATA_DIR == repo / "backend" / "data" / "sample"
+    assert zetaris.DEFAULT_TRACE_LOG_DIR == paths.LOGS_DIR
+    assert zetaris.SAMPLE_DIR == paths.SAMPLE_DATA_DIR / "zetaris"
+    env = {key: value for key, value in os.environ.items() if key not in {"MONGO_URL", "DB_NAME"}}
+    result = subprocess.run(
+        [sys.executable, "-c", "from app.core import paths; import sys; assert 'app.config' not in sys.modules; print(paths.REPO_ROOT)"],
+        cwd=paths.BACKEND_DIR, env=env, text=True, capture_output=True, check=True,
+    )
+    assert result.stdout.strip() == str(repo)
+
+
+@pytest.mark.parametrize("sql, message", [
+    ("BEGIN SELECT 1; SELECT 2; END;", "BEGIN"),
+    ("begin SELECT 1; end;", "BEGIN"),
+    ("SELECT $$a;b$$;", "dollar-quoting"),
+])
+def test_setup_splitter_rejects_unsupported_sql(tmp_path, monkeypatch, sql, message):
+    sql_file = tmp_path / "setup.sql"
+    sql_file.write_text(sql)
+    monkeypatch.setattr(zetaris_setup, "SQL_FILE", sql_file)
+    with pytest.raises(ValueError, match=message):
+        zetaris_setup.statements()
+
+
+def test_setup_splitter_preserves_quoted_semicolons(tmp_path, monkeypatch):
+    sql_file = tmp_path / "setup.sql"
+    sql_file.write_text("-- comment\nSELECT 'BEGIN;a'; SELECT \"b;c\";")
+    monkeypatch.setattr(zetaris_setup, "SQL_FILE", sql_file)
+    assert zetaris_setup.statements() == ["SELECT 'BEGIN;a'", 'SELECT "b;c"']
 
 
 def test_missing_org_fails_before_network(unit_env, monkeypatch):

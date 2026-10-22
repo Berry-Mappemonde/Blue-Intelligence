@@ -8,6 +8,8 @@ The REST URL defaults to http://localhost:8888/api/v1.0.
 There are no automatic DDL retries or rollback. On failure, inspect the reported
 statement and existing objects. --start-at N explicitly skips earlier statements
 when an administrator has confirmed that they already succeeded.
+The simple splitter separates semicolons outside quotes. BEGIN...END blocks
+and $$ dollar-quoting are unsupported and explicitly rejected.
 """
 from __future__ import annotations
 
@@ -29,13 +31,21 @@ VERIFICATION = (
 
 
 def statements() -> list[str]:
-    """Split this trusted setup file, preserving semicolons inside SQL quotes."""
+    """Split on semicolons outside quotes; reject BEGIN blocks and $$ quoting."""
     sql = SQL_FILE.read_text(encoding="utf-8")
-    tokens = re.findall(r'''--[^\n]*|'(?:''|[^'])*'|"(?:""|[^"])*"|;|[^;'"]''', sql)
+    # This is a simple splitter, not a procedural SQL parser. Fail closed for
+    # BEGIN...END and dollar-quoted bodies rather than execute partial blocks.
+    if "$$" in sql:
+        raise ValueError("Setup splitter does not support $$ dollar-quoting")
+    tokens = re.findall(r'''--[^\n]*|'(?:\\[\s\S]|''|[^'\\])*'|"(?:\\[\s\S]|""|[^"\\])*"|[A-Za-z_][A-Za-z_0-9]*|[\s\S]''', sql)
     result, current = [], []
     for token in tokens:
         if token.startswith("--"):
             continue
+        if token.upper() == "BEGIN":
+            raise ValueError("Setup splitter does not support BEGIN...END blocks")
+        if token in {"'", '"'}:
+            raise ValueError("Setup splitter found an unterminated quoted literal")
         if token == ";":
             if "".join(current).strip():
                 result.append("".join(current).strip())
@@ -74,7 +84,10 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Execute the administrative SQL and verify the view")
     parser.add_argument("--start-at", type=int, default=1, help="First setup statement to run, numbered from 1")
     args = parser.parse_args()
-    sqls = statements()
+    try:
+        sqls = statements()
+    except ValueError as exc:
+        parser.error(str(exc))
     if not 1 <= args.start_at <= len(sqls):
         parser.error(f"--start-at must be between 1 and {len(sqls)}")
     if not args.apply:

@@ -15,7 +15,7 @@ test_connection() uses 'connection' and 'databases' fixtures in sample mode.
 Each query call, including rejected/failed calls, emits one JSONL trace.
 dry_run() only validates; it neither executes SQL nor emits a query event.
 
-The SQL guard supports standard doubled-quote escaping, not backslash escapes.
+The SQL guard supports doubled quotes and Spark backslash escapes in literals.
 It is a conservative lexical guard, not a SQL parser or a database permission
 boundary; the live account should also have read-only permissions.
 """
@@ -28,21 +28,24 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
 from collections.abc import Callable
 
 import httpx
 
-DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
-SAMPLE_DIR = Path(__file__).resolve().parents[2] / "data" / "sample" / "zetaris"
+from app.core import paths
+
+DEFAULT_TRACE_LOG_DIR = paths.LOGS_DIR
+SAMPLE_DIR = paths.SAMPLE_DATA_DIR / "zetaris"
 _ALLOWED = {"SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH"}
 _FORBIDDEN = {
     "CREATE", "DROP", "INSERT", "UPDATE", "DELETE", "ALTER", "REGISTER",
     "UPSERT", "TRUNCATE", "GRANT", "REVOKE",
 }
 _TOKEN = re.compile(
-    r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|--[^\n]*(?:\n|$)|"
+    r"'(?:\\[\s\S]|''|[^'\\])*'|\"(?:\\[\s\S]|\"\"|[^\"\\])*\"|--[^\n]*(?:\n|$)|"
     r"/\*[\s\S]*?\*/|[A-Za-z_][A-Za-z_0-9]*|\S"
 )
 _LOGGER = logging.getLogger(__name__)
@@ -78,7 +81,13 @@ class ZetarisClient:
         _LOGGER.info("ZetarisAdapter mode=%s", self.mode)
 
     def dry_run(self, sql: str) -> bool:
-        """Return True for permitted SQL; otherwise raise ReadOnlyViolation."""
+        """Return True for permitted SQL; otherwise raise ReadOnlyViolation.
+
+        Within single or double quotes, a backslash escapes exactly the next
+        character (including another backslash); doubled matching quotes also
+        stay inside the literal. Unclosed literals, including dangling escapes,
+        are rejected. Only semicolons and keywords outside literals are SQL.
+        """
         if not isinstance(sql, str) or not sql.strip():
             raise ReadOnlyViolation("SQL must be a non-empty string")
         tokens = []
@@ -92,8 +101,8 @@ class ZetarisClient:
                     raise ReadOnlyViolation("Forbidden keyword or executable SQL comment")
                 continue
             if token.startswith(("'", '"')):
-                if len(token) < 2 or "\\" in token:
-                    raise ReadOnlyViolation("Unterminated quote or unsupported backslash escape")
+                if len(token) < 2:
+                    raise ReadOnlyViolation("Unterminated quoted literal")
                 tokens.append("<quoted>")
                 continue
             if token in {"/", "*"} and sql[match.start():].startswith(("/*", "*/")):
@@ -213,8 +222,15 @@ class ZetarisClient:
         """Probe SQL execution and database discovery; return a safe status report."""
         try:
             probe = self.query("SELECT 1", limit=1, fixture="connection")
-            # The local REST service serializes SQL scalar values as strings.
-            if probe not in ([[1]], [["1"]]):
+            # Accept numeric REST cells and their string representations, but
+            # do not mistake booleans, malformed shapes or rounded values for 1.
+            valid_probe = False
+            if len(probe) == 1 and len(probe[0]) == 1 and not isinstance(probe[0][0], bool):
+                try:
+                    valid_probe = Decimal(str(probe[0][0])) == Decimal(1)
+                except InvalidOperation:
+                    pass
+            if not valid_probe:
                 raise ZetarisUnavailable("Zetaris SELECT 1 returned an unexpected result")
             rows = self.query("SHOW LIGHTNING DATABASES", fixture="databases")
             if any(not row or not isinstance(row[0], str) for row in rows):
