@@ -14,6 +14,7 @@ import pytest
 from app.adapters import zetaris
 from app.adapters.zetaris import ReadOnlyViolation, ZetarisClient, ZetarisUnavailable
 from app.core import paths
+from app.agents.evaluator import RETRY_LIMIT, evaluate, finalise, prepare_retry, route_after_evaluation
 from scripts import zetaris_setup
 
 TEST_KEY = "adapter-test-secret-8472"
@@ -365,10 +366,10 @@ def _assert_port_shape(port):
     assert port["mrgid"] is None or type(port["mrgid"]) is int
 
 
-def test_get_ports_sample_has_evaluator_shape_and_real_seed_data(unit_env, monkeypatch, trace_path):
-    # Add an end-to-end test with evaluate() once the evaluator PR is merged.
+def test_sample_ports_end_to_end_with_evaluator(unit_env, monkeypatch, trace_path):
     monkeypatch.setenv("SAMPLE_MODE", "true")
-    ports = ZetarisClient().get_ports()
+    run_id = "e2e-test"
+    ports = ZetarisClient(run_id=run_id).get_ports()
     assert len(ports) == 20
     assert len({p["zone_name"] for p in ports}) > 1
     gov = [any(any(term in url for term in ("gov", "gouv", "gob")) for url in p["source_urls"]) for p in ports]
@@ -383,6 +384,35 @@ def test_get_ports_sample_has_evaluator_shape_and_real_seed_data(unit_env, monke
             assert port[field] == original["properties"].get(field)
     assert _entries(trace_path)[0]["row_count"] == 20
     assert _entries(trace_path)[0]["mode"] == "sample"
+    _assert_evaluator_round_trip(ports, run_id, trace_path)
+
+
+def _assert_evaluator_round_trip(ports, run_id, trace_path):
+    original_ids = [port["id"] for port in ports]
+    state = evaluate({"ports": ports, "run_id": run_id})
+    had_retry = bool(state["needs_retry"])
+    retries = 0
+    while route_after_evaluation(state) == "retry":
+        assert retries < RETRY_LIMIT, "Evaluator exceeded its retry limit"
+        state = evaluate(prepare_retry(state))
+        retries += 1
+    state = finalise(state)
+    assert [port["id"] for port in state["ports"]] == original_ids
+    assert all(port["verdict"] in {"pass", "flag"} for port in state["ports"])
+    assert state["needs_retry"] == []
+    assert route_after_evaluation(state) == "done"
+    entries = _entries(trace_path)
+    assert {entry["agent_name"] for entry in entries} == {"ZetarisAdapter", "EvaluatorAgent"}
+    assert all(entry["run_id"] == run_id for entry in entries)
+    assert entries[0]["agent_name"] == "ZetarisAdapter"
+    assert entries[1:] == state["trace"]
+    if had_retry:
+        assert retries > 0
+        assert any(entry.get("handoff") == {"from": "EvaluatorAgent", "to": "retry"}
+                   and entry["action"] == "prepare_retry" for entry in entries)
+        assert any(entry.get("verdict") == "retry" for entry in entries)
+    else:
+        assert retries == 0
 
 
 def test_get_ports_sample_filters_before_limit(unit_env, monkeypatch, trace_path):
@@ -454,3 +484,13 @@ def test_live_get_ports_for_zone():
     for port in ports:
         _assert_port_shape(port)
         assert port["zone_name"] == "Alaska" and port["mrgid"] == 8463
+
+
+@pytest.mark.skipif(os.environ.get("ZETARIS_LIVE") != "1", reason="Set ZETARIS_LIVE=1 for the Zetaris to evaluator integration")
+def test_live_ports_end_to_end_with_evaluator(trace_path):
+    run_id = "e2e-live-test"
+    client = ZetarisClient(run_id=run_id)
+    assert client.mode == "live", "Live test needs ZETARIS_API_KEY and SAMPLE_MODE=false"
+    ports = client.get_ports(zone_name="Alaska", limit=20)
+    assert ports and all(port["zone_name"] == "Alaska" for port in ports)
+    _assert_evaluator_round_trip(ports, run_id, trace_path)
