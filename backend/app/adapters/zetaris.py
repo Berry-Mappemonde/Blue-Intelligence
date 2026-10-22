@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
+from collections.abc import Callable
 
 import httpx
 
@@ -44,6 +46,11 @@ _TOKEN = re.compile(
     r"/\*[\s\S]*?\*/|[A-Za-z_][A-Za-z_0-9]*|\S"
 )
 _LOGGER = logging.getLogger(__name__)
+_PORT_COLUMNS = ("name", "lat", "lon", "source_urls", "validated", "geocode_source", "zone_name", "mrgid", "id")
+_PORT_SELECT = (
+    "SELECT name, lat, lon, to_json(source_urls) AS source_urls, validated, "
+    "geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports"
+)
 
 
 class ReadOnlyViolation(ValueError):
@@ -101,7 +108,8 @@ class ZetarisClient:
             raise ReadOnlyViolation("Multiple SQL statements are not allowed")
         return True
 
-    def query(self, sql: str, limit: int = 1000, *, fixture: str = "example") -> list[list]:
+    def query(self, sql: str, limit: int = 1000, *, fixture: str = "example",
+              _sample_filter: Callable[[list], bool] | None = None) -> list[list]:
         """Validate, fetch rows and trace once; never fall back silently from live."""
         started = time.perf_counter()
         status = "error"
@@ -111,7 +119,12 @@ class ZetarisClient:
             if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
                 raise ValueError("limit must be a positive integer")
             if self.mode == "sample":
-                rows = self._sample_rows(fixture)[:limit]
+                sample_rows = self._sample_rows(fixture)
+                # Internal hook for get_ports: filter before limiting and tracing,
+                # without implementing a SQL interpreter for fixture data.
+                if _sample_filter is not None:
+                    sample_rows = [row for row in sample_rows if _sample_filter(row)]
+                rows = sample_rows[:limit]
             else:
                 rows = self._live_rows(sql, limit)
             status = "ok"
@@ -121,6 +134,80 @@ class ZetarisClient:
             raise
         finally:
             self._trace(sql, len(rows), started, status)
+
+    def get_ports(self, zone_name: str | None = None, mrgid: int | None = None,
+                  limit: int = 500) -> list[dict]:
+        """Read typed PoE records through Zetaris (or the real-seed sample fixture).
+
+        The SQL REST endpoint has no bind parameters. Text filters are encoded as
+        UTF-8 hex literals and decoded by Spark SQL, never interpolated as SQL text.
+        Numeric filters accept only integers. Both filters are combined with AND.
+        """
+        if zone_name is not None and not isinstance(zone_name, str):
+            raise ValueError("zone_name must be a string or None")
+        if mrgid is not None and (isinstance(mrgid, bool) or not isinstance(mrgid, int)):
+            raise ValueError("mrgid must be an integer or None")
+        conditions = []
+        if zone_name is not None:
+            encoded = zone_name.encode("utf-8").hex()
+            conditions.append(f"zone_name = decode(unhex('{encoded}'), 'UTF-8')")
+        if mrgid is not None:
+            conditions.append(f"mrgid = {mrgid:d}")
+        sql = _PORT_SELECT
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+
+        def matches(row: list) -> bool:
+            port = self._port_dict(row)
+            return ((zone_name is None or port["zone_name"] == zone_name)
+                    and (mrgid is None or port["mrgid"] == mrgid))
+
+        rows = self.query(sql, limit=limit, fixture="poe_ports", _sample_filter=matches)
+        return [self._port_dict(row) for row in rows]
+
+    @staticmethod
+    def _port_dict(row: list) -> dict:
+        """Normalize the string-valued REST cells, without coercing false to true."""
+        if len(row) != len(_PORT_COLUMNS):
+            raise ZetarisUnavailable("PoE response has an unexpected number of columns")
+        port = dict(zip(_PORT_COLUMNS, row))
+        try:
+            for field in ("lat", "lon", "validated", "geocode_source", "zone_name", "mrgid"):
+                if port[field] == "null":
+                    port[field] = None
+            if not isinstance(port["name"], str) or not isinstance(port["id"], str):
+                raise ValueError("Invalid identity")
+            for field, bound in (("lat", 90), ("lon", 180)):
+                if port[field] is not None:
+                    if isinstance(port[field], bool):
+                        raise ValueError("Invalid coordinate")
+                    port[field] = float(port[field])
+                    if not math.isfinite(port[field]) or abs(port[field]) > bound:
+                        raise ValueError("Invalid coordinate")
+            urls = port["source_urls"]
+            if isinstance(urls, str):
+                urls = json.loads(urls)
+            if urls is None:
+                urls = []
+            if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
+                raise ValueError("Invalid source URLs")
+            port["source_urls"] = list(urls)
+            validated = port["validated"]
+            if isinstance(validated, str) and validated.lower() in {"true", "false"}:
+                validated = validated.lower() == "true"
+            if validated is not None and not isinstance(validated, bool):
+                raise ValueError("Invalid validation status")
+            port["validated"] = validated
+            if port["mrgid"] is not None:
+                if isinstance(port["mrgid"], bool) or not re.fullmatch(r"-?\d+", str(port["mrgid"])):
+                    raise ValueError("Invalid MRGID")
+                port["mrgid"] = int(port["mrgid"])
+            for field in ("geocode_source", "zone_name"):
+                if port[field] is not None and not isinstance(port[field], str):
+                    raise ValueError("Invalid text field")
+        except (ValueError, TypeError, OverflowError):
+            raise ZetarisUnavailable("PoE response contains invalid field values") from None
+        return port
 
     def test_connection(self) -> dict:
         """Probe SQL execution and database discovery; return a safe status report."""

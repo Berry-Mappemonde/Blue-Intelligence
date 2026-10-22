@@ -297,3 +297,108 @@ def test_live_connection():
     result = client.test_connection()
     assert result["status"] == "ok", result.get("message", "Connection failed")
     assert isinstance(result["databases"], list)
+
+
+def _assert_port_shape(port):
+    assert set(port) == {"name", "lat", "lon", "source_urls", "validated", "geocode_source", "zone_name", "mrgid", "id"}
+    assert isinstance(port["name"], str)
+    assert isinstance(port["id"], str)
+    for field in ("lat", "lon"):
+        assert port[field] is None or isinstance(port[field], float)
+    assert isinstance(port["source_urls"], list)
+    assert all(isinstance(url, str) for url in port["source_urls"])
+    assert port["validated"] is None or isinstance(port["validated"], bool)
+    for field in ("geocode_source", "zone_name"):
+        assert port[field] is None or isinstance(port[field], str)
+    assert port["mrgid"] is None or type(port["mrgid"]) is int
+
+
+def test_get_ports_sample_has_evaluator_shape_and_real_seed_data(unit_env, monkeypatch, trace_path):
+    # Add an end-to-end test with evaluate() once the evaluator PR is merged.
+    monkeypatch.setenv("SAMPLE_MODE", "true")
+    ports = ZetarisClient().get_ports()
+    assert len(ports) == 20
+    assert len({p["zone_name"] for p in ports}) > 1
+    gov = [any(any(term in url for term in ("gov", "gouv", "gob")) for url in p["source_urls"]) for p in ports]
+    assert any(gov) and not all(gov)
+    seed = json.loads((Path(__file__).resolve().parents[2] / "seed" / "ports_of_entry.geojson").read_text())
+    originals = {f["properties"]["id"]: f for f in seed["features"]}
+    for port in ports:
+        _assert_port_shape(port)
+        original = originals[port["id"]]
+        assert [port["lon"], port["lat"]] == original["geometry"]["coordinates"][:2]
+        for field in set(port) - {"lat", "lon"}:
+            assert port[field] == original["properties"].get(field)
+    assert _entries(trace_path)[0]["row_count"] == 20
+    assert _entries(trace_path)[0]["mode"] == "sample"
+
+
+def test_get_ports_sample_filters_before_limit(unit_env, monkeypatch, trace_path):
+    monkeypatch.delenv("ZETARIS_API_KEY")
+    client = ZetarisClient()
+    target = client.get_ports()[-1]
+    assert client.get_ports(zone_name=target["zone_name"], mrgid=target["mrgid"], limit=1) == [target]
+    assert _entries(trace_path)[-1]["row_count"] == 1
+    assert len(client.get_ports(limit=3)) == 3
+    assert client.get_ports(zone_name="No such zone") == []
+    assert client.get_ports(mrgid=-1) == []
+    assert _entries(trace_path)[-1]["row_count"] == 0
+
+
+@pytest.mark.parametrize("zone", ["Alaska", "Côte d'Ivoire", "x'; DROP TABLE ports; --", "a\\b", ""])
+def test_get_ports_encodes_filters_safely(client, monkeypatch, zone):
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return httpx.Response(200, json={"data": []})
+
+    monkeypatch.setattr(httpx, "post", post)
+    assert client.get_ports(zone_name=zone, mrgid=8463, limit=7) == []
+    sql = calls[0]["json"]["sql"]
+    assert sql == zetaris._PORT_SELECT + (
+        f" WHERE zone_name = decode(unhex('{zone.encode('utf-8').hex()}'), 'UTF-8') AND mrgid = 8463"
+    )
+    assert client.dry_run(sql)
+    assert calls[0]["json"]["limit"] == 7
+
+
+@pytest.mark.parametrize("filters", [{"mrgid": "1 OR 1=1"}, {"mrgid": True}, {"mrgid": 1.5}, {"zone_name": 123}])
+def test_get_ports_rejects_invalid_filter_types(client, filters):
+    with pytest.raises(ValueError):
+        client.get_ports(**filters)
+
+
+def test_get_ports_normalizes_rest_cells(client, monkeypatch):
+    rows = [
+        ["Port", "1.2", "-3.4", '["https://customs.gov"]', "false", "nominatim", "Zone", "8463", "id-1"],
+        ["Unknown", "null", None, "null", "null", None, "Zone", "null", "id-2"],
+    ]
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(200, json={"data": rows}))
+    ports = client.get_ports()
+    for port in ports:
+        _assert_port_shape(port)
+    assert ports[0]["validated"] is False
+    assert ports[0]["source_urls"] == ["https://customs.gov"]
+    assert ports[0]["lat"] == 1.2 and ports[0]["mrgid"] == 8463
+    assert ports[1]["lat"] is None and ports[1]["source_urls"] == []
+
+
+@pytest.mark.parametrize("index,value", [(1, "NaN"), (2, "181"), (3, "not JSON"), (4, "unknown"), (7, "3.5")])
+def test_get_ports_rejects_invalid_rest_fields(client, monkeypatch, index, value):
+    row = ["Port", "1.2", "2.3", "[]", "true", "nominatim", "Zone", "1", "id"]
+    row[index] = value
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(200, json={"data": [row]}))
+    with pytest.raises(ZetarisUnavailable, match="invalid field"):
+        client.get_ports()
+
+
+@pytest.mark.skipif(os.environ.get("ZETARIS_LIVE") != "1", reason="Set ZETARIS_LIVE=1 to query the real PoE view")
+def test_live_get_ports_for_zone():
+    client = ZetarisClient()
+    assert client.mode == "live", "Live test needs ZETARIS_API_KEY and SAMPLE_MODE=false"
+    ports = client.get_ports(zone_name="Alaska", mrgid=8463, limit=5)
+    assert 0 < len(ports) <= 5
+    for port in ports:
+        _assert_port_shape(port)
+        assert port["zone_name"] == "Alaska" and port["mrgid"] == 8463
