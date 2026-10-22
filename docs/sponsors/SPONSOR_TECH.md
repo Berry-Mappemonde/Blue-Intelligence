@@ -285,7 +285,7 @@ same `run_id` label.
 
 ## 6. How judges run it
 
-[`docs/RUNNING.md`](../RUNNING.md) gives the fresh-clone commands: a five-package
+[`docs/RUNNING.md`](../RUNNING.md) gives the fresh-clone commands: a six-package
 install, sample mode with no credentials (`python backend/run.py --input
 input_examples/01_bermuda.json`), live mode with `.env`, the HTTP server
 (`--serve`, `POST /run`, `GET /healthz`) and where traces are written.
@@ -350,14 +350,17 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
 - H-MEM tier files and the ledger are not a multi-file transaction. Dream
   proposals, conflict queues and sleep backups are instance-local. Evidence:
   [`README.md`](../../backend/app/engines/hmem/README.md).
-- The memory node's process lock uses `filelock` when it is installed (it is
-  pinned in [`requirements.txt`](../../backend/requirements.txt)); this works on
-  Windows, Linux and macOS. Without `filelock` it uses `fcntl`, which exists on
-  Linux and macOS only. With neither (Windows with only the five packages listed
-  in [`RUNNING.md`](../RUNNING.md)), the remaining thread-only fallback currently
-  raises `AttributeError` when the lock is released, so `filelock` must be
-  installed on Windows. Evidence: `_acquire_lock` and `_engine` in
-  [`memory.py`](../../backend/app/agents/memory.py).
+- The memory node's process lock uses `filelock`, which is installed by
+  [`RUNNING.md`](../RUNNING.md) and pinned in
+  [`requirements.txt`](../../backend/requirements.txt), and works on Windows,
+  Linux and macOS. Without `filelock` it falls back to `fcntl` (Linux and macOS),
+  then to a thread-only lock that does not protect against other processes.
+  Evidence: `_acquire_lock` and `_engine` in
+  [`memory.py`](../../backend/app/agents/memory.py), and
+  `test_thread_only_lock_without_filelock_or_fcntl`,
+  `test_fcntl_lock_released_exactly_once` and
+  `test_filelock_path_holds_and_releases` in
+  [`test_hmem_memory.py`](../../backend/tests/test_hmem_memory.py).
 - `is_official_source` is a hostname naming heuristic, not proof of government
   ownership and not an exhaustive allowlist. Evidence: `is_official_source` in
   [`evaluator.py`](../../backend/app/agents/evaluator.py) and its cases in
