@@ -15,9 +15,9 @@ ZetarisAdapter → HMemAgent (recall) → EvaluatorAgent ⇄ ResearchAgent (retr
 git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
 cd Blue-Intelligence
 python3 -m venv backend/.venv      # Python 3.12 or newer
-# The agent pipeline needs only these five packages (pinned as in backend/requirements.txt):
+# The agent pipeline needs only these six packages (pinned as in backend/requirements.txt):
 backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
-    python-dotenv==1.2.3 uvicorn==0.25.0
+    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3
 ```
 
 The full `backend/requirements.txt` is for the wider Blue Intelligence API. It
@@ -123,4 +123,6 @@ MONGO_URL=mongodb://127.0.0.1:27017 DB_NAME=bi_test POE_AUTO_REFRESH=0 \
 environment). Live tests run only with `ZETARIS_LIVE=1` or `NIGHTSHIFT_LIVE=1`
 and real credentials in the environment.
 
-The H-MEM file lock uses `fcntl` (Linux and macOS).
+H-MEM serializes access with a file lock: `filelock` (installed above; Windows,
+Linux and macOS). Without it, the lock falls back to `fcntl` (Linux and macOS), and
+then to a thread-only lock that does not protect against other processes.
