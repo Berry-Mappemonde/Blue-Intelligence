@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.services.poe_confidence import score_port
+from app.services.poe_confidence import apply_score, score_port
 
 AGENT_NAME = "EvaluatorAgent"
 RETRY_LIMIT = 2
@@ -51,11 +51,6 @@ _REASONS_EN = {
     "vu dans plusieurs runs": "seen in multiple runs",
     "WPI commerce (contre-liste, pas une preuve PoE)":
         "WPI commercial port (cross-check list, not proof of PoE status)",
-    "source non réelle (URLs vides ou synthèse seule)":
-        "no direct source (empty URLs or synthesis only)",
-    "carte incomplète (lat/lon manquants ou géocodeurs pas d'accord)":
-        "incomplete map (missing lat/lon or geocoders disagree)",
-    "non confirmé après le nombre maximal de tentatives": "unconfirmed after max retries",
 }
 
 
@@ -79,9 +74,9 @@ def _with_run_id(state: dict) -> dict:
     return out
 
 
-def _trace_port(trace: list[dict], port: dict, retry_count: int, action: str,
-                *, run_id: str, handoff: str | None = None) -> None:
-    """Record one event in state, stdout and JSONL; propagate logging failures."""
+def _trace_port(port: dict, retry_count: int, action: str,
+                *, run_id: str, handoff: str | None = None) -> dict:
+    """Build an event; the node writes its batch after processing all ports."""
     entry = {
         "timestamp": _now_iso(),
         "agent_name": AGENT_NAME,
@@ -90,18 +85,29 @@ def _trace_port(trace: list[dict], port: dict, retry_count: int, action: str,
         "port_name": port.get("name"),
         "input_summary": {"port_name": port.get("name"), "retry_count": retry_count},
         "verdict": port.get("verdict"),
-        "reasons": list(port.get("reasons_en") or _reasons_en(port.get("reasons") or [])),
+        "reasons": _reasons_en(
+            list(port.get("confidence_reasons") or []) + list(port.get("check_reasons") or [])
+        ),
     }
+    if port.get("retry_hint"):
+        entry["retry_hint"] = port["retry_hint"]
     if handoff is not None:
         entry["handoff"] = {"from": AGENT_NAME, "to": handoff}
-    line = json.dumps(entry, ensure_ascii=False)
+    return entry
+
+
+def _write_trace(entries: list[dict], run_id: str) -> None:
+    """Append a node's new events with one open; propagate logging failures."""
+    if not entries:
+        return
+    payload = "".join(json.dumps(entry, ensure_ascii=False) + "\n" for entry in entries)
     log_path = Path(os.environ.get("TRACE_LOG_PATH") or
                     DEFAULT_TRACE_LOG_DIR / f"trace-{run_id}.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(line + "\n")
-    print(line, flush=True)
-    trace.append(entry)
+        log_file.write(payload)
+    if os.environ.get("TRACE_STDOUT", "1") != "0":
+        print(payload, end="", flush=True)
 
 
 def _has_real_source(port: dict) -> bool:
@@ -109,14 +115,19 @@ def _has_real_source(port: dict) -> bool:
     return bool(urls) and not bool(port.get("from_synthesis"))
 
 
-def _map_ok(port: dict) -> bool:
-    has_geo = port.get("lat") is not None and port.get("lon") is not None
-    return has_geo and port.get("geocode_agree") is True
+def _map_check(port: dict) -> tuple[bool, list[str]]:
+    if port.get("lat") is None or port.get("lon") is None:
+        return False, ["not geocoded"]
+    if port.get("geocode_agree") is False:
+        return False, ["geocoders disagree"]
+    if port.get("geocode_agree") is None:
+        return True, ["single geocoder, not cross-checked"]
+    return True, []
 
 
-def _verdict(confidence: int, checks_ok: bool) -> str:
+def _verdict(confidence: int, checks_ok: bool, retry_hint: str | None) -> str:
     if confidence < 40:
-        return "retry"
+        return "retry" if retry_hint else "flag"
     if confidence > 60 and checks_ok:
         return "pass"
     return "flag"
@@ -128,32 +139,47 @@ def evaluate(state: dict) -> dict:
     ports_in = list(state.get("ports") or [])
     retry_count = int(state.get("retry_count") or 0)
     trace = list(state.get("trace") or [])
+    entries = []
     out_ports: list[dict] = []
     needs_retry: list[dict] = []
 
     for raw in ports_in:
         port = dict(raw)
-        scored = score_port(port)
-        confidence = int(scored["confidence"])
+        port.pop("reasons", None)
+        port.pop("retry_hint", None)
+        official = any(
+            "gouv" in (u or "") or "gov" in (u or "") or "gob" in (u or "")
+            for u in (port.get("source_urls") or [])
+        )
+        scored = score_port(port, official_source=official, listing_ports=state.get("listing_ports"))
+        apply_score(port, scored)
+        confidence = int(port["confidence"])
         source_ok = _has_real_source(port)
-        map_ok = _map_ok(port)
+        map_ok, map_reasons = _map_check(port)
         checks_ok = source_ok and map_ok
-        reasons = list(scored.get("reasons") or [])
+        check_reasons = []
         if not source_ok:
-            reasons.append("source non réelle (URLs vides ou synthèse seule)")
-        if not map_ok:
-            reasons.append("carte incomplète (lat/lon manquants ou géocodeurs pas d'accord)")
-        verdict = _verdict(confidence, checks_ok)
-        port["confidence"] = confidence
-        port["confidence_parts"] = scored.get("parts")
+            check_reasons.append("no direct source (empty URLs or synthesis only)")
+        check_reasons.extend(map_reasons)
+        # Non-official sources receive fewer source points in score_port.
+        # Prefer improving the source if both source and coordinates need work.
+        retry_hint = None
+        if not source_ok or not official:
+            retry_hint = "find an official source"
+        elif port.get("lat") is None or port.get("lon") is None:
+            retry_hint = "geocode the port"
+        verdict = _verdict(confidence, checks_ok, retry_hint)
         port["verdict"] = verdict
-        port["reasons"] = reasons
-        port["reasons_en"] = _reasons_en(reasons)
+        port["check_reasons"] = check_reasons
+        port["reasons_en"] = _reasons_en(port["confidence_reasons"] + check_reasons)
         out_ports.append(port)
         if verdict == "retry":
+            port["retry_hint"] = retry_hint
             needs_retry.append(port)
-        _trace_port(trace, port, retry_count, "evaluate_port", run_id=out["run_id"])
+        entries.append(_trace_port(port, retry_count, "evaluate_port", run_id=out["run_id"]))
 
+    _write_trace(entries, out["run_id"])
+    trace.extend(entries)
     out["ports"] = out_ports
     out["retry_count"] = retry_count
     out["needs_retry"] = needs_retry
@@ -175,9 +201,12 @@ def prepare_retry(state: dict) -> dict:
     out = _with_run_id(state)
     out["retry_count"] = int(state.get("retry_count") or 0) + 1
     trace = list(state.get("trace") or [])
+    entries = []
     for port in state.get("needs_retry") or []:
-        _trace_port(trace, port, out["retry_count"], "prepare_retry",
-                    run_id=out["run_id"], handoff="retry")
+        entries.append(_trace_port(port, out["retry_count"], "prepare_retry",
+                                   run_id=out["run_id"], handoff="retry"))
+    _write_trace(entries, out["run_id"])
+    trace.extend(entries)
     out["trace"] = trace
     return out
 
@@ -186,22 +215,29 @@ def finalise(state: dict) -> dict:
     """Call when route_after_evaluation() returns 'done'; retain every port.
 
     Any remaining retry verdict becomes flag, with the English reason
-    'unconfirmed after max retries' alongside its French equivalent.
+    'unconfirmed after max retries' in check_reasons and reasons_en.
     """
     out = _with_run_id(state)
     retry_count = int(state.get("retry_count") or 0)
     trace = list(state.get("trace") or [])
+    entries = []
     ports = []
     for raw in state.get("ports") or []:
         port = dict(raw)
+        port.pop("reasons", None)
         if port.get("verdict") == "retry":
             port["verdict"] = "flag"
-            port["reasons"] = list(port.get("reasons") or []) + [
-                "non confirmé après le nombre maximal de tentatives",
+            port.pop("retry_hint", None)
+            port["check_reasons"] = list(port.get("check_reasons") or []) + [
+                "unconfirmed after max retries",
             ]
-            port["reasons_en"] = _reasons_en(port["reasons"])
-            _trace_port(trace, port, retry_count, "finalise_port", run_id=out["run_id"])
+            port["reasons_en"] = _reasons_en(
+                list(port.get("confidence_reasons") or []) + port["check_reasons"]
+            )
+            entries.append(_trace_port(port, retry_count, "finalise_port", run_id=out["run_id"]))
         ports.append(port)
+    _write_trace(entries, out["run_id"])
+    trace.extend(entries)
     out["ports"] = ports
     out["needs_retry"] = []
     out["trace"] = trace

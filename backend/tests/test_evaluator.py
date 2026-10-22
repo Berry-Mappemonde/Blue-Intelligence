@@ -1,6 +1,7 @@
 """EvaluatorAgent checking node — no network, three hand-made ports."""
 from __future__ import annotations
 
+import ast
 import json
 from copy import deepcopy
 from inspect import getsourcefile
@@ -17,7 +18,7 @@ from app.agents.evaluator import (
     prepare_retry,
     route_after_evaluation,
 )
-from app.services.poe_confidence import score_port
+from app.services.poe_confidence import apply_score, score_port
 
 # High score, real source, map agreed → pass.
 PASS_PORT = {
@@ -64,6 +65,7 @@ RETRY_PORT = {
 def trace_log_path(tmp_path, monkeypatch):
     path = tmp_path / "logs" / "trace.jsonl"
     monkeypatch.setenv("TRACE_LOG_PATH", str(path))
+    monkeypatch.delenv("TRACE_STDOUT", raising=False)
     return path
 
 
@@ -71,10 +73,20 @@ def _by_name(ports):
     return {p["name"]: p for p in ports}
 
 
+def _production_score(port, **kwargs):
+    official = any(
+        "gouv" in (u or "") or "gov" in (u or "") or "gob" in (u or "")
+        for u in (port.get("source_urls") or [])
+    )
+    return score_port(port, official_source=official, **kwargs)
+
+
 def test_sample_ports_land_in_expected_score_bands():
-    assert score_port(PASS_PORT)["confidence"] > 60
-    assert score_port(FLAG_PORT)["confidence"] > 60
-    assert score_port(RETRY_PORT)["confidence"] < 40
+    passed = _production_score(PASS_PORT)
+    assert passed["confidence"] == 88
+    assert "source d'État" in passed["reasons"]
+    assert _production_score(FLAG_PORT)["confidence"] > 60
+    assert _production_score(RETRY_PORT)["confidence"] < 40
 
 
 def test_evaluator_reuses_the_original_backend_scorer():
@@ -97,9 +109,8 @@ def test_evaluate_assigns_pass_flag_retry():
     assert by_name["Somewhere"]["verdict"] == "retry"
     assert [p["name"] for p in state["needs_retry"]] == ["Somewhere"]
     assert by_name["Papeete"]["confidence"] > 60
-    assert any("géocodeurs" in r or "carte" in r for r in by_name["Hamburg"]["reasons"])
-    assert any("synthèse" in r.lower() or "source non réelle" in r
-               for r in by_name["Somewhere"]["reasons"])
+    assert by_name["Hamburg"]["check_reasons"] == ["geocoders disagree"]
+    assert "synthèse web sans page" in by_name["Somewhere"]["confidence_reasons"]
 
 
 def test_trace_is_one_json_entry_per_port():
@@ -158,7 +169,11 @@ def test_finalise_flags_unconfirmed_ports_without_dropping_any(retry_count):
     assert done["ports"][:2] == state["ports"][:2]
     flagged = done["ports"][2]
     assert flagged["verdict"] == "flag"
-    assert flagged["reasons"][:-1] == state["ports"][2]["reasons"]
+    assert flagged["confidence_reasons"] == state["ports"][2]["confidence_reasons"]
+    assert flagged["check_reasons"][:-1] == state["ports"][2]["check_reasons"]
+    assert flagged["check_reasons"][-1] == "unconfirmed after max retries"
+    assert "reasons" not in flagged
+    assert "retry_hint" not in flagged
     assert flagged["reasons_en"][:-1] == state["ports"][2]["reasons_en"]
     assert flagged["reasons_en"][-1] == "unconfirmed after max retries"
     assert done["needs_retry"] == []
@@ -221,9 +236,9 @@ def test_retry_loop_stops_at_limit_and_preserves_ports():
 def test_evaluate_adds_english_reasons_and_preserves_french():
     state = evaluate({"ports": [PASS_PORT, FLAG_PORT, RETRY_PORT]})
     by_name = _by_name(state["ports"])
-    assert by_name["Papeete"]["reasons"] == score_port(PASS_PORT)["reasons"]
+    assert by_name["Papeete"]["confidence_reasons"] == _production_score(PASS_PORT)["reasons"]
     assert by_name["Papeete"]["reasons_en"] == [
-        "national source not on the allowlist",
+        "government source",
         "Claude and OpenRouter agree",
         "catalogue + LLM + NER",
         "inside the EEZ, geocoders agree",
@@ -234,14 +249,14 @@ def test_evaluate_adds_english_reasons_and_preserves_french():
         "catalogue + LLM + NER",
         "inside the EEZ",
         "OSM: port infrastructure / customs",
-        "incomplete map (missing lat/lon or geocoders disagree)",
+        "geocoders disagree",
     ]
     assert by_name["Somewhere"]["reasons_en"] == [
         "web synthesis without a source page",
         "single extractor",
         "not geocoded",
         "no direct source (empty URLs or synthesis only)",
-        "incomplete map (missing lat/lon or geocoders disagree)",
+        "not geocoded",
     ]
     for port, entry in zip(state["ports"], state["trace"]):
         assert entry["reasons"] == port["reasons_en"]
@@ -250,14 +265,14 @@ def test_evaluate_adds_english_reasons_and_preserves_french():
 def test_unknown_french_reason_passes_through(monkeypatch):
     unknown = "nouvelle raison non traduite"
 
-    def score_with_unknown_reason(port):
-        scored = score_port(port)
+    def score_with_unknown_reason(port, **kwargs):
+        scored = score_port(port, **kwargs)
         scored["reasons"].append(unknown)
         return scored
 
     monkeypatch.setattr(evaluator, "score_port", score_with_unknown_reason)
     state = evaluate({"ports": [PASS_PORT]})
-    assert state["ports"][0]["reasons"][-1] == unknown
+    assert state["ports"][0]["confidence_reasons"][-1] == unknown
     assert state["ports"][0]["reasons_en"][-1] == unknown
     assert state["trace"][0]["reasons"][-1] == unknown
 
@@ -347,3 +362,164 @@ def test_invalid_run_ids_are_rejected_before_logging(run_id, trace_log_path):
     with pytest.raises(ValueError, match="run_id"):
         evaluate({"ports": [PASS_PORT], "run_id": run_id})
     assert not trace_log_path.exists()
+
+
+def test_every_scorer_reason_has_an_english_translation():
+    source = Path(__file__).resolve().parents[1] / "app" / "services" / "poe_confidence.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    reasons = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "reasons"
+                and node.func.attr == "append"):
+            assert len(node.args) == 1
+            reason = node.args[0]
+            assert isinstance(reason, ast.Constant) and isinstance(reason.value, str), (
+                "Scorer uses a dynamic reason; update the translation drift guard"
+            )
+            reasons.add(reason.value)
+    assert reasons, "No scorer reasons found"
+    assert not (reasons - evaluator._REASONS_EN.keys()), (
+        f"Missing English translations: {sorted(reasons - evaluator._REASONS_EN.keys())}"
+    )
+
+
+@pytest.mark.parametrize("url", [
+    "https://douane.gouv.fr/x", "https://customs.gov/x", "https://aduana.gob.es/x",
+])
+def test_government_source_score_matches_production(url):
+    port = {**PASS_PORT, "source_urls": [None, url]}
+    result = evaluate({"ports": [port]})["ports"][0]
+    scored = score_port(port, official_source=True)
+    assert result["confidence"] == scored["confidence"] == 88
+    assert result["confidence_reasons"] == scored["reasons"]
+    assert "source d'État" in result["confidence_reasons"]
+
+
+@pytest.mark.parametrize("role", ["poe", "other", None])
+def test_production_score_fields_and_separate_check_reasons(role):
+    listing = [{"name": "Papeete", "role": role}] if role else []
+    raw = {**PASS_PORT, "geocode_agree": None, "reasons": ["obsolete evaluator reason"]}
+    expected = apply_score(dict(raw), _production_score(raw, listing_ports=listing))
+    state = evaluate({"ports": [raw], "listing_ports": listing})
+    port = state["ports"][0]
+    for field in ("confidence", "confidence_parts", "confidence_reasons"):
+        assert port[field] == expected[field]
+    if role:
+        assert port["listing_role"] == expected["listing_role"] == role
+    else:
+        assert "listing_role" not in port
+    assert port["check_reasons"] == ["single geocoder, not cross-checked"]
+    assert "reasons" not in port
+    assert raw["reasons"] == ["obsolete evaluator reason"]
+    assert port["reasons_en"] == evaluator._reasons_en(
+        port["confidence_reasons"] + port["check_reasons"]
+    )
+    assert state["trace"][0]["reasons"] == port["reasons_en"]
+
+
+@pytest.mark.parametrize("changes, verdict, notes", [
+    ({"lat": None}, "flag", ["not geocoded"]),
+    ({"lon": None}, "flag", ["not geocoded"]),
+    ({"lat": None, "lon": None, "geocode_agree": False}, "flag", ["not geocoded"]),
+    ({"geocode_agree": False}, "flag", ["geocoders disagree"]),
+    ({"geocode_agree": None}, "pass", ["single geocoder, not cross-checked"]),
+    ({"geocode_agree": True}, "pass", []),
+    ({"lat": 0, "lon": 0, "geocode_agree": None}, "pass", ["single geocoder, not cross-checked"]),
+])
+def test_geocode_check_distinguishes_missing_disagreement_and_single(changes, verdict, notes):
+    port = evaluate({"ports": [{**PASS_PORT, **changes}]})["ports"][0]
+    assert port["confidence"] > 60
+    assert port["verdict"] == verdict
+    assert port["check_reasons"] == notes
+    assert "retry_hint" not in port
+
+
+@pytest.mark.parametrize("changes, hint", [
+    ({"source_urls": []}, "find an official source"),
+    ({"source_urls": ["https://example.com/port"]}, "find an official source"),
+    ({"from_synthesis": True}, "find an official source"),
+    ({"lat": None}, "geocode the port"),
+    ({"lon": None}, "geocode the port"),
+    ({"source_urls": [], "lat": None}, "find an official source"),
+])
+def test_low_score_retries_have_an_actionable_hint(changes, hint):
+    raw = {
+        "name": "Unconfirmed", "source_urls": ["https://customs.gov/port"],
+        "extraction_engine": "ner", "lat": 1, "lon": 2,
+        "spatial_kind": "rejected", "validated": False, "geocode_agree": False,
+        **changes,
+    }
+    state = evaluate({"ports": [raw]})
+    port = state["ports"][0]
+    assert port["confidence"] < 40
+    assert port["verdict"] == "retry"
+    assert port["retry_hint"] == hint
+    assert state["needs_retry"] == [port]
+    assert state["trace"][0]["retry_hint"] == hint
+    assert prepare_retry(state)["trace"][-1]["retry_hint"] == hint
+
+
+def test_low_score_without_an_actionable_hint_is_flagged():
+    raw = {
+        "name": "Rejected position", "source_urls": ["https://customs.gov/port"],
+        "extraction_engine": "ner", "lat": 1, "lon": 2,
+        "spatial_kind": "rejected", "validated": False, "geocode_agree": False,
+        "retry_hint": "obsolete hint",
+    }
+    state = evaluate({"ports": [raw]})
+    port = state["ports"][0]
+    assert port["confidence"] == 38
+    assert port["verdict"] == "flag"
+    assert port["check_reasons"] == ["geocoders disagree"]
+    assert "retry_hint" not in port
+    assert "retry_hint" not in state["trace"][0]
+    assert state["needs_retry"] == []
+    assert route_after_evaluation(state) == "done"
+
+
+def test_successful_retry_clears_old_hint_and_checks():
+    state = evaluate({"ports": [RETRY_PORT]})
+    recovered = {**state["ports"][0], **PASS_PORT, "from_synthesis": False}
+    state = evaluate({**prepare_retry(state), "ports": [recovered]})
+    assert state["ports"][0]["verdict"] == "pass"
+    assert state["ports"][0]["check_reasons"] == []
+    assert "retry_hint" not in state["ports"][0]
+    assert "retry_hint" not in state["trace"][-1]
+    assert state["needs_retry"] == []
+
+
+def test_trace_batches_one_file_open_per_node_call(trace_log_path, monkeypatch, capsys):
+    original_open = Path.open
+    opens = []
+
+    def tracked_open(path, *args, **kwargs):
+        if path == trace_log_path:
+            opens.append((args, kwargs))
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+    state = evaluate({"ports": [RETRY_PORT, {**RETRY_PORT, "name": "Another"}]})
+    assert len(opens) == 1
+    state = prepare_retry(state)
+    assert len(opens) == 2
+    state = evaluate(prepare_retry(state))
+    assert len(opens) == 4
+    state = finalise(state)
+    assert len(opens) == 5
+    printed = capsys.readouterr().out
+    assert [json.loads(line) for line in printed.splitlines()] == state["trace"]
+    with original_open(trace_log_path, encoding="utf-8") as log_file:
+        assert log_file.read() == printed
+
+
+def test_trace_stdout_can_be_disabled_for_all_nodes(trace_log_path, monkeypatch, capsys):
+    monkeypatch.setenv("TRACE_STDOUT", "0")
+    state = evaluate({"ports": [RETRY_PORT], "retry_count": RETRY_LIMIT - 1})
+    state = finalise(evaluate(prepare_retry(state)))
+    assert capsys.readouterr().out == ""
+    entries = [json.loads(line) for line in trace_log_path.read_text().splitlines()]
+    assert entries == state["trace"]
+    assert len(entries) == 4
