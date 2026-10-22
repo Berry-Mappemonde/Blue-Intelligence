@@ -3,7 +3,6 @@
 HMEM_DIR selects persistent storage; TRACE_LOG_PATH and TRACE_STDOUT match the
 EvaluatorAgent contract. Prior verdicts are evidence, not clearance authority.
 """
-import fcntl
 import hashlib
 import json
 import os
@@ -16,22 +15,60 @@ from threading import RLock
 from uuid import uuid4
 
 from app.engines.hmem import HMEM
+from app.core.paths import get_repo_root, get_data_dir, get_logs_dir
+try:
+    import filelock
+    HAS_FILELOCK = True
+except ImportError:
+    HAS_FILELOCK = False
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = get_repo_root()
 _LOCK = RLock()
+
+
+def _acquire_lock(directory):
+    """Cross-platform lock: filelock if available, else fcntl on Unix, else thread-only."""
+    directory.mkdir(parents=True, exist_ok=True)
+    # Use centralized data dir helper
+    data_dir = get_data_dir() if directory.is_relative_to(REPO_ROOT) else directory
+    lock_path = data_dir / '.lock'
+    if HAS_FILELOCK:
+        # filelock handles cross-platform advisory locking internally.
+        return filelock.FileLock(str(lock_path))
+    try:
+        import fcntl  # available on Unix (macOS/Linux in CI)
+        lock_fd = lock_path.open('a')
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        return lock_fd  # caller must release via .close()
+    except ImportError:
+        # No filelock, no fcntl: rely on RLock for thread safety only.
+        # Document: NOT safe for true multi-process without OS locking.
+        return _LOCK
 
 
 @contextmanager
 def _engine():
     # Serialize node read/modify/write cycles across threads and local processes.
-    directory = Path(os.environ.get('HMEM_DIR') or REPO_ROOT / 'data' / 'hmem')
+    directory = Path(os.environ.get('HMEM_DIR') or get_data_dir() / 'hmem')
     directory.mkdir(parents=True, exist_ok=True)
-    with _LOCK, (directory / '.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield HMEM(persist_dir=directory, actor='HMemAgent')
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    lock = _acquire_lock(directory)
+    try:
+        if HAS_FILELOCK:
+            with lock:
+                yield HMEM(persist_dir=directory, actor='HMemAgent')
+        else:
+            # fcntl path: lock_fd is returned; release in finally
+            try:
+                yield HMEM(persist_dir=directory, actor='HMemAgent')
+            finally:
+                lock.close()
+    finally:
+        # If filelock, context manager already released; if fcntl, close fd.
+        if not HAS_FILELOCK:
+            try:
+                lock.close()
+            except Exception:
+                pass
 
 
 def _state(state):
@@ -60,7 +97,7 @@ def _event(state, port, action, **details):
 
 def _trace(state, entries):
     if entries:
-        path = Path(os.environ.get('TRACE_LOG_PATH') or REPO_ROOT / 'logs' / f"trace-{state['run_id']}.jsonl")
+        path = Path(os.environ.get('TRACE_LOG_PATH') or get_logs_dir() / f"trace-{state['run_id']}.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in entries)
         with path.open('a', encoding='utf-8') as stream:
