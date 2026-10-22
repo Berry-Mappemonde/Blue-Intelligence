@@ -7,6 +7,7 @@ A persistent directory supports one writer at a time (like the TS reference).
 import os
 import time
 from pathlib import Path
+from app.core.paths import get_repo_root
 from .trust_ledger import TrustLedgerService
 from .memory_store import MemoryStoreService
 from .memory_mining import MemoryMiningService
@@ -22,7 +23,7 @@ class HMEM:
     def __init__(self, *, clock=None, actor='system', persist_dir=_DEFAULT, miner_fn=None):
         self.clock = clock if clock is not None else lambda: int(time.time() * 1000)
         if persist_dir is _DEFAULT:
-            persist_dir = os.environ.get('HMEM_DIR') or Path(__file__).resolve().parents[4] / 'data' / 'hmem'
+            persist_dir = os.environ.get('HMEM_DIR') or get_repo_root() / 'data' / 'hmem'
         self.ledger = TrustLedgerService(self.clock, persist_dir)
         self.store = MemoryStoreService(self.clock, self.ledger, actor, persist_dir)
         self.mining = MemoryMiningService(self.store, self.clock, miner_fn)
