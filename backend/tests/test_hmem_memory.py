@@ -19,8 +19,8 @@ def storage(tmp_path, monkeypatch):
 
 
 def port(verdict='pass', **extra):
-    return dict(name='Papeete', zone_name='French Polynesia', verdict=verdict,
-                source_urls=['https://example.gov/ports'], reasons_en=['government source'], **extra)
+    return {**dict(name='Papeete', zone_name='French Polynesia', verdict=verdict,
+                   source_urls=['https://example.gov/ports'], reasons_en=['government source']), **extra}
 
 
 def test_empty_recall():
@@ -56,14 +56,28 @@ def test_verdict_flip_retains_old_and_audits():
     assert resolution['newState']['supersededBy'] == new['id']
 
 
-def test_same_verdict_helpful():
+def test_same_verdict_and_source_reinforces_without_duplicate():
     remember_node(dict(ports=[port()], run_id='first'))
-    remember_node(dict(ports=[port()], run_id='second'))
+    state = remember_node(dict(ports=[port()], run_id='second'))
     h = HMEM()
-    assert len(h.store.all()) == 2
+    assert len(h.store.all()) == 1
     assert h.store.all()[0]['confidence'] == pytest.approx(.75)
     assert h.store.all()[0]['accessCount'] == 1
     assert h.ledger.history('mem-1')[-1]['details']['kind'] == 'helpful'
+    assert state['trace'][-1]['outcome'] == 'reinforced' and state['trace'][-1]['memory_id'] == 'mem-1'
+    remember_node(dict(ports=[port()], run_id='third'))
+    assert HMEM().store.get('mem-1')['accessCount'] == 2
+    assert len(recall_node(dict(ports=[port()], run_id='fourth'))['ports'][0]['memory']) == 1
+
+
+def test_changed_official_source_adds_record_without_superseding():
+    remember_node(dict(ports=[port()], run_id='first'))
+    state = remember_node(dict(ports=[port(source_urls=['https://customs.gov.pf/yachts'])], run_id='second'))
+    h = HMEM()
+    first, second = h.store.all()
+    assert state['trace'][-1]['outcome'] == 'created' and second['id'] == 'mem-2'
+    assert 'official source https://customs.gov.pf/yachts' in second['content']
+    assert not first.get('supersededBy') and first['accessCount'] == 0
 
 
 def test_jsonl_persistence_and_ephemeral_tier(storage):
@@ -107,8 +121,8 @@ def test_nodes_and_evaluator_share_trace(storage, monkeypatch, capsys):
 def test_recall_top_five_and_no_input_mutation():
     original = dict(ports=[port()], run_id='first')
     before = deepcopy(original)
-    for i in range(7):
-        remember_node(dict(ports=[port()], run_id=f'run-{i}'))
+    for i in range(7):  # distinct official sources, so each run adds a record
+        remember_node(dict(ports=[port(source_urls=[f'https://port{i}.gov/list'])], run_id=f'run-{i}'))
     recalled = recall_node(original)
     assert original == before
     assert len(recalled['ports'][0]['memory']) == 5
@@ -184,12 +198,17 @@ def test_reference_embedding_and_exact_hybrid_score():
 
 
 def test_latest_feedback_after_double_digit_id_restart():
-    for i in range(12):
-        remember_node(dict(ports=[port()], run_id=f'run-{i}'))
+    def sourced(i, verdict='pass'):
+        return port(verdict, source_urls=[f'https://port{i}.gov/list'])
+    for i in range(12):  # distinct official sources: mem-1 .. mem-12, all active
+        remember_node(dict(ports=[sourced(i)], run_id=f'run-{i}'))
+    remember_node(dict(ports=[sourced(11)], run_id='repeat'))  # unchanged: reinforce the latest
     h = HMEM()
-    assert h.store.get('mem-11')['confidence'] == pytest.approx(.75)
-    assert h.store.get('mem-12')['confidence'] == pytest.approx(.7)
-    remember_node(dict(ports=[port('flag')], run_id='flip'))
+    assert len(h.store.all()) == 12
+    assert h.store.get('mem-12')['confidence'] == pytest.approx(.75)
+    assert h.store.get('mem-11')['confidence'] == pytest.approx(.7)
+    assert h.store.get('mem-2')['confidence'] == pytest.approx(.7)
+    remember_node(dict(ports=[sourced(11, 'flag')], run_id='flip'))
     h = HMEM()
     assert len(h.store.all()) == 13
     assert all(h.store.get(f'mem-{i}')['supersededBy'] == 'mem-13' for i in range(1, 13))
