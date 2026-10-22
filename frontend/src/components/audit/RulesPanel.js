@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import {
-  GROUP_ORDER, PROFILE_ORDER, coerceValue, contractRules, inInterval, loc,
+  GROUP_ORDER, PROFILE_ORDER, coerceValue, contractRules, inInterval, isIntRule, loc,
   matchingProfile, varyRules,
 } from "../../lib/runRules";
 import { smallInput } from "./CardShell";
@@ -19,7 +19,7 @@ function RuleField({ rule, lang, value, onChange, error, disabled }) {
   const title = loc(rule.title, lang);
   const help = loc(rule.help, lang);
   const isBool = typeof rule.value === "boolean";
-  const isInt = typeof rule.value === "number" && Number.isInteger(rule.value);
+  const isInt = isIntRule(rule);
   const iv = rule.interval;
   const step = isInt ? 1 : (iv ? ((iv[1] - iv[0]) <= 2 ? 0.01 : 0.1) : 0.1);
   return (
