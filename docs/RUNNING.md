@@ -65,6 +65,14 @@ Live mode needs `ZETARIS_API_KEY`, `ZETARIS_ORG_ID` and `METERLESS_RUNTIME_TOKEN
 `llm.provider` and `llm.model` in the output show which model actually wrote the brief
 (the served model, as reported by the runtime).
 
+**Recorded live run:** `output_examples/01_bermuda.live_nemotron.json` and its trace
+`output_examples/01_bermuda.live_nemotron.trace.jsonl` were recorded on 22 October 2026
+against a local Zetaris instance and Meterless Nightshift. The Nightshift route
+`meterless/fast` served `nvidia/nemotron-3-ultra-550b-a55b` (`llm.provider: "nightshift"`).
+Zetaris returned two Bermuda ports, and H-MEM recalled four memories from earlier
+local runs. It is a recording for reference: it cannot be reproduced without
+credentials, and no code reads it.
+
 ## 4. CLI and HTTP
 
 ```bash
