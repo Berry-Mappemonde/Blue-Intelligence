@@ -243,3 +243,29 @@ def test_live_nightshift_nemotron(monkeypatch):
     assert result['provider'] == 'nightshift', result.get('fallback_reason')
     assert 'nemotron' in result['model'].lower(), result['model']
     assert result['parsed']['ports'][0]['name'].lower() == 'papeete'
+
+
+@pytest.mark.parametrize('entrypoint', ['ask_json', 'ask_json_tracked', 'ask_text'])
+def test_llm_meterless_opt_in(monkeypatch, entrypoint):
+    monkeypatch.setenv('LLM_PROVIDER', 'meterless')
+    generated = AsyncMock(return_value=dict(text='answer', parsed={'ports': []}, provider='nightshift'))
+    monkeypatch.setattr(generator, 'generate', generated)
+    function = getattr(llm, entrypoint)
+    result = asyncio.run(function('prompt', 'system'))
+    if entrypoint == 'ask_text':
+        assert result == 'answer'
+        generated.assert_awaited_once_with('prompt', 'system', role='text')
+    else:
+        assert result == (({'ports': []}, 'nightshift') if entrypoint == 'ask_json_tracked' else {'ports': []})
+        generated.assert_awaited_once_with('prompt', 'system', json_mode=True, role='json')
+
+
+def test_llm_text_default_preserves_nvidia_route(monkeypatch):
+    from app.core import nvidia
+    monkeypatch.setattr(nvidia, 'nvidia_enabled', lambda settings: True)
+    complete = AsyncMock(return_value='original nvidia response')
+    monkeypatch.setattr(nvidia, 'complete_text_nvidia', complete)
+    monkeypatch.setattr(generator, 'generate', AsyncMock(side_effect=AssertionError('Must not use generator')))
+    settings = {'custom': 'setting'}
+    assert asyncio.run(llm.ask_text('prompt', 'system', settings, max_tokens=55)) == 'original nvidia response'
+    complete.assert_awaited_once_with('system', 'prompt', settings, max_tokens=55)
