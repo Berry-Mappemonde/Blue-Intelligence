@@ -1,21 +1,29 @@
-"""Nightshift-first generation, with NVIDIA Nemotron and offline fallbacks.
+"""Nightshift-first generation, with optional NVIDIA Nemotron and offline fallbacks.
 
-Environment (no credentials are required for SAMPLE_MODE):
-  MODEL_BASE_URL: Nightshift OpenAI base, default http://127.0.0.1:8088/v1
-  MODEL_API_KEY: Nightshift bearer token; blank permits an unauthenticated probe
-  MODEL_NAME: Nightshift route/model, default meterless/fast. Configure this route
-    in Nightshift to serve Nemotron; response.model is recorded without guessing.
-  NVIDIA_API_KEY: optional direct NVIDIA fallback bearer token
+Environment (no credentials are required for SAMPLE_MODE). Official Meterless
+names win; the legacy MODEL_* names are read only when the official one is unset:
+  METERLESS_BASE_URL (or MODEL_BASE_URL): Nightshift OpenAI base,
+    default http://127.0.0.1:8088/v1
+  METERLESS_RUNTIME_TOKEN (or MODEL_API_KEY): Nightshift bearer token; blank
+    permits an unauthenticated probe
+  METERLESS_MODEL (or MODEL_NAME): Nightshift route/model, default meterless/auto.
+    response.model is recorded as served, without guessing (Nemotron proof).
+  NVIDIA_API_KEY: optional direct NVIDIA fallback; unset skips straight to sample
   NEMOTRON_MODEL: default nvidia/nemotron-3.5-lightning-30b-a3b
-  SAMPLE_MODE: true bypasses all providers (JSON result is {"ports": []})
+  SAMPLE_MODE: true bypasses all providers
   LLM_PROVIDER: meterless opts existing ask_json/ask_text into this generator
   TRACE_LOG_PATH: override repo logs/trace-<run_id>.jsonl
   TRACE_STDOUT: 0 disables stdout traces (default 1)
   NIGHTSHIFT_LIVE: 1 enables the opt-in live Nemotron integration test
 
-JSON mode requires an object, matching ask_json's contract. Sample responses
-contain no invented port or clearance facts. Provider failures are returned as
-sanitized fallback reasons, never raw HTTP bodies or exception messages.
+Latency is bounded: the /models probe gets PROBE_TIMEOUT_S (cached PROBE_TTL_S);
+each provider gets REQUEST_TIMEOUT_S of wall clock, shared by the request and its
+single retry; the whole call never exceeds GENERATE_BUDGET_S before sample.
+
+Sample output comes from the caller's sample_fn(prompt, system) when given, so
+real logic runs on the caller's own inputs; otherwise a generic empty structure.
+JSON mode requires an object, matching ask_json's contract. Provider failures are
+returned as sanitized fallback reasons, never raw HTTP bodies or exception messages.
 """
 from __future__ import annotations
 
@@ -35,11 +43,18 @@ import httpx
 from app.core.llm import parse_json_flexible
 
 DEFAULT_BASE_URL = 'http://127.0.0.1:8088/v1'
-DEFAULT_MODEL = 'meterless/fast'
+DEFAULT_MODEL = 'meterless/auto'
 DEFAULT_NEMOTRON_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b'
 NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions'
 DEFAULT_TRACE_LOG_DIR = Path(__file__).resolve().parents[3] / 'logs'
-_PROBE_TTL = 60
+REQUEST_TIMEOUT_S = 90.0   # per provider: one request plus its retry share this
+MAX_RETRIES = 1
+RETRY_BACKOFF_S = 1.0
+PROBE_TIMEOUT_S = 3.0
+PROBE_TTL_S = 60
+GENERATE_BUDGET_S = 150.0  # hard cap for the whole call before sample
+MIN_ATTEMPT_S = 5.0        # do not start a provider with less time than this
+SECRET_ENV = ('METERLESS_RUNTIME_TOKEN', 'MODEL_API_KEY', 'NVIDIA_API_KEY')
 _probe_cache = {}  # One configuration at a time; includes a credential fingerprint.
 _probe_locks = weakref.WeakKeyDictionary()
 
@@ -48,26 +63,42 @@ def _env(name, default=''):
     return os.environ.get(name, '').strip() or default
 
 
+def _setting(official, legacy, default=''):
+    """Official Meterless name first; the legacy name only when it is unset."""
+    return _env(official) or _env(legacy, default)
+
+
+def worst_case_seconds() -> dict:
+    """Upper bounds, in seconds, before each fallback (asserted by tests)."""
+    return dict(nightshift=PROBE_TIMEOUT_S + REQUEST_TIMEOUT_S, total=GENERATE_BUDGET_S)
+
+
 class _ProviderFailure(Exception):
     """Carries a safe reason code, never a provider response body."""
 
 
-async def _request(client, method, url, **kwargs):
-    for attempt in range(3):  # initial attempt plus two retries
+async def _request(client, method, url, *, budget, retries=MAX_RETRIES, **kwargs):
+    """At most 1 + retries attempts, all inside one wall-clock budget in seconds."""
+    deadline = time.monotonic() + budget
+    for attempt in range(retries + 1):
         try:
-            response = await client.request(method, url, **kwargs)
-        except httpx.TransportError as exc:
-            reason = 'timeout' if isinstance(exc, httpx.TimeoutException) else 'offline'
-            if attempt == 2:
-                raise _ProviderFailure(reason) from None
+            response = await asyncio.wait_for(client.request(method, url, **kwargs),
+                                              timeout=deadline - time.monotonic())
+        except (httpx.TransportError, asyncio.TimeoutError) as exc:
+            offline = isinstance(exc, httpx.TransportError) and not isinstance(exc, httpx.TimeoutException)
+            reason = 'offline' if offline else 'timeout'
         else:
             if response.status_code in (401, 403):
                 raise _ProviderFailure('unauthorized')
             if 200 <= response.status_code < 300:
                 return response
-            if response.status_code < 500 or attempt == 2:
+            if response.status_code < 500:
                 raise _ProviderFailure(f'http_{response.status_code}')
-        await asyncio.sleep(2 ** attempt)
+            reason = f'http_{response.status_code}'
+        # A timed-out first attempt has used the whole budget, so it is not retried.
+        if attempt == retries or deadline - time.monotonic() <= RETRY_BACKOFF_S:
+            raise _ProviderFailure(reason)
+        await asyncio.sleep(RETRY_BACKOFF_S)
     raise AssertionError('unreachable')
 
 
@@ -77,10 +108,11 @@ async def _probe(client, base, key, headers):
     lock = _probe_locks.setdefault(loop, asyncio.Lock())
     async with lock:
         cached = _probe_cache.get(identity)
-        if cached and time.monotonic() - cached[0] < _PROBE_TTL:
+        if cached and time.monotonic() - cached[0] < PROBE_TTL_S:
             return cached[1]
         try:
-            await _request(client, 'GET', base + '/models', headers=headers)
+            await _request(client, 'GET', base + '/models', budget=PROBE_TIMEOUT_S,
+                           retries=0, headers=headers)
             status = 'ready'
         except _ProviderFailure as exc:
             status = str(exc)
@@ -89,7 +121,7 @@ async def _probe(client, base, key, headers):
         return status
 
 
-async def _complete(client, url, headers, model, prompt, system, json_mode):
+async def _complete(client, url, headers, model, prompt, system, json_mode, budget):
     messages = []
     if system:
         messages.append({'role': 'system', 'content': system})
@@ -99,7 +131,7 @@ async def _complete(client, url, headers, model, prompt, system, json_mode):
     payload = dict(model=model, messages=messages, temperature=0, stream=False, max_tokens=2000)
     if json_mode:
         payload['response_format'] = {'type': 'json_object'}
-    response = await _request(client, 'POST', url, headers=headers, json=payload)
+    response = await _request(client, 'POST', url, budget=budget, headers=headers, json=payload)
     try:
         body = response.json()
         text = body['choices'][0]['message']['content']
@@ -117,7 +149,17 @@ async def _complete(client, url, headers, model, prompt, system, json_mode):
     return result
 
 
-def _sample(prompt, json_mode):
+def _sample(prompt, system, json_mode, sample_fn):
+    if sample_fn is not None:
+        # The caller's deterministic logic, computed from its own inputs.
+        value = sample_fn(prompt, system)
+        if json_mode:
+            if not isinstance(value, dict):
+                raise TypeError('sample_fn must return a dict in JSON mode')
+            return dict(text=json.dumps(value, ensure_ascii=False), parsed=value, model='caller-sample-fn')
+        if not isinstance(value, str):
+            raise TypeError('sample_fn must return a str in text mode')
+        return dict(text=value, model='caller-sample-fn')
     if json_mode:
         return dict(text='{"ports": []}', parsed={'ports': []}, model='deterministic-heuristic')
     maritime = bool(re.search(r'\b(port|ports|customs|maritime|clearance)\b', prompt, re.I))
@@ -136,13 +178,13 @@ def _trace(result, prompt, role, requested_model):
     # Redact before truncating too, so even a key straddling the 200-char limit
     # cannot appear as a prefix in a prompt preview.
     preview = prompt
-    for name in ('MODEL_API_KEY', 'NVIDIA_API_KEY'):
+    for name in SECRET_ENV:
         secret = _env(name)
         if secret:
             preview = preview.replace(secret, '[REDACTED]')
     entry['input_summary']['prompt'] = preview[:200]
     payload = json.dumps(entry, ensure_ascii=False)
-    for name in ('MODEL_API_KEY', 'NVIDIA_API_KEY'):
+    for name in SECRET_ENV:
         secret = _env(name)
         if secret:
             payload = payload.replace(json.dumps(secret, ensure_ascii=False)[1:-1], '[REDACTED]')
@@ -154,33 +196,38 @@ def _trace(result, prompt, role, requested_model):
         print(payload, flush=True)
 
 
-async def generate(prompt, system=None, *, json_mode=False, role='json', run_id=None) -> dict:
+async def generate(prompt, system=None, *, json_mode=False, role='json', run_id=None,
+                   sample_fn=None) -> dict:
     """Generate via Nightshift first; return honest provider/model provenance.
 
+    sample_fn(prompt, system), if given, supplies the sample result (a dict in
+    JSON mode, a str otherwise) when SAMPLE_MODE is on or every provider fails.
     duration_ms includes probes, retries and fallbacks. run_id is generated if
-    omitted and returned to the caller. Sample output has status='sample' and
-    sample=True, including when all configured providers fail.
+    omitted and returned to the caller. Sample output has provider='sample',
+    status='sample' and sample=True.
     """
     run_id = str(uuid4()) if run_id is None else run_id
     if not isinstance(run_id, str) or re.fullmatch(r'[A-Za-z0-9_-]+', run_id) is None:
         raise ValueError('run_id must contain only letters, digits, underscores or hyphens')
     started = time.monotonic()
+    deadline = started + GENERATE_BUDGET_S
     reasons, result, provider = [], None, 'sample'
-    requested_model = _env('MODEL_NAME', DEFAULT_MODEL)
+    requested_model = _setting('METERLESS_MODEL', 'MODEL_NAME', DEFAULT_MODEL)
     if _env('SAMPLE_MODE').lower() == 'true':
         reasons.append('SAMPLE_MODE=true')
     else:
-        base = _env('MODEL_BASE_URL', DEFAULT_BASE_URL).rstrip('/')
-        key = _env('MODEL_API_KEY')
+        base = _setting('METERLESS_BASE_URL', 'MODEL_BASE_URL', DEFAULT_BASE_URL).rstrip('/')
+        key = _setting('METERLESS_RUNTIME_TOKEN', 'MODEL_API_KEY')
         headers = {'meterless-app': 'blue-intelligence', 'meterless-scope': 'user'}
         if key:
             headers['Authorization'] = f'Bearer {key}'
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=5.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT_S, connect=5.0)) as client:
             status = await _probe(client, base, key, headers)
             if status == 'ready':
                 try:
                     result = await _complete(client, base + '/chat/completions', headers,
-                                             requested_model, prompt, system, json_mode)
+                                             requested_model, prompt, system, json_mode,
+                                             min(REQUEST_TIMEOUT_S, deadline - time.monotonic()))
                     provider = 'nightshift'
                 except _ProviderFailure as exc:
                     reasons.append(f'nightshift: {exc}')
@@ -188,18 +235,22 @@ async def generate(prompt, system=None, *, json_mode=False, role='json', run_id=
                 reasons.append(f'nightshift: {status}')
             if result is None:
                 nvidia_key = _env('NVIDIA_API_KEY')
-                if nvidia_key:
+                if not nvidia_key:
+                    # Optional: the app needs only Zetaris and Nightshift settings.
+                    reasons.append('nvidia: not_configured')
+                elif deadline - time.monotonic() < MIN_ATTEMPT_S:
+                    reasons.append('nvidia: no_time_left')
+                else:
                     requested_model = _env('NEMOTRON_MODEL', DEFAULT_NEMOTRON_MODEL)
                     try:
                         result = await _complete(client, NVIDIA_URL,
-                            {'Authorization': f'Bearer {nvidia_key}'}, requested_model, prompt, system, json_mode)
+                            {'Authorization': f'Bearer {nvidia_key}'}, requested_model, prompt, system,
+                            json_mode, min(REQUEST_TIMEOUT_S, deadline - time.monotonic()))
                         provider = 'nvidia'
                     except _ProviderFailure as exc:
                         reasons.append(f'nvidia: {exc}')
-                else:
-                    reasons.append('nvidia: missing_key')
     if result is None:
-        result = _sample(prompt, json_mode)
+        result = _sample(prompt, system, json_mode, sample_fn)
     result.update(provider=provider, run_id=run_id, sample=provider == 'sample',
                   status='sample' if provider == 'sample' else 'success',
                   duration_ms=round((time.monotonic() - started) * 1000, 3))

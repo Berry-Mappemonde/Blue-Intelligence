@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import time
 from unittest.mock import AsyncMock
 
 import httpx
@@ -17,10 +18,11 @@ def isolated_environment(monkeypatch, tmp_path, request):
     monkeypatch.setenv('TRACE_LOG_PATH', str(tmp_path / 'trace.jsonl'))
     monkeypatch.setenv('TRACE_STDOUT', '1')
     if request.node.name != 'test_live_nightshift_nemotron':
-        for name in ('SAMPLE_MODE', 'MODEL_NAME', 'NEMOTRON_MODEL', 'LLM_PROVIDER'):
+        for name in ('SAMPLE_MODE', 'METERLESS_MODEL', 'MODEL_NAME', 'MODEL_BASE_URL', 'MODEL_API_KEY',
+                     'NEMOTRON_MODEL', 'LLM_PROVIDER'):
             monkeypatch.delenv(name, raising=False)
-        monkeypatch.setenv('MODEL_BASE_URL', generator.DEFAULT_BASE_URL)
-        monkeypatch.setenv('MODEL_API_KEY', 'nightshift-test-secret')
+        monkeypatch.setenv('METERLESS_BASE_URL', generator.DEFAULT_BASE_URL)
+        monkeypatch.setenv('METERLESS_RUNTIME_TOKEN', 'nightshift-test-secret')
         monkeypatch.setenv('NVIDIA_API_KEY', 'nvidia-test-secret')
         monkeypatch.setattr(generator.asyncio, 'sleep', AsyncMock())
         # Tests must explicitly install a transport; otherwise network is forbidden.
@@ -46,7 +48,7 @@ def transport(monkeypatch):
             send = original_send
 
         def factory(**kwargs):
-            assert kwargs['timeout'].read == 180
+            assert kwargs['timeout'].read == generator.REQUEST_TIMEOUT_S
             return MockClient(transport=httpx.MockTransport(dispatch), **kwargs)
         monkeypatch.setattr(generator.httpx, 'AsyncClient', factory)
         return requests
@@ -71,9 +73,9 @@ def test_nightshift_success_headers_actual_model_and_trace(transport, isolated_e
         assert request.headers['meterless-scope'] == 'user'
         if request.method == 'GET':
             assert request.url.path == '/v1/models'
-            return httpx.Response(200, json={'data': [{'id': 'meterless/fast'}]})
+            return httpx.Response(200, json={'data': [{'id': 'meterless/auto'}]})
         payload = json.loads(request.content)
-        assert payload['model'] == 'meterless/fast'
+        assert payload['model'] == 'meterless/auto'
         assert payload['response_format'] == {'type': 'json_object'}
         return answer('```json\n{"ports": [{"name": "Papeete"}]}\n```')
     requests = transport(handler)
@@ -84,7 +86,7 @@ def test_nightshift_success_headers_actual_model_and_trace(transport, isolated_e
     assert len(requests) == 2
     entry = json.loads(isolated_environment.read_text())
     assert entry['agent_name'] == 'MeterlessGenerator'
-    assert entry['requested_model'] == 'meterless/fast'
+    assert entry['requested_model'] == 'meterless/auto'
     assert entry['served_model'] == result['model']
     assert entry['run_id'] == 'test-run' and entry['status'] == 'success'
     assert entry['duration_ms'] >= 0
@@ -103,14 +105,14 @@ def test_offline_nightshift_nvidia_fallback(transport):
     result = run()
     assert result['provider'] == 'nvidia'
     assert result['fallback_reason'] == 'nightshift: offline'
-    assert len(requests) == 4
+    assert len(requests) == 2  # one probe attempt, then NVIDIA
     assert 'parsed' not in result
 
 
 def test_both_down_returns_explicit_sample(transport):
     requests = transport(lambda request: httpx.Response(503, text='private server body'))
     result = run(json_mode=True)
-    assert len(requests) == 6
+    assert len(requests) == 3  # probe once, NVIDIA request plus one retry
     assert result['provider'] == 'sample' and result['sample']
     assert result['parsed'] == {'ports': []}
     assert result['status'] == 'sample'
@@ -133,7 +135,7 @@ def test_chat_retries_then_success(failure, transport):
         if request.method == 'GET':
             return httpx.Response(200, json={'data': []})
         posts.append(request)
-        if len(posts) < 3:
+        if len(posts) < 2:
             if failure == 'connection':
                 raise httpx.ConnectError('offline', request=request)
             if failure == 'timeout':
@@ -142,8 +144,22 @@ def test_chat_retries_then_success(failure, transport):
         return answer()
     transport(handler)
     assert run()['provider'] == 'nightshift'
-    assert len(posts) == 3
-    assert [call.args[0] for call in generator.asyncio.sleep.call_args_list] == [1, 2]
+    assert len(posts) == 2
+    assert [call.args[0] for call in generator.asyncio.sleep.call_args_list] == [generator.RETRY_BACKOFF_S]
+
+
+def test_chat_retries_at_most_once_then_falls_back(transport):
+    hosts = []
+    def handler(request):
+        hosts.append(request.url.host)
+        if request.method == 'GET':
+            return httpx.Response(200, json={'data': []})
+        return httpx.Response(502) if request.url.host == '127.0.0.1' else answer()
+    transport(handler)
+    result = run()
+    assert result['provider'] == 'nvidia'
+    assert result['fallback_reason'] == 'nightshift: http_502'
+    assert hosts == ['127.0.0.1', '127.0.0.1', '127.0.0.1', 'integrate.api.nvidia.com']
 
 
 def test_probe_cache_ttl_configuration_and_concurrent_calls(transport, monkeypatch):
@@ -159,7 +175,7 @@ def test_probe_cache_ttl_configuration_and_concurrent_calls(transport, monkeypat
         now[0] += 2
         await generator.generate('port')
         assert sum(r.method == 'GET' for r in requests) == 2
-        monkeypatch.setenv('MODEL_API_KEY', 'new-test-key')
+        monkeypatch.setenv('METERLESS_RUNTIME_TOKEN', 'new-test-key')
         await generator.generate('port')
         assert sum(r.method == 'GET' for r in requests) == 3
     asyncio.run(calls())
@@ -173,16 +189,18 @@ def test_explicit_sample_never_uses_network(monkeypatch):
     assert 'Sample mode' in run()['text']
 
 
-def test_no_keys_offline_works(transport, monkeypatch):
-    monkeypatch.delenv('MODEL_API_KEY')
+def test_no_keys_offline_skips_nvidia_straight_to_sample(transport, monkeypatch):
+    monkeypatch.delenv('METERLESS_RUNTIME_TOKEN')
     monkeypatch.delenv('NVIDIA_API_KEY')
     def handler(request):
+        assert request.url.host == '127.0.0.1', 'NVIDIA must not be called without a key'
         assert 'authorization' not in request.headers
         raise httpx.ConnectError('offline')
-    transport(handler)
+    requests = transport(handler)
     result = run()
     assert result['provider'] == 'sample'
-    assert 'missing_key' in result['fallback_reason']
+    assert result['fallback_reason'] == 'nightshift: offline; nvidia: not_configured'
+    assert len(requests) == 1
 
 
 def test_secrets_redacted_preview_truncated_and_stdout_switch(transport, isolated_environment, monkeypatch, capsys):
@@ -269,3 +287,121 @@ def test_llm_text_default_preserves_nvidia_route(monkeypatch):
     settings = {'custom': 'setting'}
     assert asyncio.run(llm.ask_text('prompt', 'system', settings, max_tokens=55)) == 'original nvidia response'
     complete.assert_awaited_once_with('system', 'prompt', settings, max_tokens=55)
+
+
+def test_official_env_names_and_default_model(transport, monkeypatch, isolated_environment):
+    monkeypatch.setenv('METERLESS_BASE_URL', 'http://nightshift.test:9000/v1/')
+    def handler(request):
+        assert request.url.host == 'nightshift.test'
+        assert request.headers['Authorization'] == 'Bearer nightshift-test-secret'
+        if request.method == 'GET':
+            assert request.url.path == '/v1/models'
+            return httpx.Response(200, json={'data': []})
+        assert json.loads(request.content)['model'] == 'meterless/auto'
+        return answer()
+    transport(handler)
+    assert generator.DEFAULT_MODEL == 'meterless/auto'
+    assert run()['provider'] == 'nightshift'
+    assert json.loads(isolated_environment.read_text())['requested_model'] == 'meterless/auto'
+
+
+@pytest.mark.parametrize('official', [True, False])
+def test_legacy_env_names_only_when_official_unset(official, transport, monkeypatch, isolated_environment):
+    monkeypatch.setenv('MODEL_BASE_URL', 'http://legacy.test/v1')
+    monkeypatch.setenv('MODEL_API_KEY', 'legacy-secret')
+    monkeypatch.setenv('MODEL_NAME', 'legacy/model')
+    if official:
+        monkeypatch.setenv('METERLESS_BASE_URL', 'http://official.test/v1')
+        monkeypatch.setenv('METERLESS_MODEL', 'meterless/fast')
+        host, key, model = 'official.test', 'nightshift-test-secret', 'meterless/fast'
+    else:
+        monkeypatch.delenv('METERLESS_BASE_URL')
+        monkeypatch.delenv('METERLESS_RUNTIME_TOKEN')
+        host, key, model = 'legacy.test', 'legacy-secret', 'legacy/model'
+    def handler(request):
+        assert request.url.host == host
+        assert request.headers['Authorization'] == f'Bearer {key}'
+        if request.method == 'GET':
+            return httpx.Response(200, json={'data': []})
+        assert json.loads(request.content)['model'] == model
+        return answer()
+    transport(handler)
+    assert run()['provider'] == 'nightshift'
+    assert json.loads(isolated_environment.read_text())['requested_model'] == model
+
+
+def test_worst_case_latency_budget():
+    assert generator.REQUEST_TIMEOUT_S == 90 and generator.MAX_RETRIES == 1
+    assert generator.PROBE_TIMEOUT_S == 3 and generator.PROBE_TTL_S == 60
+    bounds = generator.worst_case_seconds()
+    # Probe plus one 90 s provider budget (request and retry share it) before falling back.
+    assert bounds['nightshift'] == generator.PROBE_TIMEOUT_S + generator.REQUEST_TIMEOUT_S == 93
+    # The whole call, including optional NVIDIA, is capped well under 3 minutes.
+    assert bounds['nightshift'] <= bounds['total'] == generator.GENERATE_BUDGET_S <= 150 < 180
+
+
+@pytest.mark.parametrize('hang', ['probe', 'chat'])
+def test_hanging_providers_respect_budget(hang, transport, monkeypatch):
+    # Same algorithm with seconds scaled down: every hanging request must be cut off.
+    for name, value in (('PROBE_TIMEOUT_S', 0.05), ('REQUEST_TIMEOUT_S', 0.2), ('GENERATE_BUDGET_S', 0.35),
+                        ('MIN_ATTEMPT_S', 0.01), ('RETRY_BACKOFF_S', 0.01)):
+        monkeypatch.setattr(generator, name, value)
+    posts = []
+    async def handler(request):
+        if request.method == 'GET' and hang == 'chat':
+            return httpx.Response(200, json={'data': []})
+        if request.method == 'POST':
+            posts.append(request.url.host)
+        await asyncio.Event().wait()  # never answers
+    transport(handler)
+    started = time.perf_counter()
+    result = run(json_mode=True)
+    elapsed = time.perf_counter() - started
+    assert result['provider'] == 'sample' and result['parsed'] == {'ports': []}
+    assert result['fallback_reason'] == 'nightshift: timeout; nvidia: timeout'
+    # A timed-out request has spent its provider budget, so it is never retried.
+    assert posts == (['127.0.0.1', 'integrate.api.nvidia.com'] if hang == 'chat'
+                     else ['integrate.api.nvidia.com'])
+    assert elapsed < generator.GENERATE_BUDGET_S + 0.2
+
+
+def _port_list(prompt, system):
+    """Deterministic caller logic: parse names from the caller's own input."""
+    assert system == 'Extract ports.'
+    return {'ports': [{'name': name.strip()} for name in prompt.split(':', 1)[1].split(',')]}
+
+
+def test_sample_fn_runs_caller_logic_in_sample_mode(monkeypatch, isolated_environment):
+    monkeypatch.setenv('SAMPLE_MODE', 'true')
+    result = asyncio.run(generator.generate('ports: Papeete, Nuku Hiva', 'Extract ports.', json_mode=True,
+                                            run_id='sample-fn', sample_fn=_port_list))
+    assert result['parsed'] == {'ports': [{'name': 'Papeete'}, {'name': 'Nuku Hiva'}]}
+    assert json.loads(result['text']) == result['parsed']
+    assert result['provider'] == 'sample' and result['sample'] and result['status'] == 'sample'
+    assert result['model'] == 'caller-sample-fn'
+    entry = json.loads(isolated_environment.read_text())
+    assert entry['provider'] == 'sample' and entry['served_model'] == 'caller-sample-fn'
+
+
+def test_sample_fn_used_when_providers_fail(transport, monkeypatch):
+    monkeypatch.delenv('NVIDIA_API_KEY')
+    transport(lambda request: httpx.Response(503))
+    result = asyncio.run(generator.generate('ports: Fort Bay', 'Extract ports.', run_id='down',
+                                            sample_fn=lambda p, s: f"caller saw {_port_list(p, s)['ports'][0]['name']}"))
+    assert result['text'] == 'caller saw Fort Bay'
+    assert result['provider'] == 'sample'
+    assert result['fallback_reason'] == 'nightshift: http_503; nvidia: not_configured'
+
+
+def test_sample_fn_not_called_when_nightshift_answers(transport):
+    transport(lambda r: httpx.Response(200, json={'data': []}) if r.method == 'GET' else answer())
+    def forbidden(prompt, system):
+        raise AssertionError('sample_fn must not run when a provider answers')
+    assert run(json_mode=True, sample_fn=forbidden)['provider'] == 'nightshift'
+
+
+@pytest.mark.parametrize('json_mode, value', [(True, 'not a dict'), (False, {'not': 'a str'})])
+def test_sample_fn_wrong_type_is_rejected(json_mode, value, monkeypatch):
+    monkeypatch.setenv('SAMPLE_MODE', 'true')
+    with pytest.raises(TypeError, match='sample_fn'):
+        run(json_mode=json_mode, sample_fn=lambda prompt, system: value)
