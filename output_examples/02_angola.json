@@ -1,0 +1,59 @@
+{
+  "run_id": "example-angola",
+  "zone": "Angola",
+  "mode": "sample",
+  "ports": [
+    {
+      "name": "Porto de Luanda",
+      "verdict": "flag",
+      "confidence": 60,
+      "reasons_en": [
+        "government source",
+        "single extractor",
+        "inside the EEZ",
+        "single geocoder, not cross-checked"
+      ],
+      "sources": [
+        {
+          "url": "https://amn.gov.ao/web/perfil-entidade/552",
+          "provenance": "zetaris"
+        },
+        {
+          "url": "https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/",
+          "provenance": "zetaris"
+        }
+      ],
+      "memories_recalled": 0,
+      "research": null
+    }
+  ],
+  "summary": {
+    "flag": 1
+  },
+  "brief": "Clearance brief: Angola\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto de Luanda (confidence 60/100): single geocoder, not cross-checked. Sources: https://amn.gov.ao/web/perfil-entidade/552, https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "llm": {
+    "provider": "sample",
+    "model": "caller-sample-fn",
+    "fallback_reason": "SAMPLE_MODE=true"
+  },
+  "components": {
+    "zetaris": "sample",
+    "llm": "sample"
+  },
+  "retries": 0,
+  "memory": {
+    "recalled": 0,
+    "remembered": true
+  },
+  "trace_file": "logs/trace-example-angola.jsonl",
+  "timings_ms": {
+    "ZetarisAdapter.get_ports": 0.5,
+    "HMemAgent.recall": 0.4,
+    "EvaluatorAgent.evaluate": 2.2,
+    "EvaluatorAgent.finalise": 0.1,
+    "BriefingAgent.brief": 0.2,
+    "HMemAgent.remember": 0.9,
+    "total": 4.3
+  },
+  "error": null
+}
