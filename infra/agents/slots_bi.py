@@ -252,77 +252,149 @@ def usage_limit_seen(reg: dict, children: Child) -> str | None:
         except OSError:
             continue
         if rl.USAGE_LIMIT_RE.search(tail):
-            return "agent manuel (code USAGE_LIMIT dans *-run.err)"
+            return f"lot manuel ({f.name})"
     return None
 
 
-def stop_chain(reg: dict, reason: str) -> None:
-    log(f"USAGE_LIMIT détecté ({reason}) — arrêt de la chaîne, plus aucun départ.")
-    for lid, p in children.procs.items():
-        try:
-            p.terminate()
-        except OSError:
-            pass
-    for f in STOP_FILES:
-        try:
-            f.touch()
-        except OSError:
-            pass
+def stop_chain(reg: dict, why: str) -> None:
+    log(f"LIMITE D'USAGE Cursor ({why}) : arrêt de la chaîne, worktrees gardés, rien n'est relancé. Prévenir Amiral.")
+    for lid, e in reg.items():
+        if alive(e.get("pid")):
+            try:
+                os.killpg(int(e["pid"]), signal.SIGTERM)
+                log(f"    {lid} : run_lots_bi arrêté (pid {e['pid']})")
+            except OSError:
+                pass
+    for pid, ws in agent_workspaces().items():
+        if ws.startswith(str(CHAIN_WT)):
+            try:
+                os.killpg(pid, signal.SIGTERM)
+            except OSError:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+            log(f"    agent de la chaîne {pid} arrêté ({ws})")
+    (Path.home() / "lots-live" / "USAGE_LIMIT").write_text(time.strftime("%Y-%m-%d %H:%M:%S") + f" {why}\n", encoding="utf-8")
 
+
+# ---------------------------------------------------------------- décision
 
 def resolve_model(cfg: dict) -> str:
-    return cfg.get("model", "meterless/auto")
+    info = rl.local_check()
+    if not info["agent"] or not info["logged"]:
+        sys.exit("CLI Cursor absent ou non connecté")
+    ids = [m.split()[0] for m in info["models"]]
+    want = cfg.get("model") or rl.DEFAULT_MODEL
+    if want in ids:
+        return want
+    # Pour BI on utilise meterless/auto (Nemotron via Meterless)
+    cands = [i for i in ids if "meterless" in i.lower() or "nemotron" in i.lower()]
+    if not cands:
+        sys.exit("Aucun modèle Meterless/Nemotron dans `agent models` : arrêt (rien lancé)")
+    return cands[0]
 
 
-def read_priority(priority_lots: str | None, cfg: dict) -> list[str]:
-    if priority_lots is None:
-        return list(cfg.get("priority", []))
-    p = Path(priority_lots).expanduser()
-    if p.exists():
-        lines = p.read_text(encoding="utf-8").splitlines()
-        return [l.split("#", 1)[0].strip() for l in lines if l.split("#", 1)[0].strip()]
-    return [l.strip() for l in priority_lots.split(",") if l.strip()]
+def read_priority(spec: str | None, cfg: dict) -> list[str]:
+    """--priority-lots : « A,B,C » ou chemin d'un fichier (un id par ligne, # = commentaire)."""
+    if not spec:
+        return [str(x) for x in cfg.get("priority", [])]
+    p = Path(spec).expanduser()
+    text = p.read_text(encoding="utf-8") if p.exists() else spec
+    ids: list[str] = []
+    for ln in text.splitlines():
+        ln = ln.split("#", 1)[0]
+        ids += [x.strip() for x in ln.split(",") if x.strip()]
+    return list(dict.fromkeys(ids))
 
 
 class Planner:
-    def __init__(self, cfg: dict, merged: Merged, priority: list[str], only_priority: bool):
+    def __init__(self, cfg: dict, merged: Merged, priority: list[str] | None = None, only_priority: bool = False):
         self.cfg = cfg
         self.merged = merged
-        self.priority = priority
+        pool = pool_lots(cfg)
+        self.pfiles = prompt_files(pool)   # fichiers « communs » jugés sur tout le plan, pas sur la seule priorité
+        self.full_pool = pool
         self.only_priority = only_priority
-        self.pool = pool_lots(cfg)
-        self.merged.refresh()
-        self.pfiles = prompt_files(self.pool)
-        self.unknown_priority = [p for p in priority if not any(l.id == p for l in self.pool)]
+        self._wt_cache: dict[str, tuple[float, set[str]]] = {}
+        self.set_priority(priority or [])
 
     def set_priority(self, priority: list[str]) -> None:
-        self.priority = priority
-        self.unknown_priority = [p for p in priority if not any(l.id == p for l in self.pool)]
+        """Lots prioritaires d'abord (dans l'ordre donné), puis l'ordre du plan. Rappelé à chaque
+        changement du fichier de priorité, sans redémarrer l'ordonnanceur."""
+        ids = {l.id for l in self.full_pool}
+        self.priority = [x for x in priority if x in ids]
+        self.unknown_priority = [x for x in priority if x not in ids]
+        rank = {x: i for i, x in enumerate(self.priority)}
+        pool = [l for l in self.full_pool if l.id in rank] if self.only_priority else list(self.full_pool)
+        self.pool = sorted(pool, key=lambda l: (0, rank[l.id]) if l.id in rank else (1, 0))
+        self.by_id = {l.id: l for l in self.pool}
 
-    def is_merged(self, branch: str) -> bool:
-        return branch in self.merged.heads
+    def branch_of(self, lid: str, reg: dict) -> str | None:
+        if lid in self.cfg.get("taken", {}):
+            return self.cfg["taken"][lid]
+        e = reg.get(lid)
+        if e:
+            try:
+                d = json.loads((Path(e["state_dir"]) / "state.json").read_text(encoding="utf-8"))
+                return ((d.get("done") or {}).get(lid) or {}).get("branch")
+            except (OSError, json.JSONDecodeError):
+                return None
+        return None
+
+    def is_merged(self, lid: str, reg: dict) -> bool:
+        if lid in self.cfg.get("merged", []):
+            return True
+        b = self.branch_of(lid, reg)
+        return bool(b) and b in self.merged.refresh()
 
     def active(self, reg: dict) -> list[str]:
-        return [lid for lid in reg if not self.is_merged(lid)]
+        """Lots en cours : pris ou lancés, pas encore mergés."""
+        ids = list(self.cfg.get("taken", {})) + list(reg)
+        return [x for x in dict.fromkeys(ids) if not self.is_merged(x, reg)]
 
-    def decide(self, reg: dict, picked: list[str] = None) -> list[tuple[str, str]]:
-        if picked is None:
-            picked = []
-        order = self.priority + [l.id for l in self.pool if l.id not in self.priority]
-        if self.only_priority:
-            order = [l for l in order if l in self.priority]
-        act = self.active(reg)
+    def files_of(self, lid: str, reg: dict) -> set[str]:
+        files = set(self.pfiles.get(lid, set()))
+        wt = None
+        if lid in self.cfg.get("worktrees", {}):
+            wt = MANUAL_DIR / self.cfg["worktrees"][lid]
+        elif lid in reg:
+            wt = CHAIN_WT / lid.lower()
+        if wt is not None:
+            ts, cached = self._wt_cache.get(lid, (0.0, set()))
+            if time.time() - ts > 120:
+                try:
+                    cached = worktree_files(wt)
+                except Exception:  # noqa: BLE001
+                    cached = set()
+                self._wt_cache[lid] = (time.time(), cached)
+            files |= cached
+        return files
+
+    def decide(self, reg: dict, extra_active: list[str] | None = None) -> list[tuple[str, str]]:
+        """[(id, raison)] pour chaque lot restant ; raison vide = peut partir."""
+        act = self.active(reg) + list(extra_active or [])
+        act_files = {a: self.files_of(a, reg) for a in act}
         nw = self.cfg.get("never_with", {})
-        act_files = {lid: worktree_files(Path(self.cfg.get("worktrees", {}).get(lid, CHAIN_WT / lid.lower()))) for lid in act}
+        now = datetime.now(timezone.utc)
         out = []
-        for lid in order:
-            l = next((x for x in self.pool if x.id == lid), None)
-            if l is None:
+        for l in self.pool:
+            lid = l.id
+            if lid in self.cfg.get("exclude", {}):
                 continue
-            if lid in picked or lid in act or lid in self.cfg.get("exclude", {}) or lid in self.cfg.get("hold", {}):
+            if lid in self.cfg.get("taken", {}) or lid in reg or lid in (extra_active or []):
+                continue
+            if lid in self.cfg.get("merged", []):
+                continue
+            if lid in self.cfg.get("hold", {}):
+                out.append((lid, "en attente : " + self.cfg["hold"][lid]))
+                continue
+            nb = self.cfg.get("not_before", {}).get(lid)
+            if nb and now < datetime.fromisoformat(nb.replace("Z", "+00:00")):
+                out.append((lid, f"pas avant {nb}"))
                 continue
             deps = list(dict.fromkeys(l.deps + self.cfg.get("extra_deps", {}).get(lid, [])))
-            missing = [d for d in deps if not self.is_merged(d)]
+            missing = [d for d in deps if not self.is_merged(d, reg)]
             if missing:
                 out.append((lid, "dépendances non mergées : " + ", ".join(missing)))
                 continue
