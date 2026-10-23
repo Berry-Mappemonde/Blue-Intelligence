@@ -211,3 +211,59 @@ def test_live_brief_served_by_nemotron(monkeypatch):
     assert result['llm']['provider'] == 'nightshift', result['llm']['fallback_reason']
     assert 'nemotron' in result['llm']['model'].lower(), result['llm']['model']
     assert 'Luanda' in result['brief']
+
+
+def test_demo_page_is_self_contained_html():
+    response = TestClient(app).get('/')
+    assert response.status_code == 200 and response.headers['content-type'].startswith('text/html')
+    page = response.text
+    assert '<title>PoE Reconciler</title>' in page
+    assert "api('/zones')" in page and "api('/run'" in page and '/trace' in page
+    assert 'src="http' not in page and 'href="http' not in page  # no CDN or remote assets
+    assert '<script src=' not in page and '<link rel="stylesheet"' not in page  # no external assets
+
+
+def test_zones_in_sample_mode():
+    data = TestClient(app).get('/zones').json()
+    assert data['mode'] == 'sample'
+    assert data['zones'] == sorted(data['zones']) and len(data['zones']) == 20
+    assert {'Bermuda', 'Angola', 'Azores'} <= set(data['zones'])
+
+
+def test_zones_fall_back_when_zetaris_is_down(monkeypatch):
+    monkeypatch.delenv('SAMPLE_MODE')
+    monkeypatch.setenv('ZETARIS_API_KEY', 'test-key')
+    monkeypatch.setenv('ZETARIS_ORG_ID', '1')
+    monkeypatch.setenv('ZETARIS_REST_URL', 'http://127.0.0.1:9/api/v1.0')
+    monkeypatch.setattr(zetaris.time, 'sleep', lambda seconds: None)
+    data = TestClient(app).get('/zones').json()
+    assert data['mode'] == 'fallback' and 'Bermuda' in data['zones']
+
+
+def test_trace_route_returns_the_runs_events():
+    client = TestClient(app)
+    result = client.post('/run', json={'zone_name': 'Bermuda', 'run_id': 'trace-api'}).json()
+    response = client.get('/runs/trace-api/trace')
+    assert response.status_code == 200
+    events = response.json()['events']
+    assert {e['run_id'] for e in events} == {'trace-api'} == {result['run_id']}
+    assert AGENTS <= {e['agent_name'] for e in events}
+    assert events[0]['action'] == 'run_start' and events[-1]['action'] == 'run_end'
+    # A reused run_id appends to the trace; the route returns only the latest run.
+    client.post('/run', json={'zone_name': 'Bermuda', 'run_id': 'trace-api'})
+    again = client.get('/runs/trace-api/trace').json()['events']
+    assert [e['action'] for e in again].count('run_start') == 1
+    assert client.get('/runs/never-ran/trace').status_code == 404
+
+
+@pytest.mark.parametrize('bad', ['%2E%2E', '..%2F..%2Fetc%2Fpasswd', 'bad.id', 'a%20b', 'x' * 65])
+def test_trace_route_rejects_bad_run_ids(bad):
+    response = TestClient(app).get(f'/runs/{bad}/trace')
+    assert response.status_code in (404, 422), response.text
+    assert 'events' not in response.text
+
+
+def test_trace_route_rejects_traversal_with_422():
+    assert TestClient(app).get('/runs/%2E%2E/trace').status_code == 422
+    with pytest.raises(ValueError):
+        pipeline.load_trace('../../etc/passwd')
