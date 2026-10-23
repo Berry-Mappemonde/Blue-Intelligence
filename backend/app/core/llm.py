@@ -140,13 +140,14 @@ async def ask_json_tracked(prompt: str, system: str = JSON_SYSTEM,
     """Strict JSON: NEMOTRON first → NVIDIA (role chain) → OpenRouter → Claude last.
 
     Nemotron is the default first attempt; the old cascade stays as fallback.
+    Models are selected per-role from the specialized Nemotron suite.
     """
     # NEW: Try Nemotron first (NIM model, not meterless opt-in)
-    from app.core.nvidia import get_nvidia_key, complete_json_nvidia_tracked
+    from app.core.nvidia import get_nvidia_key, complete_json_nvidia_tracked, models_for
     key = get_nvidia_key(settings)
     if key:
-        # Nemotron 3-super-120b-a12b for JSON extraction; 3.5-super-vl-120b-a12b for PDFs
-        nemotron_chain = ("nvidia/nemotron-3-super-120b-a12b",)
+        # Nemotron suite: role-specialized model selection
+        nemotron_chain = models_for(role or "json")
         for model in nemotron_chain:
             try:
                 data = await complete_json_nvidia_tracked(
