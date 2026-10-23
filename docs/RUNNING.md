@@ -81,18 +81,38 @@ cannot be reproduced without credentials, and no code reads it.
 # CLI: JSON file in, JSON on stdout (and optionally a file)
 backend/.venv/bin/python backend/run.py --input input_examples/03_azores.json --output out.json
 
-# HTTP: POST /run and GET /healthz on PORT (default 8000, host 127.0.0.1; set HOST=0.0.0.0 in a container)
+# HTTP server on PORT (default 8000, host 127.0.0.1; set HOST=0.0.0.0 in a container)
 backend/.venv/bin/python backend/run.py --serve
 # in a second terminal:
 curl -s localhost:8000/healthz
+curl -s localhost:8000/zones
 curl -s -X POST localhost:8000/run -H 'Content-Type: application/json' \
      -d '{"zone_name": "Bermuda", "run_id": "demo-1"}'
+curl -s localhost:8000/runs/demo-1/trace
 ```
+
+**Demo page:** with the server running, open <http://localhost:8000> in a browser.
+Pick a zone, then press **Run verification**. The page shows the mode (live or
+sample), whether Zetaris was live, and the LLM provider and served model, with a
+"Nemotron via Nightshift" badge when the served model is a Nemotron model. It
+also shows a card per port (verdict, confidence, reasons, sources, memories
+recalled, research outcome), the brief, and an agent timeline built from the
+run's trace (agents, actions, handoffs, retry rounds, durations). It is one
+self-contained file, [`backend/app/pipeline/demo_page.html`](../backend/app/pipeline/demo_page.html),
+with no external assets, so it works offline.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /` | Demo page |
+| `POST /run` | Run the pipeline for one zone (JSON in, JSON out) |
+| `GET /zones` | Zones available now: live Zetaris, or the sample fixture (`mode`: `live`, `sample` or `fallback`) |
+| `GET /runs/{run_id}/trace` | Trace events of the latest run with that `run_id`, as JSON |
+| `GET /healthz` | Health and whether `SAMPLE_MODE` is on |
 
 If port 8000 is already in use, the server exits with "address already in use", and
 `curl` would reach whichever program holds the port. Start it with another port,
 for example `PORT=8001 backend/.venv/bin/python backend/run.py --serve`, and use
-`localhost:8001` in the `curl` commands.
+`localhost:8001` in the `curl` commands and the browser.
 
 Input: `{"zone_name": str, "run_id": optional str}` (`run_id`: letters, digits, `_`, `-`).
 Output: `run_id`, `zone`, `mode` (`live` or `sample`), `ports` (name, verdict,

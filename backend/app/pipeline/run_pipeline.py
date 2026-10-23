@@ -99,6 +99,43 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
         return fallback.get_ports(zone_name=zone_name), 'fallback'
 
 
+def list_zones() -> dict:
+    """Zones the current mode can run: live Zetaris, or the sample fixture as fallback."""
+    client = ZetarisClient(run_id='zones')
+    mode = client.mode
+    if mode == 'live':
+        try:
+            rows = client.query('SELECT DISTINCT zone_name FROM blue_intel.poe_ports', limit=1000)
+            return dict(mode='live', zones=sorted({r[0] for r in rows
+                                                   if r and isinstance(r[0], str) and r[0] != 'null'}))
+        except ZetarisUnavailable:
+            mode = 'fallback'
+    sample = ZetarisClient(run_id='zones')
+    sample.mode = 'sample'
+    return dict(mode=mode, zones=sorted({p['zone_name'] for p in sample.get_ports(limit=1000)
+                                         if p['zone_name']}))
+
+
+def load_trace(run_id: str) -> list[dict]:
+    """Trace events of the latest run with this run_id (a reused run_id appends)."""
+    if not isinstance(run_id, str) or not _RUN_ID.fullmatch(run_id):
+        raise ValueError('run_id must be 1-64 letters, digits, underscores or hyphens')
+    path = trace_path(run_id)
+    if not path.is_file():
+        return []
+    events = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get('run_id') == run_id:
+            if event.get('agent_name') == PIPELINE_AGENT and event.get('action') == 'run_start':
+                events = []
+            events.append(event)
+    return events
+
+
 def _remembered_official_sources(memories: list[dict]) -> list[tuple[str, str]]:
     """(url, memory_id) for official sources in recalled verdicts, active ones first."""
     found: list[tuple[str, str]] = []
