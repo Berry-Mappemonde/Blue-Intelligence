@@ -1208,19 +1208,54 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
         except Exception:
             s = {}
     
-    # Step 1: Extract ports using existing LLM cascade
-    llm_ports, llm_err = await _primary()
+    # Step 0: Query H-MEM for previously learned official sources
+    from app.engines.hmem import HMEM
+    from app.core.paths import get_repo_root
+    zone_iso2 = (zone.get("iso2") or "").upper()
+    hmem_sources = []
+    try:
+        hmem = HMEM(persist_dir=str(get_repo_root() / "data" / "hmem"), actor="poe_pipeline")
+        # Query H-MEM for official port sources for this zone
+        query = f"official ports of entry {zone.get('name', '')} {zone_iso2}"
+        mem_result = hmem.query(query, opts=dict(topN=5, threshold=0.15))
+        for memory in mem_result.get('memories', []):
+            content = memory.get('memory', {}).get('content', '') or ''
+            # Extract official source URLs from memory
+            urls = re.findall(r'https?://[^\s\)\]\"]+', content)
+            for url in urls:
+                lowered = url.lower()
+                if any(s in lowered for s in ['gov', 'gouv', 'gob', 'official', 'decret', 'port d\'entree']):
+                    if url not in hmem_sources:
+                        hmem_sources.append(url)
+        # Also store memory IDs for future recall
+        hmem_memories = mem_result.get('memories', [])
+    except Exception as e:
+        if log:
+            log(f"H-MEM query failed: {type(e).__name__}: {str(e)[:80]}")
+        hmem_memories = []
     
     # Step 2: Validate against Zetaris official data
     zone_name = zone.get("name", "")
     rec_id = rec.get("run_id", "") if rec else ""
     zetaris_result = await validate_ports_zetaris(zone_name, rec_id, s) if rec_id else {"mode": "sample", "ports_by_zone": {}, "official_count": 0}
     
-    # Step 3: Cross-reference and validate
+    # Step 3: Cross-reference and validate with Zetaris
     ports = await cross_reference_zetaris(llm_ports if llm_ports is not None else [], zone, zetaris_result)
-    
-    # Step 4: Record H-MEM handoff for each official port
-    zone_iso2 = zone.get("iso2", "unknown").upper()
+
+    # Step 4: Augment ports with H-MEM official sources (prioritize memory-learned sources)
+    if hmem_sources and ports:
+        for port in ports:
+            port_name = (port.get("name") or "").strip().lower()
+            for hmem_source in hmem_sources:
+                # Mark port as seen in H-MEM memory context
+                if hmem_source.lower() in port_name or port_name in hmem_source.lower():
+                    if "hmem_validation" not in port:
+                        port["hmem_validation"] = "verified_from_memory"
+                        port["hmem_source"] = hmem_source
+                    break
+
+    # Step 5: Record H-MEM handoff for each Zetaris-validated official port
+    zone_iso2 = (zone.get("iso2") or "unknown").upper()
     if rec_id and ports:
         for port in ports:
             if (port.get("zetaris_validation") or "") == "official":
