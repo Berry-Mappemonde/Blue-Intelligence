@@ -17,6 +17,25 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+# These tests cover the NIM fallback mechanics (410 skip, 429 hop, listing escalation,
+# second reader) on the pre-Nemotron chains they were written for. The Nemotron heads
+# of the production chains are covered in test_nemotron_suite.py.
+LEGACY_CHAINS = {
+    "judge": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL, nvidia.FLASH_MODEL),
+    "extract": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL),
+    "legal": (nvidia.LEGAL_MODEL, nvidia.SECONDARY_MODEL),
+    "json": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL),
+    "page": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL),
+    "text": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL),
+    "review": (nvidia.GPT_OSS_MODEL, nvidia.SECONDARY_MODEL),
+}
+
+
+@pytest.fixture(autouse=True)
+def legacy_chains(monkeypatch):
+    monkeypatch.setattr(nvidia, "CHAINS", LEGACY_CHAINS)
+
+
 class TestParseAndLegal:
     def test_strict_json_accepts_object(self):
         assert nvidia.parse_json_strict('{"is_poe": false, "kind": "cargo"}')["kind"] == "cargo"
