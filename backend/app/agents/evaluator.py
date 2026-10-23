@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import typing
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -97,7 +98,7 @@ def _trace_port(port: dict, retry_count: int, action: str,
     return entry
 
 
-def _open_trace_file(path: Path):
+def _open_trace_file(path: Path) -> typing.TextIO:
     """Open the trace stream; isolated seam for testing file-open batching."""
     return path.open("a", encoding="utf-8")
 
@@ -122,10 +123,22 @@ def is_official_source(urls: list[str | None] | None) -> bool:
     Match exact labels gouv/gov/gob/gc/govt/go immediately before a two-letter
     country suffix, never paths, queries or arbitrary labels further left.
     This intentionally narrows the production substring check in osm_validate.py
-    / enrich_ci_osm.py to remove false positives. For gouv/gov/gob it is a strict
-    subset apart from case normalization; requested gc/go domains add coverage
-    that production does not have. This is a naming heuristic, not verification
-    of domain ownership or an exhaustive government-domain allowlist.
+    / enrich_ci_osm.py to remove false positives.
+
+    For gouv/gov/gob it is a strict subset apart from case normalization;
+    requested gc/go domains add coverage that production does not have.
+
+    Note: The hostname regex does not support IDN/punycode labels (xn--...).
+    Internationalised government domains are not matched; only ASCII labels
+    are accepted (this is a naming heuristic, not a domain ownership allowlist).
+
+    Examples of accepted hostnames:
+      - douane.gouv.fr, www.gov.uk, sat.gob.mx, cbsa-asfc.gc.ca
+      - customs.govt.nz, customs.go.th
+    Examples of rejected hostnames (false positives avoided):
+      - example.com/gov/page, example.com/?source=...gov...,
+        gov.example.com, douane.gouv.fr.example.com,
+      - gov.com, govt.com, gc.com, go.com
     """
     for url in urls or []:
         if not isinstance(url, str):
