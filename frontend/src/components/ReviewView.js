@@ -35,7 +35,7 @@ function suggestHintKey(kind) {
   return "reviewSuggestHint";
 }
 
-export default function ReviewView({ t, mode, onMapDirty }) {
+export default function ReviewView({ t, lang, mode, onMapDirty }) {
   const kind = kindFromMode(mode);
   const [runId, setRunId] = useState("published");
   const [queue, setQueue] = useState([]);
@@ -375,6 +375,7 @@ export default function ReviewView({ t, mode, onMapDirty }) {
       return (
         <ZoneFiche
           t={t}
+          lang={lang}
           fiche={fiche}
           variant="page"
           choices={choices}

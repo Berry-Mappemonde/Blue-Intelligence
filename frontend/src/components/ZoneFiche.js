@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import ConfidenceBreakdown from "./ConfidenceBreakdown";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
 
 function hostOf(url) {
@@ -115,9 +117,11 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
  * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
  */
 export default function ZoneFiche({
-  t, fiche, loading, onFlyToPort, variant = "sidebar",
+  t, lang, fiche, loading, onFlyToPort, variant = "sidebar",
   choices, onChoice,
 }) {
+  // Hook avant les retours anticipés : React exige des appels inconditionnels.
+  const [openPort, setOpenPort] = useState(null);
   if (loading) {
     return (
       <section className="p-3 border-b border-line" data-testid="poe-zone-fiche-loading">
@@ -263,9 +267,21 @@ export default function ZoneFiche({
                     </button>
                   </div>
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    <span className="font-mono text-[10px] text-slate-500 truncate">
-                      {p.confidence != null ? `${t("poeConfidence")} ${p.confidence}` : (p.city || "")}
-                    </span>
+                    {p.confidence != null ? (
+                      <button
+                        type="button"
+                        onClick={() => setOpenPort(openPort === pid ? null : pid)}
+                        aria-expanded={openPort === pid}
+                        title={t("poeWhy")}
+                        data-testid={`poe-fiche-port-why-${pid || p.name}`}
+                        className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
+                      >
+                        {t("poeConfidence")} {p.confidence}
+                        <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
+                      </button>
+                    ) : (
+                      <span className="font-mono text-[10px] text-slate-500 truncate">{p.city || ""}</span>
+                    )}
                     {bus.length ? (
                       <div
                         className="flex flex-wrap items-center justify-end gap-1.5 min-w-0"
@@ -296,6 +312,15 @@ export default function ZoneFiche({
                       <span className="font-mono text-[9px] text-slate-600" data-testid="poe-fiche-port-bu-empty">—</span>
                     )}
                   </div>
+                  {openPort === pid && (
+                    <ConfidenceBreakdown
+                      parts={p.confidence_parts}
+                      reasons={p.confidence_reasons}
+                      reasonsEn={p.reasons_en}
+                      lang={lang}
+                      t={t}
+                    />
+                  )}
                 </div>
               );
             })}
