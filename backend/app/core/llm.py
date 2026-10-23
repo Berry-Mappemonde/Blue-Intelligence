@@ -142,6 +142,11 @@ async def ask_json_tracked(prompt: str, system: str = JSON_SYSTEM,
     Return (object, engine) — engine = nvidia-* | openrouter | claude.
     Same cable as ``ask_yes_no`` (twin #4).
     """
+    # Explicit opt-in only; ask_json delegates here and the default cascade stays intact.
+    if _env("LLM_PROVIDER").lower() == "meterless":
+        from app.core.generator import generate
+        result = await generate(prompt, system, json_mode=True, role=role)
+        return result["parsed"], result["provider"]
     from app.core.judge import complete_json_cascade
     data, engine = await complete_json_cascade(
         system, prompt, settings, role=role, max_tokens=max_tokens, log=log)
@@ -161,6 +166,10 @@ async def ask_json(prompt: str, system: str = JSON_SYSTEM, settings: dict | None
 async def ask_text(prompt: str, system: str = "You are a helpful assistant.",
                    settings: dict | None = None, max_tokens: int = 2000) -> str:
     """Text: NVIDIA (text chain) then OpenRouter. No Claude (JSON adapter)."""
+    # Keep the existing NVIDIA/OpenRouter path unless explicitly opted in.
+    if _env("LLM_PROVIDER").lower() == "meterless":
+        from app.core.generator import generate
+        return (await generate(prompt, system, role="text"))["text"]
     from app.core import nvidia
     if nvidia.nvidia_enabled(settings):
         try:
