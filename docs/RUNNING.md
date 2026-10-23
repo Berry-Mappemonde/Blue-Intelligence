@@ -81,29 +81,53 @@ recalled memories from earlier local runs. It is a recording for reference: it
 cannot be reproduced without credentials, and no code reads it. It was recorded
 before port coordinates (`lat`, `lon`) were added to the output.
 
-### Independent registries (why "official" is not circular)
+### Evidence tiers and independent registries (why "official" is not circular)
 
 The candidates in `blue_intel.poe_ports` are Blue Intelligence's own extraction, so
 they cannot confirm themselves. The registry check (`ZetarisAdapter.registry_check`,
 [`backend/app/agents/registry_check.py`](../backend/app/agents/registry_check.py))
-confirms each candidate against two third-party registries held in Zetaris:
+weighs two independent kinds of evidence. The first is two third-party registries held in Zetaris:
 
 | View | Source | Licence | Rows kept |
 | --- | --- | --- | --- |
 | `blue_intel.unlocode_ports` | [UN/LOCODE](https://unece.org/trade/cefact/unlocode-code-list-country-and-territory), UNECE ([download](https://unlocode.unece.org/downloads/unlocode-latest.zip)) | Published by UNECE for free use; no formal licence is stated | Function position 1 = "1" (port): 17,642 |
 | `blue_intel.wpi_ports` | [World Port Index](https://msi.nga.mil/Publications/WPI), NGA Pub 150 ([CSV](https://msi.nga.mil/api/publications/download?type=view&key=16920959/SFH00000/UpdatedPub150.csv)) | US Government work, public domain | All entries: 3,807 |
 
-A port is `official` only if its name matches a registry entry (casefolded, no
-accents or punctuation; "Port of", "Porto de", "Harbour" and similar words removed;
-St/Saint; "A / B" and "A (B)" split; WPI alternate names and UN/LOCODE names
-without diacritics included). If both sides have coordinates, the port must also be
-within 10 km of the entry. Otherwise it is `unconfirmed - review needed`. Each port
-records `registry.matches` (`source`, `code`, `name`, `distance_km`), and each check
-is a `ZetarisAdapter` `registry_check` trace event (including name matches the
-distance gate rejected). UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted
-to decimal degrees. The zone's country comes from the EEZ index (sovereign's code
-for zones such as Alaska or the Azores). If the country is unknown, the check
-queries a box around the candidates instead.
+- **Registry match:** same country code, the same name, and within 25 km when both
+  sides have coordinates. Names are casefolded, without accents or punctuation;
+  "Port of", "Porto de", "Harbour" and similar words are removed; St becomes Saint;
+  "A / B" and "A (B)" are split; WPI alternate names and UN/LOCODE names without
+  diacritics are included. A name and country match beyond 25 km is recorded as
+  `coord_mismatch` with its distance. It is not a match, and the port is kept.
+- **Official source evidence:** a source URL passes `is_official_source()` **and** the
+  port's name (or a matched registry name) appears in that URL's fetched document
+  text. Without fetched text, a URL proves nothing.
+
+| Tier (`registry.tier`) | Label | Evidence | `zetaris_validation` |
+| --- | --- | --- | --- |
+| `tier1` | Official Commercial Port of Entry | official source + registry match | `official` |
+| `tier2` | Official Yachting Port of Entry | official source, no registry match | `official` |
+| `tier_registered` | Registered port, entry status unverified | registry match only | `registered - entry status unverified` |
+| `tier3` | Unconfirmed - review needed | neither | `unconfirmed - review needed` |
+
+A registry listing never makes a port of entry on its own: UN/LOCODE and the WPI
+list ports, not clearance status. WPI "First Port of Entry" is recorded as
+supporting evidence only. Each port carries `registry` (`tier`, `label`,
+`validation`, `matches`, `official_evidence`, `coord_mismatch`,
+`first_port_of_entry`, `reasons`). Each check is a `ZetarisAdapter`
+`registry_check` trace event that states the tier and why.
+
+**Where document text exists:** only in the generation pipeline
+(`poe_pipeline.extract_ports_llm`), which holds the fetched pages as
+`[SOURCE: url]` blocks. Seed ports, and therefore `run.py`, `POST /run`,
+`/poe/verify` and sample mode, carry source URLs but no document text. There, ports
+can reach at most `tier_registered`. In the sample run, 14 of the 20 sample ports are
+`tier_registered` and 6 are `tier3`.
+
+UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted to decimal degrees.
+The zone's country comes from the EEZ index (the sovereign's code for zones such as
+Alaska or the Azores). If the zone's country is unknown, the check queries a box
+around the candidates and matches only ports that carry their own `country_iso2`.
 
 Setup (administrators, once; the full datasets are downloaded to the gitignored
 `backend/data/registries/`, never committed):
@@ -185,9 +209,10 @@ success, 1 if the result has an `error`, 2 for invalid input.
 Input: `{"zone_name": str, "run_id": optional str}` (`run_id`: letters, digits, `_`, `-`).
 Output: `run_id`, `zone`, `mode` (`live` or `sample`), `ports` (name, verdict,
 confidence, lat, lon, reasons_en, sources with provenance `zetaris` or `hmem`,
-memories_recalled, research, registry `{validation, matches}`), `summary`, `brief`,
+memories_recalled, research, registry `{tier, label, validation, matches,
+official_evidence, coord_mismatch, first_port_of_entry, reasons}`), `summary`, `brief`,
 `llm`, `components`, `registry` (`mode`, `country_iso2`, `registry_entries`,
-`official_count`), `retries`, `memory`, `trace_file`, `timings_ms`, `error`. Examples: `input_examples/` and
+`official_count`, `tiers`, `coord_mismatch_count`), `retries`, `memory`, `trace_file`, `timings_ms`, `error`. Examples: `input_examples/` and
 `output_examples/` (generated by running the commands above in sample mode).
 
 ## 5. Traces
