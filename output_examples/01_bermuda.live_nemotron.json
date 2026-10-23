@@ -1,0 +1,74 @@
+{
+  "run_id": "example-bermuda",
+  "zone": "Bermuda",
+  "mode": "live",
+  "ports": [
+    {
+      "name": "Port of St. George’s",
+      "verdict": "flag",
+      "confidence": 34,
+      "reasons_en": [
+        "unknown source",
+        "single extractor",
+        "inside the EEZ",
+        "no direct source (empty URLs or synthesis only)",
+        "single geocoder, not cross-checked",
+        "unconfirmed after max retries"
+      ],
+      "sources": [],
+      "memories_recalled": 3,
+      "research": {
+        "outcome": "no prior official source"
+      }
+    },
+    {
+      "name": "Port of Hamilton",
+      "verdict": "flag",
+      "confidence": 34,
+      "reasons_en": [
+        "unknown source",
+        "single extractor",
+        "inside the EEZ",
+        "no direct source (empty URLs or synthesis only)",
+        "single geocoder, not cross-checked",
+        "unconfirmed after max retries"
+      ],
+      "sources": [],
+      "memories_recalled": 3,
+      "research": {
+        "outcome": "no prior official source"
+      }
+    }
+  ],
+  "summary": {
+    "flag": 2
+  },
+  "brief": "Confirmed ports: None.\n\nFlagged ports:\n1. Port of St. George’s – flag (confidence 34%). Reasons: no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Sources: none.\n2. Port of Hamilton – flag (confidence 34%). Reasons: no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Sources: none.\n\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "llm": {
+    "provider": "nightshift",
+    "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "fallback_reason": null
+  },
+  "components": {
+    "zetaris": "live",
+    "llm": "nightshift"
+  },
+  "retries": 2,
+  "memory": {
+    "recalled": 6,
+    "remembered": true
+  },
+  "trace_file": "logs/trace-example-bermuda.jsonl",
+  "timings_ms": {
+    "ZetarisAdapter.get_ports": 1784.7,
+    "HMemAgent.recall": 4.7,
+    "EvaluatorAgent.evaluate": 2.8,
+    "ResearchAgent.research": 0.5,
+    "EvaluatorAgent.prepare_retry": 0.2,
+    "EvaluatorAgent.finalise": 0.1,
+    "BriefingAgent.brief": 27684.5,
+    "HMemAgent.remember": 7.6,
+    "total": 29485.1
+  },
+  "error": null
+}

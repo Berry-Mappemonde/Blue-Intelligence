@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoE Reconciler</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --navy-950: #071528;
+    --navy-900: #0b1f3a;
+    --navy-800: #13294b;
+    --navy-700: #1d3a64;
+    --sea: #17788a;
+    --sea-soft: #e2f1f3;
+    --bg: #f2f5f9;
+    --card: #ffffff;
+    --ink: #13233a;
+    --muted: #586a80;
+    --line: #d8e0ea;
+    --pass: #1b7a4b;
+    --pass-soft: #e1f3e9;
+    --flag: #9a5800;
+    --flag-soft: #fdefd6;
+    --retry: #a8431a;
+    --retry-soft: #fbe6dc;
+    --error: #b42318;
+    --error-soft: #fdecea;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(11, 31, 58, .06), 0 4px 14px rgba(11, 31, 58, .06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--sea); }
+  a:focus-visible, button:focus-visible, select:focus-visible { outline: 3px solid #7cc4d1; outline-offset: 2px; }
+
+  .topbar { background: linear-gradient(90deg, var(--navy-950), var(--navy-800)); color: #fff; }
+  .topbar-inner { max-width: 1240px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+  .brand-mark { width: 34px; height: 34px; flex: none; }
+  .brand h1 { margin: 0; font-size: 19px; letter-spacing: .2px; }
+  .brand p { margin: 0; font-size: 13px; color: #b9c7da; }
+  .topbar .spacer { flex: 1; }
+
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 32px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  h2 { margin: 0; font-size: 24px; }
+  h3 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: .6px; color: var(--navy-700); }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: 16px 18px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  select { min-width: 280px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; color: var(--ink); background: #fff; }
+  button.primary {
+    display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0; border-radius: 8px;
+    background: var(--navy-800); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.primary:hover { background: var(--navy-700); }
+  button.primary:disabled { background: #7d8ca1; cursor: progress; }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; display: none; }
+  button.busy .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status { color: var(--muted); font-size: 14px; padding-bottom: 9px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: #fff; color: var(--ink); white-space: nowrap; }
+  .chip .k { color: var(--muted); font-weight: 500; }
+  .chip.live { background: var(--sea-soft); border-color: #a9d6de; color: #0d5563; }
+  .chip.sample { background: #eef1f5; color: #3d4c60; }
+  .chip.dark { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.25); color: #fff; }
+  .badge-nemotron { background: #76b900; border-color: #5f9400; color: #fff; }
+
+  .banner { margin-top: 14px; padding: 12px 16px; border-radius: var(--radius); border: 1px solid; }
+  .banner strong { display: block; margin-bottom: 2px; }
+  .banner.error { background: var(--error-soft); border-color: #f3b5ae; color: var(--error); }
+  .banner.warn { background: var(--flag-soft); border-color: #f2cf93; color: var(--flag); }
+
+  .empty { margin-top: 16px; padding: 22px; color: var(--muted); }
+  .empty ol { margin: 8px 0 0; padding-left: 20px; }
+
+  .result-head { margin-top: 16px; padding: 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  .columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+  @media (max-width: 980px) { .columns { grid-template-columns: 1fr; } }
+  .panel { padding: 16px 18px; }
+
+  .port { border: 1px solid var(--line); border-radius: 9px; padding: 14px; margin-bottom: 12px; background: #fbfcfe; }
+  .port:last-child { margin-bottom: 0; }
+  .port-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .port h4 { margin: 0; font-size: 16px; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .pill.pass { background: var(--pass-soft); color: var(--pass); }
+  .pill.flag { background: var(--flag-soft); color: var(--flag); }
+  .pill.retry, .pill.unevaluated { background: var(--retry-soft); color: var(--retry); }
+  .bar { margin: 10px 0 4px; height: 8px; border-radius: 99px; background: #e6ebf2; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 99px; }
+  .bar.pass > span { background: var(--pass); }
+  .bar.flag > span { background: #d18a12; }
+  .bar.retry > span, .bar.unevaluated > span { background: var(--retry); }
+  .small { font-size: 13px; color: var(--muted); }
+  .port ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+  .port .label { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .sources { margin: 4px 0 0; padding: 0; list-style: none; font-size: 14px; }
+  .sources li { overflow-wrap: anywhere; }
+  .tag { margin-left: 6px; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--sea-soft); color: #0d5563; }
+  .port-foot { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+
+  .brief { white-space: pre-wrap; font-size: 15px; line-height: 1.6; background: #f7f9fc; border-left: 4px solid var(--sea); padding: 12px 14px; border-radius: 6px; margin: 0; }
+  .brief-caption { margin-top: 8px; }
+
+  .timeline { margin-top: 16px; padding: 16px 18px; }
+  .tl { list-style: none; margin: 0; padding: 0; }
+  .tl-row { display: grid; grid-template-columns: 74px 168px minmax(0, 1fr) 82px; gap: 12px; align-items: start; padding: 9px 0; border-bottom: 1px solid #edf1f6; }
+  .tl-row:last-child { border-bottom: 0; }
+  .tl-time, .tl-dur { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+  .tl-dur { text-align: right; }
+  .agent { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--navy-700); }
+  .agent.RunPipeline { background: #4a5a70; }
+  .agent.ZetarisAdapter { background: #2457a6; }
+  .agent.HMemAgent { background: #6b4bb5; }
+  .agent.EvaluatorAgent { background: var(--navy-800); }
+  .agent.ResearchAgent { background: #a8431a; }
+  .agent.BriefingAgent { background: var(--sea); }
+  .agent.MeterlessGenerator { background: #4f7f12; }
+  .tl-action { font-weight: 600; }
+  .tl-action code { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 6px; }
+  .tl-detail { font-size: 13px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .handoff { display: inline-block; margin-top: 3px; font-size: 12px; color: #0d5563; background: var(--sea-soft); padding: 1px 8px; border-radius: 6px; }
+  .round { padding: 8px 0 4px; font-size: 12px; font-weight: 700; color: var(--retry); text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #edf1f6; }
+  @media (max-width: 760px) { .tl-row { grid-template-columns: 60px minmax(0, 1fr); } .tl-row .tl-agent { grid-column: 2; } .tl-row .tl-body { grid-column: 2; } .tl-dur { text-align: left; grid-column: 2; } }
+
+  footer { max-width: 1240px; margin: 0 auto; padding: 0 24px 28px; font-size: 13px; color: var(--muted); }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r="18" fill="none" stroke="#7cc4d1" stroke-width="2"/>
+      <path d="M20 5 L24 20 L20 35 L16 20 Z" fill="#ffffff"/>
+      <path d="M20 5 L24 20 L16 20 Z" fill="#7cc4d1"/>
+      <circle cx="20" cy="20" r="2.4" fill="#0b1f3a"/>
+    </svg>
+    <div class="brand">
+      <h1>PoE Reconciler</h1>
+      <p>Where can a foreign yacht clear customs? Ports of Entry verified across official sources.</p>
+    </div>
+    <div class="spacer"></div>
+    <span id="health" class="chip dark">Connecting…</span>
+  </div>
+</header>
+
+<main>
+  <section class="card controls" aria-label="Run a verification">
+    <div class="field">
+      <label for="zone">Maritime zone</label>
+      <select id="zone" disabled><option>Loading zones…</option></select>
+    </div>
+    <button id="run" class="primary" type="button" disabled>
+      <span class="spinner" aria-hidden="true"></span><span class="label">Run verification</span>
+    </button>
+    <span id="zones-mode" class="chip sample" hidden></span>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </section>
+
+  <div id="error" class="banner error" role="alert" hidden><strong>Run failed</strong><span class="msg"></span></div>
+
+  <section id="empty" class="card empty">
+    <strong>Pick a zone and run the agents.</strong>
+    <ol>
+      <li><b>ZetarisAdapter</b> reads the zone's ports through Zetaris.</li>
+      <li><b>HMemAgent</b> recalls what earlier runs verified (Meterless H-MEM).</li>
+      <li><b>EvaluatorAgent</b> scores each port; <b>ResearchAgent</b> retries weak ones with remembered official sources.</li>
+      <li><b>BriefingAgent</b> writes a sailor-facing brief through Meterless Nightshift; <b>HMemAgent</b> remembers the verdicts.</li>
+    </ol>
+  </section>
+
+  <section id="result" hidden>
+    <div class="card result-head">
+      <h2 id="r-zone"></h2>
+      <div class="chips" id="r-chips"></div>
+      <div class="meta" id="r-meta"></div>
+    </div>
+    <div id="partial" class="banner warn" role="status" hidden><strong>Partial result</strong><span class="msg"></span></div>
+
+    <div class="columns">
+      <section class="card panel" aria-labelledby="ports-h">
+        <h3 id="ports-h">Ports of Entry</h3>
+        <div id="r-ports"></div>
+      </section>
+      <section class="card panel" aria-labelledby="brief-h">
+        <h3 id="brief-h">Clearance brief</h3>
+        <p id="r-brief" class="brief"></p>
+        <div id="r-brief-caption" class="small brief-caption"></div>
+      </section>
+    </div>
+
+    <section class="card timeline" aria-labelledby="tl-h">
+      <h3 id="tl-h">Agent timeline</h3>
+      <div id="tl-note" class="small"></div>
+      <ol id="r-timeline" class="tl"></ol>
+    </section>
+  </section>
+</main>
+
+<footer>Indicative only, not for navigation. Always confirm entry formalities with the official authorities before departure.</footer>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const ACTIONS = {
+    run_start: 'Run started', run_end: 'Run finished', zetaris_query: 'Query ports',
+    zetaris_fallback: 'Fall back to sample data', recall: 'Recall memory', evaluate_port: 'Evaluate',
+    research_port: 'Research', prepare_retry: 'Prepare retry', finalise_port: 'Finalise',
+    generate: 'Generate text', brief: 'Write brief', remember: 'Remember'
+  };
+
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(props || {})) {
+      if (value === undefined || value === null || value === false) continue;
+      if (key === 'text') node.textContent = value;
+      else if (key === 'class') node.className = value;
+      else node.setAttribute(key, value);
+    }
+    for (const child of [].concat(children || [])) {
+      if (child === null || child === undefined || child === false) continue;
+      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+    return node;
+  }
+
+  function safeLink(url, label) {
+    let ok = false;
+    try { ok = ['http:', 'https:'].includes(new URL(url).protocol); } catch (e) { ok = false; }
+    return ok ? el('a', { href: url, target: '_blank', rel: 'noopener noreferrer', text: label || url })
+              : el('span', { text: label || url });
+  }
+
+  async function api(path, options) {
+    let response;
+    try {
+      response = await fetch(path, options);
+    } catch (e) {
+      throw new Error('The server did not answer. Is `python backend/run.py --serve` still running?');
+    }
+    let body = null;
+    try { body = await response.json(); } catch (e) { body = null; }
+    if (!response.ok) {
+      const detail = body && body.detail;
+      const message = Array.isArray(detail) ? detail.map((d) => d.msg).join('; ') : (detail || response.statusText);
+      throw new Error(`${response.status}: ${message}`);
+    }
+    return body;
+  }
+
+  function showError(message) {
+    const box = $('error');
+    box.querySelector('.msg').textContent = ' ' + message;
+    box.hidden = false;
+  }
+
+  function chip(key, value, cls) {
+    return el('span', { class: 'chip ' + (cls || '') }, [key ? el('span', { class: 'k', text: key }) : null, value]);
+  }
+
+  function ms(value) {
+    if (value === null || value === undefined || isNaN(value)) return '';
+    return value >= 1000 ? (value / 1000).toFixed(1) + ' s' : Math.round(value) + ' ms';
+  }
+
+  async function loadHealth() {
+    try {
+      const health = await api('/healthz');
+      $('health').textContent = health.sample_mode ? 'Sample mode' : 'Live mode';
+    } catch (e) {
+      $('health').textContent = 'Server unreachable';
+    }
+  }
+
+  async function loadZones() {
+    const select = $('zone');
+    try {
+      const data = await api('/zones');
+      select.replaceChildren(...data.zones.map((zone) => el('option', { value: zone, text: zone })));
+      if (data.zones.includes('Bermuda')) select.value = 'Bermuda';
+      const label = { live: 'Zones from live Zetaris', sample: 'Zones from sample data', fallback: 'Zetaris unavailable: sample zones' }[data.mode] || data.mode;
+      const modeChip = $('zones-mode');
+      modeChip.textContent = `${label} (${data.zones.length})`;
+      modeChip.className = 'chip ' + (data.mode === 'live' ? 'live' : 'sample');
+      modeChip.hidden = false;
+      select.disabled = data.zones.length === 0;
+      $('run').disabled = data.zones.length === 0;
+    } catch (e) {
+      select.replaceChildren(el('option', { text: 'No zones available' }));
+      showError('Could not load zones. ' + e.message);
+    }
+  }
+
+  function renderHeader(result) {
+    $('r-zone').textContent = result.zone;
+    const llm = result.llm || {};
+    const model = llm.model || 'none';
+    const chips = [
+      chip('Mode', result.mode, result.mode === 'live' ? 'live' : 'sample'),
+      chip('Zetaris', result.components && result.components.zetaris || 'n/a',
+           result.components && result.components.zetaris === 'live' ? 'live' : 'sample'),
+      chip('LLM', `${llm.provider || 'none'} · ${model}`, llm.provider && llm.provider !== 'sample' ? 'live' : 'sample')
+    ];
+    if (/nemotron/i.test(model)) {
+      const via = llm.provider === 'nightshift' ? 'Nightshift' : llm.provider === 'nvidia' ? 'NVIDIA' : llm.provider;
+      chips.push(el('span', { class: 'chip badge-nemotron', text: `Nemotron via ${via}` }));
+    }
+    $('r-chips').replaceChildren(...chips);
+    const summary = Object.entries(result.summary || {}).map(([k, v]) => `${v} ${k}`).join(', ') || 'none';
+    $('r-meta').replaceChildren(
+      el('span', {}, ['Ports: ', el('b', { text: summary })]),
+      el('span', {}, ['Retry rounds: ', el('b', { text: String(result.retries) })]),
+      el('span', {}, ['Memories recalled: ', el('b', { text: String(result.memory ? result.memory.recalled : 0) })]),
+      el('span', {}, ['Total: ', el('b', { text: ms(result.timings_ms && result.timings_ms.total) })]),
+      el('span', {}, ['Run: ', el('b', { text: result.run_id })]),
+      el('span', {}, ['Trace: ', el('b', { text: result.trace_file })])
+    );
+    const partial = $('partial');
+    partial.hidden = !result.error;
+    partial.querySelector('.msg').textContent = result.error ? ' ' + result.error : '';
+  }
+
+  function researchText(research) {
+    if (!research) return 'not needed';
+    if (research.outcome === 'hmem_official_source') return 'used a remembered official source';
+    return research.outcome;
+  }
+
+  function renderPorts(ports) {
+    if (!ports.length) {
+      $('r-ports').replaceChildren(el('p', { class: 'small', text: 'No ports of entry were returned for this zone.' }));
+      return;
+    }
+    $('r-ports').replaceChildren(...ports.map((port) => {
+      const verdict = port.verdict || 'unevaluated';
+      const confidence = Math.max(0, Math.min(100, Number(port.confidence) || 0));
+      const sources = port.sources && port.sources.length
+        ? el('ul', { class: 'sources' }, port.sources.map((s) => el('li', {}, [
+            safeLink(s.url), s.provenance === 'hmem' ? el('span', { class: 'tag', text: 'from memory' }) : null])))
+        : el('div', { class: 'small', text: 'No source on record' });
+      return el('article', { class: 'port' }, [
+        el('div', { class: 'port-top' }, [el('h4', { text: port.name }), el('span', { class: 'pill ' + verdict, text: verdict })]),
+        el('div', { class: 'bar ' + verdict, role: 'img', 'aria-label': `Confidence ${confidence} out of 100` },
+           el('span', { style: `width:${confidence}%` })),
+        el('div', { class: 'small', text: `Confidence ${port.confidence ?? 'n/a'}/100` }),
+        el('div', { class: 'label', text: 'Reasons' }),
+        el('ul', {}, (port.reasons_en || []).map((r) => el('li', { text: r }))),
+        el('div', { class: 'label', text: 'Sources' }),
+        sources,
+        el('div', { class: 'port-foot' }, [
+          el('span', { text: `Memories recalled: ${port.memories_recalled}` }),
+          el('span', { text: `Research: ${researchText(port.research)}` })
+        ])
+      ]);
+    }));
+  }
+
+  function renderBrief(result) {
+    $('r-brief').textContent = result.brief || 'No brief was produced.';
+    const llm = result.llm || {};
+    $('r-brief-caption').textContent = llm.provider === 'sample'
+      ? 'Built deterministically from the port data (no model call in this mode).'
+      : `Written by ${llm.model} via ${llm.provider}.`;
+  }
+
+  function detailOf(event) {
+    const parts = [];
+    if (event.input_summary && event.input_summary.port_name) parts.push(event.input_summary.port_name);
+    if (event.verdict) parts.push(event.verdict);
+    if (event.outcome) parts.push(event.outcome);
+    if (event.url) parts.push(event.url);
+    if (event.action === 'zetaris_query') parts.push(`${event.mode}, ${event.row_count} row(s), ${event.status}`);
+    if (event.action === 'zetaris_fallback') parts.push(event.reason);
+    if (event.action === 'recall') parts.push(`${(event.memories || []).length} memor${(event.memories || []).length === 1 ? 'y' : 'ies'}`);
+    if (event.action === 'generate') parts.push(`${event.provider}: ${event.requested_model} → ${event.served_model}`);
+    if (event.action === 'brief') parts.push(`${event.provider} · ${event.served_model}`);
+    if (event.action === 'run_end') parts.push(event.status + (event.error ? `: ${event.error}` : ''));
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  function renderTimeline(events) {
+    const list = $('r-timeline');
+    if (!events.length) { list.replaceChildren(); $('tl-note').textContent = 'No trace events.'; return; }
+    $('tl-note').textContent = `${events.length} trace events, run ${events[0].run_id}. Consecutive events of the same step are grouped.`;
+    const groups = [];
+    for (const event of events) {
+      const last = groups[groups.length - 1];
+      if (last && last.agent === event.agent_name && last.action === event.action) last.events.push(event);
+      else groups.push({ agent: event.agent_name, action: event.action, events: [event] });
+    }
+    const start = Date.parse(events[0].timestamp);
+    const rows = [];
+    let round = 0;
+    groups.forEach((group, index) => {
+      if (group.agent === 'ResearchAgent') {
+        round += 1;
+        rows.push(el('li', { class: 'round', text: `Retry round ${round}` }));
+      }
+      const first = group.events[0];
+      const t = Date.parse(first.timestamp);
+      const next = groups[index + 1] ? Date.parse(groups[index + 1].events[0].timestamp) : null;
+      const own = group.events.reduce((sum, e) => sum + (Number(e.duration_ms) || 0), 0);
+      const duration = own || (next !== null ? next - t : null);
+      const handoffs = [...new Set(group.events.filter((e) => e.handoff).map((e) => `${e.handoff.from} → ${e.handoff.to}`))];
+      rows.push(el('li', { class: 'tl-row' }, [
+        el('span', { class: 'tl-time', text: '+' + ms(t - start) }),
+        el('span', { class: 'tl-agent' }, el('span', { class: 'agent ' + group.agent, text: group.agent })),
+        el('div', { class: 'tl-body' }, [
+          el('div', { class: 'tl-action' }, [ACTIONS[group.action] || group.action, el('code', { text: group.action })]),
+          ...group.events.map((e) => { const d = detailOf(e); return d ? el('div', { class: 'tl-detail', text: d }) : null; }),
+          ...handoffs.map((h) => el('span', { class: 'handoff', text: 'handoff ' + h }))
+        ]),
+        el('span', { class: 'tl-dur', text: duration !== null ? ms(duration) : '' })
+      ]));
+    });
+    list.replaceChildren(...rows);
+  }
+
+  async function run() {
+    const zone = $('zone').value;
+    const button = $('run');
+    $('error').hidden = true;
+    button.disabled = true;
+    button.classList.add('busy');
+    button.querySelector('.label').textContent = 'Running agents…';
+    $('status').textContent = `Verifying ${zone}. A live model can take about 30 seconds.`;
+    try {
+      const result = await api('/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone_name: zone })
+      });
+      $('empty').hidden = true;
+      renderHeader(result);
+      renderPorts(result.ports || []);
+      renderBrief(result);
+      $('result').hidden = false;
+      $('status').textContent = result.error ? 'Finished with a partial result.' : `Finished in ${ms(result.timings_ms.total)}.`;
+      try {
+        renderTimeline((await api(`/runs/${encodeURIComponent(result.run_id)}/trace`)).events);
+      } catch (e) {
+        $('r-timeline').replaceChildren();
+        $('tl-note').textContent = 'Trace unavailable: ' + e.message;
+      }
+    } catch (e) {
+      $('status').textContent = '';
+      showError(e.message);
+    } finally {
+      button.disabled = false;
+      button.classList.remove('busy');
+      button.querySelector('.label').textContent = 'Run verification';
+    }
+  }
+
+  $('run').addEventListener('click', run);
+  loadHealth();
+  loadZones();
+})();
+</script>
+</body>
+</html>
