@@ -7,6 +7,8 @@
       "name": "Port of St. George’s",
       "verdict": "flag",
       "confidence": 34,
+      "lat": 32.3810447,
+      "lon": -64.676717,
       "reasons_en": [
         "unknown source",
         "single extractor",
@@ -44,13 +46,13 @@
   "timings_ms": {
     "ZetarisAdapter.get_ports": 0.6,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 3.3,
+    "EvaluatorAgent.evaluate": 3.8,
     "ResearchAgent.research": 0.3,
-    "EvaluatorAgent.prepare_retry": 0.4,
+    "EvaluatorAgent.prepare_retry": 0.2,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.1,
     "HMemAgent.remember": 1.0,
-    "total": 6.5
+    "total": 6.9
   },
   "error": null
 }

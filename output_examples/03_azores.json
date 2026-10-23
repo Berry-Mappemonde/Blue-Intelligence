@@ -7,6 +7,8 @@
       "name": "Porto / Marina de Ponta Delgada",
       "verdict": "flag",
       "confidence": 44,
+      "lat": 37.7393398,
+      "lon": -25.6689503,
       "reasons_en": [
         "national source not on the allowlist",
         "single extractor",
@@ -43,13 +45,13 @@
   },
   "trace_file": "logs/trace-example-azores.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.5,
-    "HMemAgent.recall": 0.4,
-    "EvaluatorAgent.evaluate": 2.2,
+    "ZetarisAdapter.get_ports": 0.4,
+    "HMemAgent.recall": 0.6,
+    "EvaluatorAgent.evaluate": 2.4,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 0.9,
-    "total": 4.4
+    "HMemAgent.remember": 1.0,
+    "total": 4.7
   },
   "error": null
 }

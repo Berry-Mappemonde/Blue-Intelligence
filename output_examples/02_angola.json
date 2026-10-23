@@ -7,6 +7,8 @@
       "name": "Porto de Luanda",
       "verdict": "flag",
       "confidence": 60,
+      "lat": -8.7912966,
+      "lon": 13.2719595,
       "reasons_en": [
         "government source",
         "single extractor",
@@ -48,12 +50,12 @@
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
     "ZetarisAdapter.get_ports": 0.5,
-    "HMemAgent.recall": 0.4,
-    "EvaluatorAgent.evaluate": 2.2,
+    "HMemAgent.recall": 0.6,
+    "EvaluatorAgent.evaluate": 2.3,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.2,
     "HMemAgent.remember": 0.9,
-    "total": 4.3
+    "total": 4.6
   },
   "error": null
 }
