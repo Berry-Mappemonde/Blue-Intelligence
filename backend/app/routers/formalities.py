@@ -492,12 +492,14 @@ async def export_poe_geojson():
 async def poe_verify(payload: dict):
     """Verify PoE for a zone: run pipeline and return Nemotron status + registry validation + trace path.
 
-    A port is validated only if the run's registry check matched it in UN/LOCODE or the
-    World Port Index (held in Zetaris); each port carries registry {validation, matches}.
+    Validated ports are tiers 1-2 of the run's registry check (official-source evidence);
+    a UN/LOCODE / World Port Index match alone is tier_registered, never validated. Each
+    port carries registry {tier, label, validation, matches, official_evidence,
+    coord_mismatch, first_port_of_entry, reasons}.
 
     Input: { "zone_name": str, "mrgid": int | None }
     Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
-              zetaris_mode, registry, brief, error, trace_path }
+              ports_by_tier, zetaris_mode, registry, brief, error, trace_path }
     """
     from pathlib import Path
     from app.core import paths
@@ -516,6 +518,9 @@ async def poe_verify(payload: dict):
     ports = result.get("ports") or []
     validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") == "official"]
     non_validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") != "official"]
+    ports_by_tier: dict[str, list[str]] = {}
+    for p in ports:
+        ports_by_tier.setdefault((p.get("registry") or {}).get("tier") or "unchecked", []).append(p.get("name"))
 
     # Trace written by the run (relative to the repo root unless TRACE_LOG_PATH points elsewhere)
     trace_file = Path(result["trace_file"])
@@ -538,6 +543,7 @@ async def poe_verify(payload: dict):
         "validated_ports": validated_ports,
         "non_validated_ports": non_validated_ports,
         "zetaris_mode": (result.get("components") or {}).get("zetaris"),
+        "ports_by_tier": ports_by_tier,
         "registry": result.get("registry"),
         "brief": result.get("brief"),
         "error": result.get("error"),

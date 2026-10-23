@@ -33,14 +33,22 @@ def extract_with(monkeypatch, ports):
 def test_extract_ports_llm_runs_extraction_once_then_cross_references_zetaris(monkeypatch):
     extractor = extract_with(monkeypatch, [{'name': 'Port of St. George’s', 'city': None},
                                            {'name': 'Invented Harbour', 'city': None}])
-    ports = asyncio.run(poe_pipeline.extract_ports_llm('Ports of entry: St. George.', BERMUDA, lambda m: None))
+    context = ('[SOURCE: https://www.customs.gov.bm/yachts]\nPorts of entry: St. George\'s Harbour.\n\n'
+               '[SYNTHÈSE DE RECHERCHE (à recouper)]\nInvented Harbour is a port of entry.')
+    ports = asyncio.run(poe_pipeline.extract_ports_llm(context, BERMUDA, lambda m: None))
     assert extractor.await_count == 1  # previously: UnboundLocalError before any extraction
     by_name = {p['name']: p for p in ports}
+    # Named in the fetched official document AND listed in both registries: tier 1.
+    assert by_name['Port of St. George’s']['registry']['tier'] == 'tier1'
+    assert by_name['Port of St. George’s']['registry']['official_evidence'] == [
+        {'url': 'https://www.customs.gov.bm/yachts', 'name_found': 'saint george'}]
     assert by_name['Port of St. George’s']['zetaris_validation'] == 'official'
     # Independent registries, not BI's seed: no coordinates on the candidate, so no distance.
     assert by_name['Port of St. George’s']['registry_matches'] == [
         {'source': 'unlocode', 'code': 'BMSGE', 'name': 'Saint George', 'distance_km': None},
         {'source': 'wpi', 'code': 'BMSGE', 'name': 'St George', 'distance_km': None, 'first_port_of_entry': 'Yes'}]
+    # Only the research synthesis mentions it: not a fetched document, so tier 3.
+    assert by_name['Invented Harbour']['registry']['tier'] == 'tier3'
     assert by_name['Invented Harbour']['zetaris_validation'] == 'unconfirmed - review needed'
     assert by_name['Invented Harbour']['registry_matches'] == []
 
@@ -65,8 +73,10 @@ def test_extract_ports_llm_with_a_run_recorder_uses_its_run_id(monkeypatch):
     monkeypatch.setattr(poe_pipeline, 'validate_ports_zetaris', spy)
     asyncio.run(poe_pipeline.extract_ports_llm('text', BERMUDA, lambda m: None, rec=Recorder()))
     assert seen['run_id'] == 'run-20261023'
-    assert ('zetaris_crossref', {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12,
-                                 'official_count': 1, 'matched': ['Port of St. George’s']}) in events
+    assert ('zetaris_crossref', {
+        'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 0, 'matched': [],
+        'tiers': {'tier1': [], 'tier2': [], 'tier_registered': ['Port of St. George’s'], 'tier3': []},
+        'documents_with_text': 0}) in events
 
 
 def verify_client():
@@ -85,16 +95,22 @@ def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body['zone_name'] == 'Bermuda' and body['mrgid'] == 8493 and body['error'] is None
-    assert [p['name'] for p in body['validated_ports']] == ['Port of St. George’s']
-    assert body['non_validated_ports'] == [] and body['zetaris_mode'] == 'sample'
-    evidence = body['validated_ports'][0]['registry']
-    assert evidence['validation'] == 'official'
+    # Seed ports carry no fetched document text: a registry match alone is never "validated".
+    assert body['validated_ports'] == [] and body['zetaris_mode'] == 'sample'
+    assert [p['name'] for p in body['non_validated_ports']] == ['Port of St. George’s']
+    assert body['ports_by_tier'] == {'tier_registered': ['Port of St. George’s']}
+    evidence = body['non_validated_ports'][0]['registry']
+    assert evidence['tier'] == 'tier_registered' and evidence['validation'] == 'registered - entry status unverified'
     assert [(m['source'], m['code']) for m in evidence['matches']] == [('unlocode', 'BMSGE'), ('wpi', 'BMSGE')]
     assert all(m['distance_km'] < 1 for m in evidence['matches'])
-    assert body['registry'] == {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 1}
+    assert body['registry'] == {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 0,
+                                'tiers': {'tier1': 0, 'tier2': 0, 'tier_registered': 1, 'tier3': 0},
+                                'coord_mismatch_count': 0}
     assert body['nemotron_status'] == {'provider': 'sample', 'model': 'caller-sample-fn',
                                        'nemotron': False, 'fallback_reason': 'SAMPLE_MODE=true'}
     assert body['brief'].startswith('Clearance brief: Bermuda')
+    assert 'Registered port, entry status unverified: listed in UN/LOCODE BMSGE' in body['brief']
+    assert 'does not establish port-of-entry status' in body['brief']
     trace = Path(body['trace_path'])
     assert trace == isolated / 'trace.jsonl' and trace.is_file()
     assert body['run_id'] in trace.read_text()
@@ -109,7 +125,8 @@ def test_poe_verify_rejects_a_missing_zone():
 def test_cross_reference_matches_names_without_case_accents_or_punctuation(written):
     zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Bermuda', 'match-test'))
     out = asyncio.run(poe_pipeline.cross_reference_zetaris([{'name': written}], BERMUDA, zetaris))
-    assert out[0]['zetaris_validation'] == 'official'
+    assert [m['code'] for m in out[0]['registry_matches']] == ['BMSGE', 'BMSGE']
+    assert out[0]['registry']['tier'] == 'tier_registered'
 
 
 def test_name_key_strips_accents():
@@ -117,8 +134,8 @@ def test_name_key_strips_accents():
     zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Albania', 'accent-test'))
     out = asyncio.run(poe_pipeline.cross_reference_zetaris(
         [{'name': 'PORT OF DURRES'}, {'name': 'Luka Brčko'}], {'name': 'albania'}, zetaris))
-    assert out[0]['zetaris_validation'] == 'official'  # UN/LOCODE "Durrës", WPI "Durres"
-    assert out[1]['zetaris_validation'] == 'unconfirmed - review needed'
+    assert out[0]['registry']['tier'] == 'tier_registered'  # UN/LOCODE "Durrës", WPI "Durres"
+    assert out[1]['registry']['tier'] == 'tier3'
 
 
 def test_validate_ports_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):

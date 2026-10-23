@@ -185,7 +185,7 @@ def test_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
     # One wait on the dead server: the registry step reuses the outage and reads the fixtures.
     assert events == [('zetaris_query', 'error'), ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'),
                       ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'), ('zetaris_query', 'ok'),
-                      ('registry_check', 'ok')]
+                      ('registry_check', 'tier_registered')]
     assert 'test-key' not in (isolated / 'trace.jsonl').read_text()
 
 

@@ -1,14 +1,27 @@
-"""Registry check: confirm candidate ports against independent registries held in Zetaris.
+"""Registry check: tier candidate ports with official-source and independent-registry evidence.
 
-A candidate is "official" only if it matches a UN/LOCODE port (UNECE) or a World Port
-Index entry (NGA Pub 150) by normalised name, and lies within MAX_DISTANCE_KM of the
-registry coordinates when both sides have coordinates. Everything else is
-"unconfirmed - review needed". Blue Intelligence's own seed GeoJSON is never the
-reference, so the check is not circular. See app/adapters/registry_sources.py for the
-sources and licences.
+Two kinds of evidence, kept separate:
 
-Each port gets ``registry_matches`` ([{source, code, name, distance_km}]) and
-``zetaris_validation``; each check is traced as a ZetarisAdapter ``registry_check`` event.
+- Official source: one of the port's source URLs passes ``is_official_source()`` AND the
+  port's name (normalised, with alternates) appears in that document's fetched text. No
+  fetched text, no evidence: a URL alone proves nothing.
+- Registry: a UN/LOCODE port (UNECE) or World Port Index entry (NGA Pub 150) in the same
+  country whose name matches, within MAX_DISTANCE_KM when both sides have coordinates. A
+  name + country match further away is recorded as ``coord_mismatch`` (with the distance),
+  not as a match. Blue Intelligence's own seed GeoJSON is never the reference.
+
+Tiers (``registry.tier``):
+
+- tier1 "Official Commercial Port of Entry": official source + registry match
+- tier2 "Official Yachting Port of Entry": official source, no registry match
+- tier_registered "Registered port, entry status unverified": registry match only
+- tier3 "Unconfirmed - review needed": neither
+
+A registry listing alone never makes a port of entry: UN/LOCODE and the WPI list ports,
+not clearance status. WPI "First Port of Entry" is recorded as extra evidence only.
+``zetaris_validation`` stays backward compatible: "official" for tiers 1-2 only. Each check
+is traced as a ZetarisAdapter ``registry_check`` event with the tier and why. See
+app/adapters/registry_sources.py for the sources and licences.
 """
 from __future__ import annotations
 
@@ -17,10 +30,22 @@ import re
 import unicodedata
 
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
+from app.agents.evaluator import is_official_source
 
-MAX_DISTANCE_KM = 10.0
+MAX_DISTANCE_KM = 25.0
 OFFICIAL = "official"
 UNCONFIRMED = "unconfirmed - review needed"
+REGISTERED = "registered - entry status unverified"
+TIER1, TIER2, TIER_REGISTERED, TIER3 = "tier1", "tier2", "tier_registered", "tier3"
+TIER_LABELS = {
+    TIER1: "Official Commercial Port of Entry",
+    TIER2: "Official Yachting Port of Entry",
+    TIER_REGISTERED: "Registered port, entry status unverified",
+    TIER3: "Unconfirmed - review needed",
+}
+VALIDATION = {TIER1: OFFICIAL, TIER2: OFFICIAL, TIER_REGISTERED: REGISTERED, TIER3: UNCONFIRMED}
+_SOURCE_NAMES = {"unlocode": "UN/LOCODE", "wpi": "WPI"}
+_SOURCE_BLOCK = re.compile(r"^\[SOURCE: (\S+)\]\n", re.MULTILINE)
 SOURCES = ("unlocode", "wpi")
 REGISTRY_LIMIT = 10000
 
@@ -114,16 +139,24 @@ def _entry_code(entry: dict) -> str | None:
     return entry.get("code")
 
 
-def match_port(port: dict, entries: list[dict], max_km: float = MAX_DISTANCE_KM) -> tuple[list[dict], list[dict]]:
-    """(matches, rejected): name matches within max_km, and name matches the distance gate refused.
+def match_port(port: dict, entries: list[dict], country_iso2: str | None = None,
+               max_km: float = MAX_DISTANCE_KM) -> tuple[list[dict], list[dict]]:
+    """(matches, coord_mismatch) for a port against registry entries.
 
-    Keeps the closest entry per source. distance_km is None when either side lacks coordinates.
+    An entry matches when its country equals the port's (port country_iso2, else the given
+    zone country; unknown country: no match), a name variant is shared (WPI alternate names,
+    UN/LOCODE names without diacritics) and, when both sides have coordinates, it lies
+    within max_km. Same name and country but further away goes to coord_mismatch. Keeps
+    the closest entry per source; distance_km is None when either side lacks coordinates.
     """
+    country = (port.get("country_iso2") or country_iso2 or "").upper() or None
     variants = name_variants(port.get("name"))
     here = _coords(port)
     best: dict[str, dict] = {}
-    rejected: list[dict] = []
+    mismatched: list[dict] = []
     for entry in entries:
+        if country is None or (entry.get("country_iso2") or "").upper() != country:
+            continue
         if not variants & name_variants(*_entry_names(entry)):
             continue
         there = _coords(entry)
@@ -133,13 +166,94 @@ def match_port(port: dict, entries: list[dict], max_km: float = MAX_DISTANCE_KM)
         if entry.get("source") == "wpi" and entry.get("first_port_of_entry"):
             evidence["first_port_of_entry"] = entry["first_port_of_entry"]
         if distance is not None and distance > max_km:
-            rejected.append(evidence)
+            mismatched.append(evidence)
             continue
         current = best.get(evidence["source"])
         rank = math.inf if distance is None else distance
         if current is None or rank < (math.inf if current["distance_km"] is None else current["distance_km"]):
             best[evidence["source"]] = evidence
-    return [best[s] for s in SOURCES if s in best], rejected
+    mismatched.sort(key=lambda e: e["distance_km"])
+    return [best[s] for s in SOURCES if s in best], mismatched
+
+
+def source_texts_from_context(text: str | None) -> dict[str, str]:
+    """{url: fetched text} from the pipeline's "[SOURCE: url]" blocks (synthesis blocks excluded)."""
+    if not text:
+        return {}
+    marks = list(_SOURCE_BLOCK.finditer(text))
+    out: dict[str, str] = {}
+    for i, mark in enumerate(marks):
+        body = text[mark.end():marks[i + 1].start() if i + 1 < len(marks) else len(text)]
+        body = body.split("\n\n[SYNTHÈSE", 1)[0]
+        out[mark.group(1)] = (out.get(mark.group(1), "") + "\n" + body).strip()
+    return out
+
+
+def _text_key(text: str) -> str:
+    """Document text normalised like names: " saint george harbour ... " (padded for whole words)."""
+    # After the possessive, an apostrophe is an elision: "d'Anvers" -> "d Anvers".
+    key = name_key(_APOSTROPHES.sub(" ", _POSSESSIVE.sub("", text)))
+    return " " + " ".join(_TOKENS.get(t, t) for t in key.split()) + " "
+
+
+def official_source_evidence(port: dict, source_texts: dict[str, str] | None,
+                             alternates: tuple = ()) -> list[dict]:
+    """[{url, name_found}] for official source URLs whose fetched text names the port.
+
+    Candidate URLs are the port's source_urls (else every fetched document). A URL counts
+    only if is_official_source() accepts it AND its fetched text contains a name variant
+    (whole words, at least 4 characters, optional possessive "s") of the port name or an alternate. Text that was
+    not fetched or kept never counts.
+    """
+    if not source_texts:
+        return []
+    variants = sorted((v for v in name_variants(port.get("name"), *alternates) if len(v) >= 4),
+                      key=len, reverse=True)
+    out = []
+    for url in port.get("source_urls") or list(source_texts):
+        text = source_texts.get(url)
+        if not text or not is_official_source([url]):
+            continue
+        key = _text_key(text)
+        # "St Georges" (possessive without apostrophe) still names "St George".
+        found = next((v for v in variants if f" {v} " in key or f" {v}s " in key), None)
+        if found:
+            out.append(dict(url=url, name_found=found))
+    return out
+
+
+def _label(match: dict) -> str:
+    distance = "" if match.get("distance_km") is None else f" ({match['distance_km']:g} km)"
+    return f"{_SOURCE_NAMES.get(match.get('source'), match.get('source'))} {match.get('code') or match.get('name')}{distance}"
+
+
+def tier_for(official: list[dict], matches: list[dict]) -> str:
+    if official:
+        return TIER1 if matches else TIER2
+    return TIER_REGISTERED if matches else TIER3
+
+
+def tier_reasons(tier: str, official: list[dict], matches: list[dict], mismatched: list[dict],
+                 country: str | None) -> list[str]:
+    """English reasons: the tier, why, and what is missing. Never claims entry status from a registry."""
+    registry = ", ".join(_label(m) for m in matches)
+    sources = ", ".join(e["url"] for e in official)
+    reasons = {
+        TIER1: f"{TIER_LABELS[TIER1]}: named in official source {sources}, and listed in {registry}",
+        TIER2: f"{TIER_LABELS[TIER2]}: named in official source {sources}; not listed in UN/LOCODE "
+               f"or the World Port Index (usual for marinas and yacht clearance points)",
+        TIER_REGISTERED: f"{TIER_LABELS[TIER_REGISTERED]}: listed in {registry}, but no fetched official "
+                         f"document names it; a registry listing does not establish port-of-entry status",
+        TIER3: f"{TIER_LABELS[TIER3]}: no fetched official document names it and no UN/LOCODE or "
+               f"World Port Index entry in {country or 'an unknown country'} matches it",
+    }
+    out = [reasons[tier]]
+    if any(m.get("first_port_of_entry") == "Yes" for m in matches):
+        out.append("World Port Index lists it as a First Port of Entry (supporting evidence only)")
+    for m in mismatched[:3]:
+        out.append(f"coord_mismatch: {_label(m)} has the same name and country but lies beyond the "
+                   f"{MAX_DISTANCE_KM:g} km tolerance; check the coordinates")
+    return out
 
 
 def fetch_registry(country_iso2: str | None, run_id: str, bbox: tuple | None = None,
@@ -210,8 +324,8 @@ def fetch_for_zone(zone: dict | str | None, ports: list[dict], run_id: str,
     """Registry entries for a zone: {mode, country_iso2, entries}.
 
     Queries by country ISO2 when the zone resolves to one, else by a box around the
-    candidates. A Zetaris outage with no fallback gives mode "unavailable" and no entries,
-    so every port stays unconfirmed, never official.
+    candidates (matching then needs each port's own country_iso2). A Zetaris outage with
+    no fallback gives mode "unavailable" and no entries, so no port gets a registry match.
     """
     country = zone_iso2(zone)
     bbox = None if country else candidate_bbox(ports)
@@ -227,10 +341,14 @@ def fetch_for_zone(zone: dict | str | None, ports: list[dict], run_id: str,
     return dict(mode=mode, country_iso2=country, entries=entries)
 
 
-def annotate(ports: list[dict], registry: dict, run_id: str) -> tuple[list[dict], dict]:
-    """Add registry_matches / zetaris_validation to copies of ports; trace one event per port.
+def annotate(ports: list[dict], registry: dict, run_id: str,
+             source_texts: dict[str, str] | None = None) -> tuple[list[dict], dict]:
+    """Tier copies of ports and trace one registry_check event per port.
 
-    Returns (ports, summary) with summary {mode, country_iso2, registry_entries, official_count}.
+    Each port gets ``registry`` {tier, label, validation, matches, official_evidence,
+    coord_mismatch, first_port_of_entry, reasons}, plus the backward-compatible
+    ``registry_matches`` and ``zetaris_validation``. Returns (ports, summary) with summary
+    {mode, country_iso2, registry_entries, official_count, tiers, coord_mismatch_count}.
     """
     entries, country = registry.get("entries") or [], registry.get("country_iso2")
     client = ZetarisClient(run_id=run_id)
@@ -238,23 +356,38 @@ def annotate(ports: list[dict], registry: dict, run_id: str) -> tuple[list[dict]
     out = []
     for raw in ports:
         port = dict(raw)
-        matches, rejected = match_port(port, entries)
+        matches, mismatched = match_port(port, entries, country)
+        alternates = tuple(n for e in entries for n in _entry_names(e)
+                           if any(_entry_code(e) == m["code"] and e.get("source") == m["source"]
+                                  for m in matches))
+        official = official_source_evidence(port, source_texts, alternates)
+        tier = tier_for(official, matches)
+        fpoe = next((m["first_port_of_entry"] for m in matches if m.get("first_port_of_entry")), None)
+        port["registry"] = dict(
+            tier=tier, label=TIER_LABELS[tier], validation=VALIDATION[tier], matches=matches,
+            official_evidence=official, coord_mismatch=mismatched, first_port_of_entry=fpoe,
+            reasons=tier_reasons(tier, official, matches, mismatched, port.get("country_iso2") or country))
         port["registry_matches"] = matches
-        port["zetaris_validation"] = OFFICIAL if matches else UNCONFIRMED
+        port["zetaris_validation"] = VALIDATION[tier]
         client.trace_event(
-            "registry_check", status="ok" if matches else "unconfirmed",
-            input_summary={"port_name": port.get("name"), "country_iso2": country,
-                           "has_coordinates": _coords(port) is not None},
-            registry_entries=len(entries), matches=matches,
-            rejected_by_distance=rejected[:3], max_distance_km=MAX_DISTANCE_KM,
-            validation=port["zetaris_validation"])
+            "registry_check", status=tier,
+            input_summary={"port_name": port.get("name"), "country_iso2": port.get("country_iso2") or country,
+                           "has_coordinates": _coords(port) is not None,
+                           "documents_with_text": len(source_texts or {})},
+            registry_entries=len(entries), tier=tier, label=TIER_LABELS[tier],
+            validation=VALIDATION[tier], matches=matches, official_evidence=official,
+            coord_mismatch=mismatched[:3], max_distance_km=MAX_DISTANCE_KM,
+            reasons=port["registry"]["reasons"])
         out.append(port)
+    tiers = {t: sum(1 for p in out if p["registry"]["tier"] == t) for t in TIER_LABELS}
     summary = dict(mode=client.mode, country_iso2=country, registry_entries=len(entries),
-                   official_count=sum(1 for p in out if p["zetaris_validation"] == OFFICIAL))
+                   official_count=tiers[TIER1] + tiers[TIER2], tiers=tiers,
+                   coord_mismatch_count=sum(1 for p in out if p["registry"]["coord_mismatch"]))
     return out, summary
 
 
 def check_ports(ports: list[dict], zone: dict | str | None, run_id: str,
-                live_failed: bool = False) -> tuple[list[dict], dict]:
+                live_failed: bool = False,
+                source_texts: dict[str, str] | None = None) -> tuple[list[dict], dict]:
     """fetch_for_zone + annotate: the registry check step of the run pipeline."""
-    return annotate(ports, fetch_for_zone(zone, ports, run_id, live_failed), run_id)
+    return annotate(ports, fetch_for_zone(zone, ports, run_id, live_failed), run_id, source_texts)

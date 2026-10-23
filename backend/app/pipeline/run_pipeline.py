@@ -14,7 +14,8 @@ source a previous run verified for that same port, tagged provenance "hmem".
 BriefingAgent makes Nightshift load-bearing: the sailor-facing brief is generated
 through Meterless (Nemotron when the route serves it), and its sample fallback
 builds the same brief deterministically from the finalised port data.
-The registry check confirms each candidate against UN/LOCODE and the World Port Index
+The registry check tiers each candidate with official-source evidence (needs fetched
+document text, which seed ports do not carry) and UN/LOCODE / World Port Index matches
 held in Zetaris (app/agents/registry_check.py), independent of BI's own seed data.
 """
 from __future__ import annotations
@@ -199,24 +200,18 @@ def _brief_rows(ports: list[dict]) -> list[dict]:
         why = list(port.get('check_reasons') or []) or list(port.get('reasons_en') or [])[:3]
         if port.get('source_urls') and not is_official_source(port['source_urls']):
             why.append('no government source')
-        if port.get('zetaris_validation') == registry_check.UNCONFIRMED:
-            why.append('not found in UN/LOCODE or the World Port Index')
         rows.append(dict(
             name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'), why=why,
-            registry=_registry_label(port),
+            tier=_tier_text(port),
             sources=[u + (' (from verification memory)' if provenance.get(u) == 'hmem' else '')
                      for u in port.get('source_urls') or []]))
     return rows
 
 
-def _registry_label(port: dict) -> str | None:
-    """'UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)', or None when unconfirmed."""
-    labels = []
-    for match in port.get('registry_matches') or []:
-        name = 'UN/LOCODE' if match.get('source') == 'unlocode' else 'WPI'
-        distance = '' if match.get('distance_km') is None else f" ({match['distance_km']:g} km)"
-        labels.append(f"{name} {match.get('code') or match.get('name')}{distance}")
-    return ', '.join(labels) or None
+def _tier_text(port: dict) -> str | None:
+    """The registry check's first reason: the tier and why (None before the check ran)."""
+    reasons = (port.get('registry') or {}).get('reasons') or []
+    return reasons[0] if reasons else None
 
 
 def sample_brief(zone_name: str, ports: list[dict]) -> str:
@@ -227,15 +222,15 @@ def sample_brief(zone_name: str, ports: list[dict]) -> str:
     lines = [f'Clearance brief: {zone_name}']
     lines.append('Confirmed ports of entry:' + ('' if confirmed else ' none confirmed in this run.'))
     for r in confirmed:
-        registry = f" Registry: {r['registry']}." if r['registry'] else ''
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100).{registry} "
+        tier = f" {r['tier']}." if r['tier'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100).{tier} "
                      f"Sources: {', '.join(r['sources'])}")
     if flagged:
         lines.append('Flagged, verify before relying on them:')
     for r in flagged:
         sources = ', '.join(r['sources']) or 'no source on record'
-        registry = f" Registry: {r['registry']}." if r['registry'] else ''
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}.{registry} "
+        tier = f" {r['tier']}." if r['tier'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}.{tier} "
                      f"Sources: {sources}")
     lines.append(DISCLAIMER)
     return '\n'.join(lines)
@@ -245,7 +240,8 @@ def brief_prompt(zone_name: str, ports: list[dict]) -> str:
     return (f'Zone: {zone_name}\nFinalised ports (JSON):\n'
             f'{json.dumps(_brief_rows(ports), ensure_ascii=False)}\n'
             'Write the brief: which ports are confirmed (verdict "pass"), which are flagged and why, '
-            'each with its sources and its registry evidence (UN/LOCODE / World Port Index) if any. '
+            'each with its sources and its evidence tier (state the tier as given; a registry listing '
+            'alone is not port-of-entry status). '
             f'End with: "{DISCLAIMER}"')
 
 
@@ -340,8 +336,7 @@ def _port_out(port: dict) -> dict:
                 sources=[dict(url=u, provenance=provenance.get(u, 'zetaris'))
                          for u in port.get('source_urls') or []],
                 memories_recalled=len(port.get('memory') or []), research=port.get('research'),
-                registry=dict(validation=port.get('zetaris_validation'),
-                              matches=list(port.get('registry_matches') or [])))
+                registry=port.get('registry'))
 
 
 def _display_path(path: Path) -> str:

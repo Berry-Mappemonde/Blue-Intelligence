@@ -11,7 +11,10 @@ import pytest
 from app.adapters import registry_sources, zetaris
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents import registry_check
-from app.agents.registry_check import OFFICIAL, UNCONFIRMED, check_ports, match_port, name_variants
+from app.agents.registry_check import (
+    OFFICIAL, REGISTERED, TIER1, TIER2, TIER3, TIER_REGISTERED, UNCONFIRMED, check_ports, match_port,
+    name_variants,
+)
 from scripts import zetaris_setup
 
 BERMUDA = {"name": "Bermuda", "mrgid": 8402}
@@ -118,52 +121,163 @@ def test_name_variants_do_not_overmatch(candidate, registry):
 
 def test_wpi_alternate_names_are_matched():
     wpi = entry("wpi", "Antwerpen", 51.216667, 4.4, alternate_name="Antwerp; Anvers",
-                unlocode="BEANR", wpi_number="31250")
-    matches, _ = match_port({"name": "Port of Anvers", "lat": 51.23, "lon": 4.41}, [wpi])
+                unlocode="BEANR", wpi_number="31250", country_iso2="BE")
+    matches, _ = match_port({"name": "Port of Anvers", "lat": 51.23, "lon": 4.41}, [wpi], "BE")
     assert matches == [{"source": "wpi", "code": "BEANR", "name": "Antwerpen", "distance_km": 1.64}]
 
 
-# --- distance gate ------------------------------------------------------------------------
-def test_distance_gate_rejects_a_same_name_entry_beyond_10_km():
-    near = entry("unlocode", "Saint George", 32.383333, -64.683333, code="BMSGE")
-    far = entry("wpi", "St George", 32.5, -64.5, unlocode="BMSGE")  # ~22 km away
-    matches, rejected = match_port(ST_GEORGE, [near, far])
-    assert [m["source"] for m in matches] == ["unlocode"] and matches[0]["distance_km"] < 1
-    assert rejected == [{"source": "wpi", "code": "BMSGE", "name": "St George", "distance_km": 21.21}]
+def test_unlocode_name_without_diacritics_is_matched():
+    unlocode = entry("unlocode", "Durrës", code="ALDRZ", name_ascii="Durres", country_iso2="AL")
+    assert match_port({"name": "PORT OF DURRES"}, [unlocode], "AL")[0][0]["code"] == "ALDRZ"
+
+
+def test_country_code_must_match():
+    elsewhere = entry("unlocode", "Freeport", 26.5, -78.7, code="BSFPO", country_iso2="BS")
+    assert match_port({"name": "Freeport", "lat": 26.5, "lon": -78.7}, [elsewhere], "BM") == ([], [])
+    # The port's own country_iso2 wins over the zone's; no country at all: no match.
+    assert match_port({"name": "Freeport", "country_iso2": "BS"}, [elsewhere], "BM")[0]
+    assert match_port({"name": "Freeport"}, [elsewhere], None) == ([], [])
+
+
+# --- 25 km gate and coord_mismatch ---------------------------------------------------------
+def test_25_km_gate_accepts_22_km_and_flags_beyond_as_coord_mismatch():
+    near = entry("unlocode", "Saint George", 32.383333, -64.683333, code="BMSGE", country_iso2="BM")
+    at_22 = entry("wpi", "St George", 32.5, -64.5, unlocode="BMSGE", country_iso2="BM")
+    at_37 = entry("wpi", "St George", 32.6, -64.4, unlocode="BMXXX", country_iso2="BM")
+    matches, mismatched = match_port(ST_GEORGE, [near, at_22], "BM")
+    assert [(m["source"], m["distance_km"]) for m in matches] == [("unlocode", 0.67), ("wpi", 21.21)]
+    assert mismatched == []
+    matches, mismatched = match_port(ST_GEORGE, [at_37], "BM")
+    assert matches == [] and mismatched == [
+        {"source": "wpi", "code": "BMXXX", "name": "St George", "distance_km": 35.59}]
+
+
+def test_coord_mismatch_is_recorded_not_dropped():
+    far = entry("unlocode", "Saint George", 32.7, -64.3, code="BMSGE", country_iso2="BM")
+    ports, summary = registry_check.annotate([dict(ST_GEORGE, extra="kept")],
+                                             {"mode": "sample", "country_iso2": "BM", "entries": [far]}, "mm")
+    reg = ports[0]["registry"]
+    assert ports[0]["extra"] == "kept" and reg["tier"] == TIER3
+    assert reg["coord_mismatch"] == [{"source": "unlocode", "code": "BMSGE", "name": "Saint George",
+                                      "distance_km": 50.05}]
+    assert any(r.startswith("coord_mismatch: UN/LOCODE BMSGE (50.05 km)") for r in reg["reasons"])
+    assert summary["coord_mismatch_count"] == 1
 
 
 def test_distance_gate_skipped_when_either_side_lacks_coordinates():
-    registry = [entry("unlocode", "Hamilton", code="BMBDA")]
-    matches, rejected = match_port({"name": "Hamilton", "lat": 32.29, "lon": -64.78}, registry)
+    registry = [entry("unlocode", "Hamilton", code="BMBDA", country_iso2="BM")]
+    matches, mismatched = match_port({"name": "Hamilton", "lat": 32.29, "lon": -64.78}, registry, "BM")
     assert matches == [{"source": "unlocode", "code": "BMBDA", "name": "Hamilton", "distance_km": None}]
-    assert match_port({"name": "Hamilton"}, [entry("wpi", "Hamilton", 32.3, -64.78)])[0][0]["distance_km"] is None
-    assert rejected == []
+    wpi = [entry("wpi", "Hamilton", 32.3, -64.78, country_iso2="BM")]
+    assert match_port({"name": "Hamilton"}, wpi, "BM")[0][0]["distance_km"] is None
+    assert mismatched == []
 
 
 def test_closest_entry_wins_per_source():
-    a = entry("unlocode", "Freeport", 32.32, -64.83, code="BMFPT")
-    b = entry("unlocode", "Freeport", 26.5, -78.7, code="BSFPO")
-    c = entry("unlocode", "Freeport", None, None, code="XXFPT")
-    matches, rejected = match_port({"name": "Freeport", "lat": 32.316, "lon": -64.833}, [c, b, a])
-    assert matches[0]["code"] == "BMFPT" and [r["code"] for r in rejected] == ["BSFPO"]
+    a = entry("unlocode", "Freeport", 32.32, -64.83, code="BMFPT", country_iso2="BM")
+    b = entry("unlocode", "Freeport", 32.5, -64.5, code="BMFP2", country_iso2="BM")
+    c = entry("unlocode", "Freeport", None, None, code="BMFP3", country_iso2="BM")
+    matches, _ = match_port({"name": "Freeport", "lat": 32.316, "lon": -64.833}, [c, b, a], "BM")
+    assert matches[0]["code"] == "BMFPT"
 
 
 def test_haversine_known_distance():
     assert registry_check.haversine_km(51.5074, -0.1278, 48.8566, 2.3522) == pytest.approx(343.5, abs=1)
 
 
-# --- registry check through Zetaris (sample fixtures) -------------------------------------
-def test_unlocode_and_wpi_match_st_georges(isolated):
-    ports, summary = check_ports([ST_GEORGE], BERMUDA, "reg-bm")
-    assert summary == {"mode": "sample", "country_iso2": "BM", "registry_entries": 12, "official_count": 1}
-    port = ports[0]
-    assert port["zetaris_validation"] == OFFICIAL
-    assert port["registry_matches"] == [
+# --- official source grounding ------------------------------------------------------------
+GOV_BM = "https://www.customs.gov.bm/yachts"
+
+
+def test_source_texts_from_context_keeps_documents_not_synthesis():
+    context = (f"[SOURCE: {GOV_BM}]\nClear at St. George's.\n\n"
+               "[SOURCE: https://example.com/blog]\nA blog.\n\n"
+               "[SYNTHÈSE DE RECHERCHE (à recouper)]\nHamilton is a port of entry.")
+    texts = registry_check.source_texts_from_context(context)
+    assert texts == {GOV_BM: "Clear at St. George's.", "https://example.com/blog": "A blog."}
+    assert registry_check.source_texts_from_context("no source blocks") == {}
+
+
+@pytest.mark.parametrize("url, text, found", [
+    (GOV_BM, "Yachts must clear customs at St. George's Harbour on arrival.", "saint george"),
+    (GOV_BM, "Yachts must clear customs at ST GEORGES.", "saint george"),
+    (GOV_BM, "Yachts must clear customs at Hamilton.", None),            # name absent
+    ("https://www.noonsite.com/bermuda", "Clear at St. George's.", None),  # not an official URL
+    (GOV_BM, "", None),                                                 # no text kept
+    (GOV_BM, "Georgetown is not St Georgeville.", None),                # whole words only
+])
+def test_official_source_grounding(url, text, found):
+    evidence = registry_check.official_source_evidence({"name": "Port of St. George’s"}, {url: text})
+    assert evidence == ([{"url": url, "name_found": found}] if found else [])
+
+
+def test_grounding_needs_fetched_text_for_the_port_s_own_urls():
+    port = {"name": "Port of St. George’s", "source_urls": [GOV_BM]}
+    assert registry_check.official_source_evidence(port, None) == []
+    assert registry_check.official_source_evidence(port, {"https://www.gov.bm/other": "St. George's"}) == []
+
+
+def test_grounding_accepts_registry_alternate_names():
+    port = {"name": "Antwerp"}
+    texts = {"https://www.ports.gov.be/fr": "Les ports d'Anvers et de Zeebrugge."}
+    assert registry_check.official_source_evidence(port, texts) == []
+    assert registry_check.official_source_evidence(port, texts, ("Antwerpen", "Antwerp; Anvers")) == [
+        {"url": "https://www.ports.gov.be/fr", "name_found": "anvers"}]
+
+
+# --- tiers through Zetaris (sample fixtures) ----------------------------------------------
+def test_tier1_official_source_and_registry(isolated):
+    texts = {GOV_BM: "Yachts must clear customs at St. George's Harbour on arrival."}
+    ports, summary = check_ports([ST_GEORGE], BERMUDA, "reg-t1", source_texts=texts)
+    reg = ports[0]["registry"]
+    assert reg["tier"] == TIER1 and reg["label"] == "Official Commercial Port of Entry"
+    assert reg["validation"] == ports[0]["zetaris_validation"] == OFFICIAL
+    assert reg["official_evidence"] == [{"url": GOV_BM, "name_found": "saint george"}]
+    assert reg["matches"] == ports[0]["registry_matches"] == [
         {"source": "unlocode", "code": "BMSGE", "name": "Saint George", "distance_km": 0.67},
         {"source": "wpi", "code": "BMSGE", "name": "St George", "distance_km": 0.67, "first_port_of_entry": "Yes"}]
+    assert reg["first_port_of_entry"] == "Yes"
+    assert reg["reasons"][0] == (f"Official Commercial Port of Entry: named in official source {GOV_BM}, "
+                                 "and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)")
+    assert "First Port of Entry (supporting evidence only)" in reg["reasons"][1]
+    assert summary["tiers"] == {TIER1: 1, TIER2: 0, TIER_REGISTERED: 0, TIER3: 0}
+    assert summary["official_count"] == 1
     event = [r for r in trace_rows(isolated / "trace.jsonl") if r["action"] == "registry_check"][0]
-    assert event["agent_name"] == "ZetarisAdapter" and event["run_id"] == "reg-bm"
-    assert event["validation"] == OFFICIAL and event["matches"] == port["registry_matches"]
+    assert event["agent_name"] == "ZetarisAdapter" and event["run_id"] == "reg-t1"
+    assert event["tier"] == event["status"] == TIER1 and event["reasons"] == reg["reasons"]
+
+
+def test_tier2_official_source_without_registry_match():
+    port = {"name": "Conch Inn Marina", "lat": 26.5465414, "lon": -77.0515419}
+    texts = {"https://www.bahamas.gov.bs/customs": "Ports of entry for pleasure craft include Conch Inn Marina."}
+    ports, _ = check_ports([port], {"name": "Bahamas", "mrgid": 8404}, "reg-t2", source_texts=texts)
+    reg = ports[0]["registry"]
+    assert reg["tier"] == TIER2 and reg["label"] == "Official Yachting Port of Entry"
+    assert reg["matches"] == [] and ports[0]["zetaris_validation"] == OFFICIAL
+    assert reg["reasons"][0].startswith("Official Yachting Port of Entry: named in official source "
+                                        "https://www.bahamas.gov.bs/customs; not listed")
+
+
+def test_tier_registered_never_claims_port_of_entry():
+    ports, summary = check_ports([dict(ST_GEORGE, source_urls=[GOV_BM])], BERMUDA, "reg-reg")
+    reg = ports[0]["registry"]
+    assert reg["tier"] == TIER_REGISTERED and reg["label"] == "Registered port, entry status unverified"
+    assert reg["validation"] == ports[0]["zetaris_validation"] == REGISTERED != OFFICIAL
+    assert reg["official_evidence"] == []  # official URL, but no fetched text: does not count
+    assert "a registry listing does not establish port-of-entry status" in reg["reasons"][0]
+    assert not any("Official" in r for r in reg["reasons"])
+    assert summary["official_count"] == 0 and summary["tiers"][TIER_REGISTERED] == 1
+
+
+def test_tier3_neither_and_traced(isolated):
+    ports, summary = check_ports([{"name": "Invented Harbour", "lat": 32.3, "lon": -64.7}], BERMUDA, "reg-none",
+                                 source_texts={GOV_BM: "Clear at St. George's."})
+    reg = ports[0]["registry"]
+    assert reg["tier"] == TIER3 and ports[0]["zetaris_validation"] == UNCONFIRMED == "unconfirmed - review needed"
+    assert reg["matches"] == [] and reg["official_evidence"] == [] and summary["official_count"] == 0
+    assert reg["reasons"][0].startswith("Unconfirmed - review needed: no fetched official document names it")
+    event = [r for r in trace_rows(isolated / "trace.jsonl") if r["action"] == "registry_check"][0]
+    assert event["status"] == TIER3 and event["registry_entries"] == 12
 
 
 def test_wpi_match_with_coordinates_for_hamilton():
@@ -172,27 +286,24 @@ def test_wpi_match_with_coordinates_for_hamilton():
     assert by_source["wpi"] == {"source": "wpi", "code": "BMBDA", "name": "Hamilton", "distance_km": 0.73,
                                 "first_port_of_entry": "Yes"}
     assert by_source["unlocode"]["distance_km"] is None  # UN/LOCODE BMBDA has no coordinates
+    assert ports[0]["registry"]["tier"] == TIER_REGISTERED
 
 
-def test_no_match_is_unconfirmed_and_traced(isolated):
-    ports, summary = check_ports([{"name": "Invented Harbour", "lat": 32.3, "lon": -64.7}], BERMUDA, "reg-none")
-    assert ports[0]["zetaris_validation"] == UNCONFIRMED == "unconfirmed - review needed"
-    assert ports[0]["registry_matches"] == [] and summary["official_count"] == 0
-    event = [r for r in trace_rows(isolated / "trace.jsonl") if r["action"] == "registry_check"][0]
-    assert event["status"] == "unconfirmed" and event["registry_entries"] == 12
-
-
-def test_seed_coordinates_far_from_the_registry_stay_unconfirmed():
-    # BI's seed geocode for Antwerp is ~18 km from both registry entries: the name alone is not enough.
+def test_seed_coordinates_18_km_off_are_within_tolerance():
+    # BI's seed geocode for Antwerp is ~18 km from both registry entries: inside 25 km.
     ports, _ = check_ports([{"name": "Antwerp (Antwerpen)", "lat": 51.0669817, "lon": 4.3097669}],
                            {"name": "Belgium", "mrgid": 3293}, "reg-far")
-    assert ports[0]["zetaris_validation"] == UNCONFIRMED
+    assert [m["distance_km"] for m in ports[0]["registry_matches"]] == [18.24, 17.79]
+    assert ports[0]["registry"]["coord_mismatch"] == []
 
 
 def test_zone_without_country_queries_a_box_around_candidates():
-    ports, summary = check_ports([ST_GEORGE], {"name": "Nowhere Sea"}, "reg-bbox")
+    port = dict(ST_GEORGE, country_iso2="BM")  # the port's own country still gates the match
+    ports, summary = check_ports([port], {"name": "Nowhere Sea"}, "reg-bbox")
     assert summary["country_iso2"] is None and summary["registry_entries"] > 0
-    assert ports[0]["zetaris_validation"] == OFFICIAL
+    assert ports[0]["registry"]["tier"] == TIER_REGISTERED
+    ports, _ = check_ports([ST_GEORGE], {"name": "Nowhere Sea"}, "reg-bbox-2")
+    assert ports[0]["registry"]["tier"] == TIER3  # no country known: no registry match
 
 
 @pytest.mark.parametrize("zone, iso2", [
@@ -213,11 +324,11 @@ def test_live_failure_falls_back_to_fixtures(monkeypatch, isolated):
     monkeypatch.setenv("ZETARIS_REST_URL", "http://127.0.0.1:9/api/v1.0")  # nothing listens
     monkeypatch.setattr(zetaris.time, "sleep", lambda seconds: None)
     ports, summary = check_ports([ST_GEORGE], BERMUDA, "reg-down")
-    assert summary["mode"] == "fallback" and ports[0]["zetaris_validation"] == OFFICIAL
+    assert summary["mode"] == "fallback" and ports[0]["registry"]["tier"] == TIER_REGISTERED
     rows = trace_rows(isolated / "trace.jsonl")
     assert [(r["action"], r["status"]) for r in rows] == [
         ("zetaris_query", "error"), ("zetaris_fallback", "fallback"), ("zetaris_query", "ok"),
-        ("zetaris_query", "ok"), ("registry_check", "ok")]
+        ("zetaris_query", "ok"), ("registry_check", TIER_REGISTERED)]
     assert all(r["agent_name"] == "ZetarisAdapter" for r in rows)
     assert "registry-test-key" not in (isolated / "trace.jsonl").read_text()
 
@@ -227,7 +338,7 @@ def test_outage_without_fallback_never_marks_official(monkeypatch):
         raise ZetarisUnavailable("fixture unreadable")
     monkeypatch.setattr(ZetarisClient, "get_registry_ports", down)
     ports, summary = check_ports([ST_GEORGE], BERMUDA, "reg-unavailable")
-    assert summary["mode"] == "unavailable" and ports[0]["zetaris_validation"] == UNCONFIRMED
+    assert summary["mode"] == "unavailable" and ports[0]["registry"]["tier"] == TIER3
 
 
 # --- adapter ------------------------------------------------------------------------------
@@ -320,4 +431,4 @@ def test_live_registry_views_for_bermuda():
               for view in ("unlocode_ports", "wpi_ports")}
     assert counts["unlocode_ports"] > 10000 and counts["wpi_ports"] > 3000
     ports, summary = check_ports([ST_GEORGE], BERMUDA, "live-registries")
-    assert summary["mode"] == "live" and ports[0]["zetaris_validation"] == OFFICIAL
+    assert summary["mode"] == "live" and ports[0]["registry"]["tier"] == TIER_REGISTERED

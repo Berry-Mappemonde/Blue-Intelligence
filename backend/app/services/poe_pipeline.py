@@ -1114,13 +1114,15 @@ async def validate_ports_zetaris(zone: dict | str, run_id: str, settings: dict |
     return {**registry, "registry_entries": len(registry["entries"])}
 
 
-async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict) -> list[dict]:
-    """Mark each port "official" only if a registry entry matches its name (and lies within
-    10 km when both have coordinates); else "unconfirmed - review needed". Records
-    registry_matches [{source, code, name, distance_km}] and traces one registry_check per port.
+async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict,
+                                  source_texts: dict[str, str] | None = None) -> list[dict]:
+    """Tier each port (see app.agents.registry_check): official-source evidence needs the
+    fetched text of an official URL to name the port (source_texts, {url: text}); registry
+    evidence is a same-country UN/LOCODE / WPI name match within 25 km. zetaris_validation
+    is "official" for tiers 1-2 only. Traces one registry_check per port.
     """
     run_id = zetaris_result.get("run_id") or f"poe-{zone.get('mrgid', 'zone')}-{uuid.uuid4().hex[:8]}"
-    ports, _ = await asyncio.to_thread(registry_check.annotate, ports, zetaris_result, run_id)
+    ports, _ = await asyncio.to_thread(registry_check.annotate, ports, zetaris_result, run_id, source_texts)
     return ports
 
 
@@ -1142,14 +1144,19 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
                                       catalog_text=catalog_text, settings=settings)
     run_id = _pipeline_run_id(rec, zone)
     zetaris_result = await validate_ports_zetaris(zone, run_id, settings, candidates=ports)
-    ports = await cross_reference_zetaris(ports, zone, {**zetaris_result, "run_id": run_id})
+    # Fetched documents, as the "[SOURCE: url]" blocks of the raw collected text.
+    source_texts = registry_check.source_texts_from_context(catalog_text or context)
+    ports = await cross_reference_zetaris(ports, zone, {**zetaris_result, "run_id": run_id}, source_texts)
     official = [p for p in ports if p.get("zetaris_validation") == "official"]
+    tiers = {t: [p["name"] for p in ports if p["registry"]["tier"] == t] for t in registry_check.TIER_LABELS}
     log(f"Zetaris registries ({zetaris_result['mode']}, {zetaris_result['country_iso2'] or 'bbox'}): "
-        f"{len(official)}/{len(ports)} port(s) confirmed by UN/LOCODE or the World Port Index")
+        + ", ".join(f"{len(names)} {registry_check.TIER_LABELS[t]}" for t, names in tiers.items())
+        + f" ({len(source_texts)} fetched document(s) checked for official evidence)")
     await emit(rec, "zetaris_crossref", mode=zetaris_result["mode"],
                country_iso2=zetaris_result["country_iso2"],
                registry_entries=zetaris_result["registry_entries"],
-               official_count=len(official), matched=[p["name"] for p in official])
+               official_count=len(official), matched=[p["name"] for p in official],
+               tiers=tiers, documents_with_text=len(source_texts))
     return ports
 
 
