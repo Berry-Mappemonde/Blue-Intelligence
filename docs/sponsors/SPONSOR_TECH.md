@@ -118,11 +118,17 @@ and [`test_hmem_conformance.py`](../../backend/tests/test_hmem_conformance.py).
 
 `recall_node` queries by normalized port name plus zone and attaches the top five
 matches, including score, source and provenance, as `port["memory"]`.
-`remember_node` writes one long-term memory per finalised port. A repeated verdict
-gives the prior active memory `helpful` feedback. A changed verdict creates and
+`remember_node` compares each finalised port with the latest active memory for
+the same port. If the verdict and the official source are unchanged, it does not
+add a record: it gives that memory H-MEM `helpful` feedback (confidence and
+`accessCount` go up) and records the trace outcome `reinforced`. A changed
+official source adds a new record. A changed verdict adds a record and creates and
 resolves a conflict: the previous record remains stored and receives
-`supersededBy`; it is not deleted. Evidence: [`memory.py`](../../backend/app/agents/memory.py)
-and tests `test_remember_then_recall_second_run`, `test_same_verdict_helpful` and
+`supersededBy`; it is not deleted. Evidence: `remember_node` in
+[`memory.py`](../../backend/app/agents/memory.py) and tests
+`test_remember_then_recall_second_run`,
+`test_same_verdict_and_source_reinforces_without_duplicate`,
+`test_changed_official_source_adds_record_without_superseding` and
 `test_verdict_flip_retains_old_and_audits` in
 [`test_hmem_memory.py`](../../backend/tests/test_hmem_memory.py).
 
@@ -269,6 +275,12 @@ same events for Port of Hamilton, and the second retry round with the final eval
 come from earlier local runs of the same input file, which is why they carry the
 same `run_id` label.
 
+This run was recorded before `remember_node` stopped duplicating unchanged verdicts
+(section 2). That is why the three recalled memories are identical copies, and why
+the `remember` event shows the earlier outcome `helpful` with a new record `mem-7`.
+With the current code, an unchanged verdict and source gives the outcome
+`reinforced`, and no record is added.
+
 ```jsonl
 {"timestamp": "2026-10-22T21:41:09.427362+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_start", "input_summary": {"zone_name": "Bermuda", "timeout_s": 300.0}}
 {"timestamp": "2026-10-22T21:41:11.206777+00:00", "agent_name": "ZetarisAdapter", "run_id": "example-bermuda", "action": "zetaris_query", "input_summary": {"sql": "SELECT name, lat, lon, to_json(source_urls) AS source_urls, validated, geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports WHERE zone_name = decode(unhex('4265726d756461'), 'UTF-8')"}, "row_count": 2, "duration_ms": 1778.974, "mode": "live", "status": "ok"}
@@ -293,6 +305,28 @@ input_examples/01_bermuda.json`), live mode with `.env`, the HTTP server
 no `MONGO_URL`, no keys and no `.env`, and `test_post_run_returns_same_schema`
 checks the HTTP endpoint. Inputs are in [`input_examples/`](../../input_examples/);
 generated outputs and traces are in [`output_examples/`](../../output_examples/).
+
+**Demo page.** `python backend/run.py --serve` also serves a page at `GET /`
+(<http://localhost:8000>). It is one self-contained file with no external assets:
+[`demo_page.html`](../../backend/app/pipeline/demo_page.html). A zone is picked from
+`GET /zones`, which lists live Zetaris zones, or the sample zones in sample mode or
+when Zetaris is unavailable. **Run verification** calls `POST /run`. The page shows:
+
+- the mode, whether Zetaris was live, and the LLM provider and served model, with a
+  "Nemotron via Nightshift" badge when the served model is a Nemotron model;
+- one card per port: verdict, confidence, reasons, sources (marked when they came
+  from H-MEM), memories recalled and the ResearchAgent outcome;
+- the brief;
+- an agent timeline built from `GET /runs/{run_id}/trace`: agents, actions,
+  handoffs, retry rounds and durations.
+
+The trace route accepts only run IDs of letters, digits, `_` and `-`. Evidence:
+[`api.py`](../../backend/app/pipeline/api.py), `list_zones` and `load_trace` in
+[`run_pipeline.py`](../../backend/app/pipeline/run_pipeline.py), and
+`test_demo_page_is_self_contained_html`, `test_zones_in_sample_mode`,
+`test_zones_fall_back_when_zetaris_is_down`, `test_trace_route_returns_the_runs_events`
+and `test_trace_route_rejects_bad_run_ids` in
+[`test_run_pipeline.py`](../../backend/tests/test_run_pipeline.py).
 
 To run the sponsor tests:
 
