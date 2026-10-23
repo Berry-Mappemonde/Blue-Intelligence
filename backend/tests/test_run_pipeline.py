@@ -20,7 +20,7 @@ FIRST_INPUT = sorted((REPO_ROOT / 'input_examples').glob('*.json'))[0]
 AGENTS = {'ZetarisAdapter', 'HMemAgent', 'EvaluatorAgent', 'ResearchAgent', 'BriefingAgent', 'MeterlessGenerator'}
 OUTPUT_KEYS = {'run_id', 'zone', 'mode', 'ports', 'summary', 'brief', 'llm', 'components', 'retries',
                'memory', 'trace_file', 'timings_ms', 'error'}
-PORT_KEYS = {'name', 'verdict', 'confidence', 'reasons_en', 'sources', 'memories_recalled', 'research'}
+PORT_KEYS = {'name', 'verdict', 'confidence', 'lat', 'lon', 'reasons_en', 'sources', 'memories_recalled', 'research'}
 _CREDENTIAL_ENV = ('ZETARIS_API_KEY', 'ZETARIS_ORG_ID', 'ZETARIS_REST_URL', 'METERLESS_BASE_URL',
                    'METERLESS_RUNTIME_TOKEN', 'METERLESS_MODEL', 'MODEL_BASE_URL', 'MODEL_API_KEY',
                    'MODEL_NAME', 'NVIDIA_API_KEY')
@@ -213,14 +213,76 @@ def test_live_brief_served_by_nemotron(monkeypatch):
     assert 'Luanda' in result['brief']
 
 
-def test_demo_page_is_self_contained_html():
+def test_demo_page_serves_with_pinned_map_library_and_offline_fallback():
+    import re
     response = TestClient(app).get('/')
     assert response.status_code == 200 and response.headers['content-type'].startswith('text/html')
     page = response.text
     assert '<title>PoE Reconciler</title>' in page
-    assert "api('/zones')" in page and "api('/run'" in page and '/trace' in page
-    assert 'src="http' not in page and 'href="http' not in page  # no CDN or remote assets
-    assert '<script src=' not in page and '<link rel="stylesheet"' not in page  # no external assets
+    assert "api('/zones')" in page and "new EventSource('/run/stream?zone='" in page
+    # Only the pinned Leaflet build (with SRI) and OSM tiles are remote; no static <script src> or stylesheet.
+    remote = set(re.findall(r"https://[^'\"\s)]+", page)) - {'https://www.openstreetmap.org/copyright'}
+    assert remote == {'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+                      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
+    assert page.count('sha256-') == 2
+    assert '<script src=' not in page and '<link rel="stylesheet"' not in page
+    assert 'function svgPlot' in page  # offline chart when Leaflet or tiles are unavailable
+
+
+def _sse(response):
+    """Parse a text/event-stream body into [(event, data), ...]."""
+    events, kind, data = [], None, []
+    for line in response.iter_lines():
+        if line.startswith('event: '):
+            kind = line[7:]
+        elif line.startswith('data: '):
+            data.append(line[6:])
+        elif line == '' and kind:
+            events.append((kind, json.loads('\n'.join(data))))
+            kind, data = None, []
+    return events
+
+
+def test_run_stream_emits_trace_in_order_then_result(isolated):
+    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Bermuda', 'run_id': 'sse-1'}) as response:
+        assert response.status_code == 200
+        assert response.headers['content-type'].startswith('text/event-stream')
+        events = _sse(response)
+    kinds = [kind for kind, _ in events]
+    assert kinds[-1] == 'result' and set(kinds[:-1]) == {'trace'}
+    trace = [data for kind, data in events if kind == 'trace']
+    assert {e['run_id'] for e in trace} == {'sse-1'}
+    assert trace[0]['action'] == 'run_start' and trace[-1]['action'] == 'run_end'
+    assert trace == pipeline.load_trace('sse-1')  # same events, same order as the trace file
+    assert [e['timestamp'] for e in trace] == sorted(e['timestamp'] for e in trace)
+    assert AGENTS <= {e['agent_name'] for e in trace}
+    result = events[-1][1]
+    assert_schema(result)
+    assert result['run_id'] == 'sse-1' and result['error'] is None
+
+
+def test_run_stream_generates_run_id_and_filters_shared_trace_file(isolated):
+    client = TestClient(app)
+    client.post('/run', json={'zone_name': 'Angola', 'run_id': 'other-run'})  # same TRACE_LOG_PATH
+    with client.stream('GET', '/run/stream', params={'zone': 'Angola'}) as response:
+        events = _sse(response)
+    run_id = events[-1][1]['run_id']
+    assert run_id and {d['run_id'] for k, d in events if k == 'trace'} == {run_id}
+
+
+def test_run_stream_rejects_bad_input():
+    client = TestClient(app)
+    assert client.get('/run/stream').status_code == 422
+    assert client.get('/run/stream', params={'zone': ''}).status_code == 422
+    assert client.get('/run/stream', params={'zone': 'Bermuda', 'run_id': '../x'}).status_code == 422
+
+
+def test_run_stream_unknown_zone_ends_with_error_result():
+    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Atlantis'}) as response:
+        events = _sse(response)
+    assert events[-1][0] == 'result' and 'no ports of entry' in events[-1][1]['error']
+    assert [d['action'] for k, d in events if k == 'trace'][-1] == 'run_end'
 
 
 def test_zones_in_sample_mode():
