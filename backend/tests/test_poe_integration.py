@@ -123,3 +123,59 @@ def test_validate_ports_zetaris_live_failure_falls_back_to_sample(monkeypatch, i
     rows = [json.loads(line) for line in (isolated / 'trace.jsonl').read_text().splitlines()]
     assert [r.get('status') for r in rows if r['agent_name'] == 'ZetarisAdapter'] == ['error', 'fallback', 'ok']
     assert 'test-key' not in (isolated / 'trace.jsonl').read_text()
+
+
+ZONE_GEOCODE = {'mrgid': 8493, 'name': 'Bermuda', 'iso2': 'BM', 'sovereign': 'United Kingdom', 'geometry': None}
+OFFICIAL = 'https://www.customs.gov.bm/yachts'
+
+
+def run_extract_and_geocode(monkeypatch, used_sources):
+    async def fake_extract(context, zone, log, rec=None, catalog_text=None, settings=None):
+        return [{'name': 'Port of St. George’s', 'geocodeable': False, 'extraction_engine': 'llm'}]
+    monkeypatch.setattr(poe_pipeline, 'extract_ports_llm', fake_extract)
+    from app.services import listing_ref  # community listing: slow fuzzy matching, irrelevant here
+    monkeypatch.setattr(listing_ref, 'project_listing', lambda: {'ports': []})
+    return asyncio.run(poe_pipeline._extract_and_geocode(ZONE_GEOCODE, 'ctx', used_sources, lambda m: None, settings={}))
+
+
+def remember_official_verification():
+    from app.agents.memory import remember_node
+    remember_node({'run_id': 'earlier-run', 'ports': [{
+        'name': 'Port of St. George’s', 'zone_name': 'Bermuda', 'verdict': 'flag',
+        'source_urls': [OFFICIAL], 'reasons_en': ['government source']}]})
+
+
+def hmem_rows(trace_file):
+    import json
+    return [json.loads(l) for l in trace_file.read_text().splitlines() if '"HMemAgent"' in l]
+
+
+def test_weak_port_reuses_a_remembered_official_source(monkeypatch, isolated):
+    forum = [{'url': 'https://sailing-forum.example/bermuda', 'official': False}]
+    control = run_extract_and_geocode(monkeypatch, forum)[0]  # empty memory
+    assert control['confidence_parts']['source'] < 30 and 'source_provenance' not in control
+    remember_official_verification()
+    doc = run_extract_and_geocode(monkeypatch, forum)[0]
+    assert doc['source_urls'] == ['https://sailing-forum.example/bermuda', OFFICIAL]
+    assert doc['source_provenance'] == {OFFICIAL: 'hmem'} and doc['hmem_memory_id']
+    assert doc['confidence_parts']['source'] == 30 and doc['confidence'] > control['confidence']
+    actions = [(r['action'], r.get('outcome')) for r in hmem_rows(isolated / 'trace.jsonl')]
+    assert ('recall', None) in actions and actions[-1][0] == 'remember'
+
+
+def test_port_with_a_state_source_does_not_borrow_from_memory(monkeypatch, isolated):
+    remember_official_verification()
+    doc = run_extract_and_geocode(monkeypatch, [{'url': 'https://www.gov.bm/ports', 'official': True}])[0]
+    assert 'source_provenance' not in doc and doc['memories_recalled'] == 1
+    assert doc['confidence_parts']['source'] == 30
+
+
+def test_repeated_pipeline_runs_reinforce_instead_of_duplicating(monkeypatch, isolated):
+    from app.engines.hmem import HMEM
+    sources = [{'url': 'https://www.gov.bm/ports', 'official': True}]
+    run_extract_and_geocode(monkeypatch, sources)
+    run_extract_and_geocode(monkeypatch, sources)
+    records = HMEM(persist_dir=isolated / 'hmem').store.all()
+    assert len(records) == 1 and records[0]['confidence'] > 0.7  # one record, reinforced by helpful feedback
+    outcomes = [r['outcome'] for r in hmem_rows(isolated / 'trace.jsonl') if r['action'] == 'remember']
+    assert outcomes == ['created', 'reinforced']

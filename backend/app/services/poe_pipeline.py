@@ -48,8 +48,6 @@ from app.core.extract import (
 from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception_flags
 from app.core.llm import extract_ports, grounded_search, llm_geocode_port
 from app.core.rag import select_list_context, semantic_similarity
-from app.engines.hmem import HMEM
-from app.core.paths import get_repo_root
 from app.adapters.zetaris import ZetarisClient
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
 from app.services.poe_zone_label import (
@@ -1133,35 +1131,6 @@ async def validate_ports_zetaris(zone_name: str, run_id: str, settings: dict | N
     return {"mode": mode, "ports_by_zone": ports_by_zone, "official_count": len(official_ports)}
 
 
-async def record_hmem_handoff(run_id: str, zone_iso2: str, port_data: dict, source_url: str = "") -> dict:
-    """Register handoffs in H-MEM and memorize official URLs by country."""
-    try:
-        hmem_dir = get_repo_root() / "data" / "hmem"
-        hmem = HMEM(persist_dir=str(hmem_dir), actor="poe_pipeline")
-        
-        # Secure the source field to never be empty
-        secure_source = source_url if source_url else f"poe_pipeline:{zone_iso2}"
-        
-        # Create memory record for this handoff
-        memory_data = {
-            "content": f"PoE handoff for zone {zone_iso2}: {port_data.get('name', 'unknown')}",
-            "type": "factual",
-            "tags": [f"country:{zone_iso2.upper()}", "poe", "handoff"],
-            "source": secure_source,
-            "confidence": 0.8,
-            "provenance": {
-                "origin": "poe_pipeline",
-                "run_id": run_id,
-                "label": f"zone_{zone_iso2.upper()}_handoff"
-            }
-        }
-        
-        record = hmem.add(memory_data)
-        return {"memory_id": record['id'], "status": "recorded"}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
 async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict) -> list[dict]:
     """Cross-reference extracted ports with Zetaris official data (name-normalised match)."""
     official_ports = zetaris_result.get("ports_by_zone", {}).get(zetaris_name_key(zone.get("name")), [])
@@ -1212,9 +1181,6 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
     await emit(rec, "zetaris_crossref", mode=zetaris_result["mode"],
                official_count=zetaris_result["official_count"],
                matched=[p["name"] for p in official])
-    zone_iso2 = (zone.get("iso2") or "unknown").upper()
-    for port in official:
-        await record_hmem_handoff(run_id=run_id, zone_iso2=zone_iso2, port_data=port, source_url="")
     return ports
 
 
@@ -2245,6 +2211,37 @@ async def _haiku_tiebreak_zone(zone, rows, settings, log, rec) -> dict:
     return picks or {}
 
 
+# ---------------------------------------------------------------------------
+# H-MEM: prior verifications as evidence, outcomes remembered after scoring
+# ---------------------------------------------------------------------------
+PASS_CONFIDENCE = 60  # same threshold as EvaluatorAgent: pass above 60, else flag
+
+
+def _hmem_recall(docs: list[dict], run_id: str) -> list[list[dict]]:
+    """Prior verifications per port, through memory.py's locked engine (traced)."""
+    from app.agents.memory import recall_node
+    state = recall_node({"run_id": run_id, "ports": [
+        {"name": d["name"], "zone_name": d.get("zone_name")} for d in docs]})
+    return [p.get("memory") or [] for p in state["ports"]]
+
+
+def _hmem_remember(docs: list[dict], run_id: str) -> dict:
+    """Remember each scored port: reinforce an unchanged verdict, supersede a flip (traced)."""
+    from app.agents.evaluator import _reasons_en
+    from app.agents.memory import remember_node
+    state = remember_node({"run_id": run_id, "ports": [{
+        "name": d["name"], "zone_name": d.get("zone_name"),
+        "verdict": "pass" if (d.get("confidence") or 0) > PASS_CONFIDENCE else "flag",
+        "source_urls": d.get("source_urls") or [],
+        "reasons_en": _reasons_en(d.get("confidence_reasons") or []),
+    } for d in docs]})
+    outcomes: dict = {}
+    for entry in state["trace"]:
+        if entry.get("action") == "remember":
+            outcomes[entry["outcome"]] = outcomes.get(entry["outcome"], 0) + 1
+    return outcomes
+
+
 async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict], log,
                                rec=None, run=None, catalog_text: str | None = None,
                                settings: dict | None = None) -> list[dict]:
@@ -2361,6 +2358,7 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
         picks = await _haiku_tiebreak_zone(zone, disagreements, settings, log, rec)
 
     docs = []
+    built = []  # ports kept in this polygon, scored after the H-MEM recall below
     for row in rows:
         p, norm, geo, cands = row["port"], row["norm"], row["geo"], row["cands"]
         chosen, arbitration = _pick_from_cands(row, picks)
@@ -2415,11 +2413,39 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
             "extracted_at": now_iso(),
             "dedup_key": f"{mrgid}:{norm}",
         }
-        apply_score(doc, score_port(doc, official_source=official_source,
-                                    listing_ports=listing_ports))
         if run is not None:
             doc["run_id"] = run.run_id
             doc["pipeline_variant"] = getattr(run, "variant", None)
+        built.append((doc, p, geo, lat, lon, validated, dist_km, spatial_kind, arbitration))
+
+    # H-MEM before scoring: prior verifications of these ports, as evidence.
+    run_id = run.run_id if run is not None else f"poe-{mrgid}-{uuid.uuid4().hex[:8]}"
+    memories = [[] for _ in built]
+    if built:
+        try:
+            memories = await asyncio.to_thread(_hmem_recall, [b[0] for b in built], run_id)
+        except Exception as e:
+            log(f"H-MEM recall: {type(e).__name__}: {str(e)[:100]}")
+        await emit(rec, "hmem_recall", ports=len(built), memories=sum(len(m) for m in memories))
+
+    for (doc, p, geo, lat, lon, validated, dist_km, spatial_kind, arbitration), recalled in zip(built, memories):
+        port_official = official_source
+        if not official_source:
+            # Weak port (no State source in this zone's sources): reuse the official
+            # source a previous verification of this same port recorded.
+            from app.pipeline.run_pipeline import remembered_official_sources
+            fresh = [(u, mid) for u, mid in remembered_official_sources(recalled) if u not in doc["source_urls"]]
+            if fresh:
+                url, memory_id = fresh[0]
+                doc["source_urls"] = doc["source_urls"] + [url]
+                doc["source_provenance"] = {url: "hmem"}
+                doc["hmem_memory_id"] = memory_id
+                port_official = True
+                log(f"  H-MEM: {p['name']} → source officielle mémorisée réutilisée ({url})")
+                await emit(rec, "hmem_source_reused", port=p["name"], url=url, memory_id=memory_id)
+        doc["memories_recalled"] = len(recalled)
+        apply_score(doc, score_port(doc, official_source=port_official,
+                                    listing_ports=listing_ports))
         docs.append(doc)
         agree_note = ""
         if geo.get("agree") is True:
@@ -2443,6 +2469,15 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
                    spatial_kind=spatial_kind, confidence=doc.get("confidence"),
                    extraction_agreement=p.get("extraction_agreement"),
                    geocode_agree=geo.get("agree"))
+
+    # H-MEM after scoring: remember each outcome (reinforce unchanged, supersede flips).
+    if docs:
+        try:
+            outcomes = await asyncio.to_thread(_hmem_remember, docs, run_id)
+            log(f"H-MEM: {outcomes}")
+            await emit(rec, "hmem_remember", outcomes=outcomes)
+        except Exception as e:
+            log(f"H-MEM remember: {type(e).__name__}: {str(e)[:100]}")
     return docs
 
 

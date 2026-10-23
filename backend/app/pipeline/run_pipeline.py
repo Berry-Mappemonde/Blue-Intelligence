@@ -136,7 +136,7 @@ def load_trace(run_id: str) -> list[dict]:
     return events
 
 
-def _remembered_official_sources(memories: list[dict]) -> list[tuple[str, str]]:
+def remembered_official_sources(memories: list[dict]) -> list[tuple[str, str]]:
     """(url, memory_id) for official sources in recalled verdicts, active ones first."""
     found: list[tuple[str, str]] = []
     for memory in sorted(memories, key=lambda m: m.get('supersededBy') is not None):
@@ -154,7 +154,7 @@ def research(state: dict) -> dict:
         port = dict(raw)
         if port.get('verdict') == 'retry':
             urls = list(port.get('source_urls') or [])
-            remembered = _remembered_official_sources(port.get('memory') or [])
+            remembered = remembered_official_sources(port.get('memory') or [])
             new = [(url, memory_id) for url, memory_id in remembered if url not in urls]
             if new:
                 url, memory_id = new[0]
