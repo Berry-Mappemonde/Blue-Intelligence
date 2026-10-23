@@ -47,6 +47,9 @@ from app.core.extract import (
 from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception_flags
 from app.core.llm import extract_ports, grounded_search, llm_geocode_port
 from app.core.rag import select_list_context, semantic_similarity
+from app.engines.hmem import HMEM
+from app.core.paths import get_repo_root
+from app.adapters.zetaris import ZetarisClient
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
 from app.services.poe_zone_label import (
     keep_extracted_in_zone, search_polygon_name, serp_place_name,
@@ -1088,6 +1091,98 @@ async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
+# Zetaris validation & H-MEM integration
+# ---------------------------------------------------------------------------
+async def validate_ports_zetaris(zone_name: str, run_id: str, settings: dict | None = None) -> dict:
+    """Validate extracted ports against official Zetaris data."""
+    client = ZetarisClient(run_id=run_id)
+    try:
+        official_ports = client.get_ports(zone_name=zone_name)
+    except Exception:
+        official_ports = []
+    
+    # Build a lookup of official port names by country/zone
+    ports_by_zone = {}
+    for port in official_ports:
+        zone = (port.get("zone_name") or "unknown").upper()
+        if zone not in ports_by_zone:
+            ports_by_zone[zone] = []
+        ports_by_zone[zone].append({
+            "name": port.get("name"),
+            "lat": port.get("lat"),
+            "lon": port.get("lon"),
+            "note": port.get("note"),
+            "validated": port.get("validated"),
+            "geocode_source": port.get("geocode_source"),
+        })
+    
+    return {"mode": client.mode, "ports_by_zone": ports_by_zone, "official_count": len(official_ports)}
+
+
+async def record_hmem_handoff(run_id: str, zone_iso2: str, port_data: dict, source_url: str = "") -> dict:
+    """Register handoffs in H-MEM and memorize official URLs by country."""
+    try:
+        hmem_dir = get_repo_root() / "data" / "hmem"
+        hmem = HMEM(persist_dir=str(hmem_dir), actor="poe_pipeline")
+        
+        # Secure the source field to never be empty
+        secure_source = source_url if source_url else f"poe_pipeline:{zone_iso2}"
+        
+        # Create memory record for this handoff
+        memory_data = {
+            "content": f"PoE handoff for zone {zone_iso2}: {port_data.get('name', 'unknown')}",
+            "type": "factual",
+            "tags": [f"country:{zone_iso2.upper()}", "poe", "handoff"],
+            "source": secure_source,
+            "confidence": 0.8,
+            "provenance": {
+                "origin": "poe_pipeline",
+                "run_id": run_id,
+                "label": f"zone_{zone_iso2.upper()}_handoff"
+            }
+        }
+        
+        record = hmem.add(memory_data)
+        return {"memory_id": record['id'], "status": "recorded"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict) -> list[dict]:
+    """Cross-reference extracted ports with Zetaris official data."""
+    zone_name = (zone.get("name") or "").upper()
+    official_ports = zetaris_result.get("ports_by_zone", {}).get(zone_name, [])
+    
+    official_names = [p.get("name", "").strip().lower() for p in official_ports if p.get("name")]
+    
+    validated_ports = []
+    for port in ports:
+        name = (port.get("name") or "").strip().lower()
+        port_copy = dict(port)
+        
+        # Check if port exists in official Zetaris data
+        if name in official_names:
+            # Port matches official data
+            port_copy["zetaris_validation"] = "official"
+            # Add official coordinates if available
+            for op in official_ports:
+                if op.get("name", "").strip().lower() == name:
+                    if op.get("lat") is not None and op.get("lon") is not None:
+                        port_copy["lat"] = op["lat"]
+                        port_copy["lon"] = op["lon"]
+                    if op.get("note"):
+                        port_copy["zetaris_note"] = op["note"]
+                    break
+        else:
+            # Port not in official data - flag for review
+            port_copy["zetaris_validation"] = "unofficial - review needed"
+        
+        validated_ports.append(port_copy)
+    
+    return validated_ports
+
+
+# ---------------------------------------------------------------------------
 # 4. Compared PARALLEL extraction: LLM (OpenRouter) ∥ local NER (spaCy)
 # ---------------------------------------------------------------------------
 async def extract_ports_llm(context: str, zone: dict, log, rec=None,
@@ -1103,7 +1198,39 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
     fragments are no longer enough — JSON readers parse these pages.
     Second reader: gpt-oss (or Kimi if decree) if NVIDIA is on.
     Claude only steps in after both NIM/OR readers fail.
+    Modified: Zetaris validation + H-MEM handoff recording.
     """
+    s = settings
+    if s is None:
+        try:
+            from app.db import get_settings
+            s = await get_settings()
+        except Exception:
+            s = {}
+    
+    # Step 1: Extract ports using existing LLM cascade
+    llm_ports, llm_err = await _primary()
+    
+    # Step 2: Validate against Zetaris official data
+    zone_name = zone.get("name", "")
+    rec_id = rec.get("run_id", "") if rec else ""
+    zetaris_result = await validate_ports_zetaris(zone_name, rec_id, s) if rec_id else {"mode": "sample", "ports_by_zone": {}, "official_count": 0}
+    
+    # Step 3: Cross-reference and validate
+    ports = await cross_reference_zetaris(llm_ports if llm_ports is not None else [], zone, zetaris_result)
+    
+    # Step 4: Record H-MEM handoff for each official port
+    zone_iso2 = zone.get("iso2", "unknown").upper()
+    if rec_id and ports:
+        for port in ports:
+            if (port.get("zetaris_validation") or "") == "official":
+                await record_hmem_handoff(
+                    run_id=rec_id,
+                    zone_iso2=zone_iso2,
+                    port_data=port,
+                    source_url=""
+                )
+    
     raw_catalog = catalog_text if catalog_text is not None else context
     catalog = extract_structured_ports(raw_catalog)
     if catalog_is_sufficient(catalog, raw_catalog):

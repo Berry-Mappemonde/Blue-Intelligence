@@ -137,11 +137,27 @@ async def ask_json_tracked(prompt: str, system: str = JSON_SYSTEM,
                            settings: dict | None = None,
                            max_tokens: int = 2000, log=None,
                            role: str = "json") -> tuple[dict, str]:
-    """Strict JSON: NVIDIA (role chain) → OpenRouter → Claude last.
+    """Strict JSON: NEMOTRON first → NVIDIA (role chain) → OpenRouter → Claude last.
 
-    Return (object, engine) — engine = nvidia-* | openrouter | claude.
-    Same cable as ``ask_yes_no`` (twin #4).
+    Nemotron is the default first attempt; the old cascade stays as fallback.
     """
+    # NEW: Try Nemotron first (NIM model, not meterless opt-in)
+    from app.core.nvidia import get_nvidia_key, complete_json_nvidia_tracked
+    key = get_nvidia_key(settings)
+    if key:
+        # Nemotron 3-super-120b-a12b for JSON extraction; 3.5-super-vl-120b-a12b for PDFs
+        nemotron_chain = ("nvidia/nemotron-3-super-120b-a12b",)
+        for model in nemotron_chain:
+            try:
+                data = await complete_json_nvidia_tracked(
+                    system, prompt, settings, model=model, role=role,
+                    fallback=False, max_tokens=max_tokens)
+                return data, f"nvidia-{model.split('/')[-1]}"
+            except Exception as e:
+                if log:
+                    log(f"Nemotron {model}: {type(e).__name__}: {str(e)[:80]}")
+                continue
+    
     # Explicit opt-in only; ask_json delegates here and the default cascade stays intact.
     if _env("LLM_PROVIDER").lower() == "meterless":
         from app.core.generator import generate
