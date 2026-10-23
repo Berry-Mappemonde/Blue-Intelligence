@@ -491,58 +491,53 @@ async def export_poe_geojson():
 @router.post("/poe/verify")
 async def poe_verify(payload: dict):
     """Verify PoE for a zone: run pipeline and return Nemotron status + Zetaris validation + trace path.
-    
+
     Input: { "zone_name": str, "mrgid": int | None }
-    Output: { zone_name, mrgid, nemotron_status, validated_ports, non_validated_ports, trace_path }
+    Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
+              brief, error, trace_path }
     """
-    from app.pipeline.run_pipeline import run_pipeline
-    from app.services import poe_zone_label
-    from app.adapters.zetaris import zetaris_adapter
-    import os
-    
-    zone_name = payload.get("zone_name", "")
+    from pathlib import Path
+    from app.core import paths
+    from app.pipeline.run_pipeline import run_pipeline, validate_input
+    from app.services.poe_pipeline import cross_reference_zetaris, validate_ports_zetaris
+
+    try:
+        zone_name, _ = validate_input(payload.get("zone_name"))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
     mrgid = payload.get("mrgid")
-    
+
     # Run the pipeline
     result = await run_pipeline(zone_name)
-    
-    # Get Zetaris adapter to validate ports
-    zetaris_result = await zetaris_adapter()
-    
-    # Cross-reference extracted ports with Zetaris data
-    zone_name_upper = zone_name.upper()
-    official_ports = zetaris_result.get("ports_by_zone", {}).get(zone_name_upper, [])
-    official_names = [p.get("name", "").strip().lower() for p in official_ports if p.get("name")]
-    
-    # Extract ports from pipeline result
-    extracted_ports = result.get("summary", {}).get("ports", []) or []
-    
-    validated_ports = []
-    non_validated_ports = []
-    for port in extracted_ports:
-        name = (port.get("name") or "").strip().lower()
-        port_copy = dict(port)
-        if name in official_names:
-            port_copy["zetaris_validation"] = "official"
-            validated_ports.append(port_copy)
-        else:
-            port_copy["zetaris_validation"] = "non_official"
-            non_validated_ports.append(port_copy)
-    
-    # Get trace path
-    trace_log_path = os.environ.get(
-        'TRACE_LOG_PATH', 
-        str(__import__('pathlib').Path('/Users/clement/blue-intelligence/logs') / f'trace-{result.get("run_id", "unknown")}.jsonl')
-    )
-    
-    # Nemotron status from pipeline
-    nemotron_status = result.get("status", "unknown")
-    
+
+    # Cross-reference the verified ports with the official Zetaris reference
+    zetaris_result = await validate_ports_zetaris(zone_name, result["run_id"])
+    ports = await cross_reference_zetaris(result.get("ports") or [], {"name": zone_name}, zetaris_result)
+    validated_ports = [p for p in ports if p.get("zetaris_validation") == "official"]
+    non_validated_ports = [p for p in ports if p.get("zetaris_validation") != "official"]
+
+    # Trace written by the run (relative to the repo root unless TRACE_LOG_PATH points elsewhere)
+    trace_file = Path(result["trace_file"])
+    trace_path = trace_file if trace_file.is_absolute() else paths.REPO_ROOT / trace_file
+
+    # Which model actually wrote the brief (served model, as reported by the runtime)
+    llm = result.get("llm") or {}
+    nemotron_status = {
+        "provider": llm.get("provider"),
+        "model": llm.get("model"),
+        "nemotron": "nemotron" in (llm.get("model") or "").lower(),
+        "fallback_reason": llm.get("fallback_reason"),
+    }
+
     return {
         "zone_name": zone_name,
         "mrgid": mrgid,
+        "run_id": result["run_id"],
         "nemotron_status": nemotron_status,
         "validated_ports": validated_ports,
         "non_validated_ports": non_validated_ports,
-        "trace_path": trace_log_path
+        "zetaris_mode": zetaris_result["mode"],
+        "brief": result.get("brief"),
+        "error": result.get("error"),
+        "trace_path": str(trace_path),
     }

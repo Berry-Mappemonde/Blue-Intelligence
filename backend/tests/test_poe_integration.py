@@ -62,3 +62,34 @@ def test_extract_ports_llm_with_a_run_recorder_uses_its_run_id(monkeypatch):
     asyncio.run(poe_pipeline.extract_ports_llm('text', BERMUDA, lambda m: None, rec=Recorder()))
     assert seen['run_id'] == 'run-20261023'
     assert ('zetaris_crossref', {'mode': 'sample', 'official_count': 1, 'matched': ['Port of St. George’s']}) in events
+
+
+def verify_client():
+    """The formalities router alone (no Mongo startup hooks), as mounted by app.main."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers import formalities
+    app = FastAPI()
+    app.include_router(formalities.router)
+    return TestClient(app)
+
+
+def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
+    from pathlib import Path
+    response = verify_client().post('/api/poe/verify', json={'zone_name': 'Bermuda', 'mrgid': 8493})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body['zone_name'] == 'Bermuda' and body['mrgid'] == 8493 and body['error'] is None
+    assert [p['name'] for p in body['validated_ports']] == ['Port of St. George’s']
+    assert body['non_validated_ports'] == [] and body['zetaris_mode'] == 'sample'
+    assert body['nemotron_status'] == {'provider': 'sample', 'model': 'caller-sample-fn',
+                                       'nemotron': False, 'fallback_reason': 'SAMPLE_MODE=true'}
+    assert body['brief'].startswith('Clearance brief: Bermuda')
+    trace = Path(body['trace_path'])
+    assert trace == isolated / 'trace.jsonl' and trace.is_file()
+    assert body['run_id'] in trace.read_text()
+
+
+def test_poe_verify_rejects_a_missing_zone():
+    assert verify_client().post('/api/poe/verify', json={}).status_code == 422
+    assert verify_client().post('/api/poe/verify', json={'zone_name': '  '}).status_code == 422
