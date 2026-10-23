@@ -303,6 +303,7 @@ async def _run(ctx: dict) -> None:
 def _port_out(port: dict) -> dict:
     provenance = port.get('source_provenance') or {}
     return dict(name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'),
+                lat=port.get('lat'), lon=port.get('lon'),
                 reasons_en=list(port.get('reasons_en') or []),
                 sources=[dict(url=u, provenance=provenance.get(u, 'zetaris'))
                          for u in port.get('source_urls') or []],
@@ -362,3 +363,35 @@ async def run_pipeline(zone_name: str, run_id: str | None = None, *,
                                  status='error' if result['error'] else 'ok', error=result['error'],
                                  summary=result['summary'], timings_ms=result['timings_ms'])])
     return result
+
+
+async def stream_run(zone_name: str, run_id: str, *, poll_s: float = 0.05):
+    """Run the pipeline and yield ('trace', event) as each agent writes it, then ('result', result).
+
+    Agents append to the run's trace file; this tails it from the current end,
+    keeps only this run_id (TRACE_LOG_PATH may be shared) and reads once more
+    after the run finishes, so no event is lost.
+    """
+    path = trace_path(run_id)
+    offset = path.stat().st_size if path.is_file() else 0
+    task = asyncio.create_task(run_pipeline(zone_name, run_id))
+    pending = b''
+    while True:
+        finished = task.done()
+        if path.is_file():
+            with path.open('rb') as stream:
+                stream.seek(offset)
+                chunk = stream.read()
+            offset += len(chunk)
+            *lines, pending = (pending + chunk).split(b'\n')
+            for line in lines:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(event, dict) and event.get('run_id') == run_id:
+                    yield 'trace', event
+        if finished:
+            break
+        await asyncio.sleep(poll_s)
+    yield 'result', task.result()
