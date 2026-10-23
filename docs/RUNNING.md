@@ -5,8 +5,9 @@ a verdict, a confidence score, reasons and sources, plus a short brief for sailo
 It runs from a fresh clone with **no credentials and no MongoDB**.
 
 ```text
-ZetarisAdapter → HMemAgent (recall) → EvaluatorAgent ⇄ ResearchAgent (retry, max 2)
-              → EvaluatorAgent (finalise) → BriefingAgent (Meterless) → HMemAgent (remember)
+ZetarisAdapter (candidates) → ZetarisAdapter (registry check: UN/LOCODE + World Port Index)
+  → HMemAgent (recall) → EvaluatorAgent ⇄ ResearchAgent (retry, max 2)
+  → EvaluatorAgent (finalise) → BriefingAgent (Meterless) → HMemAgent (remember)
 ```
 
 ## 1. Install (once)
@@ -33,7 +34,10 @@ backend/.venv/bin/python backend/run.py --input input_examples/01_bermuda.json
 
 With no `.env`, `run.py` turns on `SAMPLE_MODE` and says so on stderr. Ports come
 from the bundled Zetaris fixture (`backend/data/sample/zetaris/poe_ports.json`,
-20 real ports from `seed/ports_of_entry.geojson`). The evaluator, retry loop,
+20 real ports from `seed/ports_of_entry.geojson`). The registry check reads small
+real subsets of UN/LOCODE and the World Port Index (`unlocode_ports.json`,
+`wpi_ports.json` in the same folder: the sample zones' countries, with the US cut
+to Alaska and Portugal to the Azores). The registry check, evaluator, retry loop,
 H-MEM memory and briefing logic all run for real on that data; only the
 Zetaris and model calls are replaced. The brief is then built deterministically
 from the finalised ports (`llm.model = "caller-sample-fn"`).
@@ -53,11 +57,12 @@ backend/.venv/bin/python backend/run.py --input input_examples/02_angola.json
 
 Live mode needs `ZETARIS_API_KEY`, `ZETARIS_ORG_ID` and `METERLESS_RUNTIME_TOKEN`
 (the Zetaris PoE view is registered once by `backend/scripts/zetaris_setup.py --apply`).
-`NVIDIA_API_KEY` is optional. Every external call is bounded and falls back:
+`NVIDIA_API_KEY` is optional. The registry views need a one-off setup too (see
+"Independent registries" below). Every external call is bounded and falls back:
 
 | Call | Bound | Fallback |
 | --- | --- | --- |
-| Zetaris SQL | 15 s × 3 attempts | bundled sample data, trace `status: "fallback"` |
+| Zetaris SQL | 15 s × 3 attempts | bundled sample data, trace `status: "fallback"`; once a run has fallen back, its registry check reads the fixtures directly |
 | Nightshift probe | 3 s, cached 60 s | NVIDIA if configured, else sample brief |
 | Nightshift / NVIDIA request | 90 s per provider (one retry inside it) | next provider, then sample brief |
 | Whole run | 5 minutes | partial result with an `error` field |
@@ -75,6 +80,48 @@ request to a different model. Zetaris returned two Bermuda ports, and H-MEM
 recalled memories from earlier local runs. It is a recording for reference: it
 cannot be reproduced without credentials, and no code reads it. It was recorded
 before port coordinates (`lat`, `lon`) were added to the output.
+
+### Independent registries (why "official" is not circular)
+
+The candidates in `blue_intel.poe_ports` are Blue Intelligence's own extraction, so
+they cannot confirm themselves. The registry check (`ZetarisAdapter.registry_check`,
+[`backend/app/agents/registry_check.py`](../backend/app/agents/registry_check.py))
+confirms each candidate against two third-party registries held in Zetaris:
+
+| View | Source | Licence | Rows kept |
+| --- | --- | --- | --- |
+| `blue_intel.unlocode_ports` | [UN/LOCODE](https://unece.org/trade/cefact/unlocode-code-list-country-and-territory), UNECE ([download](https://unlocode.unece.org/downloads/unlocode-latest.zip)) | Published by UNECE for free use; no formal licence is stated | Function position 1 = "1" (port): 17,642 |
+| `blue_intel.wpi_ports` | [World Port Index](https://msi.nga.mil/Publications/WPI), NGA Pub 150 ([CSV](https://msi.nga.mil/api/publications/download?type=view&key=16920959/SFH00000/UpdatedPub150.csv)) | US Government work, public domain | All entries: 3,807 |
+
+A port is `official` only if its name matches a registry entry (casefolded, no
+accents or punctuation; "Port of", "Porto de", "Harbour" and similar words removed;
+St/Saint; "A / B" and "A (B)" split; WPI alternate names and UN/LOCODE names
+without diacritics included). If both sides have coordinates, the port must also be
+within 10 km of the entry. Otherwise it is `unconfirmed - review needed`. Each port
+records `registry.matches` (`source`, `code`, `name`, `distance_km`), and each check
+is a `ZetarisAdapter` `registry_check` trace event (including name matches the
+distance gate rejected). UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted
+to decimal degrees. The zone's country comes from the EEZ index (sovereign's code
+for zones such as Alaska or the Azores). If the country is unknown, the check
+queries a box around the candidates instead.
+
+Setup (administrators, once; the full datasets are downloaded to the gitignored
+`backend/data/registries/`, never committed):
+
+```bash
+cd backend
+.venv/bin/python scripts/zetaris_setup.py --part registries            # dry run: plan + SQL
+.venv/bin/python scripts/zetaris_setup.py --part registries --apply    # download, stage, register, verify counts
+.venv/bin/python scripts/zetaris_setup.py --part registries --prepare-only --fixtures  # rebuild the sample fixtures
+```
+
+`--apply` downloads both files, writes `unlocode_ports.csv` and `wpi_ports.csv`,
+copies them into the Zetaris container (`docker cp` into
+`/home/zetaris/customer-data/shared/blue_intel`; `--stage none` if you copy them
+yourself), registers them as read-only file-store tables plus the two views, and
+compares each view's `COUNT(*)` with the local CSV. `--unlocode-zip` and `--wpi-csv`
+use files you have already downloaded. The agents only ever read the views through
+the adapter's read-only `query()`.
 
 ## 4. CLI and HTTP
 
@@ -138,8 +185,9 @@ success, 1 if the result has an `error`, 2 for invalid input.
 Input: `{"zone_name": str, "run_id": optional str}` (`run_id`: letters, digits, `_`, `-`).
 Output: `run_id`, `zone`, `mode` (`live` or `sample`), `ports` (name, verdict,
 confidence, lat, lon, reasons_en, sources with provenance `zetaris` or `hmem`,
-memories_recalled, research), `summary`, `brief`, `llm`, `components`, `retries`,
-`memory`, `trace_file`, `timings_ms`, `error`. Examples: `input_examples/` and
+memories_recalled, research, registry `{validation, matches}`), `summary`, `brief`,
+`llm`, `components`, `registry` (`mode`, `country_iso2`, `registry_entries`,
+`official_count`), `retries`, `memory`, `trace_file`, `timings_ms`, `error`. Examples: `input_examples/` and
 `output_examples/` (generated by running the commands above in sample mode).
 
 ## 5. Traces
@@ -157,7 +205,7 @@ of real traces from the example runs.
 ```bash
 cd backend
 MONGO_URL=mongodb://127.0.0.1:27017 DB_NAME=bi_test POE_AUTO_REFRESH=0 \
-  .venv/bin/python -m pytest tests/test_run_pipeline.py -v
+  .venv/bin/python -m pytest tests/test_run_pipeline.py tests/test_zetaris_registries.py -v
 ```
 
 `test_run_pipeline.py` includes fresh-clone simulations (`run.py --input` and
