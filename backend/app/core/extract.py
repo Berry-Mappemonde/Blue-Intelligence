@@ -518,7 +518,7 @@ async def parse_pdf_with_nemotron_vl(content: bytes, settings: dict | None = Non
     This calls Nemotron directly for PDF comprehension (not just text extraction).
     Falls back to None if NVIDIA key not available or call fails.
     """
-    from app.core.nvidia import get_nvidia_key, _usable_nim, _nvidia_sem, complete_json_nvidia_tracked
+    from app.core.nvidia import NEMOTRON_SUPER_VL_MODEL, get_nvidia_key, _nvidia_sem, complete_json_nvidia_tracked
     
     key = get_nvidia_key(settings)
     if not key:
@@ -546,13 +546,13 @@ async def parse_pdf_with_nemotron_vl(content: bytes, settings: dict | None = Non
 PDF content (truncated):
 {text}"""
     
-    model = "nvidia/nemotron-3.5-super-vl-120b-a12b"
     try:
         async with _nvidia_sem():
-            data = await complete_json_nvidia_tracked(
+            # Returns (data, served_model); reasoning is already off for JSON roles.
+            data, _served = await complete_json_nvidia_tracked(
                 "Tu réponds uniquement en JSON strict.", prompt, settings,
-                model=model, role="json", fallback=False, max_tokens=3000,
-                images=images, reasoning_effort="none")
+                model=NEMOTRON_SUPER_VL_MODEL, role="json", fallback=False, max_tokens=3000,
+                images=images)
         return json.dumps(data, ensure_ascii=False)
     except Exception as e:
         if log:

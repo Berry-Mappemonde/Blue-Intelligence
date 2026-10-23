@@ -55,11 +55,12 @@ PRIMARY_MODEL = GPT_OSS_MODEL
 SECONDARY_MODEL = "meta/muse-glimmer-30b"
 LEGAL_MODEL = "moonshotai/kimi-k3"
 
-# Nemotron suite — role-specialized NVIDIA NIM models
-NEMOTRON_LIGHTNING_MODEL = "nvidia/nemotron-4-340b-reward"      # filter, normalize, search_rank
+# Nemotron suite — role-specialized NVIDIA NIM chat models (catalogue IDs, 2026-10).
+# nemotron-4-340b-reward is a reward model (it scores answers), never a chat model.
+NEMOTRON_LIGHTNING_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"  # filter, normalize, search_rank
 NEMOTRON_SUPER_VL_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"  # page (visual PDF reading)
-NEMOTRON_SUPER_MODEL = "nvidia/nemotron-3-super-120b-a12b"     # extract, json, reconcile
-NEMOTRON_ULTRA_MODEL = "nvidia/nemotron-3-ultra-253b-a12b"     # judge, brief (reasoning)
+NEMOTRON_SUPER_MODEL = "nvidia/nemotron-3-super-120b-a12b"          # extract, json, reconcile
+NEMOTRON_ULTRA_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"          # judge, brief (reasoning)
 # Hosted trial gone (410 Gone). _usable_nim rewrites them to gpt-oss.
 _EOL_MODELS = frozenset({
     PRO_MODEL,
