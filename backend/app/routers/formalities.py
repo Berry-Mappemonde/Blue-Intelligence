@@ -490,16 +490,18 @@ async def export_poe_geojson():
 
 @router.post("/poe/verify")
 async def poe_verify(payload: dict):
-    """Verify PoE for a zone: run pipeline and return Nemotron status + Zetaris validation + trace path.
+    """Verify PoE for a zone: run pipeline and return Nemotron status + registry validation + trace path.
+
+    A port is validated only if the run's registry check matched it in UN/LOCODE or the
+    World Port Index (held in Zetaris); each port carries registry {validation, matches}.
 
     Input: { "zone_name": str, "mrgid": int | None }
     Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
-              brief, error, trace_path }
+              zetaris_mode, registry, brief, error, trace_path }
     """
     from pathlib import Path
     from app.core import paths
     from app.pipeline.run_pipeline import run_pipeline, validate_input
-    from app.services.poe_pipeline import cross_reference_zetaris, validate_ports_zetaris
 
     try:
         zone_name, _ = validate_input(payload.get("zone_name"))
@@ -510,11 +512,10 @@ async def poe_verify(payload: dict):
     # Run the pipeline
     result = await run_pipeline(zone_name)
 
-    # Cross-reference the verified ports with the official Zetaris reference
-    zetaris_result = await validate_ports_zetaris(zone_name, result["run_id"])
-    ports = await cross_reference_zetaris(result.get("ports") or [], {"name": zone_name}, zetaris_result)
-    validated_ports = [p for p in ports if p.get("zetaris_validation") == "official"]
-    non_validated_ports = [p for p in ports if p.get("zetaris_validation") != "official"]
+    # Registry evidence recorded by the run's ZetarisAdapter.registry_check step
+    ports = result.get("ports") or []
+    validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") == "official"]
+    non_validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") != "official"]
 
     # Trace written by the run (relative to the repo root unless TRACE_LOG_PATH points elsewhere)
     trace_file = Path(result["trace_file"])
@@ -536,7 +537,8 @@ async def poe_verify(payload: dict):
         "nemotron_status": nemotron_status,
         "validated_ports": validated_ports,
         "non_validated_ports": non_validated_ports,
-        "zetaris_mode": zetaris_result["mode"],
+        "zetaris_mode": (result.get("components") or {}).get("zetaris"),
+        "registry": result.get("registry"),
         "brief": result.get("brief"),
         "error": result.get("error"),
         "trace_path": str(trace_path),

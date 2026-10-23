@@ -1,7 +1,7 @@
 """Runnable PoE verification pipeline: one zone in, verified ports and a brief out.
 
-ZetarisAdapter.get_ports -> HMemAgent.recall -> EvaluatorAgent.evaluate
-  -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
+ZetarisAdapter.get_ports -> ZetarisAdapter.registry_check -> HMemAgent.recall
+  -> EvaluatorAgent.evaluate -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
   -> finalise -> BriefingAgent -> HMemAgent.remember
 
 Plain Python: LangGraph is not a dependency of this repository. Every step shares
@@ -14,6 +14,8 @@ source a previous run verified for that same port, tagged provenance "hmem".
 BriefingAgent makes Nightshift load-bearing: the sailor-facing brief is generated
 through Meterless (Nemotron when the route serves it), and its sample fallback
 builds the same brief deterministically from the finalised port data.
+The registry check confirms each candidate against UN/LOCODE and the World Port Index
+held in Zetaris (app/agents/registry_check.py), independent of BI's own seed data.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
+from app.agents import registry_check
 from app.agents.evaluator import (
     RETRY_LIMIT, evaluate, finalise, is_official_source, prepare_retry,
     route_after_evaluation,
@@ -97,6 +100,14 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
         fallback = ZetarisClient(run_id=run_id)
         fallback.mode = 'sample'
         return fallback.get_ports(zone_name=zone_name), 'fallback'
+
+
+def check_registries(ports: list[dict], zone_name: str, run_id: str,
+                     zetaris_mode: str | None = None) -> tuple[list[dict], dict]:
+    """Registry check step: UN/LOCODE + WPI evidence on every candidate port."""
+    mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    return registry_check.check_ports(ports, dict(name=zone_name, mrgid=mrgid), run_id,
+                                      live_failed=zetaris_mode == 'fallback')
 
 
 def list_zones() -> dict:
@@ -188,11 +199,24 @@ def _brief_rows(ports: list[dict]) -> list[dict]:
         why = list(port.get('check_reasons') or []) or list(port.get('reasons_en') or [])[:3]
         if port.get('source_urls') and not is_official_source(port['source_urls']):
             why.append('no government source')
+        if port.get('zetaris_validation') == registry_check.UNCONFIRMED:
+            why.append('not found in UN/LOCODE or the World Port Index')
         rows.append(dict(
             name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'), why=why,
+            registry=_registry_label(port),
             sources=[u + (' (from verification memory)' if provenance.get(u) == 'hmem' else '')
                      for u in port.get('source_urls') or []]))
     return rows
+
+
+def _registry_label(port: dict) -> str | None:
+    """'UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)', or None when unconfirmed."""
+    labels = []
+    for match in port.get('registry_matches') or []:
+        name = 'UN/LOCODE' if match.get('source') == 'unlocode' else 'WPI'
+        distance = '' if match.get('distance_km') is None else f" ({match['distance_km']:g} km)"
+        labels.append(f"{name} {match.get('code') or match.get('name')}{distance}")
+    return ', '.join(labels) or None
 
 
 def sample_brief(zone_name: str, ports: list[dict]) -> str:
@@ -203,12 +227,16 @@ def sample_brief(zone_name: str, ports: list[dict]) -> str:
     lines = [f'Clearance brief: {zone_name}']
     lines.append('Confirmed ports of entry:' + ('' if confirmed else ' none confirmed in this run.'))
     for r in confirmed:
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100). Sources: {', '.join(r['sources'])}")
+        registry = f" Registry: {r['registry']}." if r['registry'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100).{registry} "
+                     f"Sources: {', '.join(r['sources'])}")
     if flagged:
         lines.append('Flagged, verify before relying on them:')
     for r in flagged:
         sources = ', '.join(r['sources']) or 'no source on record'
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}. Sources: {sources}")
+        registry = f" Registry: {r['registry']}." if r['registry'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}.{registry} "
+                     f"Sources: {sources}")
     lines.append(DISCLAIMER)
     return '\n'.join(lines)
 
@@ -217,7 +245,8 @@ def brief_prompt(zone_name: str, ports: list[dict]) -> str:
     return (f'Zone: {zone_name}\nFinalised ports (JSON):\n'
             f'{json.dumps(_brief_rows(ports), ensure_ascii=False)}\n'
             'Write the brief: which ports are confirmed (verdict "pass"), which are flagged and why, '
-            f'each with its sources. End with: "{DISCLAIMER}"')
+            'each with its sources and its registry evidence (UN/LOCODE / World Port Index) if any. '
+            f'End with: "{DISCLAIMER}"')
 
 
 async def write_brief(state: dict, zone_name: str) -> dict:
@@ -283,6 +312,9 @@ async def _run(ctx: dict) -> None:
     if not ports:
         ctx['error'] = f'no ports of entry found for zone {zone_name!r}'
         return
+    ports, ctx['registry'] = await _step(ctx, 'ZetarisAdapter.registry_check', check_registries,
+                                         ports, zone_name, run_id, ctx['zetaris_mode'])
+    state = ctx['state'] = {'run_id': run_id, 'ports': ports}
     state = ctx['state'] = await _step(ctx, 'HMemAgent.recall', recall_node, state)
     state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.evaluate', evaluate, state)
     for _ in range(RETRY_LIMIT):  # route_after_evaluation also enforces the cap
@@ -307,7 +339,9 @@ def _port_out(port: dict) -> dict:
                 reasons_en=list(port.get('reasons_en') or []),
                 sources=[dict(url=u, provenance=provenance.get(u, 'zetaris'))
                          for u in port.get('source_urls') or []],
-                memories_recalled=len(port.get('memory') or []), research=port.get('research'))
+                memories_recalled=len(port.get('memory') or []), research=port.get('research'),
+                registry=dict(validation=port.get('zetaris_validation'),
+                              matches=list(port.get('registry_matches') or [])))
 
 
 def _display_path(path: Path) -> str:
@@ -331,7 +365,9 @@ def _result(ctx: dict, total_ms: float) -> dict:
         ports=ports, summary=summary, brief=brief.get('text'),
         llm=dict(provider=brief.get('provider'), model=brief.get('model'),
                  fallback_reason=brief.get('fallback_reason')),
-        components=dict(zetaris=zetaris_mode, llm=brief.get('provider')),
+        components=dict(zetaris=zetaris_mode, registry=(ctx.get('registry') or {}).get('mode'),
+                        llm=brief.get('provider')),
+        registry=ctx.get('registry'),
         retries=int(state.get('retry_count') or 0),
         memory=dict(recalled=sum(p['memories_recalled'] for p in ports),
                     remembered=bool(ctx.get('remembered'))),

@@ -26,13 +26,31 @@
         }
       ],
       "memories_recalled": 0,
-      "research": null
+      "research": null,
+      "registry": {
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "AOLAD",
+            "name": "Luanda",
+            "distance_km": null
+          },
+          {
+            "source": "wpi",
+            "code": "AOLAD",
+            "name": "Luanda",
+            "distance_km": 2.6,
+            "first_port_of_entry": "Yes"
+          }
+        ]
+      }
     }
   ],
   "summary": {
     "flag": 1
   },
-  "brief": "Clearance brief: Angola\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto de Luanda (confidence 60/100): single geocoder, not cross-checked. Sources: https://amn.gov.ao/web/perfil-entidade/552, https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Angola\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto de Luanda (confidence 60/100): single geocoder, not cross-checked. Registry: UN/LOCODE AOLAD, WPI AOLAD (2.6 km). Sources: https://amn.gov.ao/web/perfil-entidade/552, https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -40,7 +58,14 @@
   },
   "components": {
     "zetaris": "sample",
+    "registry": "sample",
     "llm": "sample"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "AO",
+    "registry_entries": 56,
+    "official_count": 1
   },
   "retries": 0,
   "memory": {
@@ -49,13 +74,14 @@
   },
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.5,
-    "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 2.3,
-    "EvaluatorAgent.finalise": 0.1,
+    "ZetarisAdapter.get_ports": 0.4,
+    "ZetarisAdapter.registry_check": 6.2,
+    "HMemAgent.recall": 0.8,
+    "EvaluatorAgent.evaluate": 1.3,
+    "EvaluatorAgent.finalise": 0.3,
     "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 0.9,
-    "total": 4.6
+    "HMemAgent.remember": 1.0,
+    "total": 10.2
   },
   "error": null
 }

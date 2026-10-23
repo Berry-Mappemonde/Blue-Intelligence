@@ -37,8 +37,12 @@ def test_extract_ports_llm_runs_extraction_once_then_cross_references_zetaris(mo
     assert extractor.await_count == 1  # previously: UnboundLocalError before any extraction
     by_name = {p['name']: p for p in ports}
     assert by_name['Port of St. George’s']['zetaris_validation'] == 'official'
-    assert by_name['Port of St. George’s']['lat'] == pytest.approx(32.381, abs=1e-3)  # official coordinates
-    assert by_name['Invented Harbour']['zetaris_validation'] == 'unofficial - review needed'
+    # Independent registries, not BI's seed: no coordinates on the candidate, so no distance.
+    assert by_name['Port of St. George’s']['registry_matches'] == [
+        {'source': 'unlocode', 'code': 'BMSGE', 'name': 'Saint George', 'distance_km': None},
+        {'source': 'wpi', 'code': 'BMSGE', 'name': 'St George', 'distance_km': None, 'first_port_of_entry': 'Yes'}]
+    assert by_name['Invented Harbour']['zetaris_validation'] == 'unconfirmed - review needed'
+    assert by_name['Invented Harbour']['registry_matches'] == []
 
 
 def test_extract_ports_llm_with_a_run_recorder_uses_its_run_id(monkeypatch):
@@ -54,14 +58,15 @@ def test_extract_ports_llm_with_a_run_recorder_uses_its_run_id(monkeypatch):
     seen = {}
     real = poe_pipeline.validate_ports_zetaris
 
-    async def spy(zone_name, run_id, settings=None):
+    async def spy(zone, run_id, settings=None, candidates=None):
         seen['run_id'] = run_id
-        return await real(zone_name, run_id, settings)
+        return await real(zone, run_id, settings, candidates)
 
     monkeypatch.setattr(poe_pipeline, 'validate_ports_zetaris', spy)
     asyncio.run(poe_pipeline.extract_ports_llm('text', BERMUDA, lambda m: None, rec=Recorder()))
     assert seen['run_id'] == 'run-20261023'
-    assert ('zetaris_crossref', {'mode': 'sample', 'official_count': 1, 'matched': ['Port of St. George’s']}) in events
+    assert ('zetaris_crossref', {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12,
+                                 'official_count': 1, 'matched': ['Port of St. George’s']}) in events
 
 
 def verify_client():
@@ -82,6 +87,11 @@ def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
     assert body['zone_name'] == 'Bermuda' and body['mrgid'] == 8493 and body['error'] is None
     assert [p['name'] for p in body['validated_ports']] == ['Port of St. George’s']
     assert body['non_validated_ports'] == [] and body['zetaris_mode'] == 'sample'
+    evidence = body['validated_ports'][0]['registry']
+    assert evidence['validation'] == 'official'
+    assert [(m['source'], m['code']) for m in evidence['matches']] == [('unlocode', 'BMSGE'), ('wpi', 'BMSGE')]
+    assert all(m['distance_km'] < 1 for m in evidence['matches'])
+    assert body['registry'] == {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 1}
     assert body['nemotron_status'] == {'provider': 'sample', 'model': 'caller-sample-fn',
                                        'nemotron': False, 'fallback_reason': 'SAMPLE_MODE=true'}
     assert body['brief'].startswith('Clearance brief: Bermuda')
@@ -104,10 +114,11 @@ def test_cross_reference_matches_names_without_case_accents_or_punctuation(writt
 
 def test_name_key_strips_accents():
     assert poe_pipeline.zetaris_name_key('Luka Brčko') == poe_pipeline.zetaris_name_key('LUKA BRCKO') == 'luka brcko'
-    zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Bosnia and Herzegovina', 'accent-test'))
+    zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Albania', 'accent-test'))
     out = asyncio.run(poe_pipeline.cross_reference_zetaris(
-        [{'name': 'LUKA BRCKO'}], {'name': 'bosnia and herzegovina'}, zetaris))
-    assert out[0]['zetaris_validation'] == 'official'
+        [{'name': 'PORT OF DURRES'}, {'name': 'Luka Brčko'}], {'name': 'albania'}, zetaris))
+    assert out[0]['zetaris_validation'] == 'official'  # UN/LOCODE "Durrës", WPI "Durres"
+    assert out[1]['zetaris_validation'] == 'unconfirmed - review needed'
 
 
 def test_validate_ports_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
@@ -119,9 +130,11 @@ def test_validate_ports_zetaris_live_failure_falls_back_to_sample(monkeypatch, i
     monkeypatch.setenv('ZETARIS_REST_URL', 'http://127.0.0.1:9/api/v1.0')  # nothing listens
     monkeypatch.setattr(zetaris.time, 'sleep', lambda seconds: None)
     result = asyncio.run(poe_pipeline.validate_ports_zetaris('Bermuda', 'zetaris-down'))
-    assert result['mode'] == 'fallback' and result['official_count'] == 1
+    assert result['mode'] == 'fallback' and result['registry_entries'] == 12
     rows = [json.loads(line) for line in (isolated / 'trace.jsonl').read_text().splitlines()]
-    assert [r.get('status') for r in rows if r['agent_name'] == 'ZetarisAdapter'] == ['error', 'fallback', 'ok']
+    assert [(r['action'], r.get('status')) for r in rows if r['agent_name'] == 'ZetarisAdapter'] == [
+        ('zetaris_query', 'error'), ('zetaris_fallback', 'fallback'),
+        ('zetaris_query', 'ok'), ('zetaris_query', 'ok')]
     assert 'test-key' not in (isolated / 'trace.jsonl').read_text()
 
 

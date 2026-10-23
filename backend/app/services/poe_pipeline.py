@@ -27,7 +27,6 @@ import os
 import re
 import threading
 import time
-import unicodedata
 import uuid
 
 import httpx
@@ -49,6 +48,7 @@ from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception
 from app.core.llm import extract_ports, grounded_search, llm_geocode_port
 from app.core.rag import select_list_context, semantic_similarity
 from app.adapters.zetaris import ZetarisClient
+from app.agents import registry_check
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
 from app.services.poe_zone_label import (
     keep_extracted_in_zone, search_polygon_name, serp_place_name,
@@ -1097,63 +1097,31 @@ def zetaris_name_key(name: str | None) -> str:
 
     "Port of St. George's" == "Port of St. George’s"; "LUKA BRCKO" == "Luka Brčko".
     """
-    text = unicodedata.normalize("NFKD", name or "")
-    text = "".join(c for c in text if not unicodedata.combining(c)).casefold()
-    text = re.sub(r"[\'’‘`´]", "", text)
-    return " ".join(re.sub(r"[\W_]+", " ", text).split())
+    return registry_check.name_key(name)
 
 
-async def validate_ports_zetaris(zone_name: str, run_id: str, settings: dict | None = None) -> dict:
-    """Official Zetaris ports for the zone; a live failure falls back to the sample fixture.
+async def validate_ports_zetaris(zone: dict | str, run_id: str, settings: dict | None = None,
+                                 candidates: list[dict] | None = None) -> dict:
+    """Independent registry entries (UN/LOCODE + World Port Index) for the zone, via Zetaris.
 
-    Uses the pipeline's fetch_ports (ZetarisClient.get_ports + traced fallback) in a
-    worker thread: the client is synchronous and must not block the event loop.
+    The zone resolves to a country ISO2 (its iso2, the EEZ index, or its sovereign);
+    without one, a box around the candidates' coordinates is queried instead. A live
+    Zetaris failure falls back to the sample fixtures (traced as zetaris_fallback). The
+    client is synchronous, so it runs in a worker thread.
+    Returns {mode, country_iso2, entries, registry_entries}.
     """
-    from app.pipeline.run_pipeline import fetch_ports
-    try:
-        official_ports, mode = await asyncio.to_thread(fetch_ports, zone_name, run_id)
-    except Exception:
-        official_ports, mode = [], "unavailable"
-
-    # Build a lookup of official port names by country/zone
-    ports_by_zone = {}
-    for port in official_ports:
-        zone = zetaris_name_key(port.get("zone_name") or "unknown")
-        ports_by_zone.setdefault(zone, []).append({
-            "name": port.get("name"),
-            "lat": port.get("lat"),
-            "lon": port.get("lon"),
-            "note": port.get("note"),
-            "validated": port.get("validated"),
-            "geocode_source": port.get("geocode_source"),
-        })
-
-    return {"mode": mode, "ports_by_zone": ports_by_zone, "official_count": len(official_ports)}
+    registry = await asyncio.to_thread(registry_check.fetch_for_zone, zone, candidates or [], run_id)
+    return {**registry, "registry_entries": len(registry["entries"])}
 
 
 async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict) -> list[dict]:
-    """Cross-reference extracted ports with Zetaris official data (name-normalised match)."""
-    official_ports = zetaris_result.get("ports_by_zone", {}).get(zetaris_name_key(zone.get("name")), [])
-    official_by_key = {zetaris_name_key(p.get("name")): p for p in official_ports if p.get("name")}
-
-    validated_ports = []
-    for port in ports:
-        port_copy = dict(port)
-        op = official_by_key.get(zetaris_name_key(port.get("name")))
-        if op is not None:
-            # Port matches official data; add official coordinates if available
-            port_copy["zetaris_validation"] = "official"
-            if op.get("lat") is not None and op.get("lon") is not None:
-                port_copy["lat"] = op["lat"]
-                port_copy["lon"] = op["lon"]
-            if op.get("note"):
-                port_copy["zetaris_note"] = op["note"]
-        else:
-            # Port not in official data - flag for review
-            port_copy["zetaris_validation"] = "unofficial - review needed"
-        validated_ports.append(port_copy)
-
-    return validated_ports
+    """Mark each port "official" only if a registry entry matches its name (and lies within
+    10 km when both have coordinates); else "unconfirmed - review needed". Records
+    registry_matches [{source, code, name, distance_km}] and traces one registry_check per port.
+    """
+    run_id = zetaris_result.get("run_id") or f"poe-{zone.get('mrgid', 'zone')}-{uuid.uuid4().hex[:8]}"
+    ports, _ = await asyncio.to_thread(registry_check.annotate, ports, zetaris_result, run_id)
+    return ports
 
 
 # ---------------------------------------------------------------------------
@@ -1173,14 +1141,15 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
     ports = await _extract_ports_core(context, zone, log, rec=rec,
                                       catalog_text=catalog_text, settings=settings)
     run_id = _pipeline_run_id(rec, zone)
-    zetaris_result = await validate_ports_zetaris(zone.get("name") or "", run_id, settings)
-    ports = await cross_reference_zetaris(ports, zone, zetaris_result)
+    zetaris_result = await validate_ports_zetaris(zone, run_id, settings, candidates=ports)
+    ports = await cross_reference_zetaris(ports, zone, {**zetaris_result, "run_id": run_id})
     official = [p for p in ports if p.get("zetaris_validation") == "official"]
-    log(f"Zetaris ({zetaris_result['mode']}): {len(official)}/{len(ports)} port(s) "
-        f"found in the official reference")
+    log(f"Zetaris registries ({zetaris_result['mode']}, {zetaris_result['country_iso2'] or 'bbox'}): "
+        f"{len(official)}/{len(ports)} port(s) confirmed by UN/LOCODE or the World Port Index")
     await emit(rec, "zetaris_crossref", mode=zetaris_result["mode"],
-               official_count=zetaris_result["official_count"],
-               matched=[p["name"] for p in official])
+               country_iso2=zetaris_result["country_iso2"],
+               registry_entries=zetaris_result["registry_entries"],
+               official_count=len(official), matched=[p["name"] for p in official])
     return ports
 
 

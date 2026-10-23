@@ -21,13 +21,31 @@
       "memories_recalled": 0,
       "research": {
         "outcome": "no prior official source"
+      },
+      "registry": {
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "BMSGE",
+            "name": "Saint George",
+            "distance_km": 0.67
+          },
+          {
+            "source": "wpi",
+            "code": "BMSGE",
+            "name": "St George",
+            "distance_km": 0.67,
+            "first_port_of_entry": "Yes"
+          }
+        ]
       }
     }
   ],
   "summary": {
     "flag": 1
   },
-  "brief": "Clearance brief: Bermuda\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Port of St. George’s (confidence 34/100): no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Sources: no source on record\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Bermuda\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Port of St. George’s (confidence 34/100): no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Registry: UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km). Sources: no source on record\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -35,7 +53,14 @@
   },
   "components": {
     "zetaris": "sample",
+    "registry": "sample",
     "llm": "sample"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "BM",
+    "registry_entries": 12,
+    "official_count": 1
   },
   "retries": 2,
   "memory": {
@@ -45,14 +70,15 @@
   "trace_file": "logs/trace-example-bermuda.jsonl",
   "timings_ms": {
     "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 6.1,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 3.8,
+    "EvaluatorAgent.evaluate": 1.5,
     "ResearchAgent.research": 0.3,
-    "EvaluatorAgent.prepare_retry": 0.2,
+    "EvaluatorAgent.prepare_retry": 0.3,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.1,
-    "HMemAgent.remember": 1.0,
-    "total": 6.9
+    "HMemAgent.remember": 0.9,
+    "total": 10.7
   },
   "error": null
 }

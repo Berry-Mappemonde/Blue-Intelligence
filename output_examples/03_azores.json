@@ -22,13 +22,31 @@
         }
       ],
       "memories_recalled": 0,
-      "research": null
+      "research": null,
+      "registry": {
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "PTPDL",
+            "name": "Ponta Delgada",
+            "distance_km": 0.7
+          },
+          {
+            "source": "wpi",
+            "code": "PTPDL",
+            "name": "Ponta Delgada",
+            "distance_km": 0.7,
+            "first_port_of_entry": "Yes"
+          }
+        ]
+      }
     }
   ],
   "summary": {
     "flag": 1
   },
-  "brief": "Clearance brief: Azores\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto / Marina de Ponta Delgada (confidence 44/100): single geocoder, not cross-checked; no government source. Sources: https://www.acorianooriental.pt/noticia/veleiros-proibidos-de-atracar-nas-flores-377030\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Azores\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto / Marina de Ponta Delgada (confidence 44/100): single geocoder, not cross-checked; no government source. Registry: UN/LOCODE PTPDL (0.7 km), WPI PTPDL (0.7 km). Sources: https://www.acorianooriental.pt/noticia/veleiros-proibidos-de-atracar-nas-flores-377030\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -36,7 +54,14 @@
   },
   "components": {
     "zetaris": "sample",
+    "registry": "sample",
     "llm": "sample"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "PT",
+    "registry_entries": 29,
+    "official_count": 1
   },
   "retries": 0,
   "memory": {
@@ -46,12 +71,13 @@
   "trace_file": "logs/trace-example-azores.jsonl",
   "timings_ms": {
     "ZetarisAdapter.get_ports": 0.4,
+    "ZetarisAdapter.registry_check": 13.5,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 2.4,
+    "EvaluatorAgent.evaluate": 0.9,
     "EvaluatorAgent.finalise": 0.1,
-    "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 1.0,
-    "total": 4.7
+    "BriefingAgent.brief": 0.1,
+    "HMemAgent.remember": 0.9,
+    "total": 16.7
   },
   "error": null
 }
