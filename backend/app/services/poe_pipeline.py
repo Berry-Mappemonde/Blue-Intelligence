@@ -27,6 +27,7 @@ import os
 import re
 import threading
 import time
+import unicodedata
 import uuid
 
 import httpx
@@ -1093,21 +1094,34 @@ async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
 # ---------------------------------------------------------------------------
 # Zetaris validation & H-MEM integration
 # ---------------------------------------------------------------------------
+def zetaris_name_key(name: str | None) -> str:
+    """Matching key: casefold, no accents, no apostrophes or punctuation.
+
+    "Port of St. George's" == "Port of St. George’s"; "LUKA BRCKO" == "Luka Brčko".
+    """
+    text = unicodedata.normalize("NFKD", name or "")
+    text = "".join(c for c in text if not unicodedata.combining(c)).casefold()
+    text = re.sub(r"[\'’‘`´]", "", text)
+    return " ".join(re.sub(r"[\W_]+", " ", text).split())
+
+
 async def validate_ports_zetaris(zone_name: str, run_id: str, settings: dict | None = None) -> dict:
-    """Validate extracted ports against official Zetaris data."""
-    client = ZetarisClient(run_id=run_id)
+    """Official Zetaris ports for the zone; a live failure falls back to the sample fixture.
+
+    Uses the pipeline's fetch_ports (ZetarisClient.get_ports + traced fallback) in a
+    worker thread: the client is synchronous and must not block the event loop.
+    """
+    from app.pipeline.run_pipeline import fetch_ports
     try:
-        official_ports = client.get_ports(zone_name=zone_name)
+        official_ports, mode = await asyncio.to_thread(fetch_ports, zone_name, run_id)
     except Exception:
-        official_ports = []
-    
+        official_ports, mode = [], "unavailable"
+
     # Build a lookup of official port names by country/zone
     ports_by_zone = {}
     for port in official_ports:
-        zone = (port.get("zone_name") or "unknown").upper()
-        if zone not in ports_by_zone:
-            ports_by_zone[zone] = []
-        ports_by_zone[zone].append({
+        zone = zetaris_name_key(port.get("zone_name") or "unknown")
+        ports_by_zone.setdefault(zone, []).append({
             "name": port.get("name"),
             "lat": port.get("lat"),
             "lon": port.get("lon"),
@@ -1115,8 +1129,8 @@ async def validate_ports_zetaris(zone_name: str, run_id: str, settings: dict | N
             "validated": port.get("validated"),
             "geocode_source": port.get("geocode_source"),
         })
-    
-    return {"mode": client.mode, "ports_by_zone": ports_by_zone, "official_count": len(official_ports)}
+
+    return {"mode": mode, "ports_by_zone": ports_by_zone, "official_count": len(official_ports)}
 
 
 async def record_hmem_handoff(run_id: str, zone_iso2: str, port_data: dict, source_url: str = "") -> dict:
@@ -1149,36 +1163,27 @@ async def record_hmem_handoff(run_id: str, zone_iso2: str, port_data: dict, sour
 
 
 async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict) -> list[dict]:
-    """Cross-reference extracted ports with Zetaris official data."""
-    zone_name = (zone.get("name") or "").upper()
-    official_ports = zetaris_result.get("ports_by_zone", {}).get(zone_name, [])
-    
-    official_names = [p.get("name", "").strip().lower() for p in official_ports if p.get("name")]
-    
+    """Cross-reference extracted ports with Zetaris official data (name-normalised match)."""
+    official_ports = zetaris_result.get("ports_by_zone", {}).get(zetaris_name_key(zone.get("name")), [])
+    official_by_key = {zetaris_name_key(p.get("name")): p for p in official_ports if p.get("name")}
+
     validated_ports = []
     for port in ports:
-        name = (port.get("name") or "").strip().lower()
         port_copy = dict(port)
-        
-        # Check if port exists in official Zetaris data
-        if name in official_names:
-            # Port matches official data
+        op = official_by_key.get(zetaris_name_key(port.get("name")))
+        if op is not None:
+            # Port matches official data; add official coordinates if available
             port_copy["zetaris_validation"] = "official"
-            # Add official coordinates if available
-            for op in official_ports:
-                if op.get("name", "").strip().lower() == name:
-                    if op.get("lat") is not None and op.get("lon") is not None:
-                        port_copy["lat"] = op["lat"]
-                        port_copy["lon"] = op["lon"]
-                    if op.get("note"):
-                        port_copy["zetaris_note"] = op["note"]
-                    break
+            if op.get("lat") is not None and op.get("lon") is not None:
+                port_copy["lat"] = op["lat"]
+                port_copy["lon"] = op["lon"]
+            if op.get("note"):
+                port_copy["zetaris_note"] = op["note"]
         else:
             # Port not in official data - flag for review
             port_copy["zetaris_validation"] = "unofficial - review needed"
-        
         validated_ports.append(port_copy)
-    
+
     return validated_ports
 
 

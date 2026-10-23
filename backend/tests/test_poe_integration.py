@@ -93,3 +93,33 @@ def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
 def test_poe_verify_rejects_a_missing_zone():
     assert verify_client().post('/api/poe/verify', json={}).status_code == 422
     assert verify_client().post('/api/poe/verify', json={'zone_name': '  '}).status_code == 422
+
+
+@pytest.mark.parametrize('written', ["Port of St. George's", 'PORT OF ST GEORGES', 'port of st. george’s'])
+def test_cross_reference_matches_names_without_case_accents_or_punctuation(written):
+    zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Bermuda', 'match-test'))
+    out = asyncio.run(poe_pipeline.cross_reference_zetaris([{'name': written}], BERMUDA, zetaris))
+    assert out[0]['zetaris_validation'] == 'official'
+
+
+def test_name_key_strips_accents():
+    assert poe_pipeline.zetaris_name_key('Luka Brčko') == poe_pipeline.zetaris_name_key('LUKA BRCKO') == 'luka brcko'
+    zetaris = asyncio.run(poe_pipeline.validate_ports_zetaris('Bosnia and Herzegovina', 'accent-test'))
+    out = asyncio.run(poe_pipeline.cross_reference_zetaris(
+        [{'name': 'LUKA BRCKO'}], {'name': 'bosnia and herzegovina'}, zetaris))
+    assert out[0]['zetaris_validation'] == 'official'
+
+
+def test_validate_ports_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
+    import json
+    from app.adapters import zetaris
+    monkeypatch.setenv('SAMPLE_MODE', 'false')
+    monkeypatch.setenv('ZETARIS_API_KEY', 'test-key')
+    monkeypatch.setenv('ZETARIS_ORG_ID', '1')
+    monkeypatch.setenv('ZETARIS_REST_URL', 'http://127.0.0.1:9/api/v1.0')  # nothing listens
+    monkeypatch.setattr(zetaris.time, 'sleep', lambda seconds: None)
+    result = asyncio.run(poe_pipeline.validate_ports_zetaris('Bermuda', 'zetaris-down'))
+    assert result['mode'] == 'fallback' and result['official_count'] == 1
+    rows = [json.loads(line) for line in (isolated / 'trace.jsonl').read_text().splitlines()]
+    assert [r.get('status') for r in rows if r['agent_name'] == 'ZetarisAdapter'] == ['error', 'fallback', 'ok']
+    assert 'test-key' not in (isolated / 'trace.jsonl').read_text()
