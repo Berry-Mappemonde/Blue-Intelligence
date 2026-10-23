@@ -89,6 +89,31 @@ def test_fresh_clone_cli_succeeds_in_sample_mode(cli_runs):
     assert json.loads('\n'.join(lines[start:])) == result
 
 
+@pytest.mark.parametrize('cwd, script', [('repo', 'backend/run.py'), ('backend', 'run.py')])
+def test_fresh_clone_cli_zone_interface(cwd, script, tmp_path):
+    """--zone / --run-id / --sample-mode / --timeout / --trace, from a clean env, from either directory."""
+    trace = tmp_path / 'zone.trace.jsonl'
+    env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(tmp_path), 'HMEM_DIR': str(tmp_path / 'hmem')}
+    proc = subprocess.run(
+        [sys.executable, script, '--no-dotenv', '--zone', 'Angola', '--run-id', 'cli-zone', '--sample-mode',
+         '--timeout', '60', '--trace', str(trace)],
+        cwd=REPO_ROOT if cwd == 'repo' else REPO_ROOT / 'backend', env=env, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()
+    result = json.loads('\n'.join(lines[lines.index('{'):]))
+    assert_schema(result)
+    assert result['run_id'] == 'cli-zone' and result['zone'] == 'Angola' and result['mode'] == 'sample'
+    assert 'Pipeline Result' in proc.stderr and 'Run ID:   cli-zone' in proc.stderr  # summary on stderr
+    assert {r['run_id'] for r in trace_rows(trace)} == {'cli-zone'}
+
+
+def test_cli_rejects_bad_zone_input(tmp_path):
+    env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(tmp_path)}
+    proc = subprocess.run([sys.executable, 'backend/run.py', '--no-dotenv', '--zone', 'Angola', '--run-id', '../x'],
+                          cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 2 and 'Invalid input' in proc.stderr
+
+
 def test_trace_has_every_agent_one_run_id_and_retry(cli_runs):
     (_, result, rows), _ = cli_runs
     assert AGENTS <= {r['agent_name'] for r in rows}

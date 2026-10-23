@@ -79,7 +79,8 @@ before port coordinates (`lat`, `lon`) were added to the output.
 ## 4. CLI and HTTP
 
 ```bash
-# CLI: JSON file in, JSON on stdout (and optionally a file)
+# CLI: a zone name, or a JSON input file; JSON result on stdout (and optionally a file)
+backend/.venv/bin/python backend/run.py --zone "Azores" --sample-mode
 backend/.venv/bin/python backend/run.py --input input_examples/03_azores.json --output out.json
 
 # HTTP server on PORT (default 8000, host 127.0.0.1; set HOST=0.0.0.0 in a container)
@@ -127,6 +128,13 @@ If port 8000 is already in use, the server exits with "address already in use", 
 for example `PORT=8001 backend/.venv/bin/python backend/run.py --serve`, and use
 `localhost:8001` in the `curl` commands and the browser.
 
+CLI options: `--zone NAME` or `--input FILE` (one is required), `--run-id ID`,
+`--sample-mode` (force offline sample data), `--timeout SECONDS` (default 300),
+`--trace PATH` (trace file, like `TRACE_LOG_PATH`), `--output FILE`, and
+`--no-dotenv` (ignore `.env` files, to simulate a fresh clone). The result JSON goes
+to stdout after the trace events; a readable summary goes to stderr. Exit code 0 on
+success, 1 if the result has an `error`, 2 for invalid input.
+
 Input: `{"zone_name": str, "run_id": optional str}` (`run_id`: letters, digits, `_`, `-`).
 Output: `run_id`, `zone`, `mode` (`live` or `sample`), `ports` (name, verdict,
 confidence, lat, lon, reasons_en, sources with provenance `zetaris` or `hmem`,
@@ -152,8 +160,8 @@ MONGO_URL=mongodb://127.0.0.1:27017 DB_NAME=bi_test POE_AUTO_REFRESH=0 \
   .venv/bin/python -m pytest tests/test_run_pipeline.py -v
 ```
 
-`test_run_pipeline.py` includes a fresh-clone simulation (`run.py` in a clean
-environment). Live tests run only with `ZETARIS_LIVE=1` or `NIGHTSHIFT_LIVE=1`
+`test_run_pipeline.py` includes fresh-clone simulations (`run.py --input` and
+`run.py --zone`, in a clean environment). Live tests run only with `ZETARIS_LIVE=1` or `NIGHTSHIFT_LIVE=1`
 and real credentials in the environment.
 
 H-MEM serializes access with a file lock: `filelock` (installed above; Windows,
