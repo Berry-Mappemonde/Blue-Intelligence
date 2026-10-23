@@ -34,6 +34,12 @@ LEGACY_CHAINS = {
 @pytest.fixture(autouse=True)
 def legacy_chains(monkeypatch):
     monkeypatch.setattr(nvidia, "CHAINS", LEGACY_CHAINS)
+    # No network: Nightshift (the first hop of llm.ask_json) reports no model answered.
+    from unittest.mock import AsyncMock
+    from app.core import generator
+    monkeypatch.setattr(generator, "generate", AsyncMock(return_value={
+        "provider": "sample", "text": "", "parsed": {}, "model": "deterministic-heuristic",
+        "fallback_reason": "test: no Nightshift"}))
 
 
 class TestParseAndLegal:

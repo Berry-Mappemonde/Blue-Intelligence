@@ -1241,7 +1241,7 @@ async def _extract_ports_core(context: str, zone: dict, log, rec=None,
         log("catalogue marqué suffisant mais 0 port retenu — LLM non sauté")
 
     _KNOWN_ENGINES = (
-        "claude", "openrouter", "catalog", "ner",
+        "claude", "openrouter", "catalog", "ner", "nightshift",
         "nvidia-laguna", "nvidia-muse", "nvidia-kimi", "nvidia-deepseek",
         "nvidia-gpt-oss", "nvidia-gemma", "nvidia-minimax", "nvidia-nemotron",
         "nvidia-llama", "llm",
