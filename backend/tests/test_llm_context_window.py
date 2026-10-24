@@ -102,3 +102,92 @@ def test_long_prose_is_condensed_to_the_default_window(monkeypatch):
     context, window, branch = poe.extraction_context(raw, [], "ports of entry")
     assert branch == "rag" and window == llm.LLM_CONTEXT_CHARS
     assert len(context) <= llm.LLM_CONTEXT_CHARS < len(raw)
+
+
+# --- generate_zone_poe: per-zone window -------------------------
+
+class _Zones:
+    def __init__(self, zones):
+        self.zones = zones
+
+    async def find_one(self, query):
+        return dict(self.zones[query["mrgid"]])
+
+    async def update_one(self, *args, **kwargs):
+        return None
+
+
+class _DB:
+    def __init__(self, zones):
+        self.eez_zones = _Zones(zones)
+
+
+def _stub_zone_pipeline(monkeypatch, texts, extract, synthesis=None):
+    """Stub search, collection and persistence around the real context and window steps."""
+    import app.db
+
+    async def no_settings():
+        return {}
+
+    async def find_sources(zone, *args, **kwargs):
+        return [{"url": f"https://gov.example/{zone['mrgid']}", "official": True}], True, None
+
+    async def collect(official, log, rec=None, **kwargs):
+        return [texts[int(official[0]["url"].rsplit("/", 1)[1])]], {}, official, {}
+
+    async def grounded(zone, whitelist, log, query_override=None):
+        return None, synthesis
+
+    async def persist(db, zone, docs, status, *args, **kwargs):
+        return {"mrgid": zone["mrgid"], "status": status, "poe_count": len(docs)}
+
+    monkeypatch.setattr(app.db, "get_settings", no_settings)
+    monkeypatch.setattr(poe, "load_exceptions", lambda: {})
+    monkeypatch.setattr(poe, "build_whitelist", lambda *a, **k: [])
+    monkeypatch.setattr(poe, "_find_sources", find_sources)
+    monkeypatch.setattr(poe, "_collect_texts", collect)
+    monkeypatch.setattr(poe, "search_grounded", grounded)
+    monkeypatch.setattr(poe, "extract_structured_ports",
+                        lambda raw: [{"name": "Catalog Port"}] if "CATALOG" in raw else [])
+    monkeypatch.setattr(poe, "looks_like_port_catalog", lambda raw: "CATALOG" in raw)
+    monkeypatch.setattr(poe, "remember_seed_urls", lambda *a, **k: [])
+    monkeypatch.setattr(poe, "_extract_and_geocode", extract)
+    monkeypatch.setattr(poe, "_persist_zone", persist)
+
+
+def test_concurrent_zones_each_read_with_their_own_window(monkeypatch):
+    catalog_text = "CATALOG " + "x" * 30000 + " TAIL1"
+    prose = "\n\n".join(f"Paragraph {i} about customs formalities and visas." for i in range(700))
+    zones = {1: {"mrgid": 1, "name": "Catalogland"}, 2: {"mrgid": 2, "name": "Proseland"}}
+    prompts, seen, arrived, done = _nightshift_spy(monkeypatch), {}, [], []
+
+    async def run():
+        both_set, both_read = asyncio.Event(), asyncio.Event()
+
+        async def extract(zone, context, used_sources, log, rec=None, run=None,
+                          catalog_text=None, settings=None):
+            # Both zones set their window before either reader runs, and neither
+            # finishes (and resets it) before both have read.
+            arrived.append(zone["mrgid"])
+            if len(arrived) == 2:
+                both_set.set()
+            await both_set.wait()
+            await llm.extract_ports_nightshift(context, zone)
+            seen[zone["mrgid"]] = (llm.llm_context_chars.get(), len(llm.reader_context(context)))
+            done.append(zone["mrgid"])
+            if len(done) == 2:
+                both_read.set()
+            await both_read.wait()
+            return []
+
+        _stub_zone_pipeline(monkeypatch, {1: catalog_text, 2: prose}, extract)
+        db = _DB(zones)
+        await asyncio.gather(poe.generate_zone_poe(db, 1), poe.generate_zone_poe(db, 2))
+        return llm.llm_context_chars.get()
+
+    outer = asyncio.run(run())
+    assert seen[1] == (poe.CATALOG_CONTEXT_CHARS, len(catalog_text))
+    assert seen[2][0] == llm.LLM_CONTEXT_CHARS and seen[2][1] <= llm.LLM_CONTEXT_CHARS < len(prose)
+    assert sum("TAIL1" in p for p in prompts) == 1
+    assert outer == llm.LLM_CONTEXT_CHARS
+
