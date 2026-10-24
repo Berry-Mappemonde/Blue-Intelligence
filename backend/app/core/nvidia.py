@@ -630,16 +630,17 @@ async def extract_ports_nvidia(context: str, zone: dict,
                                model: str | None = None,
                                engine: str | None = None,
                                fallback: bool | None = None) -> list[dict]:
-    from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports
+    from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports, reader_context
 
     # Primary reader: extract chain (Pro → gpt-oss → Muse).
     # Kimi is second reader only via second_extract_choice (decree).
     role = "extract"
     do_fb = True if fallback is None and model is None else bool(fallback)
+    sent = reader_context(context)
     prompt = POE_EXTRACT_PROMPT.format(
         name=zone.get("name") or zone.get("geoname"),
         sovereign=zone.get("sovereign") or "",
-        context=(context or "")[:20000],
+        context=sent,
     )
     data, used = await complete_json_nvidia_tracked(
         "Tu réponds uniquement en JSON strict.", prompt, settings,
@@ -649,5 +650,5 @@ async def extract_ports_nvidia(context: str, zone: dict,
     for p in ports:
         p["extraction_engine"] = tag
     if log:
-        log(f"LLM {tag}: {len(ports)} port(s) extraits")
+        log(f"LLM {tag}: {len(ports)} port(s) extraits sur {len(sent)} chars envoyés")
     return ports

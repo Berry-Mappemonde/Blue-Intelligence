@@ -46,7 +46,9 @@ from app.core.extract import (
     official_attachments, serp_filter, should_follow_attachments,
 )
 from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception_flags
-from app.core.llm import extract_ports, grounded_search, llm_geocode_port
+from app.core.llm import (
+    LLM_CONTEXT_CHARS, extract_ports, grounded_search, llm_context_chars, llm_geocode_port,
+)
 from app.core.rag import select_list_context, semantic_similarity
 from app.adapters.zetaris import ZetarisClient
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
@@ -2589,6 +2591,23 @@ async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
     return await db.eez_zones.find_one({"mrgid": mrgid})
 
 
+CATALOG_CONTEXT_CHARS = 40000
+
+
+def extraction_context(raw: str, raw_catalog: list, rag_q: str) -> tuple[str, int, str]:
+    """Context for the LLM readers, the window they may send, and the branch that chose it.
+
+    A port catalog or legal phrasing keeps the raw text (the readers send up to 40,000
+    chars); longer text is condensed by RAG to 20,000; short text is sent as is.
+    """
+    if looks_like_port_catalog(raw) or raw_catalog:
+        return raw[:CATALOG_CONTEXT_CHARS], CATALOG_CONTEXT_CHARS, "catalog"
+    if len(raw) > 15000:
+        return (select_list_context(rag_q, raw, max_chars=LLM_CONTEXT_CHARS),
+                LLM_CONTEXT_CHARS, "rag")
+    return raw, LLM_CONTEXT_CHARS, "raw"
+
+
 async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                             run=None, refresh: bool = False) -> dict:
     """Orchestrator: search -> collect -> extract -> write.
@@ -2616,6 +2635,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
     variant = normalize_variant(getattr(run, "variant", None) if run is not None else "tinyfish")
     from app.core.extract import allow_tinyfish_fetch
     _tf_token = allow_tinyfish_fetch.set(variant == "tinyfish")
+    _ctx_token = llm_context_chars.set(LLM_CONTEXT_CHARS)
     log(f"=== {name} (mrgid {mrgid}) — variant={variant} whitelist: {', '.join(whitelist[:8]) or 'vide'}")
     await emit(rec, "zone_start", iso2=zone.get("iso2"), sov_iso2=zone.get("sov_iso2"),
                sovereign=zone.get("sovereign"), pol_type=zone.get("pol_type"),
@@ -2693,17 +2713,16 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                 await emit(rec, "seed_remembered", iso2=zone.get("iso2"), urls=remembered)
         rag_q = (f"official designated ports of entry customs gazette decree "
                  f"puertos habilitados puertos de entrada port of entry {name}")
-        if looks_like_port_catalog(raw) or raw_catalog:
-            context = raw[:40000]
+        context, window, branch = extraction_context(raw, raw_catalog, rag_q)
+        llm_context_chars.set(window)
+        sent_chars = min(len(context), window)
+        if branch == "catalog":
             log(f"catalogue / tournure légale ({len(raw_catalog)} nom(s)) — "
-                f"texte brut conservé pour le parseur, LLM sur {len(context)} chars")
-        elif len(raw) > 15000:
-            context = select_list_context(rag_q, raw, max_chars=20000)
+                f"texte brut conservé pour le parseur, LLM sur {sent_chars} chars")
+        elif branch == "rag":
             log(f"RAG: contexte condensé à {len(context)} chars (listes d'abord, puis similarité)")
-        else:
-            context = raw
         await emit(rec, "context", sources=len(texts), synthesis=bool(synthesis),
-                   raw_chars=raw_chars, final_chars=len(context),
+                   raw_chars=raw_chars, final_chars=len(context), llm_chars=sent_chars,
                    catalog_n=len(raw_catalog))
 
         # 4. Extraction + geocoding + spatial validation
@@ -2750,6 +2769,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                    duration_s=round(time.time() - t0, 1))
         raise
     finally:
+        llm_context_chars.reset(_ctx_token)
         allow_tinyfish_fetch.reset(_tf_token)
 
 
