@@ -2764,6 +2764,8 @@ def zone_to_item(doc: dict) -> dict:
 
 
 def ports_to_geojson(docs: list[dict]) -> dict:
+    from app.agents.evaluator import _reasons_en
+
     feats = []
     for d in docs:
         if d.get("lat") is None or d.get("lon") is None:
@@ -2785,6 +2787,12 @@ def ports_to_geojson(docs: list[dict]) -> dict:
                 "spatial_anomaly": d.get("spatial_anomaly"),
                 "confidence": d.get("confidence"),
                 "confidence_reasons": d.get("confidence_reasons"),
+                "confidence_parts": d.get("confidence_parts"),
+                "reasons_en": (
+                    _reasons_en(d.get("confidence_reasons") or [])
+                    if d.get("confidence_reasons")
+                    else None
+                ),
                 "spatial_kind": d.get("spatial_kind"),
             },
         })
