@@ -85,8 +85,9 @@ SEARX_PUBLIC_INSTANCES = [
     "https://search.sapti.me",
 ]
 
-# Our local process (see infra/searxng/). Not a vendor key.
-LOCAL_SEARXNG_URL = "http://127.0.0.1:8888"
+# Our local process (see infra/searxng/). Not a vendor key. Port 8890, because
+# Zetaris uses 8888-8889 on the same machine.
+LOCAL_SEARXNG_URL = "http://127.0.0.1:8890"
 
 PIPELINE_VARIANTS = ("v1", "v2", "tinyfish")
 _VARIANT_ALIASES = {
@@ -105,7 +106,7 @@ def normalize_variant(value: str | None) -> str:
 
 
 def configured_searxng_url() -> str:
-    """URL of our instance. SEARXNG_URL if set, otherwise loopback:8888."""
+    """URL of our instance. SEARXNG_URL if set, otherwise loopback:8890."""
     own = (os.environ.get("SEARXNG_URL") or "").strip().rstrip("/")
     return own or LOCAL_SEARXNG_URL
 
@@ -113,7 +114,7 @@ def configured_searxng_url() -> str:
 def searx_instances() -> list[str]:
     """Self-hosted SearXNG instance first, public instances as fallback.
 
-    If SEARXNG_URL is empty, still prefix http://127.0.0.1:8888
+    If SEARXNG_URL is empty, still prefix http://127.0.0.1:8890
     (without duplicating). Public instances remain as fallback.
     """
     own = configured_searxng_url()
