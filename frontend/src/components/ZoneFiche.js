@@ -1,7 +1,34 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
+
+/**
+ * ErrorBoundary — évite l'écran blanc si un composant enfant de la fiche
+ * plante au render (champ mannant, objet passé en enfant JSX, etc.).
+ */
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    // eslint-disable-next-line no-console
+    console.error("[ZoneFiche ErrorBoundary]", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="p-3 border-b border-line bg-raised/30">
+          <p className="font-mono text-[10px] text-amber-400" data-testid="poe-fiche-error">
+            Erreur d'affichage de la fiche — champ manquant ou donnée invalide.
+          </p>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function hostOf(url) {
   try {
@@ -128,7 +155,7 @@ const CERT_COLOR = {
 /**
  * Certification badge: green when Zetaris Certified, amber otherwise.
  */
-function CertificationBadge({ status }) {
+function CertificationBadge({ status, t }) {
   const certified = status === "Zetaris Certified";
   return (
     <span
@@ -143,19 +170,24 @@ function CertificationBadge({ status }) {
 
 /**
  * Telemetry banner: active model + memory status.
+ * Renders only safe strings — never a raw object as a React child.
  */
-function TelemetryBanner({ status }) {
+function TelemetryBanner({ status, t }) {
   const active = status && status.arbitration_status === "Zetaris Certified";
+  const nemotron = status?.nemotron_status;
+  const modelLabel = (nemotron && typeof nemotron === "object" && nemotron.model)
+    ? nemotron.model
+    : (typeof nemotron === "string" ? nemotron : t("telemetryNemotron"));
   return (
     <div className="flex items-center justify-between gap-2 border border-line/60 bg-raised/40 rounded-sm p-2">
       <div className="flex flex-col gap-0.5">
         <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryModel")}</span>
-        <span className="font-mono text-[9px] text-white">{status?.nemotron_status ?? t("telemetryNemotron")}</span>
+        <span className="font-mono text-[9px] text-white">{modelLabel}</span>
       </div>
       <div className="flex flex-col gap-0.5">
         <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryMemory")}</span>
         <span className={`font-mono text-[9px] ${active ? "text-green-400" : "text-amber-400"}`}>
-          {active ? "remember_node active" : "pending"}
+          {active ? t("telemetryRememberActive") : t("telemetryPending")}
         </span>
       </div>
     </div>
@@ -187,7 +219,8 @@ export default function ZoneFiche({
   const unclos = fiche.unclos && typeof fiche.unclos === "object" ? fiche.unclos : null;
   const unclosKey = unclos?.code ? `poeUnclos_${unclos.code}` : "";
   return (
-    <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
+    <ErrorBoundary>
+      <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
       <div className="flex items-baseline justify-between gap-2">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
           {t("poeFicheTitle")}
@@ -200,7 +233,7 @@ export default function ZoneFiche({
       </div>
       {/* Phase 3 — telemetry banner */}
       {fiche.arbitration_status || fiche.nemotron_status ? (
-        <TelemetryBanner status={fiche} />
+        <TelemetryBanner status={fiche} t={t} />
       ) : null}
       <div>
         <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
@@ -317,7 +350,7 @@ export default function ZoneFiche({
                     >
                       <p className="flex items-center gap-1.5">
                         <span className="font-semibold text-slate-200 leading-snug">{p.name}</span>
-                        <CertificationBadge status={p.arbitration_status ?? p.certification_status ?? ""} />
+                        <CertificationBadge status={p.arbitration_status ?? p.certification_status ?? ""} t={t} />
                       </p>
                     </button>
                   </div>
@@ -393,6 +426,7 @@ export default function ZoneFiche({
           </p>
         </div>
       ) : null}
-    </section>
+      </section>
+    </ErrorBoundary>
   );
 }

@@ -141,8 +141,10 @@ def settings_out_of_range(updates: dict) -> str | None:
 
 @router.get("/admin/check")
 async def admin_check():
-    """Admin gate neutralisé : l'application est ouverte par défaut."""
-    return JSONResponse({"status": "ok", "admin": True}, status_code=200)
+    """Validate the admin key: the `_admin_gate` middleware returns 401 before
+    reaching here if ADMIN_KEY is set and the header is missing/wrong."""
+    return {"ok": True,
+            "admin_required": bool(os.environ.get("ADMIN_KEY", "").strip())}
 
 
 @router.get("/settings")

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "./api";
-import { verifyZonePoe } from "./api";
 import { makeT } from "./i18n";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
@@ -92,8 +91,9 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-  // Admin mode — toujours activé par défaut, l'application est ouverte.
-  const [isAdmin, setIsAdmin] = useState(true);
+  // Admin mode — déterminé par GET /admin/check (ouvert par défaut en local sans ADMIN_KEY).
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminChecked, setAdminChecked] = useState(false);
   const [mode, setModeRaw] = useState(readInitialMode());   // 7 modes incl. climatology
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState(null);
@@ -214,10 +214,31 @@ export default function App() {
   const viewRef = useRef(view);
   viewRef.current = view;
 
+  // Resolve admin status from /admin/check on boot: open by default locally
+  // (ADMIN_KEY unset → admin_required: false → Console/Review reachable),
+  // protected in prod (ADMIN_KEY set → key required).
+  useEffect(() => {
+    let alive = true;
+    const resolveAdmin = async () => {
+      try {
+        const { data } = await api.get("/admin/check");
+        if (!alive) return;
+        setIsAdmin(Boolean(data?.admin_required));
+        setAdminChecked(true);
+      } catch (_) {
+        if (!alive) return;
+        setIsAdmin(false);
+        setAdminChecked(true);
+      }
+    };
+    resolveAdmin();
+    return () => { alive = false; };
+  }, []);
+
   // Without admin rights, Console (audit) and Review views are unreachable.
   useEffect(() => {
     if (!isAdmin && (view === "audit" || view === "review")) setView("map");
-  }, [isAdmin, view]);
+  }, [isAdmin, view, adminChecked]);
 
   // Persist mode + reflect on <html> for CSS var switching
   const setMode = useCallback((m) => {
@@ -735,15 +756,15 @@ export default function App() {
 
 // Refactor 2026-06 — Handler wired to the sidebar rows and the EEZ polygons:
 // selects the zone; when a bbox is supplied (sidebar click), also flies to it.
-// Phase 3 — enriches the fiche via /api/poe/verify (V2: arbitration_status,
-// confidence_score, official_sources, nemotron_status).
+// Simple read-only fetch of the zone fiche via GET /poe/zones/{mrgid};
+// no POST /api/poe/verify is triggered on click.
 const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
   setSelectedZone(mrgid);
   setSelectedZoneName(zoneName ?? null);
   setZoneFiche(null);
   setFicheLoading(true);
   try {
-    const data = await verifyZonePoe(zoneName ?? "", mrgid);
+    const { data } = await api.get(`/poe/zones/${mrgid}`);
     setZoneFiche(data);
   } catch (_) {
     setZoneFiche(null);
