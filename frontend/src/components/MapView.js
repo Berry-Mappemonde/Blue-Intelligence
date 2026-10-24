@@ -182,7 +182,11 @@ export default function MapView({
         });
         lyr.on("click", () => {
           const cb = onSelectZoneRef.current;
-          if (typeof cb === "function") cb(mrgid, null);
+          if (typeof cb === "function") {
+            const z = zoneItemsRef.current.get(mrgid);
+            const zoneName = z ? (z.label || z.name || z.geoname || "") : "";
+            cb(mrgid, zoneName, null);
+          }
         });
         lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
         lyr.on("mouseout", () => { try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status)); } catch (_) {} });

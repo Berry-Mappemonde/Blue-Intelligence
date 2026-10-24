@@ -1,7 +1,34 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
+
+/**
+ * ErrorBoundary — évite l'écran blanc si un composant enfant de la fiche
+ * plante au render (champ mannant, objet passé en enfant JSX, etc.).
+ */
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    // eslint-disable-next-line no-console
+    console.error("[ZoneFiche ErrorBoundary]", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="p-3 border-b border-line bg-raised/30">
+          <p className="font-mono text-[10px] text-amber-400" data-testid="poe-fiche-error">
+            Erreur d'affichage de la fiche — champ manquant ou donnée invalide.
+          </p>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function hostOf(url) {
   try {
@@ -115,7 +142,58 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
  * Review sheet for a VLIZ polygon — same gesture as ProjectList:
  * Review (variant=page): every TD + every BU per port.
  * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
+ *
+ * Phase 3 — V2 payload: consumes arbitration_status, confidence_score,
+ * official_sources, nemotron_status from /api/poe/verify.
  */
+
+const CERT_COLOR = {
+  certified: "border-green-400 text-green-400 bg-green-400/10",
+  pending:   "border-amber-500 text-amber-400 bg-amber-500/10",
+};
+
+/**
+ * Certification badge: green when Zetaris Certified, amber otherwise.
+ */
+function CertificationBadge({ status, t }) {
+  const certified = status === "Zetaris Certified";
+  return (
+    <span
+      className={`px-2 py-0.5 rounded font-mono text-[8px] uppercase tracking-widest ${certified ? CERT_COLOR.certified : CERT_COLOR.pending}`}
+      data-testid={`poe-fiche-cert-${certified ? "certified" : "review"}`}
+      title={certified ? t("poeCertified") : t("poeReviewNeeded")}
+    >
+      {certified ? t("poeCertified") : t("poeReviewNeeded")}
+    </span>
+  );
+}
+
+/**
+ * Telemetry banner: active model + memory status.
+ * Renders only safe strings — never a raw object as a React child.
+ */
+function TelemetryBanner({ status, t }) {
+  const active = status && status.arbitration_status === "Zetaris Certified";
+  const nemotron = status?.nemotron_status;
+  const modelLabel = (nemotron && typeof nemotron === "object" && nemotron.model)
+    ? nemotron.model
+    : (typeof nemotron === "string" ? nemotron : t("telemetryNemotron"));
+  return (
+    <div className="flex items-center justify-between gap-2 border border-line/60 bg-raised/40 rounded-sm p-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryModel")}</span>
+        <span className="font-mono text-[9px] text-white">{modelLabel}</span>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryMemory")}</span>
+        <span className={`font-mono text-[9px] ${active ? "text-green-400" : "text-amber-400"}`}>
+          {active ? t("telemetryRememberActive") : t("telemetryPending")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function ZoneFiche({
   t, lang, fiche, loading, onFlyToPort, variant = "sidebar",
   choices, onChoice,
@@ -141,7 +219,8 @@ export default function ZoneFiche({
   const unclos = fiche.unclos && typeof fiche.unclos === "object" ? fiche.unclos : null;
   const unclosKey = unclos?.code ? `poeUnclos_${unclos.code}` : "";
   return (
-    <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
+    <ErrorBoundary>
+      <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
       <div className="flex items-baseline justify-between gap-2">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
           {t("poeFicheTitle")}
@@ -152,6 +231,10 @@ export default function ZoneFiche({
           </span>
         )}
       </div>
+      {/* Phase 3 — telemetry banner */}
+      {fiche.arbitration_status || fiche.nemotron_status ? (
+        <TelemetryBanner status={fiche} t={t} />
+      ) : null}
       <div>
         <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
           {zoneDisplayName(fiche, t)}
@@ -248,6 +331,8 @@ export default function ZoneFiche({
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
               const canFly = p.lat != null && p.lon != null && onFlyToPort;
               const pid = p.port_id || p.id || p.name;
+              const certified = p.arbitration_status === "Zetaris Certified";
+              const score = p.confidence_score ?? p.confidence;
               return (
                 <div
                   key={pid || p.name}
@@ -263,11 +348,14 @@ export default function ZoneFiche({
                       })}
                       className="min-w-0 flex-1 text-left disabled:cursor-default"
                     >
-                      <p className="text-xs font-semibold text-slate-200 leading-snug">{p.name}</p>
+                      <p className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-200 leading-snug">{p.name}</span>
+                        <CertificationBadge status={p.arbitration_status ?? p.certification_status ?? ""} t={t} />
+                      </p>
                     </button>
                   </div>
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    {p.confidence != null ? (
+                    {score != null ? (
                       <button
                         type="button"
                         onClick={() => setOpenPort(openPort === pid ? null : pid)}
@@ -276,7 +364,7 @@ export default function ZoneFiche({
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
                         className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
                       >
-                        {t("poeConfidence")} {p.confidence}
+                        {t("poeConfidence")} {score}
                         <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
                       </button>
                     ) : (
@@ -338,6 +426,7 @@ export default function ZoneFiche({
           </p>
         </div>
       ) : null}
-    </section>
+      </section>
+    </ErrorBoundary>
   );
 }

@@ -59,15 +59,42 @@ function _tdBlock(t, recs) {
   </div>`;
 }
 
+/**
+ * Official sources (deduplicated, clickable) from the V2 payload.
+ * Kept consistent between popup and sidebar so both show the same count.
+ */
+function _officialSourcesBlock(t, sources) {
+  const list = (sources || []).filter((u) => u);
+  if (!list.length) return "";
+  const links = list.map((u, i) => `
+    <div style="margin-top:3px;font-size:10px;">
+      <a href="${escH(u)}" target="_blank" rel="noopener noreferrer"
+         data-testid="poe-fiche-popup-official-source-${i}"
+         style="color:#00f0ff;text-decoration:none;word-break:break-all;">
+        ${escH(u)}
+      </a>
+    </div>`).join("");
+  return `<div data-testid="poe-fiche-popup-official-sources" style="margin-top:8px;">
+    <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid rgba(251,191,36,0.25);padding-bottom:2px;">${escH(t("poeSourcesTd"))}</div>
+    ${links}
+    <div style="margin-top:2px;font-size:9px;color:#64748b;">${list.length} ${escH(t("poeSourcesTitle"))}</div>
+  </div>`;
+}
+
 function _portsBlock(t, ports) {
   const rows = (ports || []).slice(0, 24).map((p) => {
     const href = _buUrl(p);
-    const score = p.confidence != null ? ` · ${escH(t("poeConfidence"))} ${Number(p.confidence)}` : "";
+    const certified = p.arbitration_status === "Zetaris Certified";
+    const badge = certified
+      ? `<span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#39ff14;border:1px solid rgba(57,255,20,0.4);padding:0 4px;border-radius:2px;">✓ Zetaris Certified</span>`
+      : `<span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#fbbf24;border:1px solid rgba(251,191,36,0.4);padding:0 4px;border-radius:2px;">Review Needed</span>`;
+    const score = p.confidence_score ?? p.confidence;
+    const scoreTxt = score != null ? ` · ${escH(t("poeConfidence"))} ${Number(score)}` : "";
     const link = href
       ? `<a href="${escH(href)}" target="_blank" rel="noreferrer" data-testid="poe-fiche-popup-port-bu" style="color:#00f0ff;text-decoration:none;">↗</a>`
       : `<span style="color:#64748b;">—</span>`;
     return `<div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px;font-size:11px;color:#e2e8f0;">
-      <span>⚓ ${escH(p.name)}${score}</span>${link}
+      <span style="display:flex;align-items:center;gap:4px;">⚓ ${escH(p.name)} ${badge}${scoreTxt}</span>${link}
     </div>`;
   }).join("");
   const more = (ports || []).length > 24
@@ -114,12 +141,13 @@ export function zonePopupHtml(mrgid, props, { tRef, zoneItemsRef, zoneFicheRef, 
   const gen = z.generated_at ? String(z.generated_at).slice(0, 10) : null;
   const tdRecs = _tdRecs(fiche, z);
   const ports = fiche?.ports || _portsFromGeojson(mrgid, poePortsRef?.current);
+  const officialSources = fiche?.official_sources || [];
   const noSourceWarn = status === "ia_sans_source"
     ? `<div style="margin-top:6px;padding:4px 6px;background:rgba(255,74,74,0.08);border:1px solid rgba(255,74,74,0.35);color:#fecaca;font-size:10px;line-height:1.4;border-radius:2px;">⚠️ ${escH(t("poeNoSourceWarning"))}</div>`
     : "";
   const errHtml = z.last_error
     ? `<div style="margin-top:6px;font-size:10px;color:#fca5a5;">${escH(t("poeLastError"))}: ${escH(z.last_error)}</div>` : "";
-  const body = `${noSourceWarn}${errHtml}${_tdBlock(t, tdRecs)}${_portsBlock(t, ports)}`;
+  const body = `${noSourceWarn}${errHtml}${_tdBlock(t, tdRecs)}${_officialSourcesBlock(t, officialSources)}${_portsBlock(t, ports)}`;
   const polType = z.pol_type || props?.pol_type;
   const unclosHtml = z.unclos && z.unclos.code
     ? `<div data-testid="zone-unclos-block" style="margin-top:6px;padding:5px 7px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.35);border-radius:2px;">

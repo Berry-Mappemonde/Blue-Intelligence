@@ -147,25 +147,20 @@ export default function Header({
               onSelect={(run) => { onSelectMapRun(run); setView("map"); }}
             />
           )}
-          {/* Console and Review: admin only (?admin=<key>) */}
-          {isAdmin && (
-            <button
-              data-testid="view-toggle-audit"
-              onClick={() => setView("audit")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "audit" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
-            >
-              <Radar size={13} /> {t("audit")}
-            </button>
-          )}
-          {isAdmin && mode !== "science" && mode !== "climatology" && (
-            <button
-              data-testid="view-toggle-review"
-              onClick={() => setView("review")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "review" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
-            >
-              <ClipboardCheck size={13} /> {t("review")}
-            </button>
-          )}
+          <button
+            data-testid="view-toggle-audit"
+            onClick={() => setView("audit")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "audit" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+          >
+            <Radar size={13} /> {t("audit")}
+          </button>
+          <button
+            data-testid="view-toggle-review"
+            onClick={() => setView("review")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "review" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+          >
+            <ClipboardCheck size={13} /> {t("review")}
+          </button>
         </div>
         <a
           href={HELLOASSO_MEMBERSHIP_URL}
