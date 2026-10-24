@@ -224,7 +224,7 @@ export default function ZoneFiche({
         </p>
         {fiche.confidence_avg != null && (
           <span className="font-mono text-[9px] text-slate-300" data-testid="poe-fiche-score">
-            {t("poeConfidenceAvg")} {fiche.confidence_avg}
+            {t("poeConfidenceAvg")} {fiche.confidence_avg}%
           </span>
         )}
       </div>
@@ -237,7 +237,33 @@ export default function ZoneFiche({
             data-testid="poe-fiche-verify"
             className="w-full px-2 py-1.5 border border-accent/50 text-accent font-mono text-[10px] uppercase tracking-widest rounded-sm hover:bg-accent/10 disabled:opacity-60 disabled:cursor-wait"
           >
-            {verifyState?.running ? t("poeVerifying") : t("poeVerify")}
+            {verifyState?.running ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-1 h-4 w-4 inline"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                {t("poeVerifying")}
+              </>
+            ) : (
+              t("poeVerify")
+            )}
           </button>
           {verifyState?.error ? (
             <p className="font-mono text-[10px] text-amber-400 break-words" data-testid="poe-fiche-verify-error">
@@ -385,7 +411,7 @@ export default function ZoneFiche({
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
                         className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
                       >
-                        {t("poeConfidence")} {score}
+                        {t("poeConfidence")} {score}%
                         <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
                       </button>
                     ) : (

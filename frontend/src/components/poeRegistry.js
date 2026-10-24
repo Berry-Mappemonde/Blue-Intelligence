@@ -12,7 +12,7 @@
 export const TIER_TONE = {
   tier1: "border-green-400 text-green-400 bg-green-400/10",
   tier2: "border-teal-400 text-teal-300 bg-teal-400/10",
-  tier_registered: "border-sky-400 text-sky-300 bg-sky-400/10",
+  tier_registered: "border-amber-400 text-amber-400 bg-amber-400/10",
   tier3: "border-amber-500 text-amber-400 bg-amber-500/10",
   none: "border-slate-600 text-slate-400 bg-slate-700/20",
 };
