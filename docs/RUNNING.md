@@ -62,6 +62,10 @@ Live mode needs `ZETARIS_API_KEY`, `ZETARIS_ORG_ID` and `METERLESS_RUNTIME_TOKEN
 | Nightshift / NVIDIA request | 90 s per provider (one retry inside it) | next provider, then sample brief |
 | Whole run | 5 minutes | partial result with an `error` field |
 
+The PoE search step uses a self-hosted SearXNG (`infra/searxng/`) at `SEARXNG_URL`,
+default `http://127.0.0.1:8890`. It is not 8888 because the local Zetaris API
+listens on 8888-8889. Public SearXNG instances remain as a fallback.
+
 `llm.provider` and `llm.model` in the output show which model actually wrote the brief
 (the served model, as reported by the runtime).
 
