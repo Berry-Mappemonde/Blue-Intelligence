@@ -1,5 +1,6 @@
 import { ZONE_COLORS, escH, flagEmoji } from "./constants";
 import { zoneDisplayName, zoneSubtitle } from "./zoneLabel";
+import { registryBadgeHtml } from "../poeRegistry";
 
 /**
  * HTML popup for a VLIZ polygon sheet: kept TD URLs,
@@ -84,11 +85,8 @@ function _officialSourcesBlock(t, sources) {
 function _portsBlock(t, ports) {
   const rows = (ports || []).slice(0, 24).map((p) => {
     const href = _buUrl(p);
-    const certified = p.arbitration_status === "Zetaris Certified";
-    const badge = certified
-      ? `<span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#39ff14;border:1px solid rgba(57,255,20,0.4);padding:0 4px;border-radius:2px;">✓ Zetaris Certified</span>`
-      : `<span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#fbbf24;border:1px solid rgba(251,191,36,0.4);padding:0 4px;border-radius:2px;">Review Needed</span>`;
-    const score = p.confidence_score ?? p.confidence;
+    const badge = registryBadgeHtml(p, t, escH);
+    const score = p.confidence;
     const scoreTxt = score != null ? ` · ${escH(t("poeConfidence"))} ${Number(score)}` : "";
     const link = href
       ? `<a href="${escH(href)}" target="_blank" rel="noreferrer" data-testid="poe-fiche-popup-port-bu" style="color:#00f0ff;text-decoration:none;">↗</a>`

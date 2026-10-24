@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
+import { TIER_TONE, registryBadge, registryNotes } from "./poeRegistry";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
 
 /**
@@ -138,65 +139,61 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
   );
 }
 
-/**
- * Review sheet for a VLIZ polygon — same gesture as ProjectList:
- * Review (variant=page): every TD + every BU per port.
- * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
- *
- * Phase 3 — V2 payload: consumes arbitration_status, confidence_score,
- * official_sources, nemotron_status from /api/poe/verify.
- */
-
-const CERT_COLOR = {
-  certified: "border-green-400 text-green-400 bg-green-400/10",
-  pending:   "border-amber-500 text-amber-400 bg-amber-500/10",
-};
-
-/**
- * Certification badge: green when Zetaris Certified, amber otherwise.
- */
-function CertificationBadge({ status, t }) {
-  const certified = status === "Zetaris Certified";
+/** Registry tier badge, or a neutral "Not yet verified" when the port has no registry. */
+function RegistryBadge({ port, t }) {
+  const { tier, label } = registryBadge(port, t);
   return (
     <span
-      className={`px-2 py-0.5 rounded font-mono text-[8px] uppercase tracking-widest ${certified ? CERT_COLOR.certified : CERT_COLOR.pending}`}
-      data-testid={`poe-fiche-cert-${certified ? "certified" : "review"}`}
-      title={certified ? t("poeCertified") : t("poeReviewNeeded")}
+      className={`px-1.5 py-0.5 rounded-sm border font-mono text-[8px] uppercase tracking-widest leading-tight ${TIER_TONE[tier]}`}
+      data-testid={`poe-fiche-tier-${tier}`}
+      title={(port?.registry?.reasons || [])[0] || label}
     >
-      {certified ? t("poeCertified") : t("poeReviewNeeded")}
+      {label}
     </span>
   );
 }
 
-/**
- * Telemetry banner: active model + memory status.
- * Renders only safe strings — never a raw object as a React child.
- */
-function TelemetryBanner({ status, t }) {
-  const active = status && status.arbitration_status === "Zetaris Certified";
-  const nemotron = status?.nemotron_status;
-  const modelLabel = (nemotron && typeof nemotron === "object" && nemotron.model)
-    ? nemotron.model
-    : (typeof nemotron === "string" ? nemotron : t("telemetryNemotron"));
+/** Telemetry of the last verify run, read from its payload only. */
+function VerifyTelemetry({ verify, t }) {
+  const ns = verify?.nemotron_status || {};
+  const mem = verify?.memory || {};
+  const cell = (label, value, testId) => (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</span>
+      <span className="font-mono text-[9px] text-slate-100 truncate" data-testid={testId} title={value}>{value}</span>
+    </div>
+  );
   return (
-    <div className="flex items-center justify-between gap-2 border border-line/60 bg-raised/40 rounded-sm p-2">
-      <div className="flex flex-col gap-0.5">
-        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryModel")}</span>
-        <span className="font-mono text-[9px] text-white">{modelLabel}</span>
-      </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryMemory")}</span>
-        <span className={`font-mono text-[9px] ${active ? "text-green-400" : "text-amber-400"}`}>
-          {active ? t("telemetryRememberActive") : t("telemetryPending")}
-        </span>
+    <div className="border border-line/60 bg-raised/40 rounded-sm p-2 space-y-1.5" data-testid="poe-fiche-telemetry">
+      <p className="font-mono text-[8px] uppercase tracking-[0.2em] text-slate-500">{t("telemetryTitle")}</p>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {cell(t("telemetryModel"), ns.model || "—", "poe-telemetry-model")}
+        {cell(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
+        {cell(
+          t("telemetryMemory"),
+          `${mem.recalled ?? 0} ${t("telemetryRecalled")} · ${mem.reinforced ?? 0} ${t("telemetryReinforced")} · ${mem.created ?? 0} ${t("telemetryCreated")}`,
+          "poe-telemetry-memory",
+        )}
+        {cell(t("telemetryZetaris"), verify?.zetaris_mode || "—", "poe-telemetry-zetaris")}
+        {cell(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run")}
+        {ns.fallback_reason ? cell(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback") : null}
       </div>
     </div>
   );
 }
 
+/**
+ * Review sheet for a VLIZ polygon — same gesture as ProjectList:
+ * Review (variant=page): every TD + every BU per port.
+ * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
+ *
+ * V2: each port's badge comes from its registry tier (PR #34); "Verify" runs
+ * POST /poe/verify and merges the result (see poeRegistry.mergeVerifyIntoFiche).
+ */
+
 export default function ZoneFiche({
   t, lang, fiche, loading, onFlyToPort, variant = "sidebar",
-  choices, onChoice,
+  choices, onChoice, onVerify, verifyState,
 }) {
   // Hook avant les retours anticipés : React exige des appels inconditionnels.
   const [openPort, setOpenPort] = useState(null);
@@ -231,10 +228,25 @@ export default function ZoneFiche({
           </span>
         )}
       </div>
-      {/* Phase 3 — telemetry banner */}
-      {fiche.arbitration_status || fiche.nemotron_status ? (
-        <TelemetryBanner status={fiche} t={t} />
+      {typeof onVerify === "function" ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={onVerify}
+            disabled={Boolean(verifyState?.running)}
+            data-testid="poe-fiche-verify"
+            className="w-full px-2 py-1.5 border border-accent/50 text-accent font-mono text-[10px] uppercase tracking-widest rounded-sm hover:bg-accent/10 disabled:opacity-60 disabled:cursor-wait"
+          >
+            {verifyState?.running ? t("poeVerifying") : t("poeVerify")}
+          </button>
+          {verifyState?.error ? (
+            <p className="font-mono text-[10px] text-amber-400 break-words" data-testid="poe-fiche-verify-error">
+              {t("poeVerifyFailed")}: {verifyState.error}
+            </p>
+          ) : null}
+        </div>
       ) : null}
+      {fiche.verify ? <VerifyTelemetry verify={fiche.verify} t={t} /> : null}
       <div>
         <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
           {zoneDisplayName(fiche, t)}
@@ -331,8 +343,8 @@ export default function ZoneFiche({
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
               const canFly = p.lat != null && p.lon != null && onFlyToPort;
               const pid = p.port_id || p.id || p.name;
-              const certified = p.arbitration_status === "Zetaris Certified";
-              const score = p.confidence_score ?? p.confidence;
+              const score = p.confidence;
+              const notes = registryNotes(p, t);
               return (
                 <div
                   key={pid || p.name}
@@ -348,10 +360,19 @@ export default function ZoneFiche({
                       })}
                       className="min-w-0 flex-1 text-left disabled:cursor-default"
                     >
-                      <p className="flex items-center gap-1.5">
-                        <span className="font-semibold text-slate-200 leading-snug">{p.name}</span>
-                        <CertificationBadge status={p.arbitration_status ?? p.certification_status ?? ""} t={t} />
-                      </p>
+                      <p className="text-xs font-semibold text-slate-200 leading-snug">{p.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <RegistryBadge port={p} t={t} />
+                      </div>
+                      {notes.map((n) => (
+                        <p
+                          key={n.key}
+                          className="mt-0.5 font-mono text-[9px] text-slate-500 leading-snug"
+                          data-testid={`poe-fiche-note-${n.key}`}
+                        >
+                          {n.text}
+                        </p>
+                      ))}
                     </button>
                   </div>
                   <div className="flex items-center justify-between mt-1 gap-2">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api from "./api";
+import api, { verifyZonePoe } from "./api";
 import { makeT } from "./i18n";
+import { mergeVerifyIntoFiche } from "./components/poeRegistry";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
 import MarinasPanel from "./components/MarinasPanel";
@@ -185,6 +186,7 @@ export default function App() {
   const [selectedZoneName, setSelectedZoneName] = useState(null);
   const [flyToZone, setFlyToZone] = useState(null);         // {mrgid, bbox, ts}
   const [zoneFiche, setZoneFiche] = useState(null);
+  const [verifyState, setVerifyState] = useState({ mrgid: null, running: false, error: null });
   const [ficheLoading, setFicheLoading] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [flyToPoe, setFlyToPoe] = useState(null);
@@ -776,6 +778,24 @@ const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
   }
 }, []);
 
+  // Explicit "Verify" in the fiche: POST /poe/verify (Nemotron + Zetaris, ~50 s), merged
+  // into the fiche of the zone it started for; a result arriving after the user moved
+  // to another zone is dropped.
+  const handleVerifyZone = useCallback(async () => {
+    const mrgid = selectedZone;
+    const zoneName = zoneFiche?.name || zoneFiche?.geoname || selectedZoneName || "";
+    if (!mrgid || !zoneName) return;
+    setVerifyState({ mrgid, running: true, error: null });
+    try {
+      const data = await verifyZonePoe(zoneName, mrgid);
+      setZoneFiche((f) => (f && Number(f.mrgid) === Number(mrgid) ? mergeVerifyIntoFiche(f, data) : f));
+      setVerifyState((v) => (v.mrgid === mrgid ? { mrgid, running: false, error: data?.error || null } : v));
+    } catch (e) {
+      const detail = e?.response?.data?.detail || e?.message || String(e);
+      setVerifyState((v) => (v.mrgid === mrgid ? { mrgid, running: false, error: String(detail) } : v));
+    }
+  }, [selectedZone, selectedZoneName, zoneFiche]);
+
   const handleFlyToPoe = useCallback((port) => {
     if (!port || port.lat == null || port.lon == null) return;
     setFlyToPoe({ ...port, ts: Date.now() });
@@ -852,6 +872,8 @@ const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
             fiche={zoneFiche}
             ficheLoading={ficheLoading}
             onFlyToPort={handleFlyToPoe}
+            onVerify={handleVerifyZone}
+            verifyState={verifyState.mrgid === selectedZone ? verifyState : null}
           />
         )}
         {view !== "review" && mode === "amp" && (
