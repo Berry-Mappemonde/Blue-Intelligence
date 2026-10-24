@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api, { verifyZonePoe } from "./api";
+import api, { verifyZonePoe, hasAdminKey } from "./api";
 import { makeT } from "./i18n";
 import { mergeVerifyIntoFiche } from "./components/poeRegistry";
 import Header from "./components/Header";
@@ -225,7 +225,7 @@ export default function App() {
       try {
         const { data } = await api.get("/admin/check");
         if (!alive) return;
-        setIsAdmin(Boolean(data?.admin_required));
+        setIsAdmin(!data.admin_required || hasAdminKey());
         setAdminChecked(true);
       } catch (_) {
         if (!alive) return;
