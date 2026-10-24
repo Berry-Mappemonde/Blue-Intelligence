@@ -2742,7 +2742,9 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                        query="(retry synthèse après 0 port)", retry=True,
                        n=0, synthesis_chars=len(syn_retry or ""))
             if syn_retry:
-                context_retry = f"{context}\n\n[SYNTHÈSE DE RECHERCHE (à recouper)]\n{syn_retry[:6000]}"
+                # Synthesis first: readers send only the start of the context (see
+                # llm_context_chars), so appended after a full context it was never read.
+                context_retry = f"[SYNTHÈSE DE RECHERCHE (à recouper)]\n{syn_retry[:6000]}\n\n{context}"
                 docs = await _extract_and_geocode(zone, context_retry, used_sources, log, rec, run,
                                                   catalog_text=context_retry, settings=settings)
                 if docs:

@@ -104,7 +104,7 @@ def test_long_prose_is_condensed_to_the_default_window(monkeypatch):
     assert len(context) <= llm.LLM_CONTEXT_CHARS < len(raw)
 
 
-# --- generate_zone_poe: per-zone window -------------------------
+# --- generate_zone_poe: per-zone window and the 0-port retry -------------------------
 
 class _Zones:
     def __init__(self, zones):
@@ -191,3 +191,20 @@ def test_concurrent_zones_each_read_with_their_own_window(monkeypatch):
     assert sum("TAIL1" in p for p in prompts) == 1
     assert outer == llm.LLM_CONTEXT_CHARS
 
+
+def test_zero_port_retry_puts_the_synthesis_where_readers_see_it(monkeypatch):
+    catalog_text = "CATALOG " + "x" * 45000
+    calls = []
+
+    async def extract(zone, context, used_sources, log, rec=None, run=None,
+                      catalog_text=None, settings=None):
+        calls.append(llm.reader_context(context))
+        return []
+
+    _stub_zone_pipeline(monkeypatch, {1: catalog_text}, extract,
+                        synthesis="SYNTH-MARKER Hamilton is the port of entry.")
+    result = asyncio.run(poe.generate_zone_poe(_DB({1: {"mrgid": 1, "name": "Catalogland"}}), 1))
+    assert len(calls) == 2 and result["status"] == "erreur"
+    assert "SYNTH-MARKER" not in calls[0]
+    assert calls[1].startswith("[SYNTHÈSE DE RECHERCHE (à recouper)]\nSYNTH-MARKER")
+    assert len(calls[1]) == poe.CATALOG_CONTEXT_CHARS
