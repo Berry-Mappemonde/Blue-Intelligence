@@ -45,3 +45,4 @@ backend/data/climatology/**/*.npz.tmp
 logs/*.jsonl
 data/hmem/
 data/.lock
+fixtures/

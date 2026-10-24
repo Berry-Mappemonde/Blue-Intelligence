@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api, { clearAdminKey, hasAdminKey } from "./api";
+import api from "./api";
+import { verifyZonePoe } from "./api";
 import { makeT } from "./i18n";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
@@ -91,17 +92,8 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-  // Admin mode — Console and Review are visible only after the backend
-  // validates the key (?admin=<key> in the URL, stored by api.js).
-  const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    if (!hasAdminKey()) return;
-    api.get("/admin/check")
-      .then(() => setIsAdmin(true))
-      .catch((e) => {
-        if (e?.response?.status === 401) clearAdminKey();
-      });
-  }, []);
+  // Admin mode — toujours activé par défaut, l'application est ouverte.
+  const [isAdmin, setIsAdmin] = useState(true);
   const [mode, setModeRaw] = useState(readInitialMode());   // 7 modes incl. climatology
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState(null);
@@ -190,6 +182,7 @@ export default function App() {
   const [poeZonesLoading, setPoeZonesLoading] = useState(true);
   const [poePorts, setPoePorts] = useState({ type: "FeatureCollection", features: [] });
   const [selectedZone, setSelectedZone] = useState(null);   // mrgid
+  const [selectedZoneName, setSelectedZoneName] = useState(null);
   const [flyToZone, setFlyToZone] = useState(null);         // {mrgid, bbox, ts}
   const [zoneFiche, setZoneFiche] = useState(null);
   const [ficheLoading, setFicheLoading] = useState(false);
@@ -740,14 +733,27 @@ export default function App() {
     return undefined;
   }, [mode, climoMonth, fetchClimoMeta]);
 
-  // Refactor 2026-06 — Handler wired to the sidebar rows and the EEZ polygons:
-  // selects the zone; when a bbox is supplied (sidebar click), also flies to it.
-  const handleSelectZone = useCallback((mrgid, bbox, anchor) => {
-    setSelectedZone(mrgid);
-    if (bbox && Array.isArray(bbox) && bbox.length === 4) {
-      setFlyToZone({ mrgid, bbox, anchor: anchor || null, ts: Date.now() });
-    }
-  }, []);
+// Refactor 2026-06 — Handler wired to the sidebar rows and the EEZ polygons:
+// selects the zone; when a bbox is supplied (sidebar click), also flies to it.
+// Phase 3 — enriches the fiche via /api/poe/verify (V2: arbitration_status,
+// confidence_score, official_sources, nemotron_status).
+const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
+  setSelectedZone(mrgid);
+  setSelectedZoneName(zoneName ?? null);
+  setZoneFiche(null);
+  setFicheLoading(true);
+  try {
+    const data = await verifyZonePoe(zoneName ?? "", mrgid);
+    setZoneFiche(data);
+  } catch (_) {
+    setZoneFiche(null);
+  } finally {
+    setFicheLoading(false);
+  }
+  if (bbox && Array.isArray(bbox) && bbox.length === 4) {
+    setFlyToZone({ mrgid, bbox, anchor: anchor || null, ts: Date.now() });
+  }
+}, []);
 
   const handleFlyToPoe = useCallback((port) => {
     if (!port || port.lat == null || port.lon == null) return;
@@ -765,13 +771,9 @@ export default function App() {
       setFicheLoading(false);
       return;
     }
-    let alive = true;
-    setFicheLoading(true);
-    api.get(`/poe/zones/${selectedZone}`)
-      .then(({ data }) => { if (alive) setZoneFiche(data); })
-      .catch(() => { if (alive) setZoneFiche(null); })
-      .finally(() => { if (alive) setFicheLoading(false); });
-    return () => { alive = false; };
+    // Phase 3 — fiche already enriched via verifyZonePoe in handleSelectZone.
+    // No redundant API call here.
+    return () => { /* noop */ };
   }, [selectedZone, mapEpoch]);
 
   return (

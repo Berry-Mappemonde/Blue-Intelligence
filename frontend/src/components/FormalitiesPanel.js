@@ -160,7 +160,7 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
             <button
               key={z.mrgid}
               data-testid={`poe-zone-row-${z.mrgid}`}
-              onClick={() => onSelectZone && onSelectZone(z.mrgid, z.bbox, z.anchor)}
+              onClick={() => onSelectZone && onSelectZone(z.mrgid, zoneDisplayName(z, t), z.bbox, z.anchor)}
               title={z.status === "erreur" && z.last_error ? z.last_error : zoneDisplayName(z, t)}
               className={`w-full text-left px-4 py-2.5 border-b border-line hover:bg-raised transition-colors group ${
                 isSelected ? "bg-amberx/5 border-l-2 border-l-amberx" : ""

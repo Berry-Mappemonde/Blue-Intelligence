@@ -115,7 +115,53 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
  * Review sheet for a VLIZ polygon — same gesture as ProjectList:
  * Review (variant=page): every TD + every BU per port.
  * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
+ *
+ * Phase 3 — V2 payload: consumes arbitration_status, confidence_score,
+ * official_sources, nemotron_status from /api/poe/verify.
  */
+
+const CERT_COLOR = {
+  certified: "border-green-400 text-green-400 bg-green-400/10",
+  pending:   "border-amber-500 text-amber-400 bg-amber-500/10",
+};
+
+/**
+ * Certification badge: green when Zetaris Certified, amber otherwise.
+ */
+function CertificationBadge({ status }) {
+  const certified = status === "Zetaris Certified";
+  return (
+    <span
+      className={`px-2 py-0.5 rounded font-mono text-[8px] uppercase tracking-widest ${certified ? CERT_COLOR.certified : CERT_COLOR.pending}`}
+      data-testid={`poe-fiche-cert-${certified ? "certified" : "review"}`}
+      title={certified ? t("poeCertified") : t("poeReviewNeeded")}
+    >
+      {certified ? t("poeCertified") : t("poeReviewNeeded")}
+    </span>
+  );
+}
+
+/**
+ * Telemetry banner: active model + memory status.
+ */
+function TelemetryBanner({ status }) {
+  const active = status && status.arbitration_status === "Zetaris Certified";
+  return (
+    <div className="flex items-center justify-between gap-2 border border-line/60 bg-raised/40 rounded-sm p-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryModel")}</span>
+        <span className="font-mono text-[9px] text-white">{status?.nemotron_status ?? t("telemetryNemotron")}</span>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400">{t("telemetryMemory")}</span>
+        <span className={`font-mono text-[9px] ${active ? "text-green-400" : "text-amber-400"}`}>
+          {active ? "remember_node active" : "pending"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function ZoneFiche({
   t, lang, fiche, loading, onFlyToPort, variant = "sidebar",
   choices, onChoice,
@@ -152,6 +198,10 @@ export default function ZoneFiche({
           </span>
         )}
       </div>
+      {/* Phase 3 — telemetry banner */}
+      {fiche.arbitration_status || fiche.nemotron_status ? (
+        <TelemetryBanner status={fiche} />
+      ) : null}
       <div>
         <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
           {zoneDisplayName(fiche, t)}
@@ -248,6 +298,8 @@ export default function ZoneFiche({
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
               const canFly = p.lat != null && p.lon != null && onFlyToPort;
               const pid = p.port_id || p.id || p.name;
+              const certified = p.arbitration_status === "Zetaris Certified";
+              const score = p.confidence_score ?? p.confidence;
               return (
                 <div
                   key={pid || p.name}
@@ -263,11 +315,14 @@ export default function ZoneFiche({
                       })}
                       className="min-w-0 flex-1 text-left disabled:cursor-default"
                     >
-                      <p className="text-xs font-semibold text-slate-200 leading-snug">{p.name}</p>
+                      <p className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-200 leading-snug">{p.name}</span>
+                        <CertificationBadge status={p.arbitration_status ?? p.certification_status ?? ""} />
+                      </p>
                     </button>
                   </div>
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    {p.confidence != null ? (
+                    {score != null ? (
                       <button
                         type="button"
                         onClick={() => setOpenPort(openPort === pid ? null : pid)}
@@ -276,7 +331,7 @@ export default function ZoneFiche({
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
                         className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
                       >
-                        {t("poeConfidence")} {p.confidence}
+                        {t("poeConfidence")} {score}
                         <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
                       </button>
                     ) : (

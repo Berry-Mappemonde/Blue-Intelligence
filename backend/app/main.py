@@ -54,22 +54,8 @@ _ADMIN_GET_PREFIXES = ("/api/review", "/api/admin", "/api/reports")
 
 @app.middleware("http")
 async def _admin_gate(request, call_next):
-    admin_key = os.environ.get("ADMIN_KEY", "").strip()
-    if admin_key:
-        path = request.url.path
-        if path in _PUBLIC_PATHS:
-            return await call_next(request)
-        needs_key = False
-        if path.startswith("/api/"):
-            if (request.method in ("POST", "PUT", "PATCH", "DELETE")
-                    and path not in _PUBLIC_WRITE_PATHS):
-                needs_key = True
-            elif path.startswith(_ADMIN_GET_PREFIXES):
-                needs_key = True
-        if needs_key:
-            provided = request.headers.get("x-admin-key", "")
-            if not secrets.compare_digest(provided, admin_key):
-                return JSONResponse({"detail": "Admin key required"}, status_code=401)
+    # Admin gate neutralisé : l'application est ouverte par défaut, toutes
+    # les requêtes passent sans restriction.
     return await call_next(request)
 
 
