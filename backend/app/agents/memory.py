@@ -86,6 +86,12 @@ def _port_tag(port):
     return 'port:' + hashlib.sha256(identity.encode()).hexdigest()
 
 
+def _port_label(port):
+    """'Port <name>', unless the name already starts with the word Port ('Port of St. George's')."""
+    name = str(port.get('name') or '').strip()
+    return name if re.match(r'port\b', name, re.IGNORECASE) else f'Port {name}'
+
+
 def _event(state, port, action, **details):
     return dict(timestamp=datetime.now(timezone.utc).isoformat(), agent_name='HMemAgent',
                 run_id=state['run_id'], action=action,
@@ -111,7 +117,7 @@ def recall_node(state):
     with _engine() as engine:
         for port in out['ports']:
             tag = _port_tag(port)
-            result = engine.query(f"Port {port.get('name', '')} ({port.get('zone_name') or ''})", dict(
+            result = engine.query(f"{_port_label(port)} ({port.get('zone_name') or ''})", dict(
                 topN=5, threshold=0, predicate=lambda m: tag in m['tags']))
             port['memory'] = [dict(id=m['memory']['id'], content=m['memory']['content'],
                 score=m['relevance'], source=m['memory']['source'],
@@ -148,7 +154,7 @@ def remember_node(state):
                                       handoff={'from': 'EvaluatorAgent', 'to': 'HMemAgent'}))
                 continue
             record = engine.add(dict(
-                content=f"Port {port.get('name', '')} ({zone}): verdict {verdict}; official source {official}; reasons {'; '.join(port.get('reasons_en') or [])}",
+                content=f"{_port_label(port)} ({zone}): verdict {verdict}; official source {official}; reasons {'; '.join(port.get('reasons_en') or [])}",
                 type='factual', layer='long_term', source=urls[0] if urls else 'evaluator',
                 provenance=dict(origin='model_response', learnedAt=engine.clock(),
                                 label=f"evaluator run {out['run_id']}", refs=[out['run_id']]),

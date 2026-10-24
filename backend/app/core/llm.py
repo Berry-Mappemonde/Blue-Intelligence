@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import httpx
@@ -26,6 +27,16 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "openai/gpt-4o-mini"
 JSON_SYSTEM = ("You are the Blue Intelligence maritime OSINT engine. "
                "Reply ONLY with a single valid JSON object, no prose, no markdown fences.")
+
+# Source text a port-extraction reader sends. The pipeline widens it for one zone
+# (``llm_context_chars.set(...)``) when it keeps a raw catalog; other callers keep 20,000.
+LLM_CONTEXT_CHARS = 20000
+llm_context_chars: ContextVar[int] = ContextVar("llm_context_chars", default=LLM_CONTEXT_CHARS)
+
+
+def reader_context(context: str | None) -> str:
+    """The part of ``context`` a port-extraction reader actually sends."""
+    return (context or "")[:llm_context_chars.get()]
 
 MARINE_KW = [
     "ocean", "marine", "sea", "coral", "reef", "mangrove", "seagrass", "coastal",
@@ -498,10 +509,11 @@ async def extract_ports_openrouter(context: str, zone: dict,
                                    settings: dict | None = None, log=None) -> list[dict]:
     """OpenRouter reader only (no NIM loop-back)."""
     from app.services.poe_zone_label import search_polygon_name
+    sent = reader_context(context)
     prompt = POE_EXTRACT_PROMPT.format(
         name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
         sovereign=zone.get("sovereign") or "",
-        context=context[:20000],
+        context=sent,
     )
     data = await _json_openrouter(
         prompt, "Tu réponds uniquement en JSON strict.", settings, 2500)
@@ -509,17 +521,18 @@ async def extract_ports_openrouter(context: str, zone: dict,
     for p in ports:
         p["extraction_engine"] = "openrouter"
     if log:
-        log(f"LLM OpenRouter: {len(ports)} port(s) extraits")
+        log(f"LLM OpenRouter: {len(ports)} port(s) extraits sur {len(sent)} chars envoyés")
     return ports
 
 
 async def extract_ports_nightshift(context: str, zone: dict, log=None) -> list[dict] | None:
     """Nemotron through Nightshift with the same prompt as OpenRouter; None if unavailable."""
     from app.services.poe_zone_label import search_polygon_name
+    sent = reader_context(context)
     prompt = POE_EXTRACT_PROMPT.format(
         name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
         sovereign=zone.get("sovereign") or "",
-        context=context[:20000],
+        context=sent,
     )
     served = await _nightshift(prompt, "Tu réponds uniquement en JSON strict.",
                                json_mode=True, role="extract", log=log)
@@ -530,7 +543,8 @@ async def extract_ports_nightshift(context: str, zone: dict, log=None) -> list[d
         p["extraction_engine"] = "nightshift"
         p["extraction_model"] = served.get("model")
     if log:
-        log(f"LLM Nightshift ({served.get('model')}): {len(ports)} port(s) extraits")
+        log(f"LLM Nightshift ({served.get('model')}): {len(ports)} port(s) extraits "
+            f"sur {len(sent)} chars envoyés")
     return ports
 
 
