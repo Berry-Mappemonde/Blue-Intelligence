@@ -53,3 +53,22 @@ const api = axios.create({
 });
 
 export default api;
+
+// ---------------------------------------------------------------------------
+// V2: PoE verification via backend pipeline
+// ---------------------------------------------------------------------------
+export async function verifyZonePoe(zoneName: string, mrgid: number | null) {
+  const body = { zone_name: zoneName, mrgid };
+  const response = await fetch(`${BACKEND_URL}/api/poe/verify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`poe/verify failed: ${response.status} – ${err}`);
+  }
+  return response.json();
+}

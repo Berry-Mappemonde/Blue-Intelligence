@@ -1,0 +1,267 @@
+{
+  "description": "20 real ports copied unchanged from seed/ports_of_entry.geojson. Sample data, not current clearance advice.",
+  "columns": [
+    "name",
+    "lat",
+    "lon",
+    "source_urls",
+    "validated",
+    "geocode_source",
+    "zone_name",
+    "mrgid",
+    "id"
+  ],
+  "data": [
+    [
+      "Anchorage Small Boat Harbor",
+      61.2163129,
+      -149.894852,
+      [
+        "https://unblock.federalregister.gov"
+      ],
+      true,
+      "nominatim",
+      "Alaska",
+      8463,
+      "eafca5b8-0fe0-45f2-b1a0-278b25ed7971"
+    ],
+    [
+      "Port of Ghazaouet",
+      35.093863,
+      -1.86322,
+      [],
+      true,
+      "nominatim",
+      "Algeria",
+      8378,
+      "108bf43e-0031-4fc5-b3de-cc6d2c3bdad9"
+    ],
+    [
+      "PKK Porti i Durrësit",
+      41.313255,
+      19.4462348,
+      [
+        "https://asp.gov.al/wp-content/uploads/2024/11/Udhezim-nr.-469-date-22.08.16-PER-LISTEN-E-PKK-DHE-ZONAVE-TRANSIT-i-miratuar.pdf"
+      ],
+      true,
+      "nominatim",
+      "Albania",
+      5670,
+      "37612483-d7e5-474b-8a0f-26529ceabdf7"
+    ],
+    [
+      "Road Bay",
+      18.1993278,
+      -63.0948151,
+      [
+        "https://www.gov.uk/foreign-travel-advice/anguilla/entry-requirements"
+      ],
+      true,
+      "nominatim",
+      "Anguilla",
+      8412,
+      "290f4bbc-dfc2-4b0c-b7e3-7eb40b524467"
+    ],
+    [
+      "Porto de Luanda",
+      -8.7912966,
+      13.2719595,
+      [
+        "https://amn.gov.ao/web/perfil-entidade/552",
+        "https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/"
+      ],
+      true,
+      "nominatim",
+      "Angola",
+      8478,
+      "c2fb8716-a095-4947-b066-edd433867fb0"
+    ],
+    [
+      "Deep water Harbor",
+      17.1184569,
+      -61.8448509,
+      [
+        "https://customs.gov.ag/page/temporary-importation"
+      ],
+      true,
+      "nominatim",
+      "Antigua and Barbuda",
+      8414,
+      "3f50fce8-b1bf-4e5b-be61-4551fac0ce9e"
+    ],
+    [
+      "Terminal Fluvial Binacional de Tigre",
+      -34.4235341,
+      -58.5817628,
+      [
+        "https://www.argentina.gob.ar/migraciones/pasos-internacionales",
+        "https://biblioteca.afip.gob.ar/dcp/DEC_C_001001_1982_05_21"
+      ],
+      true,
+      "nominatim",
+      "Argentina",
+      8466,
+      "cb01220c-6fe9-45fb-ba17-2c893c99661d"
+    ],
+    [
+      "Port of Georgetown",
+      -7.9411072,
+      -14.3631189,
+      [
+        "https://www.sainthelena.gov.sh/documents/customs-ordinance.pdf"
+      ],
+      true,
+      "nominatim",
+      "Ascension",
+      8379,
+      "bbe376bb-80ab-4e63-bf1e-e812973450d1"
+    ],
+    [
+      "Porto / Marina de Ponta Delgada",
+      37.7393398,
+      -25.6689503,
+      [
+        "https://www.acorianooriental.pt/noticia/veleiros-proibidos-de-atracar-nas-flores-377030"
+      ],
+      true,
+      "nominatim",
+      "Azores",
+      8361,
+      "345b6f5c-0011-44f6-a702-3ca91328e849"
+    ],
+    [
+      "Brisbane",
+      -27.4648602,
+      153.0096055,
+      [],
+      true,
+      "nominatim",
+      "Australia",
+      8323,
+      "517c732c-0d6b-4d24-908f-b6fd565a3aa8"
+    ],
+    [
+      "Waves Marina (Amwaj Marina)",
+      26.2947431,
+      50.666445,
+      [
+        "https://www.mtt.gov.bh/pma-laws-and-regulations"
+      ],
+      true,
+      "nominatim",
+      "Bahrain",
+      8358,
+      "35204b37-099e-44e9-b6d6-b533a2ecb2be"
+    ],
+    [
+      "Conch Inn Marina",
+      26.5465414,
+      -77.0515419,
+      [
+        "https://www.bahamascustoms.gov.bs/accordions/about-ecas-2/"
+      ],
+      true,
+      "nominatim",
+      "Bahamas",
+      8404,
+      "a128b488-f649-498a-8ecd-ec302c9eea24"
+    ],
+    [
+      "Port of Chattogram",
+      22.3357242,
+      91.7892303,
+      [
+        "https://bangladeshcustoms.gov.bd/trade_info/fees_charges",
+        "http://bdlaws.minlaw.gov.bd/act-354/chapter-details-643.html"
+      ],
+      true,
+      "nominatim",
+      "Bangladesh",
+      8481,
+      "810770d6-e4a8-401e-b705-9ab778671085"
+    ],
+    [
+      "BRIDGETOWN PORT",
+      13.0977832,
+      -59.6184184,
+      [
+        "https://immigration.gov.bb/pages/contactus.aspx"
+      ],
+      true,
+      "nominatim",
+      "Barbados",
+      8418,
+      "284efeaf-6c88-4ea2-a300-2c1e5fda9d5f"
+    ],
+    [
+      "Antwerp (Antwerpen)",
+      51.0669817,
+      4.3097669,
+      [
+        "https://ibz.be/"
+      ],
+      true,
+      "nominatim",
+      "Belgium",
+      3293,
+      "3961359b-51af-403f-bd25-544bbc97ab81"
+    ],
+    [
+      "San Pedro",
+      17.9192814,
+      -87.9615436,
+      [],
+      true,
+      "nominatim",
+      "Belize",
+      8457,
+      "9c372e70-c3c8-42c2-8ddf-65199f166238"
+    ],
+    [
+      "Port of St. George’s",
+      32.3810447,
+      -64.676717,
+      [],
+      true,
+      "nominatim",
+      "Bermuda",
+      8402,
+      "9b7ce825-c818-4496-8fa2-c36bbdeeb555"
+    ],
+    [
+      "Port Autonome de Cotonou",
+      6.3443587,
+      2.4187131,
+      [],
+      true,
+      "nominatim",
+      "Benin",
+      8393,
+      "13533c23-05a3-4b72-85d6-8d2183771140"
+    ],
+    [
+      "Luka Brčko",
+      44.8756731,
+      18.8205143,
+      [
+        "https://www.uino.gov.ba/portal/hr/kontakt-hr/regionalni-ured-tuzla/"
+      ],
+      false,
+      "nominatim",
+      "Bosnia and Herzegovina",
+      22491,
+      "844af260-2922-4129-9601-646bccdaef85"
+    ],
+    [
+      "Road Town Jetty / Port of Road Town",
+      18.425766,
+      -64.6230914,
+      [],
+      true,
+      "nominatim",
+      "British Virgin Islands",
+      8411,
+      "eaae5788-f777-4041-90bb-370360eefaa4"
+    ]
+  ]
+}

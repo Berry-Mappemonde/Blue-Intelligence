@@ -53,7 +53,7 @@ install_searxng_venv() {
 ensure_searxng_url() {
   # SEARXNG_URL is not a secret: URL of OUR local process.
   local envf="${1:?backend .env path}"
-  local url="http://127.0.0.1:8888"
+  local url="http://127.0.0.1:8890"
   mkdir -p "$(dirname "$envf")"
   python3 - "$envf" "$url" <<'PY'
 import sys
@@ -85,7 +85,7 @@ searxng_json_ok() {
   python3 - <<'PY'
 import json, sys, urllib.request
 
-url = "http://127.0.0.1:8888/search?q=ping&format=json"
+url = "http://127.0.0.1:8890/search?q=ping&format=json"
 req = urllib.request.Request(
     url,
     headers={"User-Agent": "BlueIntelligence-start/1.0", "Accept": "application/json"},

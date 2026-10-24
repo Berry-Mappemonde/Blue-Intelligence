@@ -15,6 +15,7 @@ from app.agents.evaluator import (
     RETRY_LIMIT,
     evaluate,
     finalise,
+    is_official_source,
     prepare_retry,
     route_after_evaluation,
 )
@@ -492,15 +493,15 @@ def test_successful_retry_clears_old_hint_and_checks():
 
 
 def test_trace_batches_one_file_open_per_node_call(trace_log_path, monkeypatch, capsys):
-    original_open = Path.open
+    original_open = evaluator._open_trace_file
     opens = []
 
-    def tracked_open(path, *args, **kwargs):
-        if path == trace_log_path:
-            opens.append((args, kwargs))
-        return original_open(path, *args, **kwargs)
+    def tracked_open(path):
+        assert path == trace_log_path
+        opens.append(path)
+        return original_open(path)
 
-    monkeypatch.setattr(Path, "open", tracked_open)
+    monkeypatch.setattr(evaluator, "_open_trace_file", tracked_open)
     state = evaluate({"ports": [RETRY_PORT, {**RETRY_PORT, "name": "Another"}]})
     assert len(opens) == 1
     state = prepare_retry(state)
@@ -511,8 +512,7 @@ def test_trace_batches_one_file_open_per_node_call(trace_log_path, monkeypatch, 
     assert len(opens) == 5
     printed = capsys.readouterr().out
     assert [json.loads(line) for line in printed.splitlines()] == state["trace"]
-    with original_open(trace_log_path, encoding="utf-8") as log_file:
-        assert log_file.read() == printed
+    assert trace_log_path.read_text(encoding="utf-8") == printed
 
 
 def test_trace_stdout_can_be_disabled_for_all_nodes(trace_log_path, monkeypatch, capsys):
@@ -523,3 +523,44 @@ def test_trace_stdout_can_be_disabled_for_all_nodes(trace_log_path, monkeypatch,
     entries = [json.loads(line) for line in trace_log_path.read_text().splitlines()]
     assert entries == state["trace"]
     assert len(entries) == 4
+
+
+@pytest.mark.parametrize("url", [
+    "https://douane.gouv.fr", "http://www.gov.uk", "https://sat.gob.mx",
+    "https://cbsa-asfc.gc.ca", "https://customs.govt.nz", "https://customs.go.th",
+    "https://customs.gov/ports", "HTTPS://DOUANE.GOUV.FR/path",
+    "https://customs.gov.:443/ports",
+])
+def test_is_official_source_accepts_government_hostnames(url):
+    assert is_official_source([None, "", "https://example.com", url])
+    port = {**PASS_PORT, "source_urls": [url]}
+    result = evaluate({"ports": [port]})["ports"][0]
+    assert result["confidence"] == score_port(port, official_source=True)["confidence"]
+    assert "source d'État" in result["confidence_reasons"]
+
+
+@pytest.mark.parametrize("url", [
+    "https://governance.com", "https://gobble.io", "https://example.com/gov/page",
+    "https://example.com/?source=https://douane.gouv.fr", "https://example.com/#gov",
+    "https://gov.example.com", "https://douane.gouv.fr.example.com",
+    "https://gov.com", "https://govt.com", "https://gc.com", "https://go.com",
+    "https://www.gov.uk@example.com", "https://example.com/douane.gouv.fr",
+    "https://customs-gov.fr", "https://gouvfr.com", "https://customs.gov..",
+    "https://.gov.uk", "https://bad_host.gov.uk", "https://[broken",
+    "https://127.0.0.1/gov", "https://[::1]/gov", "https://gov",
+    "mailto:customs@gov.uk", "ftp://customs.gov", "douane.gouv.fr", "", None,
+])
+def test_is_official_source_rejects_non_government_or_invalid_urls(url):
+    assert not is_official_source([url])
+
+
+def test_is_official_source_empty_lists():
+    assert not is_official_source([])
+    assert not is_official_source(None)
+
+
+def test_path_substring_does_not_receive_official_source_score():
+    port = {**PASS_PORT, "source_urls": ["https://example.com/gov/page"]}
+    result = evaluate({"ports": [port]})["ports"][0]
+    assert result["confidence"] == score_port(port, official_source=False)["confidence"]
+    assert "source d'État" not in result["confidence_reasons"]

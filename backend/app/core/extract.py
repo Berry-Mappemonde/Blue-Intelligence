@@ -31,6 +31,7 @@ and selective internal-link follow-up (depth=2: /annuaire, /contacts…).
 import asyncio
 import difflib
 import hashlib
+import json
 import html
 import os
 import re
@@ -508,6 +509,55 @@ def parse_pdf_text(content: bytes, max_pages: int = 180) -> str:
     except OSError:
         pass
     return text
+
+
+async def parse_pdf_with_nemotron_vl(content: bytes, settings: dict | None = None,
+                                      max_pages: int = 180, log=None) -> str | None:
+    """Extract and understand PDF using Nemotron 3.5 Super VL with reasoning_effort='none'.
+
+    This calls Nemotron directly for PDF comprehension (not just text extraction).
+    Falls back to None if NVIDIA key not available or call fails.
+    """
+    from app.core.nvidia import NEMOTRON_SUPER_VL_MODEL, get_nvidia_key, _nvidia_sem, complete_json_nvidia_tracked
+    
+    key = get_nvidia_key(settings)
+    if not key:
+        if log:
+            log("Nemotron VL: NVIDIA_API_KEY not configured")
+        return None
+    
+    # First extract text via existing PyMuPDF
+    text = await asyncio.to_thread(parse_pdf_text, content, max_pages)
+    if not text or not text.strip():
+        return None
+    
+    # Generate PDF page JPEGs for vision input
+    images = pdf_page_jpegs(content, max_pages=2)
+    
+    # Truncate to reasonable size for LLM context
+    text = text[:15000]
+    
+    prompt = f"""Extract structured information from this PDF content. Return JSON with:
+- "text": the extracted text (cleaned, no artifacts)
+- "ports": array of ports found with name, city, lat, lon if present
+- "official": boolean - is this an official government document?
+- "document_type": string (gazette, decree, catalog, list, etc.)
+
+PDF content (truncated):
+{text}"""
+    
+    try:
+        async with _nvidia_sem():
+            # Returns (data, served_model); reasoning is already off for JSON roles.
+            data, _served = await complete_json_nvidia_tracked(
+                "Tu réponds uniquement en JSON strict.", prompt, settings,
+                model=NEMOTRON_SUPER_VL_MODEL, role="json", fallback=False, max_tokens=3000,
+                images=images)
+        return json.dumps(data, ensure_ascii=False)
+    except Exception as e:
+        if log:
+            log(f"Nemotron VL PDF: {type(e).__name__}: {str(e)[:80]}")
+        return None
 
 
 def parse_html_n1(html: str) -> str:

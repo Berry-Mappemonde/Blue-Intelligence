@@ -43,3 +43,7 @@ credentials.json
 backend/data/climatology/**/*.partial.npz
 backend/data/climatology/**/*.npz.tmp
 logs/*.jsonl
+data/hmem/
+data/.lock
+# Independent port registries downloaded by backend/scripts/zetaris_setup.py --part registries
+backend/data/registries/
