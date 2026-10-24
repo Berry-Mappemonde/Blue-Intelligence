@@ -90,7 +90,6 @@ def verify_client():
 
 
 def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
-    from pathlib import Path
     response = verify_client().post('/api/poe/verify', json={'zone_name': 'Bermuda', 'mrgid': 8493})
     assert response.status_code == 200, response.text
     body = response.json()
@@ -111,9 +110,34 @@ def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
     assert body['brief'].startswith('Clearance brief: Bermuda')
     assert 'Registered port, entry status unverified: listed in UN/LOCODE BMSGE' in body['brief']
     assert 'does not establish port-of-entry status' in body['brief']
-    trace = Path(body['trace_path'])
-    assert trace == isolated / 'trace.jsonl' and trace.is_file()
-    assert body['run_id'] in trace.read_text()
+    # The trace is named, never located: no filesystem path anywhere in the response.
+    assert 'trace_path' not in body and body['trace_name'] == 'trace.jsonl'
+    assert body['run_id'] in (isolated / 'trace.jsonl').read_text()
+    assert str(isolated) not in response.text and '/Users/' not in response.text
+    assert body['memory'] == {'recalled': 0, 'remembered': True, 'created': 1, 'reinforced': 0, 'superseded': 0}
+
+
+def test_poe_verify_response_maps_every_port_with_registry_and_memory_counts(isolated):
+    """Shape the V2 fiche relies on: validated + non-validated cover every run port, each with
+    registry evidence and the evaluator's confidence; a second run reinforces H-MEM."""
+    from app.core import paths
+    client = verify_client()
+    first = client.post('/api/poe/verify', json={'zone_name': 'Bermuda', 'mrgid': 8493}).json()
+    second = client.post('/api/poe/verify', json={'zone_name': 'Bermuda', 'mrgid': 8493}).json()
+    ports = second['validated_ports'] + second['non_validated_ports']
+    assert [p['name'] for p in ports] == ['Port of St. George’s']
+    for port in ports:
+        assert set(port['registry']) >= {'tier', 'label', 'validation', 'matches', 'coord_mismatch',
+                                         'first_port_of_entry', 'reasons'}
+        assert port['registry']['label'] == 'Registered port, entry status unverified'
+        assert isinstance(port['confidence'], int)
+        assert 'arbitration_status' not in port and 'confidence_score' not in port
+    assert first['memory']['created'] == 1 and first['memory']['recalled'] == 0
+    assert second['memory'] == {'recalled': 1, 'remembered': True, 'created': 0, 'reinforced': 1, 'superseded': 0}
+    assert second['run_id'] != first['run_id']
+    assert second['nemotron_status']['provider'] == 'sample'
+    for body in (first, second):
+        assert str(paths.REPO_ROOT) not in str(body) and str(isolated) not in str(body)
 
 
 def test_poe_verify_rejects_a_missing_zone():
