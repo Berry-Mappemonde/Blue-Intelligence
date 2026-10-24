@@ -288,3 +288,17 @@ def test_filelock_path_holds_and_releases(monkeypatch, storage):
     with memory._engine():
         assert _held_by_another_thread(free) is False
     assert _held_by_another_thread(free) is True
+
+
+def test_memory_text_does_not_double_the_port_prefix():
+    ports = [port(name="Port of St. George's", zone_name='Bermuda'),
+             port(name='port louis', zone_name='Mauritius'),
+             port(name='Portsmouth', zone_name='United Kingdom')]
+    remember_node(dict(ports=ports, run_id='first'))
+    contents = [m['content'] for m in HMEM().store.all()]
+    assert contents[0].startswith("Port of St. George's (Bermuda): verdict pass")
+    assert contents[1].startswith('port louis (Mauritius): verdict pass')
+    assert contents[2].startswith('Port Portsmouth (United Kingdom): verdict pass')
+    assert not any('port port ' in c.lower() for c in contents)
+    recalled = recall_node(dict(ports=ports[:1], run_id='second'))['ports'][0]['memory']
+    assert recalled[0]['content'].startswith("Port of St. George's (Bermuda)")
