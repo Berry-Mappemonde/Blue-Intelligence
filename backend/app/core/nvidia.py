@@ -612,7 +612,7 @@ async def extract_ports_nvidia(context: str, zone: dict,
     prompt = POE_EXTRACT_PROMPT.format(
         name=zone.get("name") or zone.get("geoname"),
         sovereign=zone.get("sovereign") or "",
-        context=(context or "")[:20000],
+        context=(context or "")[:40000],
     )
     data, used = await complete_json_nvidia_tracked(
         "Tu réponds uniquement en JSON strict.", prompt, settings,

@@ -441,7 +441,7 @@ async def extract_ports_openrouter(context: str, zone: dict,
     prompt = POE_EXTRACT_PROMPT.format(
         name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
         sovereign=zone.get("sovereign") or "",
-        context=context[:20000],
+        context=context[:40000],
     )
     data = await _json_openrouter(
         prompt, "Tu réponds uniquement en JSON strict.", settings, 2500)

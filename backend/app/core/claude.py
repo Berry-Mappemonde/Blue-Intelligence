@@ -31,7 +31,7 @@ CACHE_TTL = "1h"
 MIN_CACHE_TOKENS = 4096
 STOP_RATIO = 0.90
 MAX_OUTPUT_TOKENS = 2500
-CONTEXT_CHARS = 20000
+CONTEXT_CHARS = 40000
 
 # Haiku 4.5 — $ / million de tokens (platform.claude.com/docs pricing)
 RATE_INPUT = 1.00
