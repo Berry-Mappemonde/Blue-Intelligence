@@ -2,12 +2,14 @@
 
 This note explains how each sponsor technology is used in the PoE Reconciler and
 where the evidence is. Each claim points to a file or a test in this repository.
-All paths are relative to this file and exist on this branch, which includes the
-runnable pipeline from PR #32 (merge order: see [Limitations](#7-limitations)).
+All paths are relative to this file and exist on this branch, which is based on the
+V2 integration branch `feat/integrate-poe-pipeline` (PR #33). That branch already
+contains the runnable pipeline from PR #32 and the registry tiers from PR #34
+(merge order: see [Limitations](#7-limitations)).
 
 | Sponsor | Role in the product | Code | Working feature | Test evidence |
 | --- | --- | --- | --- | --- |
-| Zetaris | Data layer: every run reads its ports through Zetaris SQL | [`zetaris.py`](../../backend/app/adapters/zetaris.py) | ZetarisAdapter, first step of every run | [`test_zetaris_adapter.py`](../../backend/tests/test_zetaris_adapter.py), `test_live_zone_through_real_zetaris` |
+| Zetaris | Data layer: every run reads its ports through Zetaris SQL, then checks them against UN/LOCODE and the World Port Index held in Zetaris | [`zetaris.py`](../../backend/app/adapters/zetaris.py), [`registry_check.py`](../../backend/app/agents/registry_check.py) | ZetarisAdapter: `get_ports`, then `registry_check` (evidence tier per port) | [`test_zetaris_adapter.py`](../../backend/tests/test_zetaris_adapter.py), [`test_zetaris_registries.py`](../../backend/tests/test_zetaris_registries.py), `test_live_zone_through_real_zetaris`, `test_live_registry_views_for_bermuda` |
 | Meterless H-MEM engine | Verification memory across runs | [`engines/hmem/`](../../backend/app/engines/hmem/), [`memory.py`](../../backend/app/agents/memory.py) | ResearchAgent reuses a previously verified official source during retries | [`test_hmem_conformance.py`](../../backend/tests/test_hmem_conformance.py), `test_research_uses_remembered_official_source` |
 | Meterless Nightshift | Primary AI provider | [`generator.py`](../../backend/app/core/generator.py) | BriefingAgent writes the sailor-facing brief | [`test_generator.py`](../../backend/tests/test_generator.py), `test_live_brief_served_by_nemotron` |
 | NVIDIA | Nemotron models served through Nightshift | same as Nightshift | The brief in the recorded live run | `test_live_nightshift_nemotron`, [`01_bermuda.live_nemotron.json`](../../output_examples/01_bermuda.live_nemotron.json) |
@@ -91,6 +93,82 @@ SAMPLE_MODE=false .venv/bin/python -c 'from app.adapters.zetaris import ZetarisC
 
 Evidence for all three commands and both verification statements:
 [`zetaris_setup.py`](../../backend/scripts/zetaris_setup.py).
+
+### Independent registries and evidence tiers
+
+`blue_intel.poe_ports` holds Blue Intelligence's own seed, so it cannot confirm
+itself. Zetaris therefore also holds two third-party registries, and every run
+checks each candidate against them in a `ZetarisAdapter.registry_check` step,
+before H-MEM and the evaluator see it:
+
+| Zetaris view | Source | Licence | Rows (local Zetaris) |
+| --- | --- | --- | --- |
+| `blue_intel.unlocode_ports` | [UN/LOCODE](https://unece.org/trade/cefact/unlocode-code-list-country-and-territory), UNECE: entries whose Function has "1" in position 1 (port) | Published by UNECE for free use; no formal licence is stated | 17,642 |
+| `blue_intel.wpi_ports` | [World Port Index](https://msi.nga.mil/Publications/WPI), NGA Pub 150, including the first-port-of-entry field | US Government work, public domain | 3,807 |
+
+The administrator setup downloads both files to a gitignored folder, registers
+them as Lightning file-store tables in database `BLUE_INTEL_REGISTRIES`, exposes
+them as schemastore views, and compares each view's `COUNT(*)` with the local
+file. Only small real fixtures are committed. Evidence:
+[`zetaris_setup_registries.sql`](../../backend/scripts/zetaris_setup_registries.sql),
+[`zetaris_setup.py`](../../backend/scripts/zetaris_setup.py) (`--part registries`),
+parsers in [`registry_sources.py`](../../backend/app/adapters/registry_sources.py)
+(UN/LOCODE `DDMMN DDDMMW` coordinates converted to decimal degrees), and fixtures
+[`unlocode_ports.json`](../../backend/data/sample/zetaris/unlocode_ports.json) and
+[`wpi_ports.json`](../../backend/data/sample/zetaris/wpi_ports.json).
+
+At runtime, `ZetarisClient.get_registry_ports(country_iso2, bbox, source)` reads one
+view through the same read-only `query()`. Filters are validated before they
+enter SQL: the country can only be two ASCII letters, and the bounding box must
+be finite and ordered. Each port then gets two kinds of evidence:
+
+- **Registry match:** an entry in the same country with the same name, and, when
+  both sides have coordinates, within 25 km. Names are compared without case,
+  accents or punctuation; "Port of" and similar words are removed; St becomes
+  Saint; WPI alternate names and UN/LOCODE names without diacritics count. A name
+  and country match beyond 25 km is recorded as `coord_mismatch` with its
+  distance. It is not a match, and the port is kept.
+- **Official source evidence:** a source URL that passes `is_official_source()`
+  *and* whose fetched text names the port. Text that was not fetched never counts.
+
+| Tier | Label | Evidence |
+| --- | --- | --- |
+| `tier1` | Official Commercial Port of Entry | official source evidence and a registry match |
+| `tier2` | Official Yachting Port of Entry | official source evidence, no registry match (usual for marinas) |
+| `tier_registered` | Registered port, entry status unverified | registry match only |
+| `tier3` | Unconfirmed - review needed | neither |
+
+A registry listing alone never establishes port-of-entry status: its reason says
+so in the trace and in the brief. The WPI first-port-of-entry field is recorded
+as supporting evidence only. Each port carries `registry` (`tier`, `label`,
+`validation`, `matches`, `official_evidence`, `coord_mismatch`,
+`first_port_of_entry`, `reasons`), and each check is a `ZetarisAdapter`
+`registry_check` trace event whose status is the tier. If the live registry
+query fails, the check reads the fixtures; an outage with no fallback leaves
+ports unconfirmed, never official. Evidence:
+[`registry_check.py`](../../backend/app/agents/registry_check.py),
+`check_registries` in [`run_pipeline.py`](../../backend/app/pipeline/run_pipeline.py),
+and in [`test_zetaris_registries.py`](../../backend/tests/test_zetaris_registries.py):
+`test_25_km_gate_accepts_22_km_and_flags_beyond_as_coord_mismatch`,
+`test_coord_mismatch_is_recorded_not_dropped`,
+`test_tier1_official_source_and_registry`,
+`test_tier2_official_source_without_registry_match`,
+`test_tier_registered_never_claims_port_of_entry`,
+`test_tier3_neither_and_traced`,
+`test_grounding_needs_fetched_text_for_the_port_s_own_urls`,
+`test_live_failure_falls_back_to_fixtures` and
+`test_outage_without_fallback_never_marks_official`.
+`test_live_registry_views_for_bermuda` passed against local Zetaris.
+
+**What the tiers can show today.** Fetched document text exists only inside the
+generation pipeline (`extract_ports_llm` in
+[`poe_pipeline.py`](../../backend/app/services/poe_pipeline.py)), which holds the
+pages it fetched as `[SOURCE: url]` blocks. Nothing stores that text. Seed ports,
+and therefore `run.py`, `POST /run`, `POST /api/poe/verify` and sample mode, carry
+source URLs but no document text, so on those paths a port can reach at most
+`tier_registered`; tiers 1 and 2 appear only during generation. In the sample run,
+13 of the 20 sample ports are `tier_registered` and 7 are `tier3`. Storing
+fetched text so the run pipeline can show official evidence is not built yet.
 
 ## 2. Meterless H-MEM engine: verification memory
 
@@ -307,10 +385,14 @@ checks the HTTP endpoint. Inputs are in [`input_examples/`](../../input_examples
 generated outputs and traces are in [`output_examples/`](../../output_examples/).
 
 **Demo page.** `python backend/run.py --serve` also serves a page at `GET /`
-(<http://localhost:8000>). It is one self-contained file with no external assets:
-[`demo_page.html`](../../backend/app/pipeline/demo_page.html). A zone is picked from
+(<http://localhost:8000>). It is one file,
+[`demo_page.html`](../../backend/app/pipeline/demo_page.html); its only remote assets
+are a pinned Leaflet build (with integrity hashes) and OpenStreetMap tiles, and it
+draws an offline chart when they are unavailable. A zone is picked from
 `GET /zones`, which lists live Zetaris zones, or the sample zones in sample mode or
-when Zetaris is unavailable. **Run verification** calls `POST /run`. The page shows:
+when Zetaris is unavailable. **Run verification** streams the run from
+`GET /run/stream` (server-sent events; `POST /run` is the same run as one JSON
+response). The page shows:
 
 - the mode, whether Zetaris was live, and the LLM provider and served model, with a
   "Nemotron via Nightshift" badge when the served model is a Nemotron model;
@@ -323,7 +405,7 @@ when Zetaris is unavailable. **Run verification** calls `POST /run`. The page sh
 The trace route accepts only run IDs of letters, digits, `_` and `-`. Evidence:
 [`api.py`](../../backend/app/pipeline/api.py), `list_zones` and `load_trace` in
 [`run_pipeline.py`](../../backend/app/pipeline/run_pipeline.py), and
-`test_demo_page_is_self_contained_html`, `test_zones_in_sample_mode`,
+`test_demo_page_serves_with_pinned_map_library_and_offline_fallback`, `test_zones_in_sample_mode`,
 `test_zones_fall_back_when_zetaris_is_down`, `test_trace_route_returns_the_runs_events`
 and `test_trace_route_rejects_bad_run_ids` in
 [`test_run_pipeline.py`](../../backend/tests/test_run_pipeline.py).
@@ -363,10 +445,13 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
   and `_verdict` in [`evaluator.py`](../../backend/app/agents/evaluator.py).
 - **Nightshift may serve a different Nemotron than requested.** The served model
   is recorded, not chosen by the application (section 4).
-- **Merge order.** The work spans PRs #26 (Zetaris), #28 (H-MEM), #29 (evaluator
-  follow-ups), #30 (Nightshift generator) and #32 (run pipeline), which must be
-  merged in that order before this document (#31). `docs/RUNNING.md` tells judges
-  to clone the default branch.
+- **Merge order.** This document (#31) targets `feat/integrate-poe-pipeline`
+  (#33), which already contains the work of #26 (Zetaris), #28 (H-MEM), #30
+  (Nightshift generator), #32 (run pipeline), #34 (registry tiers) and #35. #33
+  then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
+  branch.
+- **Official evidence needs fetched text.** Outside the generation pipeline no
+  port can reach tier 1 or 2, because document text is not stored (section 1).
 - The 1,169-port GeoJSON is a repository snapshot, not current clearance advice;
   live Zetaris reads the REST table backed by that snapshot. The sample fixture
   contains only 20 rows, one per zone.
@@ -422,3 +507,5 @@ hackathon work, all committed on 22 October 2026 or later:
 | Nightshift generator and opt-in LLM hook | [#30](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/30) | `6688bdc`, `860f24d`, `eb5701a`, `2df1406` |
 | This write-up | [#31](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/31) | `85e840a` and this update |
 | Run pipeline, CLI, `POST /run`, examples and docs | [#32](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/32) | `f11d972`, `04f9368`, `6f1265c`, `44a7aeb`, `4cdd51f`, `953b11d`, `1892f87` |
+| UN/LOCODE and WPI registries in Zetaris, evidence tiers | [#34](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/34) | `78afc7b`, `785ec5a`, `5a7fa93`, `8359a6d`, `01aebfe`, `c10f09b` |
+| Reader context window, H-MEM label, SearXNG port, health probe | [#35](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/35) | `69d1a55`, `93609ca`, `dea81a2`, `af98049`, `f32764d`, `87769b5` |
