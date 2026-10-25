@@ -94,13 +94,13 @@
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
     "ZetarisAdapter.get_ports": 0.6,
-    "ZetarisAdapter.registry_check": 6.1,
+    "ZetarisAdapter.registry_check": 5.6,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 1.0,
+    "EvaluatorAgent.evaluate": 0.9,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.2,
     "HMemAgent.remember": 0.9,
-    "total": 9.6
+    "total": 8.9
   },
   "error": null
 }

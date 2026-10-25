@@ -71,7 +71,7 @@
   "summary": {
     "pass": 1
   },
-  "brief": "Clearance brief: Bermuda\nConfirmed ports of entry:\n- Port of St. George’s (confidence 67/100). Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km). Sources: \nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Bermuda\nConfirmed ports of entry:\n- Port of St. George’s (confidence 67/100). Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km). Sources: gov.bm: https://www.gov.bm/department/customs (official evidence), planning.gov.bm: https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (official evidence)\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -105,14 +105,14 @@
   },
   "trace_file": "logs/trace-example-bermuda.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.7,
-    "ZetarisAdapter.registry_check": 24.3,
-    "HMemAgent.recall": 1.0,
+    "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 21.3,
+    "HMemAgent.recall": 0.7,
     "EvaluatorAgent.evaluate": 1.2,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.1,
-    "HMemAgent.remember": 0.9,
-    "total": 28.4
+    "HMemAgent.remember": 1.0,
+    "total": 25.1
   },
   "error": null
 }

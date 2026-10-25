@@ -54,7 +54,7 @@
   "summary": {
     "flag": 1
   },
-  "brief": "Clearance brief: Benin\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Port Autonome de Cotonou (confidence 34/100): no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Registered port, entry status unverified: listed in UN/LOCODE BJCOO, WPI BJCOO (1.73 km), but no fetched official document names it; a registry listing does not establish port-of-entry status. Sources: no source on record\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Benin\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Port Autonome de Cotonou (confidence 34/100): no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Registered port, entry status unverified: listed in UN/LOCODE BJCOO, WPI BJCOO (1.73 km), but no fetched official document names it; a registry listing does not establish port-of-entry status. Sources: No source\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -88,16 +88,16 @@
   },
   "trace_file": "logs/trace-example-benin.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.7,
-    "ZetarisAdapter.registry_check": 5.4,
-    "HMemAgent.recall": 0.6,
+    "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 5.2,
+    "HMemAgent.recall": 0.7,
     "EvaluatorAgent.evaluate": 1.1,
-    "ResearchAgent.research": 0.2,
+    "ResearchAgent.research": 0.3,
     "EvaluatorAgent.prepare_retry": 0.3,
-    "EvaluatorAgent.finalise": 0.2,
+    "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.1,
     "HMemAgent.remember": 0.9,
-    "total": 9.7
+    "total": 9.4
   },
   "error": null
 }
