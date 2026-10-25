@@ -35,6 +35,9 @@ registry (UN/LOCODE, NGA World Port Index), both, or neither. A short brief for
 sailors closes each run. The answer is built from scattered public sources, and a
 registry listing alone is never presented as port-of-entry status.
 
+- **Tier = legal-status evidence:** what says this port is a port of entry (an official page, a registry, both or neither).
+- **Verdict = data-quality review:** whether the record is reliable enough to use as is (`pass`) or needs a human look (`flag`), from its sources, reading and coordinates.
+
 ### Architecture
 
 ```text
@@ -162,10 +165,8 @@ in [`docs/RUNNING.md`](docs/RUNNING.md).
 - **Sample data is small:** 20 real ports, one per zone, and small real
   subsets of the registries. Official evidence exists only for zones whose
   official pages have been fetched: 4 zones in the sample.
-- **The evidence tier and the verdict are separate checks.** Official
-  evidence gives a port the official-source score, but `pass` also needs more
-  than 60 and a cross-checked geocode, which seed ports lack. St. George's
-  (Bermuda) is `tier1` and `flag` at 60 in sample mode.
+- **Tier and verdict can differ** (definitions above). St. George's (Bermuda) is
+  `tier1` but `flag` at 60: `pass` needs more than 60, and seed ports have one geocoder.
 - **Grounding is a heuristic:** it checks the official domain, the entry term
   and the distance. A port name with "Port of" stripped can match the town.
   The committed snapshots were reviewed by hand.
