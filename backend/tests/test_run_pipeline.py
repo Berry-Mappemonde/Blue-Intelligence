@@ -175,6 +175,7 @@ def test_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
     monkeypatch.setenv('ZETARIS_REST_URL', 'http://127.0.0.1:9/api/v1.0')  # nothing listens
     monkeypatch.setenv('METERLESS_BASE_URL', 'http://127.0.0.1:9/v1')
     monkeypatch.setattr(zetaris.time, 'sleep', lambda seconds: None)
+    monkeypatch.setattr(pipeline.evidence_store, '_mongo_records', lambda mrgid: [])  # no stored evidence
     result = run('Angola', 'zetaris-down')
     assert result['error'] is None and result['ports']
     assert result['components']['zetaris'] == 'fallback' and result['mode'] == 'sample'
@@ -184,6 +185,7 @@ def test_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
     events = [(r['action'], r.get('status')) for r in rows if r['agent_name'] == 'ZetarisAdapter']
     # One wait on the dead server: the registry step reuses the outage and reads the fixtures.
     assert events == [('zetaris_query', 'error'), ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'),
+                      ('evidence_lookup', 'ok'),
                       ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'), ('zetaris_query', 'ok'),
                       ('registry_check', 'tier_registered')]
     assert 'test-key' not in (isolated / 'trace.jsonl').read_text()

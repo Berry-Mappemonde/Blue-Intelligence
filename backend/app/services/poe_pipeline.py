@@ -49,6 +49,7 @@ from app.core.llm import (
     LLM_CONTEXT_CHARS, extract_ports, grounded_search, llm_context_chars, llm_geocode_port,
 )
 from app.core.rag import select_list_context, semantic_similarity
+from app.adapters import evidence_store
 from app.adapters.zetaris import ZetarisClient
 from app.agents import registry_check
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
@@ -2099,7 +2100,9 @@ async def _collect_texts(official: list[dict], log, rec=None, max_fetch: int = 8
             excerpts[url] = (text or "")[:2500]
             used_sources.append({"url": url, "domain": c.get("domain") or domain_of(url),
                                  "md5": hashes.get(url), "collected_at": now_iso(),
-                                 "official": bool(c.get("official"))})
+                                 "official": bool(c.get("official")),
+                                 "sha256": evidence_store.sha256_text(text or ""),
+                                 "level": res.get("level")})
             await emit(rec, "source_used", url=url, domain=c.get("domain"),
                        chars=len(text or ""))
     return texts, hashes, used_sources, excerpts
@@ -2568,6 +2571,24 @@ async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
     return await db.eez_zones.find_one({"mrgid": mrgid})
 
 
+async def _store_evidence(db, zone: dict, docs: list[dict], raw: str,
+                          used_sources: list[dict], log, rec=None) -> int:
+    """Build evidence records from the collected official text and store them; never fails."""
+    try:
+        records = evidence_store.build_records(
+            zone.get("mrgid"), [d.get("name") for d in docs or []],
+            evidence_store.documents_from_context(raw, used_sources))
+        stored = await evidence_store.store(db, records)
+    except Exception as e:  # noqa: BLE001 — evidence is optional, generation must finish
+        log(f"evidence: non stockée ({type(e).__name__}: {str(e)[:100]})")
+        return 0
+    if stored:
+        log(f"evidence: {stored} extrait(s) officiel(s) stocké(s) pour {len({r['port_key'] for r in records})} port(s)")
+    await emit(rec, "evidence_stored", records=stored,
+               ports=sorted({r["port_key"] for r in records}))
+    return stored
+
+
 CATALOG_CONTEXT_CHARS = 40000
 
 
@@ -2730,6 +2751,10 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                         apply_score(d, score_port(
                             d, official_source=False,
                             listing_ports=None))
+
+        # Official evidence records from the fetched text (never model output), stored for
+        # the run pipeline and /api/poe/verify, which read ports from Zetaris.
+        await _store_evidence(db, zone, docs, raw, used_sources, log, rec)
 
         # 5. Write: confidence lives on each port, no longer a zone buffer.
         status = "ia" if docs else "erreur"
