@@ -99,8 +99,10 @@ route a request to a different model. Zetaris returned two Bermuda ports, both
 both, quoting the gov.bm Customs page (`excerpt_verified: true`). H-MEM started
 empty. No Mongo evidence store was available, so the evidence lookup fell back to
 the committed official-page snapshots (`evidence_lookup` event, `status:
-"fallback"`). It is a recording for reference: it cannot be reproduced without
-credentials, and no code reads it.
+"fallback"`). The judge's reasons and excerpts were added to its `critique` trace
+event after the recording, copied verbatim from `port.judge` in the output JSON (the
+code now writes them there). It is a recording for reference: it cannot be reproduced
+without credentials, and no code reads it.
 
 ### Evidence tiers and independent registries (why "official" is not circular)
 
