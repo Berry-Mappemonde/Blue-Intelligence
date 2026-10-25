@@ -103,9 +103,16 @@ weighs two independent kinds of evidence. The first is two third-party registrie
   "A / B" and "A (B)" are split; WPI alternate names and UN/LOCODE names without
   diacritics are included. A name and country match beyond 25 km is recorded as
   `coord_mismatch` with its distance. It is not a match, and the port is kept.
-- **Official source evidence:** a source URL passes `is_official_source()` **and** the
-  port's name (or a matched registry name) appears in that URL's fetched document
-  text. Without fetched text, a URL proves nothing.
+- **Official source evidence:** a URL that passes `is_official_source()` **and** whose
+  text names the port (or a matched registry name) within ~200 characters of an
+  entry term: port of entry, customs, clearance, clear in, immigration, quarantine,
+  harbour master, and their French, Spanish, Portuguese, Italian and Greek
+  equivalents (`ENTRY_TERMS` in `registry_check.py`). A mention inside an address or
+  contact listing ("Cabinet Building, Hamilton", a street number, a postcode, an
+  e-mail) does not count, and neither does a bare mention. The text is either
+  fetched now (`evidence_source: "fetched_now"`) or a stored snippet of an earlier
+  fetch (`"stored_snippet"`); it is never model output. Without text, a URL proves
+  nothing.
 
 | Tier (`registry.tier`) | Label | Evidence | `zetaris_validation` |
 | --- | --- | --- | --- |
@@ -121,12 +128,25 @@ supporting evidence only. Each port carries `registry` (`tier`, `label`,
 `first_port_of_entry`, `reasons`). Each check is a `ZetarisAdapter`
 `registry_check` trace event that states the tier and why.
 
-**Where document text exists:** only in the generation pipeline
-(`poe_pipeline.extract_ports_llm`), which holds the fetched pages as
-`[SOURCE: url]` blocks. Seed ports, and therefore `run.py`, `POST /run`,
-`/poe/verify` and sample mode, carry source URLs but no document text. There, ports
-can reach at most `tier_registered`. In the sample run, 14 of the 20 sample ports are
-`tier_registered` and 6 are `tier3`.
+**Stored evidence.** Generation (`generate_zone_poe`) builds evidence records from
+the official pages it fetched, deterministically: `{mrgid, port_key, url, domain,
+matched_name, snippet, content_sha256, fetched_at, extract_level}`, where `snippet`
+is a verbatim slice of at most 400 characters around a mention that passes the
+check above and `content_sha256` hashes the full fetched text. At most three per
+port go to the Mongo collection `poe_evidence` (unique on `mrgid` + `port_key` +
+`url`). `run.py`, `POST /run` and `/api/poe/verify` read ports from Zetaris, so
+their registry step looks the records up by zone (`evidence_store.lookup`) and runs
+the same check on each snippet before it counts. In `SAMPLE_MODE`, or when Mongo is
+unreachable, the lookup reads small verbatim snapshots of real official pages in
+[`backend/data/sample/official_pages/`](../backend/data/sample/official_pages/)
+and builds the records the same way. A failed lookup gives no evidence, never an
+official tier. Each lookup is a `ZetarisAdapter` `evidence_lookup` trace event.
+
+In the sample run, 1 of the 20 sample ports is `tier1` (Port of St. George's,
+Bermuda: gov.bm Customs and a Bermuda planning report), 2 are `tier2` (Deep water
+Harbor, Antigua: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas Customs), 12
+are `tier_registered` and 5 are `tier3`. Before stored evidence, the same run gave
+13 `tier_registered` and 7 `tier3`.
 
 UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted to decimal degrees.
 The zone's country comes from the EEZ index (the sovereign's code for zones such as
