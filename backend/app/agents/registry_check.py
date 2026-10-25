@@ -28,6 +28,7 @@ app/adapters/registry_sources.py for the sources and licences.
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
 import unicodedata
@@ -36,6 +37,7 @@ from urllib.parse import urlparse
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents.evaluator import is_official_source
 
+LOG = logging.getLogger(__name__)
 MAX_DISTANCE_KM = 25.0
 OFFICIAL = "official"
 UNCONFIRMED = "unconfirmed - review needed"
@@ -71,7 +73,8 @@ _TOKENS = {"st": "saint", "ste": "sainte", "mt": "mount", "ft": "fort", "pt": "p
 _GENERIC = set(_PREFIXES) | set(_SUFFIXES) | {"harbour", "harbor", "bay", "quay", "pier", "dock"}
 
 # Official evidence: the port's name must sit within PROXIMITY_CHARS of an entry term.
-# A strong term designates on its own; a weak term (a department or office) counts only
+# A strong term designates on its own; a weak term (a department or office, or "point of
+# entry", which also covers airports and land borders) counts only
 # with a port word in the same window and a match on the full name, not on the place
 # left after stripping "Port of" (so "the Hamilton ... Long Room ... Customs" does not count).
 PROXIMITY_CHARS = 200
@@ -96,12 +99,15 @@ STRONG_ENTRY_TERMS = (
 )
 WEAK_ENTRY_TERMS = (
     "customs", "immigration", "quarantine", "harbour master", "harbor master", "harbourmaster",
-    "harbormaster",
-    "douane", "douanes", "quarantaine", "capitainerie",
+    "harbormaster", "point of entry", "points of entry",
+    "douane", "douanes", "quarantaine", "capitainerie", "point d'entrée", "points d'entrée",
     "aduana", "aduanas", "migraciones", "inmigración", "cuarentena", "capitanía de puerto",
-    "alfândega", "alfândegas", "imigração", "quarentena", "capitania",
-    "dogana", "dogane", "immigrazione", "quarantena", "capitaneria di porto",
-    "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα",
+    "punto de entrada", "puntos de entrada",
+    "alfândega", "alfândegas", "imigração", "quarentena", "capitania", "ponto de entrada",
+    "pontos de entrada",
+    "dogana", "dogane", "immigrazione", "quarantena", "capitaneria di porto", "punto di ingresso",
+    "punti di ingresso", "punto di entrata",
+    "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα", "σημείο εισόδου", "σημεία εισόδου",
 )
 ENTRY_TERMS = STRONG_ENTRY_TERMS + WEAK_ENTRY_TERMS
 # Words that put a weak term in a port context.
@@ -513,6 +519,28 @@ def candidate_bbox(ports: list[dict], pad_deg: float = 0.5) -> tuple | None:
             min(90.0, max(lats) + pad_deg), min(180.0, max(lons) + pad_deg))
 
 
+_PYCOUNTRY_WARNED = False
+
+
+def _pycountry():
+    """The pycountry module, or None after one warning per process.
+
+    Without it, zones whose country comes from their sovereign (Alaska, the Azores) get
+    no registry match, so their tiers drop; say so once instead of degrading silently.
+    """
+    global _PYCOUNTRY_WARNED
+    try:
+        import pycountry
+        return pycountry
+    except ImportError:
+        if not _PYCOUNTRY_WARNED:
+            _PYCOUNTRY_WARNED = True
+            LOG.warning("pycountry is not installed: zones whose country comes from their sovereign "
+                        "(e.g. Alaska, the Azores) get no registry match. "
+                        "Install pycountry==26.2.16 (see docs/RUNNING.md).")
+        return None
+
+
 def zone_iso2(zone: dict | str | None) -> str | None:
     """ISO2 of a zone: its own iso2, else the EEZ index (by mrgid, then name), else its sovereign's."""
     zone = {"name": zone} if isinstance(zone, str) else dict(zone or {})
@@ -533,10 +561,12 @@ def zone_iso2(zone: dict | str | None) -> str | None:
         return None
     if found.get("iso2"):
         return str(found["iso2"]).upper()
-    try:  # e.g. Alaska and the Azores have no iso2 of their own in the index
-        import pycountry
+    pycountry = _pycountry()  # e.g. Alaska and the Azores have no iso2 of their own in the index
+    if pycountry is None:
+        return None
+    try:
         return pycountry.countries.lookup(found.get("sovereign") or "").alpha_2
-    except (ImportError, LookupError):
+    except LookupError:
         return None
 
 

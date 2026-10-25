@@ -138,6 +138,22 @@ def test_weak_term_counts_with_the_full_name_and_a_port_word():
     assert found is not None and found["strength"] == "weak" and found["matched_name"] == "port of hamilton"
 
 
+@pytest.mark.parametrize("name, text, term", [
+    ("Brisbane", "Points of entry for small craft include the port of Brisbane.", "points of entry"),
+    ("Marigot", "Le port de Marigot est un point d'entrée pour les plaisanciers.", "point d entree"),
+    ("Ensenada", "Puntos de entrada: puerto de Ensenada.", "puntos de entrada"),
+])
+def test_point_of_entry_is_weak_and_counts_with_a_port_word(name, text, term):
+    found = mention(text, name)
+    assert found is not None and found["entry_term"] == term and found["strength"] == "weak"
+
+
+def test_point_of_entry_without_a_port_word_does_not_count():
+    # An airport-only sentence: "airport" is not a port word.
+    assert mention("Points of entry include Brisbane International Airport.", "Brisbane") is None
+    assert mention("Brisbane Airport is a designated point of entry for air travellers.", "Brisbane") is None
+
+
 def test_strong_term_is_enough_even_for_the_town_name():
     text = ("Customs officers are stationed at Bermuda’s main ports of entry: St. George’s "
             "L. F. Wade International Airport Hamilton")
