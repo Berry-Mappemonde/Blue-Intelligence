@@ -168,7 +168,7 @@ def _url_ok(url: str) -> bool:
     return url_ok(url)
 
 
-def _url_rank(url: str, official: str | None) -> tuple:
+def _url_rank(url: str, official: Optional[str]) -> tuple:
     u = (url or "").lower()
     official_hit = 0
     if official:

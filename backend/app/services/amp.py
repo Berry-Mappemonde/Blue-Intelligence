@@ -125,7 +125,7 @@ def bbox_span_deg(bbox: tuple[float, float, float, float]) -> float:
     return max(bbox[2] - bbox[0], bbox[3] - bbox[1])
 
 
-def iter_world_bboxes(step: float | None = None):
+def iter_world_bboxes(step: Optional[float] = None):
     """Split WORLD_TILES into AMP bboxes (minx, miny, maxx, maxy)."""
     from app.services.osm_seeds import WORLD_TILES
     step = float(step if step is not None else catalog_default("amp.bbox_max_deg", 8))
@@ -173,7 +173,7 @@ def bbox_polygon(bbox: tuple[float, float, float, float]) -> dict:
     return {"type": "Polygon", "coordinates": [ring]}
 
 
-def normalize_url(url: str | None) -> str | None:
+def normalize_url(url: Optional[str]) -> Optional[str]:
     raw = (url or "").strip()
     if not raw or raw.lower() in ("null", "none", "n/a", "-"):
         return None
@@ -192,12 +192,12 @@ def normalize_url(url: str | None) -> str | None:
     return f"{(parsed.scheme or 'https').lower()}://{host}{path}"
 
 
-def urls_equivalent(a: str | None, b: str | None) -> bool:
+def urls_equivalent(a: Optional[str], b: Optional[str]) -> bool:
     na, nb = normalize_url(a), normalize_url(b)
     return bool(na and nb and na == nb)
 
 
-def extract_urls(blob: str | None) -> list[str]:
+def extract_urls(blob: Optional[str]) -> list[str]:
     if not blob:
         return []
     seen: set[str] = set()
@@ -212,7 +212,7 @@ def extract_urls(blob: str | None) -> list[str]:
     return out
 
 
-def url_host(url: str | None) -> str | None:
+def url_host(url: Optional[str]) -> Optional[str]:
     nu = normalize_url(url)
     if not nu:
         return None
@@ -222,7 +222,7 @@ def url_host(url: str | None) -> str | None:
     return host or None
 
 
-def is_manager_suburl(url: str | None, manager_url: str | None) -> bool:
+def is_manager_suburl(url: Optional[str], manager_url: Optional[str]) -> bool:
     """Same host as the manager, distinct path — most common case."""
     if urls_equivalent(url, manager_url):
         return False
@@ -230,19 +230,19 @@ def is_manager_suburl(url: str | None, manager_url: str | None) -> bool:
     return bool(hu and hm and hu == hm)
 
 
-def fold_text(value: str | None) -> str:
+def fold_text(value: Optional[str]) -> str:
     raw = unicodedata.normalize("NFD", value or "")
     return "".join(ch for ch in raw if unicodedata.category(ch) != "Mn").lower()
 
 
-def name_tokens(name: str | None) -> set[str]:
+def name_tokens(name: Optional[str]) -> set[str]:
     return {
         tok for tok in _NAME_TOKEN_RE.findall(fold_text(name))
         if tok not in _NAME_STOP
     }
 
 
-def name_matches(name: str | None, blob: str | None) -> bool:
+def name_matches(name: Optional[str], blob: Optional[str]) -> bool:
     """The site name must appear in the URL / title (search off-host)."""
     toks = name_tokens(name)
     if not toks:
@@ -256,7 +256,7 @@ def name_matches(name: str | None, blob: str | None) -> bool:
     return next(iter(toks)) in hay
 
 
-def split_protectedseas_website(raw: str | None) -> tuple[str | None, list[str]]:
+def split_protectedseas_website(raw: Optional[str]) -> tuple[Optional[str], list[str]]:
     """Champ Website PS : parfois ``Label|https://a; Autre|https://b``."""
     urls = extract_urls(raw)
     if not urls:
@@ -274,8 +274,8 @@ def protectedseas_visit_blobs(doc: dict) -> list[str]:
 
 
 def rank_visit_candidate(
-    url: str | None,
-    manager_url: str | None,
+    url: Optional[str],
+    manager_url: Optional[str],
     *,
     curated: bool = False,
     title: str = "",
@@ -315,11 +315,11 @@ def rank_visit_candidate(
 
 
 def pick_visit_url(
-    manager_url: str | None,
-    other_helpful_links: str | None = None,
-    discovered: str | None = None,
+    manager_url: Optional[str],
+    other_helpful_links: Optional[str] = None,
+    discovered: Optional[str] = None,
     extra_blobs: list[str] | None = None,
-) -> tuple[str | None, str]:
+) -> tuple[Optional[str], str]:
     """Pick a visit URL distinct from the manager.
 
     Prefer a same-host sub-URL if it exists, but accept
@@ -371,8 +371,8 @@ def pick_visit_url(
     return None, "none" if not manager_url and not any(blobs) else "not_found"
 
 
-def apply_visit_choice(doc: dict, *, discovered: str | None = None,
-                       source: str | None = None) -> dict:
+def apply_visit_choice(doc: dict, *, discovered: Optional[str] = None,
+                       source: Optional[str] = None) -> dict:
     """Write visit_url / status. Never overwrite visit_url with manager_url."""
     raw_web = doc.get("ps_website_raw") or ""
     if not raw_web and "|" in str(doc.get("manager_url") or ""):
@@ -417,7 +417,7 @@ def _as_lfp(value: Any) -> int:
     return n if 0 <= n <= 5 else 0
 
 
-def _as_activity(value: Any) -> int | None:
+def _as_activity(value: Any) -> Optional[int]:
     """Navigator : 0 autorisé, 1 interdit, 2 restreint, 3 inconnu. None = pas encore codé."""
     if value is None or value == "":
         return None
@@ -833,7 +833,7 @@ def _lighten_wide_batch(docs: list) -> list:
 
 async def collect_light_areas_for_wide_view(
     db, bbox, span: float, *, limit: int = WIDE_VIEW_FETCH_LIMIT,
-    batch_size: int | None = None,
+    batch_size: Optional[int] = None,
 ) -> list[dict]:
     """Lit les aires par lots et n'en garde qu'un lot de géométries brutes.
 
@@ -1033,7 +1033,7 @@ def sanitize_geometry(geom: dict | None) -> dict | None:
     return None
 
 
-def _point_geom(lat: float | None, lon: float | None) -> dict | None:
+def _point_geom(lat: Optional[float], lon: Optional[float]) -> dict | None:
     if lat is None or lon is None:
         return None
     return {"type": "Point", "coordinates": [float(lon), float(lat)]}
@@ -1050,7 +1050,7 @@ def _ring_area(ring: list) -> float:
     return abs(area) * 0.5
 
 
-def _ring_centroid(ring: list) -> tuple[float | None, float | None]:
+def _ring_centroid(ring: list) -> tuple[Optional[float], Optional[float]]:
     if not ring or len(ring) < 1:
         return None, None
     if len(ring) < 3:
@@ -1072,7 +1072,7 @@ def _ring_centroid(ring: list) -> tuple[float | None, float | None]:
     return cy, cx
 
 
-def _centroid(geom: dict | None) -> tuple[float | None, float | None]:
+def _centroid(geom: dict | None) -> tuple[Optional[float], Optional[float]]:
     """Centroid of the outer ring (or of the largest polygon)."""
     if not geom:
         return None, None
@@ -1646,8 +1646,8 @@ async def upsert_sites(db, docs: list[dict]) -> int:
 
 
 async def sites_in_bbox(db, bbox: tuple[float, float, float, float], *,
-                        force: bool = False, max_features: int | None = None,
-                        ttl_days: int | None = None) -> tuple[list[dict], dict]:
+                        force: bool = False, max_features: Optional[int] = None,
+                        ttl_days: Optional[int] = None) -> tuple[list[dict], dict]:
     max_features = int(max_features or catalog_default("amp.max_features", 400))
     ttl_days = int(ttl_days or catalog_default("amp.cache_ttl_days", 30))
     cached = await query_cache(db, bbox, limit=max_features)
@@ -1738,7 +1738,7 @@ async def resolve_visit_urls(db, *, limit: int = 500) -> dict:
     }
 
 
-async def set_visit_url(db, site_id: str, url: str | None) -> dict | None:
+async def set_visit_url(db, site_id: str, url: Optional[str]) -> dict | None:
     doc = await db.amp_sites.find_one({"_id": site_id})
     if not doc:
         doc = await db.amp_sites.find_one({"site_id": site_id})

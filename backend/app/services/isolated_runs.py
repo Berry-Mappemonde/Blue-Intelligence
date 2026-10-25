@@ -19,7 +19,7 @@ from app.core.events import RunRecorder
 from app.core.run_rules import attach_rules, bind_rules, snapshot_for_run, snapshot_list_fields
 from app.services.run_fingerprint import build_code_fingerprint, merge_run_params
 
-_current_run_id: ContextVar[str | None] = ContextVar("isolated_run_id", default=None)
+_current_run_id: ContextVar[Optional[str]] = ContextVar("isolated_run_id", default=None)
 
 
 @dataclass(frozen=True)
@@ -30,8 +30,8 @@ class DatasetSpec:
     items_coll: str
     events_coll: str
     wrote_flag: str
-    cursor_coll: str | None = None
-    extra_items_coll: str | None = None
+    cursor_coll: Optional[str] = None
+    extra_items_coll: Optional[str] = None
 
 
 DATASETS = {
@@ -98,7 +98,7 @@ def parse_osm_tiles(raw) -> tuple[tuple[float, float, float, float], ...] | None
     return tuple(out)
 
 
-async def list_run_events(db, dataset: str, run_id: str, *, step: str | None = None,
+async def list_run_events(db, dataset: str, run_id: str, *, step: Optional[str] = None,
                           skip: int = 0, limit: int = 500) -> dict:
     spec = spec_for(dataset)
     q: dict = {"run_id": run_id}
@@ -121,11 +121,11 @@ async def list_run_events(db, dataset: str, run_id: str, *, step: str | None = N
     }
 
 
-def current_run_id() -> str | None:
+def current_run_id() -> Optional[str]:
     return _current_run_id.get()
 
 
-def bind_run(run_id: str | None):
+def bind_run(run_id: Optional[str]):
     return _current_run_id.set(run_id)
 
 
@@ -143,7 +143,7 @@ def run_doc_id(raw_id) -> str:
     return f"{rid}:{sid}" if rid else sid
 
 
-def stamp(doc: dict, *, source_id=None, wrote_flag: str | None = None) -> dict:
+def stamp(doc: dict, *, source_id=None, wrote_flag: Optional[str] = None) -> dict:
     """Stamp run_id / source_id / wrote_* on a copy. No-op outside an isolated run."""
     rid = current_run_id()
     out = dict(doc)
@@ -172,7 +172,7 @@ def coll(db, name: str):
     return getattr(db, name)
 
 
-async def ensure_indexes(db, dataset: str | None = None) -> None:
+async def ensure_indexes(db, dataset: Optional[str] = None) -> None:
     keys = (dataset,) if dataset else tuple(DATASETS)
     for key in keys:
         spec = spec_for(key)
@@ -194,9 +194,9 @@ async def ensure_indexes(db, dataset: str | None = None) -> None:
 
 async def open_run(
     db, dataset: str, *, kind: str, label: str = "",
-    settings: dict | None = None, run_id: str | None = None,
+    settings: dict | None = None, run_id: Optional[str] = None,
     extra_params: dict | None = None, rules_overrides: dict | None = None,
-    profile: str | None = None, to_file: bool = True,
+    profile: Optional[str] = None, to_file: bool = True,
     resume: bool = False,
 ) -> dict:
     """Create (or resume) a run document. Never write the live collection."""
@@ -270,7 +270,7 @@ async def open_run(
 
 
 async def finalize_run(db, dataset: str, run_id: str, *, cancelled: bool = False,
-                       error: str | None = None, extra: dict | None = None):
+                       error: Optional[str] = None, extra: dict | None = None):
     if not run_id:
         return
     spec = spec_for(dataset)

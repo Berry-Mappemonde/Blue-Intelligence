@@ -1,5 +1,8 @@
 """app.routers.marinas — Marinas & anchorages: build (OSM/SHOM), imports/exports,
 unit and batch AI enrichment."""
+
+from __future__ import annotations
+
 import asyncio
 import json
 import os
@@ -238,8 +241,8 @@ def start_marinas_fc_warmup() -> None:
 
 @router.get("/marinas")
 async def list_marinas(
-    priority: int | None = None,
-    source: str | None = None,
+    priority: Optional[int] = None,
+    source: Optional[str] = None,
     visible: bool = False,
 ):
     q: dict = {}
@@ -279,17 +282,17 @@ class MarinasBuildBody(BaseModel):
     clear_before: bool = False
     resume: bool = True
     from_scratch: bool | None = None
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
     # Kept so old clients / the Anchorages Audit map are not broken.
-    radius_nm: float | None = None
+    radius_nm: Optional[float] = None
     include_corridor: bool | None = None
-    corridor_step_nm: float | None = None
-    corridor_radius_nm: float | None = None
+    corridor_step_nm: Optional[float] = None
+    corridor_radius_nm: Optional[float] = None
     maps_place_after: bool = False
-    scope: str | None = None
+    scope: Optional[str] = None
     tiles: list[list[float]] | None = None
-    label: str | None = None
+    label: Optional[str] = None
 
 
 async def _marina_rules_and_radii(body, settings: dict, extra_overrides: dict | None = None):
@@ -329,7 +332,7 @@ async def _marina_rules_and_radii(body, settings: dict, extra_overrides: dict | 
 async def _persist_marina_run(kind: str, rules: dict, extra: dict, *,
                               resume: bool = False, settings: dict | None = None,
                               rules_overrides: dict | None = None,
-                              label: str | None = None) -> dict:
+                              label: Optional[str] = None) -> dict:
     from app.services import isolated_runs
     opened = await isolated_runs.open_run(
         db, "marinas", kind=kind, label=label or f"marinas-{kind}",
@@ -559,22 +562,22 @@ async def marinas_count():
 # ---------- Anchorages (Phase 8 — Mouillages) ----------
 
 class AnchoragesBuildBody(BaseModel):
-    radius_nm: float | None = None
+    radius_nm: Optional[float] = None
     clear_before: bool = False
     include_corridor: bool = False
-    corridor_step_nm: float | None = None
-    corridor_radius_nm: float | None = None
-    profile: str | None = None
+    corridor_step_nm: Optional[float] = None
+    corridor_radius_nm: Optional[float] = None
+    profile: Optional[str] = None
     rules: dict | None = None
     # "full" (default) = tiled world dump · "test" = Biscay tile ·
     # "corridor" = legacy waypoints + route band (isolated run).
-    scope: str | None = None
+    scope: Optional[str] = None
 
 
 @router.get("/anchorages")
 async def list_anchorages(
-    priority: int | None = None,
-    anchorage_type: str | None = None,
+    priority: Optional[int] = None,
+    anchorage_type: Optional[str] = None,
 ):
     q: dict = {}
     if priority is not None:
@@ -749,10 +752,10 @@ MARINA_ENRICH_TASKS: dict[str, dict] = {}
 
 class MarinaEnrichBatchBody(BaseModel):
     limit: int = 10   # 0 = all remaining marinas ("Chain all" mode)
-    priority: int | None = None
+    priority: Optional[int] = None
     include_enriched: bool = False   # if True, re-enrich already-enriched ones
     stale_only: bool = False   # if True, filter to stale-only (needs enriched_at)
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
 
 
@@ -764,7 +767,7 @@ class MapsPlaceBody(BaseModel):
     limit: int = 0
     force: bool = False
     skip_search: bool = True
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
 
 
@@ -793,7 +796,7 @@ async def _marina_telemetry(marina: dict, status: str, duration_ms: float, engin
 
 
 async def _run_marina_enrich_one(marina: dict, min_credit_usd: float, log_fn,
-                                skip_tinyfish: bool = False, run_id: str | None = None) -> dict:
+                                skip_tinyfish: bool = False, run_id: Optional[str] = None) -> dict:
     """Run the enrichment chain. `run_id` → marina_run_marinas ; sinon carte live (fiche unitaire)."""
     settings = await get_settings()
     tf_key = (settings.get("tinyfish_api_key") or os.environ.get("TINYFISH_API_KEY") or "").strip() or None
@@ -1173,7 +1176,7 @@ async def marinas_run_detail(run_id: str):
 
 
 @router.get("/marinas/runs/{run_id}/events")
-async def marinas_run_events(run_id: str, step: str | None = None,
+async def marinas_run_events(run_id: str, step: Optional[str] = None,
                              skip: int = 0, limit: int = 500):
     from app.services import isolated_runs
     if not await db.marina_runs.find_one({"_id": run_id}):

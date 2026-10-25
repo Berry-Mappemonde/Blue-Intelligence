@@ -407,7 +407,7 @@ WORLD_TILES: tuple[tuple[float, float, float, float], ...] = (
 MIN_TILE_DEG = 8.0
 
 
-def split_categories(raw: str | None) -> set[str]:
+def split_categories(raw: Optional[str]) -> set[str]:
     if not raw:
         return set()
     return {part.strip().lower() for part in raw.split(";") if part.strip()}
@@ -471,7 +471,7 @@ def control_kind_flags(tags: dict[str, str]) -> tuple[bool, bool]:
 def nearest_control(
     lat: float, lon: float,
     controls: list[tuple[float, float, dict]],
-    radius_km: float | None = None,
+    radius_km: Optional[float] = None,
 ) -> tuple[float, dict] | None:
     """Nearest control within ≤ radius_km, else None."""
     from app.core.run_rules import get_rule
@@ -589,7 +589,7 @@ def osm_role(tags: dict[str, str], *, near_control: bool = False) -> str:
     return "not_port"
 
 
-def taginfo_count(key: str, value: str) -> int | None:
+def taginfo_count(key: str, value: str) -> Optional[int]:
     try:
         r = httpx.get(
             TAGINFO_API,
@@ -607,7 +607,7 @@ def taginfo_count(key: str, value: str) -> int | None:
     return None
 
 
-def _catalog_row(entry: dict[str, Any], live: int | None) -> dict[str, Any]:
+def _catalog_row(entry: dict[str, Any], live: Optional[int]) -> dict[str, Any]:
     count = live if live is not None else entry.get("measured")
     return {
         **{k: entry[k] for k in (
@@ -622,7 +622,7 @@ def how_many_ports(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """There is no single count of "OSM ports" — answers per layer."""
     by_tag = {r["tag"]: r.get("count") for r in rows}
 
-    def n(tag: str) -> int | None:
+    def n(tag: str) -> Optional[int]:
         return by_tag.get(tag)
 
     commercial_sum = sum(
@@ -869,7 +869,7 @@ def _overpass_query(south: float, west: float, north: float, east: float,
 
 def _overpass_marina_near_control_query(
     south: float, west: float, north: float, east: float,
-    radius_m: int | None = None,
+    radius_m: Optional[int] = None,
 ) -> str:
     """Marinas within a radius (m) of a control — not the worldwide leisure=marina dump."""
     from app.core.run_rules import get_rule
@@ -1010,7 +1010,7 @@ async def fetch_osm_elements(
     return list(by_id.values())
 
 
-def _bbox_hit(bbox: list[float] | None, lon: float, lat: float) -> bool:
+def _bbox_hit(bbox: Optional[float], lon: float, lat: float) -> bool:
     if not bbox or len(bbox) < 4:
         return True
     minx, miny, maxx, maxy = (float(bbox[0]), float(bbox[1]),

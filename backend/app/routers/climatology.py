@@ -101,9 +101,9 @@ def climatology_point(
     lat: float = Query(...),
     lon: float = Query(...),
     month: int = Query(..., ge=1, le=12),
-    dest_lat: float | None = Query(None),
-    dest_lon: float | None = Query(None),
-    day: int | None = Query(None, ge=1, le=31),
+    dest_lat: Optional[float] = Query(None),
+    dest_lon: Optional[float] = Query(None),
+    day: Optional[int] = Query(None, ge=1, le=31),
 ):
     response.headers["Cache-Control"] = CACHE_CONTROL_POINT
     lat, lon = _coord(lat, lon)
@@ -155,8 +155,8 @@ def climatology_crossings(
     lat2: float = Query(...),
     lon2: float = Query(...),
     month: int = Query(..., ge=1, le=12),
-    day: int | None = Query(None, ge=1, le=31),
-    dayrange: int | None = Query(None, ge=7, le=45),
+    day: Optional[int] = Query(None, ge=1, le=31),
+    dayrange: Optional[int] = Query(None, ge=7, le=45),
 ):
     response.headers["Cache-Control"] = CACHE_CONTROL_POINT
     lat1, lon1 = _coord(lat1, lon1)

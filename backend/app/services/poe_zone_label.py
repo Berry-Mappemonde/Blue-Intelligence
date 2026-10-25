@@ -21,15 +21,15 @@ _GEO_PREFIXES = (
 )
 
 
-def _is_200nm(pol: str | None) -> bool:
+def _is_200nm(pol: Optional[str]) -> bool:
     return (pol or "").replace(" ", "").upper() == "200NM"
 
 
-def _fold(s: str | None) -> str:
+def _fold(s: Optional[str]) -> str:
     return (s or "").strip().casefold()
 
 
-def geoname_tail(geoname: str | None) -> str:
+def geoname_tail(geoname: Optional[str]) -> str:
     """Strip the VLIZ prefix, keep the partners / place."""
     g = (geoname or "").strip()
     gl = g.casefold()
@@ -96,8 +96,8 @@ def compose_zone_label(sovereign: str, key: str, qualifier: str) -> str:
     return f"{sov} ({inner})" if sov else inner
 
 
-def _stamp(zone: dict, *, disambiguated: bool, key: str | None,
-           qualifier: str | None, label: str) -> None:
+def _stamp(zone: dict, *, disambiguated: bool, key: Optional[str],
+           qualifier: Optional[str], label: str) -> None:
     zone["disambiguated"] = disambiguated
     zone["qualifier_key"] = key
     zone["qualifier"] = qualifier
@@ -168,7 +168,7 @@ def zone_sort_key(zone: dict) -> tuple:
     return (sov, primary, label)
 
 
-def sovereign_polygon_count(sovereign: str, zones: list[dict] | None = None) -> int:
+def sovereign_polygon_count(sovereign: str, zones: Optional[dict] = None) -> int:
     """How many VLIZ polygons for this sovereign (eez_index if zones omitted)."""
     sov = (sovereign or "").strip()
     if not sov:
@@ -180,7 +180,7 @@ def sovereign_polygon_count(sovereign: str, zones: list[dict] | None = None) -> 
     return sum(1 for z in zones if _fold(z.get("sovereign")) == fold)
 
 
-def search_polygon_name(zone: dict, zones: list[dict] | None = None) -> str:
+def search_polygon_name(zone: dict, zones: Optional[dict] = None) -> str:
     """SERP / extraction name = this VLIZ polygon, not the country aggregate.
 
     Mayotte → “Mayotte”. France hexagon (23 polygons) → “France hexagone”.
@@ -199,7 +199,7 @@ def search_polygon_name(zone: dict, zones: list[dict] | None = None) -> str:
     return " ".join(label.replace("(", " ").replace(")", " ").replace("·", " ").split())
 
 
-def serp_place_name(zone: dict, zones: list[dict] | None = None) -> str:
+def serp_place_name(zone: dict, zones: Optional[dict] = None) -> str:
     """Name sent to the engine: state vocabulary, not the VLIZ qualifier.
 
     “France hexagone” appears on no customs page. Mayotte stays Mayotte.
@@ -210,7 +210,7 @@ def serp_place_name(zone: dict, zones: list[dict] | None = None) -> str:
     return search_polygon_name(zone, zones)
 
 
-def zone_search_lang_iso(zone: dict) -> str | None:
+def zone_search_lang_iso(zone: dict) -> Optional[str]:
     """ISO2 for query language: polygon first, else sovereign."""
     for cc in (zone.get("iso2"), zone.get("sov_iso2")):
         val = (cc or "").strip().upper()
@@ -219,12 +219,12 @@ def zone_search_lang_iso(zone: dict) -> str | None:
     return None
 
 
-def zone_search_location(zone: dict) -> str | None:
+def zone_search_location(zone: dict) -> Optional[str]:
     """ISO2 TinyFish / geocode: the polygon (YT), not the sovereign (FR)."""
     return zone_search_lang_iso(zone)
 
 
-def keep_extracted_in_zone(arbitration: str | None) -> bool:
+def keep_extracted_in_zone(arbitration: Optional[str]) -> bool:
     """A GPS outside THIS polygon is not written on this card.
 
     ``spatial_rejected`` (gazetteer or source coordinates): do not attach

@@ -114,7 +114,7 @@ def catalog_default(rule_id: str, fallback: Any = None) -> Any:
         return fallback
 
 
-def rules_for_mode(mode: str | None = None, *, include_shared: bool = True) -> list[dict]:
+def rules_for_mode(mode: Optional[str] = None, *, include_shared: bool = True) -> list[dict]:
     """Rules for a mode (+ shared). `mode=None` → the whole catalog."""
     if mode and mode not in ("projects", "formalities", "marinas", "capitaineries", "amp", "science", "climatology"):
         raise RuleError(f"mode inconnu: {mode}")
@@ -193,8 +193,8 @@ def _source_and_value(rule: dict, settings: dict, profile_vals: dict, overrides:
     return deepcopy(rule["value"]), "catalog"
 
 
-def resolve_rules(*, mode: str | None = None, settings: dict | None = None,
-                  overrides: dict | None = None, profile: str | None = None,
+def resolve_rules(*, mode: Optional[str] = None, settings: dict | None = None,
+                  overrides: dict | None = None, profile: Optional[str] = None,
                   include_shared: bool = True) -> dict:
     """Resolve effective values for a mode (or the whole catalog)."""
     cat = load_catalog()
@@ -239,8 +239,8 @@ def rules_hash(chosen: dict) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
-def snapshot_for_run(*, mode: str | None, settings: dict | None = None,
-                     overrides: dict | None = None, profile: str | None = None) -> dict:
+def snapshot_for_run(*, mode: Optional[str], settings: dict | None = None,
+                     overrides: dict | None = None, profile: Optional[str] = None) -> dict:
     """Snapshot recordable in `params.rules` — no secrets."""
     resolved = resolve_rules(mode=mode, settings=settings,
                              overrides=overrides, profile=profile)
@@ -256,7 +256,7 @@ def snapshot_for_run(*, mode: str | None, settings: dict | None = None,
     return resolved
 
 
-def public_catalog(mode: str | None = None) -> dict:
+def public_catalog(mode: Optional[str] = None) -> dict:
     """API view: principle + profiles + rules (no secrets)."""
     cat = load_catalog()
     known = profiles()

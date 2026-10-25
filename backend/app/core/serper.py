@@ -49,7 +49,7 @@ def _map_organic(payload: dict) -> list[dict]:
     return out
 
 
-async def serper_search(query: str, key: str, *, gl: str | None = None,
+async def serper_search(query: str, key: str, *, gl: Optional[str] = None,
                         hl: str = "en", log=None) -> list[dict]:
     """POST google.serper.dev/search. 400/401/402/429/timeout → [] (no exception)."""
     log = log or (lambda m: None)

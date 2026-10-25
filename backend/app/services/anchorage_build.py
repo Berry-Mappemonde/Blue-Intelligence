@@ -291,7 +291,7 @@ async def build_anchorages(
     include_corridor: bool = True,
     corridor_step_nm: float = 25.0,
     corridor_radius_nm: float = 25.0,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
 ) -> dict:
     """Full build: OSM around each waypoint + corridor band
     ±corridor_radius_nm (bbox-batched, per-point fallback), dedup,
@@ -543,7 +543,7 @@ async def build_world_anchorages(
     resume: bool = True,
     tiles: tuple[tuple[float, float, float, float], ...] | None = None,
     client: httpx.AsyncClient | None = None,
-    throttle_s: float | None = None,
+    throttle_s: Optional[float] = None,
     fetch_tile=None,
 ) -> dict:
     """Sweep world coastal tiles (like marinas) and upsert

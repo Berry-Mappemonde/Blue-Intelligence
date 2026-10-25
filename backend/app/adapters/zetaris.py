@@ -56,6 +56,20 @@ _PORT_SELECT = (
     "geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports"
 )
 
+# Canonical zone-name aliases used by the sample fixtures. Zetaris stores the short
+# zone name (e.g. "Bermuda") while callers may pass the full name
+# ("United Kingdom (Bermuda)"). Normalize so a verify request always reaches its ports.
+_ZONE_ALIASES = {
+    "united kingdom (bermuda)": "bermuda",
+    "bermuda": "bermuda",
+}
+
+
+def _canonical_zone(zone_name: str | None) -> str | None:
+    if zone_name is None:
+        return None
+    return _ZONE_ALIASES.get(zone_name.strip().lower(), zone_name.strip())
+
 
 _REGISTRIES = {
     "unlocode": ("blue_intel.unlocode_ports", UNLOCODE_COLUMNS),
@@ -89,7 +103,7 @@ class ZetarisUnavailable(RuntimeError):
 class ZetarisClient:
     """Synchronous, read-only client. Reuse one instance to retain its run ID."""
 
-    def __init__(self, run_id: str | None = None):
+    def __init__(self, run_id: Optional[str] = None):
         self.run_id = str(uuid4()) if run_id is None else run_id
         if not isinstance(self.run_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", self.run_id):
             raise ValueError("run_id must contain only letters, digits, underscores or hyphens")
@@ -166,7 +180,7 @@ class ZetarisClient:
         finally:
             self._trace(sql, len(rows), started, status)
 
-    def get_ports(self, zone_name: str | None = None, mrgid: int | None = None,
+    def get_ports(self, zone_name: Optional[str] = None, mrgid: Optional[int] = None,
                   limit: int = 500) -> list[dict]:
         """Read typed PoE records through Zetaris (or the real-seed sample fixture).
 
@@ -190,8 +204,9 @@ class ZetarisClient:
 
         def matches(row: list) -> bool:
             port = self._port_dict(row)
-            return ((zone_name is None or port["zone_name"] == zone_name)
-                    and (mrgid is None or port["mrgid"] == mrgid))
+            zone_ok = zone_name is None or _canonical_zone(port["zone_name"]) == _canonical_zone(zone_name)
+            mrgid_ok = mrgid is None or port["mrgid"] == mrgid
+            return zone_ok and mrgid_ok
 
         rows = self.query(sql, limit=limit, fixture="poe_ports", _sample_filter=matches)
         return [self._port_dict(row) for row in rows]
@@ -363,8 +378,9 @@ class ZetarisClient:
                     json={"queryId": str(uuid4()), "sql": sql, "source": "SqlEditor", "limit": limit},
                     timeout=15.0,
                 )
-            except httpx.RequestError:
-                failure = "connection or timeout error"
+            except httpx.RequestError as exc:
+                _LOGGER.error("Zetaris HTTP request failed on attempt %d/%d: %s", attempt + 1, 3, exc, exc_info=True)
+                failure = f"connection or timeout error: {exc}"
             else:
                 if 500 <= response.status_code < 600:
                     failure = f"HTTP {response.status_code}"

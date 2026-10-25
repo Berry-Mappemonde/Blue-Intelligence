@@ -151,7 +151,7 @@ def looks_official_url(url: str) -> bool:
     return bool(url and _OFFICIAL_URL_RE.search(url))
 
 
-def serp_drop_reason(url: str, extra_re=None, protect: bool = False) -> str | None:
+def serp_drop_reason(url: str, extra_re=None, protect: bool = False) -> Optional[str]:
     """Why drop this URL, or None to keep it. Auditable."""
     if not (url or "").startswith("http"):
         return "not_http"
@@ -190,7 +190,7 @@ def serp_filter(results: list[dict], url_key: str = "url", extra_re=None,
     return out
 
 
-def url_looks_like_pdf(url: str | None) -> bool:
+def url_looks_like_pdf(url: Optional[str]) -> bool:
     """Path .pdf — even if the server serves captcha HTML instead."""
     path = (urlparse(url or "").path or "").lower()
     return path.endswith(".pdf")
@@ -217,11 +217,11 @@ _wayback_503s = 0
 _wayback_pause_until = 0.0
 
 
-def url_host(url: str | None) -> str:
+def url_host(url: Optional[str]) -> str:
     return (urlparse(url or "").hostname or "").lower().rstrip(".")
 
 
-def host_is_retired(url: str | None) -> bool:
+def host_is_retired(url: Optional[str]) -> bool:
     """Hôte dont le DNS est mort — ne pas fetcher ni capturer."""
     host = url_host(url)
     if not host:
@@ -230,7 +230,7 @@ def host_is_retired(url: str | None) -> bool:
                for suf in RETIRED_HOST_SUFFIXES)
 
 
-def url_looks_like_download(url: str | None, disposition: str = "") -> bool:
+def url_looks_like_download(url: Optional[str], disposition: str = "") -> bool:
     """Fichier à télécharger (PDF, attachment) — Chromium ne peut pas le photographier."""
     if "attachment" in (disposition or "").lower():
         return True
@@ -240,7 +240,7 @@ def url_looks_like_download(url: str | None, disposition: str = "") -> bool:
     return bool(_DOWNLOAD_PATH_RE.search(path))
 
 
-def should_skip_screenshot(url: str | None, page: dict | None = None) -> str | None:
+def should_skip_screenshot(url: Optional[str], page: dict | None = None) -> Optional[str]:
     """Raison de sauter la capture Review, ou None."""
     page = page or {}
     if host_is_retired(url) or host_is_retired(page.get("final_url")):
@@ -266,7 +266,7 @@ def reset_wayback_circuit() -> None:
     _wayback_pause_until = 0.0
 
 
-def wayback_circuit_open(now: float | None = None) -> bool:
+def wayback_circuit_open(now: Optional[float] = None) -> bool:
     return (now if now is not None else time.time()) < _wayback_pause_until
 
 
@@ -288,7 +288,7 @@ _IMAGE_EXTS = frozenset({
 })
 
 
-def path_looks_like_image(path: str | None) -> bool:
+def path_looks_like_image(path: Optional[str]) -> bool:
     """Last segment .png/.jpg/… — WordPress portraits, not a card."""
     name = unquote((path or "").split("?")[0]).rsplit("/", 1)[-1].lower()
     if "." not in name:
@@ -296,7 +296,7 @@ def path_looks_like_image(path: str | None) -> bool:
     return name.rsplit(".", 1)[-1] in _IMAGE_EXTS
 
 
-def url_looks_like_image(url: str | None) -> bool:
+def url_looks_like_image(url: Optional[str]) -> bool:
     """Image URL — Chromium + trafilatura on it blows RAM."""
     return path_looks_like_image(urlparse(url or "").path)
 
@@ -383,7 +383,7 @@ def _pdf_cache_path(digest: str) -> Path:
     return Path(PDF_CACHE_DIR) / f"{digest}.act1.txt"
 
 
-def _read_pdf_cache(digest: str) -> str | None:
+def _read_pdf_cache(digest: str) -> Optional[str]:
     path = _pdf_cache_path(digest)
     try:
         if path.is_file():
@@ -512,7 +512,7 @@ def parse_pdf_text(content: bytes, max_pages: int = 180) -> str:
 
 
 async def parse_pdf_with_nemotron_vl(content: bytes, settings: dict | None = None,
-                                      max_pages: int = 180, log=None) -> str | None:
+                                      max_pages: int = 180, log=None) -> Optional[str]:
     """Extract and understand PDF using Nemotron 3.5 Super VL with reasoning_effort='none'.
 
     This calls Nemotron directly for PDF comprehension (not just text extraction).
@@ -711,7 +711,7 @@ async def fetch_raw(url: str, timeout: int = 25) -> httpx.Response:
         return r
 
 
-def is_maps_render_url(url: str | None) -> bool:
+def is_maps_render_url(url: Optional[str]) -> bool:
     """Google Maps card or search: JS DOM, not a decree. Fetch only."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
@@ -751,7 +751,7 @@ def content_is_pdf(content: bytes | None, content_type: str = "",
     return False
 
 
-def text_usable(text: str | None, min_chars: int = 200, *,
+def text_usable(text: Optional[str], min_chars: int = 200, *,
                 html: str = "", title: str = "") -> bool:
     """Text long enough and not an anti-bot challenge."""
     t = (text or "").strip()
@@ -783,7 +783,7 @@ def _link_href(raw) -> str:
     return ""
 
 
-def html_hrefs(html: str | None, url: str, limit: int = 50) -> list[str]:
+def html_hrefs(html: Optional[str], url: str, limit: int = 50) -> list[str]:
     """All http(s) hrefs, internals included — needed for AMP / depth-2."""
     if not html:
         return []
@@ -800,7 +800,7 @@ def html_hrefs(html: str | None, url: str, limit: int = 50) -> list[str]:
     return out
 
 
-def empty_page(url: str, *, level: str = "failed", error: str | None = None) -> dict:
+def empty_page(url: str, *, level: str = "failed", error: Optional[str] = None) -> dict:
     return {
         "url": url, "text": "", "md5": None, "level": level, "title": "",
         "meta_desc": "", "image": None, "ext_links": [], "links": [],
@@ -1410,7 +1410,7 @@ def _extract_annexe_ppc_maritime(text: str) -> list[dict]:
     return out
 
 
-def _sx_normalize_place(raw: str) -> str | None:
+def _sx_normalize_place(raw: str) -> Optional[str]:
     """Simpsonbay Marina, Greatbay harbor, Cruise Terminal — not the airport."""
     n = " ".join((raw or "").split()).strip(" .;:")
     n = re.sub(r"^(?:including|and)\s+(?:the\s+)?", "", n, flags=re.I).strip()
@@ -1428,7 +1428,7 @@ def _sx_normalize_place(raw: str) -> str | None:
     return None
 
 
-def _eg_normalize_marina(raw: str) -> str | None:
+def _eg_normalize_marina(raw: str) -> Optional[str]:
     """SIS title "Hurghada Marina:" — not a town cited in prose."""
     n = " ".join(html.unescape(raw or "").split()).strip(" .;:*")
     n = re.sub(r"^\*+", "", n).strip()
@@ -1832,7 +1832,7 @@ async def _fetch_bytes(url: str, headers: dict, timeout: float):
         return r.content, (r.headers.get("content-type") or "").lower()
 
 
-async def _wayback_snapshot_url(url: str) -> str | None:
+async def _wayback_snapshot_url(url: str) -> Optional[str]:
     async with httpx.AsyncClient(timeout=20, follow_redirects=False, headers=UA_BROWSER) as client:
         r = await fetch_checked(client, "https://web.archive.org/cdx/search/cdx", params={
             "url": url, "output": "json", "filter": "statuscode:200",
@@ -1846,7 +1846,7 @@ async def _wayback_snapshot_url(url: str) -> str | None:
         return f"https://web.archive.org/web/{ts}id_/{orig}"
 
 
-def _mirror_http_status(exc: Exception) -> int | None:
+def _mirror_http_status(exc: Exception) -> Optional[int]:
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code
     return None
@@ -1859,7 +1859,7 @@ def _mirror_http_err(exc: Exception) -> str:
     return type(exc).__name__
 
 
-def _mirror_usable(text: str | None) -> bool:
+def _mirror_usable(text: Optional[str]) -> bool:
     if not text or len(text) < 400:
         return False
     if looks_blocked(text) or looks_hard_challenge(text=text, html=text):
@@ -1874,7 +1874,7 @@ def _append_fetch_links(text: str, links: list | None) -> str:
     return (text or "") + "\n" + "\n".join(extra[:20])
 
 
-def _arbitrate_mirror_texts(jina_text: str | None, tf_text: str | None) -> tuple[str, str, dict] | None:
+def _arbitrate_mirror_texts(jina_text: Optional[str], tf_text: Optional[str]) -> tuple[str, str, dict] | None:
     """Jina ∥ TinyFish Fetch: challenge dropped, catalog wins, else the longest."""
     j_ok = _mirror_usable(jina_text)
     t_ok = _mirror_usable(tf_text)
@@ -1910,7 +1910,7 @@ def _arbitrate_mirror_texts(jina_text: str | None, tf_text: str | None) -> tuple
     return None
 
 
-async def _jina_mirror_text(url: str, log) -> str | None:
+async def _jina_mirror_text(url: str, log) -> Optional[str]:
     for attempt in range(2):
         try:
             content, _ = await _fetch_bytes(f"https://r.jina.ai/{url}", UA_READER, 90)
@@ -1929,7 +1929,7 @@ async def _jina_mirror_text(url: str, log) -> str | None:
     return None
 
 
-async def _tinyfish_mirror_text(url: str, log) -> tuple[str | None, list]:
+async def _tinyfish_mirror_text(url: str, log) -> tuple[Optional[str], list]:
     from app.core.tinyfish import tf_api_key, tf_fetch
     key = tf_api_key()
     if not key:
@@ -1952,7 +1952,7 @@ async def _tinyfish_mirror_text(url: str, log) -> tuple[str | None, list]:
     return text, links
 
 
-async def _jorf_reader_text(url: str, log) -> str | None:
+async def _jorf_reader_text(url: str, log) -> Optional[str]:
     """Copies of the same JORF text when Légifrance returns a Cloudflare challenge."""
     blob = (url or "").upper()
     for key, mirrors in _JORF_READERS.items():
@@ -1975,7 +1975,7 @@ async def _jorf_reader_text(url: str, log) -> str | None:
     return None
 
 
-async def _wayback_mirror_text(url: str, log) -> str | None:
+async def _wayback_mirror_text(url: str, log) -> Optional[str]:
     if wayback_circuit_open():
         log("miroir Wayback: en pause (503 répétés)")
         return None
@@ -2273,8 +2273,8 @@ async def read_urls(
     min_chars: int = 200,
     prefer_fetch: bool = False,
     allow_render: bool = True,
-    fetch_purpose: str | None = None,
-    fetch_key: str | None = None,
+    fetch_purpose: Optional[str] = None,
+    fetch_key: Optional[str] = None,
     keep_if_links: bool = False,
     log=None,
     concurrency: int = 4,
@@ -2365,8 +2365,8 @@ async def read_url(
     min_chars: int = 200,
     prefer_fetch: bool = False,
     allow_render: bool = True,
-    fetch_purpose: str | None = None,
-    fetch_key: str | None = None,
+    fetch_purpose: Optional[str] = None,
+    fetch_key: Optional[str] = None,
     keep_if_links: bool = False,
     log=None,
 ) -> dict:

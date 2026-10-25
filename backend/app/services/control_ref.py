@@ -8,9 +8,9 @@ _DELTA_DEG = 0.004
 
 
 def control_ref_from_candidates(
-    lat: float | None,
-    lon: float | None,
-    candidates: list[dict] | None,
+    lat: Optional[float],
+    lon: Optional[float],
+    candidates: Optional[dict],
     radius_km: float = OVERLAY_RADIUS_KM,
 ) -> dict:
     """Attach the nearest official neighbor. Distance only. No identity."""
@@ -35,7 +35,7 @@ def control_ref_from_candidates(
     }
 
 
-async def marina_control_candidates(db, lat: float | None, lon: float | None) -> list[dict]:
+async def marina_control_candidates(db, lat: Optional[float], lon: Optional[float]) -> list[dict]:
     if lat is None or lon is None or db is None:
         return []
     try:

@@ -190,7 +190,7 @@ def _usable_nim(model: str) -> str:
     return used
 
 
-def supports_json_object(model: str | None) -> bool:
+def supports_json_object(model: Optional[str]) -> bool:
     blob = (model or "").lower()
     return not any(token in blob for token in _NO_JSON_OBJECT)
 
@@ -219,7 +219,7 @@ def _dedupe(models: list[str]) -> tuple[str, ...]:
     return tuple(out)
 
 
-def models_for(role: str, preferred: str | None = None) -> tuple[str, ...]:
+def models_for(role: str, preferred: Optional[str] = None) -> tuple[str, ...]:
     """NIM order for the role. `CHAINS` is the source; no implicit Muse pin.
 
     Overrides: `NVIDIA_MODEL_CHAIN_{ROLE}` (full list), else
@@ -251,7 +251,7 @@ def models_for(role: str, preferred: str | None = None) -> tuple[str, ...]:
     return _dedupe([*head, *defaults])
 
 
-def engine_label(model: str | None = None) -> str:
+def engine_label(model: Optional[str] = None) -> str:
     """Persisted label (judge_engine / extraction_engine)."""
     m = (model or primary_model()).lower()
     if "deepseek" in m:
@@ -275,12 +275,12 @@ def engine_label(model: str | None = None) -> str:
     return "nvidia"
 
 
-def muse_generation_extras(model: str | None = None) -> dict:
+def muse_generation_extras(model: Optional[str] = None) -> dict:
     """Documented NIM parameters (infer cards) for PoE JSON."""
     return generation_extras(model)
 
 
-def sampling_params(model: str | None = None) -> dict:
+def sampling_params(model: Optional[str] = None) -> dict:
     """NVIDIA infer-card sampling, not generic greedy."""
     m = (model or primary_model()).lower()
     if "muse" in m:
@@ -301,7 +301,7 @@ def sampling_params(model: str | None = None) -> dict:
     return {"temperature": 0}
 
 
-def generation_extras(model: str | None = None, role: str = "json") -> dict:
+def generation_extras(model: Optional[str] = None, role: str = "json") -> dict:
     """reasoning_effort / chat_template_kwargs per infer card and usage."""
     m = (model or primary_model()).lower()
     # legal: Kimi thinking always on; infer default = max. PoE / page JSON:
@@ -332,7 +332,7 @@ def generation_extras(model: str | None = None, role: str = "json") -> dict:
     return {}
 
 
-def looks_like_legal_text(text: str | None) -> bool:
+def looks_like_legal_text(text: Optional[str]) -> bool:
     """True if the excerpt looks like a decree / gazette (Kimi, not the current judge)."""
     blob = (text or "").strip()
     if len(blob) < 80:
@@ -340,7 +340,7 @@ def looks_like_legal_text(text: str | None) -> bool:
     return bool(_LEGAL_RE.search(blob))
 
 
-def second_extract_choice(context: str | None) -> tuple[str, str] | None:
+def second_extract_choice(context: Optional[str]) -> tuple[str, str] | None:
     """Second reader: Kimi on a decree; else the next in the extract chain."""
     prim = primary_model()
     if looks_like_legal_text(context):
@@ -353,7 +353,7 @@ def second_extract_choice(context: str | None) -> tuple[str, str] | None:
     return None
 
 
-def parse_json_strict(txt: str | None):
+def parse_json_strict(txt: Optional[str]):
     """JSON only. Reject chain-of-thought (prompt example included)."""
     if not isinstance(txt, str) or not txt.strip():
         return None
@@ -368,7 +368,7 @@ def parse_json_strict(txt: str | None):
         return None
 
 
-def _extract_json_object(txt: str | None):
+def _extract_json_object(txt: Optional[str]):
     """First balanced JSON object (net for reasoning_content)."""
     if not isinstance(txt, str):
         return None
@@ -525,7 +525,7 @@ async def _complete_one(key: str, payload: dict, *,
 async def complete_json_nvidia_tracked(
         system: str, prompt: str,
         settings: dict | None = None, *,
-        model: str | None = None,
+        model: Optional[str] = None,
         role: str = "json",
         fallback: bool = True,
         max_tokens: int = 800,
@@ -560,7 +560,7 @@ async def complete_json_nvidia_tracked(
 
 async def complete_json_nvidia(system: str, prompt: str,
                                settings: dict | None = None, *,
-                               model: str | None = None,
+                               model: Optional[str] = None,
                                role: str = "json",
                                fallback: bool = True,
                                max_tokens: int = 800,
@@ -575,7 +575,7 @@ async def complete_json_nvidia(system: str, prompt: str,
 
 async def complete_text_nvidia(system: str, prompt: str,
                                settings: dict | None = None, *,
-                               model: str | None = None,
+                               model: Optional[str] = None,
                                role: str = "text",
                                fallback: bool = True,
                                max_tokens: int = 800,
@@ -627,8 +627,8 @@ async def complete_text_nvidia(system: str, prompt: str,
 
 async def extract_ports_nvidia(context: str, zone: dict,
                                settings: dict | None = None, log=None,
-                               model: str | None = None,
-                               engine: str | None = None,
+                               model: Optional[str] = None,
+                               engine: Optional[str] = None,
                                fallback: bool | None = None) -> list[dict]:
     from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports, reader_context
 

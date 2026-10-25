@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from app.config import DATA_DIR
 
 # VLIZ v12 → territories.json (checked 2026-06, same table as zee_crossings).
-MRGID_TO_TERRITORY: dict[int, str | None] = {
+MRGID_TO_TERRITORY: dict[int, Optional[str]] = {
     5677: "france_metropolitaine",
     48966: "france_metropolitaine",
     48976: "france_metropolitaine",

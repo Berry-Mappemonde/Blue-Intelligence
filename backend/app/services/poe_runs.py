@@ -12,6 +12,8 @@ Resume: an interrupted run (server restart…) continues where it
 stopped — zones already in poe_run_zones for this run are skipped.
 v1 ↔ run comparison and the report live in poe_diff / poe_report.
 """
+from __future__ import annotations
+
 import asyncio
 import time
 import uuid
@@ -57,7 +59,7 @@ async def execute_run(db, state, run_id: str, label: str = "",
                       concurrency: int = 2, resume: bool = False,
                       variant: str = "tinyfish",
                       rules_overrides: dict | None = None,
-                      profile: str | None = None) -> dict:
+                      profile: Optional[str] = None) -> dict:
     """Execute (or resume) a full run. `state` is a TaskState (live logs,
     progress, cancel); durable state lives in db.poe_runs.
     variant: v1 | v2 | tinyfish — never writes poe_ports.

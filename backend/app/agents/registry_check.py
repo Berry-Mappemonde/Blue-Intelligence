@@ -361,6 +361,9 @@ def entry_mention(text: str | None, variants: list[tuple[str, ...]]) -> dict | N
                 gap = max(ts - ne, ns - te, 0)
                 if gap > PROXIMITY_CHARS:
                     continue
+                # Un terme d'entrée FORT (ex: "ports of entry") suffit à lui seul : il valide
+                # même une variante stripée ("saint george" depuis "Port of St. George's").
+                # Seul un terme FAIBLE exige un mot-port proche et refuse la variante stripée.
                 if strength == "weak" and (getattr(variant, "stripped", False)
                                            or not _port_word_near(tokens, ns, ne, (ts, te))):
                     continue

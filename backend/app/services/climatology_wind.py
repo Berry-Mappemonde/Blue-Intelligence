@@ -43,7 +43,7 @@ def wind_npz_path(month: int) -> Path:
     return wind_dir() / f"wind-{int(month):02d}.npz"
 
 
-def has_snapshot(month: int | None = None) -> bool:
+def has_snapshot(month: Optional[int] = None) -> bool:
     if month is None:
         return wind_npz_path(1).is_file()
     return wind_npz_path(month).is_file()
@@ -96,7 +96,7 @@ def _bundle_stat(bundle: dict) -> str:
     return "average"
 
 
-def _sample_count(bundle: dict, i: int, j: int) -> int | None:
+def _sample_count(bundle: dict, i: int, j: int) -> Optional[int]:
     count = bundle.get("sample_count")
     if count is None:
         return None

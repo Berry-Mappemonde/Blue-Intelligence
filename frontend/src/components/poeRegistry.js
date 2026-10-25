@@ -67,14 +67,58 @@ export function registryBadgeHtml(port, t, esc) {
   return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${borderColor};background:${backgroundColor};padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
 }
 
+const PORT_TOKENS = { st: "saint", ste: "sainte", mt: "mount", ft: "fort", pt: "point" };
+// Leading facility words that name the facility, not the place (mirrors backend _PREFIXES).
+const PORT_PREFIXES = [
+  "port autonome de", "port autonome d", "pkk porti i", "porti i",
+  "port of", "port de", "port d", "porto de", "porto do", "porto da",
+  "puerto de", "puerto del", "harbour of", "harbor of",
+  "marina de", "marina di", "marina", "luka", "porto", "puerto", "port", "the",
+];
+// Trailing facility words (mirrors backend _SUFFIXES).
+const PORT_SUFFIXES = [
+  "small boat harbour", "small boat harbor", "deep water harbour", "deep water harbor",
+  "harbour", "harbor", "port", "marina", "jetty", "terminal",
+];
+
+function stripAffixes(key, words, leading) {
+  let result = key;
+  for (const word of words) {
+    if (leading) {
+      if (result.startsWith(word + " ")) result = result.slice(word.length + 1);
+    } else {
+      if (result.endsWith(" " + word)) result = result.slice(0, -word.length - 1);
+    }
+  }
+  return result;
+}
+
+/** Normalisation fidèle à `port_key` du backend (registry_check.py) :
+ *  retire accents, possessifs, préfixes/suffixes d'installation, et épelle St/Ste/Mt/Ft/Pt. */
 function portKey(name) {
-  return String(name || "")
+  let key = String(name || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/['’`]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  // possessifs ('s / ’s)
+  key = key.replace(/['’`]s\b/gi, "");
+  key = key.replace(/['’`]/g, "");
+  // tokens non-words -> espace, collapse
+  key = key.replace(/[^a-z0-9]+/g, " ").trim();
+  // préfixes de début + suffixes de fin
+  key = stripAffixes(key, PORT_PREFIXES, true);
+  key = stripAffixes(key, PORT_SUFFIXES, false);
+  if (!key) {
+    key = String(name || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/['’`]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+  // st/ste/mt/ft/pt -> saint/sainte/mount/fort/point
+  return key.split(/\s+/).map((t) => PORT_TOKENS[t] || t).join(" ").trim();
 }
 
 /**

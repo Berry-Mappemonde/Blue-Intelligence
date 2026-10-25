@@ -9,8 +9,8 @@ from __future__ import annotations
 def resolve_from_scratch(
     explicit: bool | None,
     *,
-    scope: str | None = None,
-    mode: str | None = None,
+    scope: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> bool:
     if explicit is not None:
         return bool(explicit)

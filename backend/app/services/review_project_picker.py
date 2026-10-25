@@ -146,7 +146,7 @@ def merge_project(local: dict, llm: dict | None,
 
 
 async def _llm_pick_project(fiche: dict, settings, log,
-                            lessons: list[dict] | None = None) -> dict | None:
+                            lessons: Optional[dict] = None) -> dict | None:
     urls = project_urls(fiche)
     sites = project_sites(fiche)
     if not urls and not sites:
@@ -183,7 +183,7 @@ async def _llm_pick_project(fiche: dict, settings, log,
 async def suggest_project_documents(db, entity_id: str, *,
                                     settings: dict | None = None,
                                     log=None,
-                                    lessons: list[dict] | None = None) -> dict:
+                                    lessons: Optional[dict] = None) -> dict:
     log = log or (lambda m: None)
     eid = _sid(entity_id)
     packed = await get_fiche(db, "project", PUBLISHED_RUN, eid)

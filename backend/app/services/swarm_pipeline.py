@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -494,7 +496,7 @@ class Swarm:
             asyncio.create_task(self.stop())
 
     async def deploy(self, mode: str, clear_db: bool, settings: dict, force_rescan: bool = False,
-                     run_id: str | None = None, recorder=None):
+                     run_id: Optional[str] = None, recorder=None):
         if self.running:
             raise ValueError("swarm already running")
         self.settings = settings
@@ -656,7 +658,7 @@ class Swarm:
                 if cached:
                     existing = {p["url"] for p in await self.db.projects.find({}, {"url": 1}).to_list(30000)}
                     fresh = [c for c in cached if c["url"] not in existing]
-                    resolutions: dict[str, str | None] = {}
+                    resolutions: dict[str, Optional[str]] = {}
                     queued_pages = []
                     for c in fresh:
                         reason = public_url_error(c["url"], resolve_cache=resolutions)
@@ -1025,7 +1027,7 @@ class Swarm:
             self.log(f"[{name}] listing hop error: {str(e)[:120]}", "error")
             return None
 
-    async def _infer_listing_from_live(self, seed) -> str | None:
+    async def _infer_listing_from_live(self, seed) -> Optional[str]:
         """Hint: common prefix of v1 cards of the same funder (not an extraction dump)."""
         name = (seed.get("name") or "").strip()
         if not name:
@@ -1615,7 +1617,7 @@ class Swarm:
             return
         self._queue_partner_seed(decision["seed"])
 
-    def _ftm_new_org_blocked(self, name: str, url: str | None = None) -> bool:
+    def _ftm_new_org_blocked(self, name: str, url: Optional[str] = None) -> bool:
         catalog = self.master_seeds or MASTER_SEEDS
         if find_catalog_seed(catalog, name, url):
             return False
@@ -1747,7 +1749,7 @@ class Swarm:
             "warn",
         )
 
-    def _inbox_ftm(self, name: str, url: str | None, seed: dict | None, proj: dict):
+    def _inbox_ftm(self, name: str, url: Optional[str], seed: dict | None, proj: dict):
         self.ftm_inbox.append({
             "name": name,
             "url": (url or "").strip(),

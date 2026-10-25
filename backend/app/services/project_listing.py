@@ -95,7 +95,7 @@ def path_parts(path: str) -> list[str]:
     return [p for p in (path or "").strip("/").split("/") if p]
 
 
-def is_homepage_url(url: str | None) -> bool:
+def is_homepage_url(url: Optional[str]) -> bool:
     """Site root (optionally /fr, /en). Not a catalogue."""
     if not (url or "").strip():
         return True
@@ -136,7 +136,7 @@ def is_listing_path(path: str, *, apply_blacklist: bool = True) -> bool:
     return True
 
 
-def is_listing_url(url: str | None, *, home_ok: bool = False) -> bool:
+def is_listing_url(url: Optional[str], *, home_ok: bool = False) -> bool:
     if not (url or "").strip().startswith("http"):
         return False
     if is_homepage_url(url):
@@ -144,7 +144,7 @@ def is_listing_url(url: str | None, *, home_ok: bool = False) -> bool:
     return is_listing_path(urlparse(url).path)
 
 
-def is_curated_listing_url(url: str | None) -> bool:
+def is_curated_listing_url(url: Optional[str]) -> bool:
     """The 21 curated ones are already the catalogue, even if the path exits the leaf filter."""
     key = (url or "").rstrip("/")
     if not key:
@@ -170,7 +170,7 @@ def needs_listing_hop(seed: dict | None) -> bool:
     return True
 
 
-def pick_listing_url(urls: list[str] | None) -> str | None:
+def pick_listing_url(urls: list[str] | None) -> Optional[str]:
     """One catalogue: shortest path among valid candidates."""
     ok = [u for u in (urls or []) if is_listing_url(u)]
     if not ok:
@@ -179,7 +179,7 @@ def pick_listing_url(urls: list[str] | None) -> str | None:
     return ok[0]
 
 
-def apply_learned_listings(seeds: list[dict], extras: list[dict] | None) -> list[dict]:
+def apply_learned_listings(seeds: list[dict], extras: Optional[dict]) -> list[dict]:
     """Reattach memorized catalogues (Mongo) onto v1 MasterSeeds."""
     by_domain: dict[str, str] = {}
     by_name: dict[str, str] = {}
@@ -281,7 +281,7 @@ def fiche_search_retry_query(seed: dict) -> str:
 
 def infer_listing_from_project_urls(
     urls: list[str], funder_name: str = "", *, allow_shared_hub: bool = False,
-) -> str | None:
+) -> Optional[str]:
     """Hint: common prefix of v1 cards if it looks like a catalogue.
 
     Save Our Seas `/project/…` → `https://saveourseas.com/project/`.
@@ -361,7 +361,7 @@ def _looks_like_fiche_parts(parts: list[str]) -> bool:
     return meaningful[0] in leaves and meaningful[-1] not in leaves
 
 
-def listing_hygiene_ok(url: str | None) -> bool:
+def listing_hygiene_ok(url: Optional[str]) -> bool:
     """Same light constraint for SERP, Agent and memory. Not a leaf veto."""
     if not (url or "").startswith("http"):
         return False
@@ -456,7 +456,7 @@ def merge_listing_candidates(*groups, cap=LISTING_JUDGE_CAP) -> list[str]:
     return ordered[:limit] if limit else ordered
 
 
-def accept_listing_url(url: str | None, seed: dict | None = None) -> str | None:
+def accept_listing_url(url: Optional[str], seed: dict | None = None) -> Optional[str]:
     """Listing Agent output: hygiene, not the `/projects/` leaf veto."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
@@ -494,7 +494,7 @@ def filter_listing_urls(hits, seed, max_urls=3, *, exclude_urls=None) -> list[st
     return urls[:cap] if cap else urls
 
 
-def parent_listing_url(url: str | None) -> str | None:
+def parent_listing_url(url: Optional[str]) -> Optional[str]:
     """`/projects/coral-restore` → `https://host/projects/` if the parent is an index."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
@@ -569,7 +569,7 @@ def listing_judge_prompt(seed: dict, candidates: list) -> str:
     )
 
 
-def parse_listing_judge(data: dict | None, candidates: list, home: str | None) -> str | None:
+def parse_listing_judge(data: dict | None, candidates: list, home: Optional[str]) -> Optional[str]:
     from app.core.judge import parse_yes_no
     yes = parse_yes_no(
         data,
@@ -585,7 +585,7 @@ async def llm_judge_listing(
     *,
     settings: dict | None = None,
     log=None,
-) -> str | None:
+) -> Optional[str]:
     """NVIDIA (json chain) → OpenRouter → Claude. One URL among 3–5, never off-list."""
     packed = []
     for cand in candidates or []:

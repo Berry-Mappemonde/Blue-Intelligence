@@ -90,7 +90,7 @@ def find_building(
     lat: float,
     lon: float,
     pts: Sequence[dict] | Iterable[dict],
-    radius_km: float | None = None,
+    radius_km: Optional[float] = None,
     lat_key: str = "lat",
     lon_key: str = "lon",
 ) -> OverlayHit | None:

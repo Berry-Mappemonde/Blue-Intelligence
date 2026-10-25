@@ -174,7 +174,7 @@ def semantic_similarity(a: str, b: str) -> float:
         return difflib.SequenceMatcher(None, a[:3000], b[:3000]).ratio()
 
 
-def content_changed(old_text: str, new_text: str, threshold: float | None = None) -> bool:
+def content_changed(old_text: str, new_text: str, threshold: Optional[float] = None) -> bool:
     """Semantic monitoring: True only if the content actually changed
     (avoids an LLM re-extraction for a minor HTML change)."""
     if not old_text or not new_text:

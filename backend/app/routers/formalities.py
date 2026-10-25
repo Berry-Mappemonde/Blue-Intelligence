@@ -1,6 +1,8 @@
 """
 app.routers.formalities — Formalities mode FastAPI endpoints [EEZ -> Ports of Entry].
 """
+from __future__ import annotations
+
 import asyncio
 import os
 import time
@@ -69,7 +71,7 @@ def _auto_log(msg: str):
         AUTO_STATE["logs"] = AUTO_STATE["logs"][-300:]
 
 
-def _ts_of(iso: str | None) -> float | None:
+def _ts_of(iso: Optional[str]) -> Optional[float]:
     if not iso:
         return None
     try:
@@ -462,7 +464,7 @@ async def poe_qualify_unclos():
 # Ports & exports
 # ---------------------------------------------------------------------------
 @router.get("/poe/ports")
-async def poe_ports(mrgid: int | None = None, country: str | None = None,
+async def poe_ports(mrgid: Optional[int] = None, country: Optional[str] = None,
                     visible: bool = False):
     if visible:
         from app.services.review_gold import visible_poe_port_docs
@@ -497,7 +499,7 @@ async def poe_verify(payload: dict):
     port carries registry {tier, label, validation, matches, official_evidence,
     coord_mismatch, first_port_of_entry, reasons}.
 
-    Input: { "zone_name": str, "mrgid": int | None }
+    Input: { "zone_name": str, "mrgid": Optional[int] }
     Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
               ports_by_tier, zetaris_mode, registry, memory, brief, error, trace_name }
     memory is {recalled, remembered, created, reinforced, superseded}. trace_name is the
@@ -511,9 +513,14 @@ async def poe_verify(payload: dict):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     mrgid = payload.get("mrgid")
+    if mrgid is not None:
+        try:
+            mrgid = int(mrgid)
+        except (TypeError, ValueError):
+            mrgid = None
 
-    # Run the pipeline
-    result = await run_pipeline(zone_name)
+    # Run the pipeline (mrgid is forwarded to evidence_store.lookup for official-snapshot matching)
+    result = await run_pipeline(zone_name, mrgid=mrgid)
 
     # Registry evidence recorded by the run's ZetarisAdapter.registry_check step
     ports = result.get("ports") or []

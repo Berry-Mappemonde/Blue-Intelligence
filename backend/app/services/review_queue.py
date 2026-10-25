@@ -70,7 +70,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def comment_key(kind: str, entity_id: str, run_id: str | None = None) -> str:
+def comment_key(kind: str, entity_id: str, run_id: Optional[str] = None) -> str:
     """Union key `{mode}:{entity_id}`. `run_id` ignored (legacy debug)."""
     del run_id
     return f"{kind}:{_sid(entity_id)}"
@@ -80,7 +80,7 @@ def legacy_comment_key(kind: str, run_id: str, entity_id: str) -> str:
     return f"{kind}:{run_id}:{entity_id}"
 
 
-def is_published(run_id: str | None) -> bool:
+def is_published(run_id: Optional[str]) -> bool:
     return not run_id or run_id == PUBLISHED_RUN
 
 
@@ -272,7 +272,7 @@ def _title_filter(field: str, q: str) -> dict:
     return {field: {"$regex": re.escape(needle), "$options": "i"}}
 
 
-def _as_mrgid(value) -> int | None:
+def _as_mrgid(value) -> Optional[int]:
     try:
         mid = int(value)
     except (TypeError, ValueError):
@@ -340,7 +340,7 @@ async def _eez_queue_docs(db, rid: str, stable_only: bool) -> list[dict]:
     return out
 
 
-async def list_queue(db, kind: str, run_id: str | None = None,
+async def list_queue(db, kind: str, run_id: Optional[str] = None,
                      offset: int = 0, limit: int = QUEUE_LIMIT_DEFAULT,
                      q: str = "", pre_gold: bool = False,
                      stable: bool = False) -> dict:
@@ -545,7 +545,7 @@ def _dedupe_urls(*groups) -> list[str]:
     return out
 
 
-def _project_fiche(doc: dict, extras: list[dict] | None = None) -> dict:
+def _project_fiche(doc: dict, extras: Optional[dict] = None) -> dict:
     extras = [e for e in (extras or []) if isinstance(e, dict)]
     funders: list[str] = []
     seen_f: set[str] = set()
@@ -790,7 +790,7 @@ def _amp_visit_candidates(doc: dict) -> list[dict]:
     seen: set[str] = set()
     out: list[dict] = []
 
-    def _add(url: str | None, source: str, status: str | None = None):
+    def _add(url: Optional[str], source: str, status: Optional[str] = None):
         href = (url or "").strip()
         if not href or href in seen:
             return
@@ -866,8 +866,8 @@ async def _project_union_extras(db, doc: dict) -> list[dict]:
     return extras
 
 
-async def get_fiche(db, kind: str, run_id: str | None, entity_id: str,
-                    content_run_id: str | None = None) -> dict | None:
+async def get_fiche(db, kind: str, run_id: Optional[str], entity_id: str,
+                    content_run_id: Optional[str] = None) -> dict | None:
     if kind not in KINDS:
         raise ValueError("kind must be project|eez|poe|marina|capitainerie|amp")
     rid = run_id or PUBLISHED_RUN

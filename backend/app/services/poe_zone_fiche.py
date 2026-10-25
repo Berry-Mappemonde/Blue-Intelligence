@@ -153,7 +153,7 @@ def _best_one(recs: list[dict]) -> dict | None:
     return capped[0] if capped else None
 
 
-def _list_like_from_docs(docs: list[dict] | None) -> list[dict]:
+def _list_like_from_docs(docs: Optional[dict]) -> list[dict]:
     """A PDF / decree found while searching a port may be the TD list."""
     out: list[dict] = []
     for doc in docs or []:
@@ -164,7 +164,7 @@ def _list_like_from_docs(docs: list[dict] | None) -> list[dict]:
     return out
 
 
-def bus_by_port_name(docs: list[dict] | None) -> dict[str, list[dict]]:
+def bus_by_port_name(docs: Optional[dict]) -> dict[str, list[dict]]:
     """All state URLs of a port (judge / sources_bu), list/PDF first."""
     buckets: dict[str, dict[str, dict]] = {}
     for doc in docs or []:
@@ -181,12 +181,12 @@ def bus_by_port_name(docs: list[dict] | None) -> dict[str, list[dict]]:
     return {key: _rank_sources(list(recs.values())) for key, recs in buckets.items() if recs}
 
 
-def bu_by_port_name(docs: list[dict] | None) -> dict[str, dict]:
+def bu_by_port_name(docs: Optional[dict]) -> dict[str, dict]:
     """Best state URL found while searching THIS port (judge / sources_bu)."""
     return {key: recs[0] for key, recs in bus_by_port_name(docs).items() if recs}
 
 
-def stable_port_id(doc: dict, mrgid: int | None = None) -> str:
+def stable_port_id(doc: dict, mrgid: Optional[int] = None) -> str:
     """Review / Gold identity: dedup_key, else `{mrgid}:{normalized name}`."""
     key = str(doc.get("dedup_key") or "").strip()
     if key:
@@ -202,8 +202,8 @@ def stable_port_id(doc: dict, mrgid: int | None = None) -> str:
 
 
 def _port_row(doc: dict, url_bu: dict | None = None,
-              urls_bu: list[dict] | None = None, *,
-              mrgid: int | None = None) -> dict | None:
+              urls_bu: Optional[dict] = None, *,
+              mrgid: Optional[int] = None) -> dict | None:
     name = (doc.get("name") or "").strip()
     if not name:
         return None
@@ -239,9 +239,9 @@ def _fiche_kind(zone: dict, n_sources: int, n_ports: int) -> str:
 
 
 def assemble_zone_fiche(zone: dict, ports: list[dict], *,
-                        seeds: list[dict] | None = None,
-                        run_ports: list[dict] | None = None,
-                        run_zones: list[dict] | None = None) -> dict:
+                        seeds: Optional[dict] = None,
+                        run_ports: Optional[dict] = None,
+                        run_zones: Optional[dict] = None) -> dict:
     """Build the review card. 0 Atlas writes.
 
     ``sources_td``: all unique state URLs (list/PDF first).
@@ -360,7 +360,7 @@ async def _label_zone(db, zone: dict) -> dict:
     return zone
 
 
-def _is_published(run_id: str | None) -> bool:
+def _is_published(run_id: Optional[str]) -> bool:
     return not run_id or run_id == PUBLISHED_RUN
 
 
@@ -433,7 +433,7 @@ def _merge_union_ports(v1: list[dict], run_ports: list[dict],
     return list(by.values())
 
 
-async def build_zone_fiche(db, mrgid: int, run_id: str | None = None,
+async def build_zone_fiche(db, mrgid: int, run_id: Optional[str] = None,
                            *, union: bool = False) -> dict | None:
     """Load Atlas read-only and assemble the card.
 

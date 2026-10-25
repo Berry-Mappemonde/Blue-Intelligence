@@ -9,6 +9,9 @@ A run writes only into:
 The v1 `projects` collection is NEVER written (wrote_projects: false).
 Map promotion = phase D, manual, outside this module.
 """
+
+from __future__ import annotations
+
 import time
 import uuid
 
@@ -64,9 +67,9 @@ COUNTER_FOR_VERDICT = {
 
 
 async def open_run(db, *, mode: str, label: str = "", settings: dict | None = None,
-                   force_rescan: bool = False, run_id: str | None = None,
+                   force_rescan: bool = False, run_id: Optional[str] = None,
                    to_file: bool = True, rules_overrides: dict | None = None,
-                   profile: str | None = None) -> dict:
+                   profile: Optional[str] = None) -> dict:
     """Create the run document. Do not write `projects`."""
     await ensure_run_indexes(db)
     rid = run_id or new_run_id()
@@ -135,7 +138,7 @@ async def write_run_project(db, run_id: str, doc: dict) -> str:
     return rid
 
 
-async def finalize_run(db, run_id: str, *, cancelled: bool = False, error: str | None = None,
+async def finalize_run(db, run_id: str, *, cancelled: bool = False, error: Optional[str] = None,
                        extra: dict | None = None):
     if not run_id:
         return

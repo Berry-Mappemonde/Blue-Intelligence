@@ -53,7 +53,7 @@ def _literal_ip(host: str):
         return None
 
 
-def _resolve(host: str, cache: dict | None) -> str | None:
+def _resolve(host: str, cache: dict | None) -> Optional[str]:
     """None when every address is public. An English reason otherwise."""
     if cache is not None and host in cache:
         return cache[host]
@@ -74,7 +74,7 @@ def _resolve(host: str, cache: dict | None) -> str | None:
     return reason
 
 
-def public_url_error(url: str, resolve_cache: dict | None = None) -> str | None:
+def public_url_error(url: str, resolve_cache: dict | None = None) -> Optional[str]:
     """Return an English rejection reason, or None when the URL may be fetched."""
     raw = (url or "").strip()
     if not raw or len(raw) > URL_MAX_LENGTH:

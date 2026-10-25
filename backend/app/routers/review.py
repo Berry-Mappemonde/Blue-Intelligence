@@ -4,6 +4,9 @@ Reads runs / v1. Writes `review_comments`, `review_gold`, `review_choices`,
 `review_suggest`. Never writes `projects` / `poe_ports` / `eez_zones` /
 `marinas` / `capitaineries` / `amp_sites`.
 """
+
+from __future__ import annotations
+
 import asyncio
 
 from fastapi import APIRouter, HTTPException
@@ -55,7 +58,7 @@ async def review_queue_get(kind: str, run_id: str = PUBLISHED_RUN,
 
 @router.get("/review/fiche")
 async def review_fiche_get(kind: str, id: str, run_id: str = PUBLISHED_RUN,
-                           content_run_id: str | None = None):
+                           content_run_id: Optional[str] = None):
     kind = _kind_or_400(kind)
     if not id:
         raise HTTPException(400, "id required")
@@ -101,12 +104,12 @@ class ChoiceBody(BaseModel):
     id: str
     target: str
     action: str
-    url: str | None = None
-    port_id: str | None = None
-    site_id: str | None = None
-    field: str | None = None
-    lat: float | None = None
-    lon: float | None = None
+    url: Optional[str] = None
+    port_id: Optional[str] = None
+    site_id: Optional[str] = None
+    field: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 @router.put("/review/comment")
@@ -129,7 +132,7 @@ class ExtractBody(BaseModel):
 
 class SuggestBody(BaseModel):
     kind: str
-    id: str | None = None
+    id: Optional[str] = None
     scope: str = "one"
 
 

@@ -233,7 +233,7 @@ def merge_picks(local: dict, llm: dict | None, allowed: set[str]) -> dict:
 
 
 async def _llm_pick(fiche: dict, evidences: list[dict], settings, log,
-                    lessons: list[dict] | None = None) -> dict | None:
+                    lessons: Optional[dict] = None) -> dict | None:
     allowed = {ev["url"] for ev in evidences}
     few = pick_fewshot(lessons or [], fiche, exclude_id=_sid(fiche.get("mrgid")))
     prompt = PICKER_PROMPT.format(
@@ -274,7 +274,7 @@ async def _llm_pick(fiche: dict, evidences: list[dict], settings, log,
 async def suggest_eez_documents(db, entity_id: str, *,
                                 settings: dict | None = None,
                                 log=None,
-                                lessons: list[dict] | None = None) -> dict:
+                                lessons: Optional[dict] = None) -> dict:
     """Pre-fill keep/drop + comment. No Gold."""
     log = log or (lambda m: None)
     eid = _sid(entity_id)

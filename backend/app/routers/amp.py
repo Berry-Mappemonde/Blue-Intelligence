@@ -1,4 +1,7 @@
 """app.routers.amp — 4th mode: Marine Protected Areas (ProtectedSeas)."""
+
+from __future__ import annotations
+
 import asyncio
 import json
 import os
@@ -22,7 +25,7 @@ VISIT_DISCOVER_STATE = TaskState(max_logs=400)
 
 
 class VisitUrlBody(BaseModel):
-    url: str | None = None
+    url: Optional[str] = None
 
 
 class RefreshBody(BaseModel):
@@ -33,14 +36,14 @@ class RefreshBody(BaseModel):
 class DiscoverBody(BaseModel):
     limit: int = 200
     skip_search: bool = False
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
-    bbox: str | None = None
-    label: str | None = None
+    bbox: Optional[str] = None
+    label: Optional[str] = None
     resume: bool = False
     from_scratch: bool | None = None
     harvest_polygons: bool | None = None
-    scope: str | None = None
+    scope: Optional[str] = None
 
 
 def _parse_bbox(raw: str, **caps):
@@ -443,7 +446,7 @@ async def amp_run_detail(run_id: str):
 
 
 @router.get("/amp/runs/{run_id}/events")
-async def amp_run_events(run_id: str, step: str | None = None,
+async def amp_run_events(run_id: str, step: Optional[str] = None,
                          skip: int = 0, limit: int = 500):
     from app.services import isolated_runs
     if not await db.amp_runs.find_one({"_id": run_id}):

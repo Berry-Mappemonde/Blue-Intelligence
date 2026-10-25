@@ -192,7 +192,7 @@ def sse_http_timeout(timeout=None) -> httpx.Timeout:
     return httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
 
 
-async def tf_run_async(url: str, goal: str, schema: dict, key: str, max_duration_s: int | None = None) -> dict:
+async def tf_run_async(url: str, goal: str, schema: dict, key: str, max_duration_s: Optional[int] = None) -> dict:
     payload = {"url": url, "goal": goal, "output_schema": schema, "browser_profile": "lite"}
     cfg = public_agent_config(
         {"max_duration_seconds": max_duration_s} if max_duration_s else None)
@@ -470,9 +470,9 @@ def _map_search_hits(payload: dict) -> list[dict]:
     return out
 
 
-async def tf_search(query: str, key: str, *, location: str | None = None,
-                    language: str | None = None, include_domains=None,
-                    exclude_domains=None, purpose: str | None = POE_PURPOSE,
+async def tf_search(query: str, key: str, *, location: Optional[str] = None,
+                    language: Optional[str] = None, include_domains=None,
+                    exclude_domains=None, purpose: Optional[str] = POE_PURPOSE,
                     page: int = 0, log=None) -> list[dict]:
     """GET Search API. 401/402/429/timeout → [] (never an exception)."""
     log = log or (lambda m: None)
@@ -547,7 +547,7 @@ def _map_fetch_payload(payload: dict, requested: list[str]) -> dict[str, dict]:
 
 
 async def tf_fetch(urls: list[str], key: str, *, ttl: int = 0, links: bool = True,
-                   purpose: str | None = POE_PURPOSE, log=None) -> dict[str, dict]:
+                   purpose: Optional[str] = POE_PURPOSE, log=None) -> dict[str, dict]:
     """POST Fetch API (lots de 10). bot_blocked → blocked=True, texte vide."""
     log = log or (lambda m: None)
     if not (key or "").strip():
@@ -585,9 +585,9 @@ async def tf_fetch(urls: list[str], key: str, *, ttl: int = 0, links: bool = Tru
     return out
 
 
-async def tf_search_pages(query: str, key: str, *, location: str | None = None,
-                          language: str | None = None, include_domains=None,
-                          exclude_domains=None, purpose: str | None = POE_PURPOSE,
+async def tf_search_pages(query: str, key: str, *, location: Optional[str] = None,
+                          language: Optional[str] = None, include_domains=None,
+                          exclude_domains=None, purpose: Optional[str] = POE_PURPOSE,
                           max_pages: int = SEARCH_PAGE_CAP,
                           stop_when=None, log=None) -> list[dict]:
     """Chain Search pages (0..max_pages-1) until stop_when(hits)."""
@@ -616,7 +616,7 @@ async def tf_search_pages(query: str, key: str, *, location: str | None = None,
     return hits
 
 
-def poe_agent_goal(name: str, zone_name: str, iso2: str | None = None) -> str:
+def poe_agent_goal(name: str, zone_name: str, iso2: Optional[str] = None) -> str:
     cc = f" ({iso2})" if iso2 else ""
     return (
         f"Open this official page. Decide if « {name} » in {zone_name}{cc} "
@@ -634,7 +634,7 @@ def poe_agent_goal(name: str, zone_name: str, iso2: str | None = None) -> str:
 
 
 async def tf_poe_agent(url: str, name: str, zone_name: str, key: str, *,
-                       iso2: str | None = None, log=None,
+                       iso2: Optional[str] = None, log=None,
                        credit_cap: int = AGENT_CREDIT_CAP) -> dict:
     """One Agent per seed: lite then stealth. 2 concurrent. No max_steps (403)."""
     log = log or (lambda m: None)

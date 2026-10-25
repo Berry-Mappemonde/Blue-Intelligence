@@ -48,7 +48,7 @@ def _has_coords(fiche: dict) -> bool:
     return -90 <= lat <= 90 and -180 <= lon <= 180
 
 
-def _ota_url(url: str | None) -> bool:
+def _ota_url(url: Optional[str]) -> bool:
     try:
         host = (urlparse(url or "").hostname or "").lower()
     except Exception:

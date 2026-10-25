@@ -36,7 +36,7 @@ def wave_npz_path(month: int) -> Path:
     return wave_dir() / f"wave-{int(month):02d}.npz"
 
 
-def has_snapshot(month: int | None = None) -> bool:
+def has_snapshot(month: Optional[int] = None) -> bool:
     if month is None:
         return wave_npz_path(1).is_file()
     return wave_npz_path(month).is_file()
@@ -150,7 +150,7 @@ def is_wave_hazard(lat: float, lon: float, month: int) -> bool | None:
     return w["hs_p90_m"] > nogo
 
 
-def _wave_field(bundle: dict, want: str) -> tuple[str | None, object | None]:
+def _wave_field(bundle: dict, want: str) -> tuple[Optional[str], object | None]:
     snapshot_stat = str(bundle["stat"][0]) if "stat" in bundle else None
     field_name = {"p50": "hs_p50", "p90": "hs_p90", "mean": "hs_mean"}[want]
     # Never serve a mean under the name P90.
@@ -159,7 +159,7 @@ def _wave_field(bundle: dict, want: str) -> tuple[str | None, object | None]:
     return snapshot_stat, (bundle.get(field_name) if field_name else None)
 
 
-def _wave_features(month: int, bundle: dict, bbox, step: int, want: str, *, light: bool) -> tuple[list[dict], str | None]:
+def _wave_features(month: int, bundle: dict, bbox, step: int, want: str, *, light: bool) -> tuple[list[dict], Optional[str]]:
     snapshot_stat, arr = _wave_field(bundle, want)
     features: list[dict] = []
     if arr is None:

@@ -38,6 +38,7 @@ GET  /api/poe/seeds/osm                Taginfo + OSM cache (no Overpass)
 POST /api/poe/seeds/osm/refresh        reload Overpass → osm_port_seeds
 GET  /api/poe/runs/code-fingerprint
 """
+from __future__ import annotations
 import asyncio
 import time
 
@@ -84,9 +85,9 @@ class RunBody(BaseModel):
     limit: int = 0
     concurrency: int = 2
     zones: list[int] | None = None
-    resume_run_id: str | None = None
+    resume_run_id: Optional[str] = None
     variant: str = "tinyfish"           # v1 | v2 | tinyfish
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
 
 
@@ -146,7 +147,7 @@ class SeedMineBody(BaseModel):
 async def _launch_run(*, resume: bool, run_id: str, label: str, limit: int,
                       zones, concurrency: int, variant: str,
                       rules_overrides: dict | None = None,
-                      profile: str | None = None) -> str:
+                      profile: Optional[str] = None) -> str:
     if len(_active_ids()) >= MAX_PARALLEL_RUNS:
         raise HTTPException(409, f"déjà {MAX_PARALLEL_RUNS} runs actifs")
     if run_id in RUN_STATES and RUN_STATES[run_id].running:
@@ -384,7 +385,7 @@ async def poe_seeds_build(body: SeedBuildBody | None = None):
 
 
 @router.get("/poe/seeds")
-async def poe_seeds_list(mrgid: int | None = None, verdict: str | None = None,
+async def poe_seeds_list(mrgid: Optional[int] = None, verdict: Optional[str] = None,
                          limit: int = 50):
     """Read poe_seed_ports. No poe_ports write."""
     q: dict = {}
@@ -645,7 +646,7 @@ async def poe_seeds_mine_cancel():
 
 
 @router.get("/poe/listing-control/review")
-async def listing_control_review(run_id: str | None = None, reason: str | None = None,
+async def listing_control_review(run_id: Optional[str] = None, reason: Optional[str] = None,
                                  skip: int = 0, limit: int = 500):
     q: dict = {}
     if run_id:
@@ -725,7 +726,7 @@ async def poe_run_cancel(run_id: str):
 
 
 @router.get("/poe/runs/{run_id}/ports")
-async def poe_run_ports(run_id: str, mrgid: int | None = None):
+async def poe_run_ports(run_id: str, mrgid: Optional[int] = None):
     q: dict = {"run_id": run_id}
     if mrgid is not None:
         q["mrgid"] = mrgid
@@ -734,7 +735,7 @@ async def poe_run_ports(run_id: str, mrgid: int | None = None):
 
 
 @router.get("/poe/runs/{run_id}/events")
-async def poe_run_events(run_id: str, step: str | None = None, mrgid: int | None = None,
+async def poe_run_events(run_id: str, step: Optional[str] = None, mrgid: Optional[int] = None,
                          skip: int = 0, limit: int = 500):
     q: dict = {"run_id": run_id}
     if step:

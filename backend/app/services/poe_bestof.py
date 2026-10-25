@@ -224,7 +224,7 @@ async def compare_runs(db, run_ids: list[str], include_v1: bool = True) -> dict:
 
 
 async def synthesize_best_of(db, run_ids: list[str], include_v1: bool = True,
-                             dest_run_id: str | None = None, label: str = "") -> dict:
+                             dest_run_id: Optional[str] = None, label: str = "") -> dict:
     """Write a synthetic map into a new run. poe_ports intact."""
     from app.services.poe_runs import new_run_id, ensure_run_indexes
     await ensure_run_indexes(db)

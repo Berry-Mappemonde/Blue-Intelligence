@@ -115,7 +115,7 @@ def _min_kn() -> float:
     return float(rule("climatology.cyclone_min_kn", 34))
 
 
-def storms_for_month(month: int, *, min_kn: float | None = None) -> list[dict]:
+def storms_for_month(month: int, *, min_kn: Optional[float] = None) -> list[dict]:
     month = parse_month(month)
     floor = _min_kn() if min_kn is None else float(min_kn)
     out = []
@@ -198,7 +198,7 @@ def tracks_geojson(month: int) -> dict:
     }
 
 
-def _in_dayrange(storm: dict, month: int, day: int | None, dayrange: int) -> bool:
+def _in_dayrange(storm: dict, month: int, day: Optional[int], dayrange: int) -> bool:
     if day is None:
         return month in (storm.get("months") or [])
     start = storm.get("start")
@@ -227,8 +227,8 @@ def _in_dayrange(storm: dict, month: int, day: int | None, dayrange: int) -> boo
 
 def crossings(
     lat1: float, lon1: float, lat2: float, lon2: float,
-    month: int, *, day: int | None = None, dayrange: int | None = None,
-    radius_nm: float | None = None, prefilter: bool = True,
+    month: int, *, day: Optional[int] = None, dayrange: Optional[int] = None,
+    radius_nm: Optional[float] = None, prefilter: bool = True,
 ) -> dict:
     """OpenCPN ``CycloneTrackCrossings`` spirit: integer + list, never prose.
 
@@ -306,7 +306,7 @@ def tracks_in_month(month: int) -> int:
     return len(storms_for_month(month))
 
 
-def nearby_count(lat: float, lon: float, month: int, radius_nm: float | None = None,
+def nearby_count(lat: float, lon: float, month: int, radius_nm: Optional[float] = None,
                  prefilter: bool = True) -> int:
     radius = float(radius_nm if radius_nm is not None else rule("climatology.cyclone_radius_nm", 120))
     if not prefilter:

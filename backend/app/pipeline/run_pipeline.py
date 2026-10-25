@@ -28,11 +28,13 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from app.adapters import evidence_store
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents import registry_check
+from app.agents import poe_judge
 from app.agents.evaluator import (
     RETRY_LIMIT, evaluate, finalise, is_official_source, prepare_retry,
     route_after_evaluation,
@@ -77,7 +79,7 @@ def _write_trace(run_id: str, entries: list[dict]) -> None:
         print(payload, end='', flush=True)
 
 
-def validate_input(zone_name, run_id=None) -> tuple[str, str | None]:
+def validate_input(zone_name, run_id=None) -> tuple[str, Optional[str]]:
     if not isinstance(zone_name, str) or not zone_name.strip() or len(zone_name) > 200:
         raise ValueError('zone_name must be a non-empty string of at most 200 characters')
     if run_id is not None and (not isinstance(run_id, str) or not _RUN_ID.fullmatch(run_id)):
@@ -105,11 +107,13 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
 
 
 def check_registries(ports: list[dict], zone_name: str, run_id: str,
-                     zetaris_mode: str | None = None) -> tuple[list[dict], dict]:
+                     zetaris_mode: str | None = None,
+                     mrgid: Optional[int] = None) -> tuple[list[dict], dict]:
     """Registry check step: UN/LOCODE + WPI evidence on every candidate port, plus official
     evidence from stored snippets of the zone (evidence_store.lookup; none on failure)."""
-    mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
-    stored = evidence_store.lookup(mrgid, [p.get('name') for p in ports], run_id)
+    if mrgid is None:
+        mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    stored = evidence_store.lookup(mrgid, [p.get('name') for p in ports], run_id, zone_name=zone_name)
     return registry_check.check_ports(ports, dict(name=zone_name, mrgid=mrgid), run_id,
                                       live_failed=zetaris_mode == 'fallback', stored_records=stored)
 
@@ -267,7 +271,7 @@ async def write_brief(state: dict, zone_name: str) -> dict:
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
-async def _in_thread(fn, *args):
+async def _in_thread(fn, *args, **kwargs):
     """Run fn in a daemon thread: a step that never returns cannot block shutdown."""
     loop = asyncio.get_running_loop()
     future = loop.create_future()
@@ -282,7 +286,7 @@ async def _in_thread(fn, *args):
 
     def work():
         try:
-            value, error = fn(*args), None
+            value, error = fn(*args, **kwargs), None
         except BaseException as exc:  # noqa: BLE001 — re-raised in the event loop
             value, error = None, exc
         try:
@@ -294,14 +298,96 @@ async def _in_thread(fn, *args):
     return await future
 
 
-async def _step(ctx: dict, name: str, fn, *args):
+async def _step(ctx: dict, name: str, fn, *args, **kwargs):
     ctx['step'] = name
     started = time.monotonic()
     try:
-        return await _in_thread(fn, *args)
+        return await _in_thread(fn, *args, **kwargs)
     finally:
         elapsed = round((time.monotonic() - started) * 1000, 1)
         ctx['timings'][name] = round(ctx['timings'].get(name, 0) + elapsed, 1)
+
+
+async def _apply_nemotron_judgment(ports: list[dict], zone_name: str, run_id: str,
+                                   zetaris_mode: str | None = None) -> list[dict]:
+    """Applique le jugement Nemotron Ultra (rôle 'judge') à chaque port candidat.
+
+    Pour chaque port disposant de documents officiels (evidence_store.lookup),
+    appelle Nemotron pour juger si c'est un Port of Entry. Surcharge
+    registry.tier, confidence et official_evidence avec le résultat Nemotron.
+    Fallback : si Nemotron est indisponible ou sans texte officiel, conserve
+    l'annotation déterministe déjà appliquée par registry_check.
+    """
+    try:
+        from app.db import get_settings
+        settings = await get_settings()
+    except Exception:
+        settings = {}
+
+    mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    if mrgid is None:
+        return ports
+
+    port_names = [p.get('name') for p in ports if p.get('name')]
+    stored_records = evidence_store.lookup(
+        mrgid, port_names, run_id, zone_name=zone_name)
+
+    official_texts: list[str] = []
+    for record in stored_records or []:
+        snippet = record.get('snippet')
+        if snippet:
+            official_texts.append(snippet)
+
+    # Un seul appel groupé Nemotron pour tous les ports de la zone (évite 499/502)
+    judgments = await poe_judge.judge_zone_ports_with_nemotron(
+        ports, official_texts, zone_name, settings=settings,
+        log=lambda m: None,
+    )
+
+    judged_ports: list[dict] = []
+    for port in ports:
+        port = dict(port)
+        name = port.get('name') or 'inconnu'
+        judgment = judgments.get(name) or poe_judge._default_judgment(
+            reason="non évalué par Nemotron")
+
+        # Surcharge avec le jugement Nemotron (fallback déterministe conservé
+        # si Nemotron est indisponible : _engine == 'deterministic')
+        registry = port.setdefault('registry', {})
+        nemotron_tier = judgment['tier']
+        registry['tier'] = nemotron_tier
+        registry['confidence'] = judgment['confidence']
+        excerpt = judgment.get('official_excerpt') or ''
+        urls = port.get('source_urls') or []
+        source_url = urls[0] if urls else None
+        if isinstance(excerpt, str) and excerpt:
+            registry['official_evidence'] = [
+                {'excerpt': excerpt, 'source': 'Nemotron Legal Audit',
+                 'url': source_url}
+            ]
+        elif isinstance(excerpt, list):
+            registry['official_evidence'] = excerpt
+        else:
+            registry['official_evidence'] = []
+        registry['nemotron_reasoning'] = judgment['reasoning']
+        registry['judgment_engine'] = judgment.get('_engine', 'deterministic')
+        registry['is_poe'] = judgment['is_poe']
+
+        # Cohérence : met à jour validation / zetaris_validation selon le tier Nemotron
+        if nemotron_tier in ("tier1", "tier2"):
+            registry['validation'] = "official"
+            registry['zetaris_validation'] = "official"
+        elif nemotron_tier == "tier_registered":
+            registry['validation'] = "registered - entry status unverified"
+            registry['zetaris_validation'] = "registered - entry status unverified"
+        else:  # tier3
+            registry['validation'] = "unconfirmed - review needed"
+            registry['zetaris_validation'] = "unconfirmed - review needed"
+
+        port['confidence'] = judgment['confidence']
+        judged_ports.append(port)
+
+    return judged_ports
 
 
 async def _run(ctx: dict) -> None:
@@ -312,7 +398,10 @@ async def _run(ctx: dict) -> None:
         ctx['error'] = f'no ports of entry found for zone {zone_name!r}'
         return
     ports, ctx['registry'] = await _step(ctx, 'ZetarisAdapter.registry_check', check_registries,
-                                         ports, zone_name, run_id, ctx['zetaris_mode'])
+                                         ports, zone_name, run_id, ctx['zetaris_mode'],
+                                         mrgid=ctx.get('mrgid'))
+    # Nemotron Ultra judge : évaluation sémantique des ports candidats
+    ports = await _apply_nemotron_judgment(ports, zone_name, run_id, ctx.get('zetaris_mode'))
     state = ctx['state'] = {'run_id': run_id, 'ports': ports}
     state = ctx['state'] = await _step(ctx, 'HMemAgent.recall', recall_node, state)
     state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.evaluate', evaluate, state)
@@ -383,13 +472,26 @@ def _result(ctx: dict, total_ms: float) -> dict:
     )
 
 
-async def run_pipeline(zone_name: str, run_id: str | None = None, *,
+async def run_pipeline(zone_name: str, run_id: Optional[str] = None, *,
+                       mrgid: Optional[int] = None,
+                       sample_mode: Optional[bool] = None,
                        timeout_s: float = RUN_TIMEOUT_S) -> dict:
-    """Verify one zone's Ports of Entry; always returns within timeout_s (plus bookkeeping)."""
+    """Verify one zone's Ports of Entry; always returns within timeout_s (plus bookkeeping).
+
+    `mrgid`, when provided, is forwarded to ``evidence_store.lookup`` so the official
+    snapshot matching (sample mode) is scoped to the right zone.
+
+    `sample_mode`, when provided (not None), overrides the SAMPLE_MODE environment
+    variable for the duration of the run so callers can force live mode
+    (Nightshift/Nemotron) or sample mode explicitly.
+    """
     zone_name, run_id = validate_input(zone_name, run_id)
+    if sample_mode is not None:
+        os.environ['SAMPLE_MODE'] = 'true' if sample_mode else 'false'
     if run_id is None:
         run_id = str(uuid4())
-    ctx = dict(run_id=run_id, zone=zone_name, state={'run_id': run_id, 'ports': []},
+    ctx = dict(run_id=run_id, zone=zone_name, mrgid=mrgid,
+               state={'run_id': run_id, 'ports': []},
                step=None, timings={}, error=None)
     _write_trace(run_id, [_event(run_id, PIPELINE_AGENT, 'run_start',
                                  input_summary=dict(zone_name=zone_name, timeout_s=timeout_s))])

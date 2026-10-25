@@ -125,7 +125,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def domain_of(url: str | None) -> str:
+def domain_of(url: Optional[str]) -> str:
     if not url:
         return ""
     try:
@@ -203,7 +203,7 @@ def set_frequent_hubs_from_projects(projects: list[dict]) -> frozenset[str]:
     return _FREQUENT_HUBS
 
 
-def is_shared_hub(url_or_domain: str | None) -> bool:
+def is_shared_hub(url_or_domain: Optional[str]) -> bool:
     """True if the host is a shared catalog (Decade, Surfrider v1, …)."""
     d = domain_of(url_or_domain)
     if not d:
@@ -216,7 +216,7 @@ def is_shared_hub(url_or_domain: str | None) -> bool:
     return d in frequent_hub_netlocs()
 
 
-def name_owns_hub(name: str, url_or_domain: str | None) -> bool:
+def name_owns_hub(name: str, url_or_domain: Optional[str]) -> bool:
     """The funder *is* the hub (Ocean Decade, HUB Ocean), not a hosted org."""
     d = domain_of(url_or_domain)
     if not d:
@@ -268,7 +268,7 @@ def official_site_query(name: str) -> str:
     return f'"{n}" official site' if n else ""
 
 
-def official_site_retry_query(name: str) -> str | None:
+def official_site_retry_query(name: str) -> Optional[str]:
     """2nd shot if the long name yields nothing: acronym in parentheses."""
     m = re.search(r"\(([A-Z][A-Z0-9]{1,7})\)", name or "")
     if not m:
@@ -276,7 +276,7 @@ def official_site_retry_query(name: str) -> str | None:
     return f'"{m.group(1)}" official website'
 
 
-def is_publisher_host(url_or_domain: str | None) -> bool:
+def is_publisher_host(url_or_domain: Optional[str]) -> bool:
     """True if the host is a journal / publisher, not the organization."""
     d = domain_of(url_or_domain)
     if not d:
@@ -323,7 +323,7 @@ def official_name_tokens(name: str) -> list[str]:
     return tokens
 
 
-def domain_matches_org(url_or_domain: str | None, name: str) -> bool:
+def domain_matches_org(url_or_domain: Optional[str], name: str) -> bool:
     """The domain carries a distinctive name token (not just “blue”)."""
     d = domain_of(url_or_domain)
     if not d:
@@ -443,7 +443,7 @@ def prefer_official_home(seed: dict | None) -> dict:
     return item
 
 
-def listing_url_from_project_urls(urls: list[str], funder_name: str = "") -> str | None:
+def listing_url_from_project_urls(urls: list[str], funder_name: str = "") -> Optional[str]:
     """Root of the *owner* domain — never a borrowed hub."""
     counts: Counter[str] = Counter()
     for u in urls:
@@ -497,7 +497,7 @@ def build_v1_seeds(projects: list[dict]) -> list[dict]:
     return seeds
 
 
-def merge_curated(v1_seeds: list[dict], curated: list[dict] | None = None) -> list[dict]:
+def merge_curated(v1_seeds: list[dict], curated: Optional[dict] = None) -> list[dict]:
     """Union by name/alias. A funder hosted on CORDIS / FPA2 is not dropped."""
     curated = curated if curated is not None else _curated_seeds()
     out: list[dict] = []
@@ -537,7 +537,7 @@ def merge_curated(v1_seeds: list[dict], curated: list[dict] | None = None) -> li
     return out
 
 
-def build_master_seeds(projects: list[dict], curated: list[dict] | None = None) -> list[dict]:
+def build_master_seeds(projects: list[dict], curated: Optional[dict] = None) -> list[dict]:
     from app.services.seed_catalog import build_enriched_master_seeds
     return build_enriched_master_seeds(projects, curated)
 
@@ -563,7 +563,7 @@ def seeds_for_run(seeds: list[dict]) -> list[dict]:
     return sorted(ready, key=_key)
 
 
-def is_known_funder(seeds: list[dict], name: str | None = None, url: str | None = None) -> bool:
+def is_known_funder(seeds: list[dict], name: Optional[str] = None, url: Optional[str] = None) -> bool:
     domain = domain_of(url)
     n = norm_name(name or "")
     for s in seeds:
@@ -575,7 +575,7 @@ def is_known_funder(seeds: list[dict], name: str | None = None, url: str | None 
     return False
 
 
-def listing_url_for_name(seeds: list[dict], name: str) -> str | None:
+def listing_url_for_name(seeds: list[dict], name: str) -> Optional[str]:
     for s in seeds:
         if names_match(s.get("name") or "", name, s.get("aliases") or []) and s.get("url"):
             return s["url"]

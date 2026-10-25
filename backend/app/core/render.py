@@ -88,7 +88,7 @@ def _decode_worker(proc: subprocess.CompletedProcess) -> None:
         raise RenderUnavailable(err or "playwright missing")
 
 
-def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> str | None:
+def _run_render_worker(url: str, timeout_s: int, settle_ms: int) -> Optional[str]:
     """Spawn ``app.core.render_worker`` HTML — hookable from tests."""
     with tempfile.TemporaryDirectory(prefix="bi-render-") as tmp:
         out = Path(tmp) / "page.html"
@@ -145,7 +145,7 @@ async def _get_browser(log):
             return None
 
 
-async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=None) -> str | None:
+async def render_html(url: str, timeout_s: int = 45, settle_ms: int = 2500, log=None) -> Optional[str]:
     """HTML rendered by isolated Chromium (DOM after JavaScript), or None."""
     global _unavailable
     log = log or (lambda m: None)

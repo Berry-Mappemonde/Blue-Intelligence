@@ -1,5 +1,8 @@
 """app.routers.capitaineries — OSM harbour_master dump + SHOM / NOAA overlays
 (BUISGL FUNCTN=2), phone / VHF enrichment."""
+
+from __future__ import annotations
+
 import asyncio
 import os
 import time
@@ -112,7 +115,7 @@ async def import_capitaineries_geojson(fc: dict = Body(...)):
 
 
 @router.get("/capitaineries")
-async def list_capitaineries(source: str | None = None, visible: bool = False,
+async def list_capitaineries(source: Optional[str] = None, visible: bool = False,
                              review: bool = False):
     q: dict = {}
     if source:
@@ -181,13 +184,13 @@ class BuildBody(BaseModel):
     clear_before: bool = False
     resume: bool = True
     from_scratch: bool | None = None
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
-    scope: str | None = None
+    scope: Optional[str] = None
     tiles: list[list[float]] | None = None
     skip_shom: bool = False
     skip_noaa: bool = False
-    label: str | None = None
+    label: Optional[str] = None
 
 
 @router.post("/capitaineries/build")
@@ -338,7 +341,7 @@ class EnrichBatchBody(BaseModel):
     limit: int = 10
     include_enriched: bool = False
     skip_tinyfish: bool = False
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
 
 
@@ -365,7 +368,7 @@ async def _telemetry(doc: dict, status: str, duration_ms: float, engine: str, re
 
 
 async def _run_enrich_one(doc: dict, min_credit_usd: float, log_fn,
-                         skip_tinyfish: bool = False, run_id: str | None = None) -> dict:
+                         skip_tinyfish: bool = False, run_id: Optional[str] = None) -> dict:
     settings = await get_settings()
     tf_key = (settings.get("tinyfish_api_key") or os.environ.get("TINYFISH_API_KEY") or "").strip() or None
     or_key = get_llm_key(settings) or None
@@ -623,7 +626,7 @@ async def capitaineries_run_detail(run_id: str):
 
 
 @router.get("/capitaineries/runs/{run_id}/events")
-async def capitaineries_run_events(run_id: str, step: str | None = None,
+async def capitaineries_run_events(run_id: str, step: Optional[str] = None,
                                    skip: int = 0, limit: int = 500):
     from app.services import isolated_runs
     if not await db.capitainerie_runs.find_one({"_id": run_id}):

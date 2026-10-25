@@ -253,7 +253,7 @@ async def overpass_fetch_bbox(
     client: httpx.AsyncClient,
     max_retries: int = 5,
     logger=None,
-    body: str | None = None,
+    body: Optional[str] = None,
     meta: dict | None = None,
 ) -> list[dict]:
     """
@@ -909,7 +909,7 @@ def priority_for(lat: float, lon: float, wps: list[Waypoint]) -> tuple[int, Wayp
     """
     from app.core.run_rules import get_rule
     near_nm = float(get_rule("marinas.priority_escale_nm", 15.0))
-    best_wp: Waypoint | None = None
+    best_wp: WaypoOptional[int] = None
     best_d = math.inf
     for w in wps:
         d = haversine_nm(lat, lon, w.lat, w.lon)

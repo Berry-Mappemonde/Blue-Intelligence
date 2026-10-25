@@ -34,7 +34,7 @@ async def all_kind_ids(db, kind: str) -> list[str]:
 async def suggest_one(db, kind: str, entity_id: str, *,
                       settings: dict | None = None,
                       log=None,
-                      lessons: list[dict] | None = None) -> dict:
+                      lessons: Optional[dict] = None) -> dict:
     kind = (kind or "").strip().lower()
     if kind == "eez":
         from app.services.review_doc_picker import suggest_eez_documents

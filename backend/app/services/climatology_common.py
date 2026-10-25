@@ -311,7 +311,7 @@ def empty_blocks() -> dict:
     }
 
 
-def _sidecar_stat(path: Path) -> str | None:
+def _sidecar_stat(path: Path) -> Optional[str]:
     if not path.is_file():
         return None
     try:
@@ -322,7 +322,7 @@ def _sidecar_stat(path: Path) -> str | None:
     return str(stat) if stat else None
 
 
-def snapshot_status(month: int | None = None) -> dict:
+def snapshot_status(month: Optional[int] = None) -> dict:
     """Presence and ``stat`` of the displayed month (January if ``month`` is omitted)."""
     root = climatology_dir()
     wind_dir = root / "wind"
@@ -351,7 +351,7 @@ def snapshot_status(month: int | None = None) -> dict:
     }
 
 
-def product_meta(product: str, month: int | None = None) -> dict:
+def product_meta(product: str, month: Optional[int] = None) -> dict:
     periods = {
         "wind": WIND_PERIOD,
         "wave": WAVE_PERIOD,

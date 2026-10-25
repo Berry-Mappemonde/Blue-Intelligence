@@ -678,7 +678,7 @@ def harvest_bu_catalog(fetched: dict, urls: list[str]) -> dict:
     }
 
 
-def seed_on_catalog(doc: dict, ports: list[dict] | None) -> dict | None:
+def seed_on_catalog(doc: dict, ports: Optional[dict]) -> dict | None:
     """True if the seed name is already on the official list (dedup)."""
     if not ports:
         return None

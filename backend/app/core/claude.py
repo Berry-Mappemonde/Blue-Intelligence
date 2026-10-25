@@ -97,7 +97,7 @@ def claude_enabled(settings: dict | None = None) -> bool:
     return bool(get_anthropic_key(settings)) and get_claude_budget_usd(settings) > 0
 
 
-def _rates_for_model(model: str | None) -> tuple[float, float, float, float, float]:
+def _rates_for_model(model: Optional[str]) -> tuple[float, float, float, float, float]:
     """(input, output, cache_read, cache_write_5m, cache_write_1h) $/MTok."""
     if model and "sonnet" in model:
         return (SONNET_RATE_INPUT, SONNET_RATE_OUTPUT, SONNET_RATE_CACHE_READ,
@@ -106,7 +106,7 @@ def _rates_for_model(model: str | None) -> tuple[float, float, float, float, flo
             RATE_CACHE_WRITE_5M, RATE_CACHE_WRITE_1H)
 
 
-def estimate_cost_usd(usage: dict | None, model: str | None = None) -> float:
+def estimate_cost_usd(usage: dict | None, model: Optional[str] = None) -> float:
     """Cost from the Messages API usage block (Haiku by default)."""
     u = usage or {}
     inp_r, out_r, read_r, w5, w1h = _rates_for_model(model)
@@ -159,7 +159,7 @@ def _write_usage(doc: dict) -> None:
             fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
 
 
-def record_usage(api_usage: dict | None, cost_usd: float | None = None) -> dict:
+def record_usage(api_usage: dict | None, cost_usd: Optional[float] = None) -> dict:
     cost = float(cost_usd if cost_usd is not None else estimate_cost_usd(api_usage))
     u = api_usage or {}
     doc = load_usage()
@@ -545,7 +545,7 @@ async def extract_ports_claude(context: str, zone: dict,
 
 async def complete_json_claude(system: str, user: str,
                                settings: dict | None = None, *,
-                               model: str | None = None,
+                               model: Optional[str] = None,
                                max_tokens: int = 250, log=None,
                                images: list[bytes] | None = None) -> dict:
     """JSON Messages call (judge). Haiku or Sonnet. Raises on budget / HTTP."""

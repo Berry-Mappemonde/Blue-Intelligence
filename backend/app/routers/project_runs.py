@@ -1,4 +1,7 @@
 """Isolated Projects runs API — never writes `projects`."""
+
+from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -20,7 +23,7 @@ class ProjectRunBody(BaseModel):
     label: str = ""
     force_rescan: bool | None = None
     from_scratch: bool | None = None
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
 
 
@@ -126,7 +129,7 @@ async def project_run_cancel(run_id: str):
 
 
 @router.get("/projects/runs/{run_id}/projects")
-async def project_run_projects(run_id: str, verdict: str | None = None, limit: int = 500):
+async def project_run_projects(run_id: str, verdict: Optional[str] = None, limit: int = 500):
     if not await db.project_runs.find_one({"_id": run_id}):
         raise HTTPException(404, f"Run {run_id} unknown")
     q: dict = {"run_id": run_id}
@@ -151,7 +154,7 @@ async def project_run_geojson(run_id: str):
 
 
 @router.get("/projects/runs/{run_id}/events")
-async def project_run_events(run_id: str, step: str | None = None,
+async def project_run_events(run_id: str, step: Optional[str] = None,
                              skip: int = 0, limit: int = 500):
     q: dict = {"run_id": run_id}
     if step:
@@ -164,7 +167,7 @@ async def project_run_events(run_id: str, step: str | None = None,
 
 @router.get("/projects/runs/{run_id}/journal")
 async def project_run_journal(run_id: str, skip: int = 0, limit: int = 2000,
-                              kind: str | None = None, tail: bool = False,
+                              kind: Optional[str] = None, tail: bool = False,
                               format: str = "json"):
     """Full run journal (swarm narrative + agents). Not the live map."""
     from app.services.run_journal import (

@@ -307,7 +307,7 @@ def union_extracted(batches: list[tuple[str, list[dict]]],
     beyond a few thousand ports.
     """
     out: list[dict] = []
-    by_zone: dict[int | None, list[dict]] = {}
+    by_zone: dict[Optional[int], list[dict]] = {}
     by_key: dict[str, dict] = {}
     for source, ports in batches:
         for raw in ports:
@@ -385,7 +385,7 @@ def listing_name_seeds(listing_ports: list[dict]) -> list[dict]:
 def attach_listing_seeds(extracted: list[dict], listing_ports: list[dict]) -> dict:
     """Add unmatched listing names. Matches annotate the extracted seed."""
     listing_seeds = listing_name_seeds(listing_ports)
-    by_zone: dict[int | None, list[dict]] = {}
+    by_zone: dict[Optional[int], list[dict]] = {}
     for p in extracted:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
     attached = 0
@@ -423,7 +423,7 @@ def attach_listing_seeds(extracted: list[dict], listing_ports: list[dict]) -> di
 
 def attach_listing_other(seeds: list[dict], listing_ports: list[dict]) -> int:
     """Attach the listing:other role on an already-known identity. No novel seed."""
-    by_zone: dict[int | None, list[dict]] = {}
+    by_zone: dict[Optional[int], list[dict]] = {}
     for p in seeds:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
     attached = 0
@@ -490,7 +490,7 @@ def attach_osm_seeds(extracted: list[dict], osm_docs: list[dict]) -> dict:
         is_marina_only, is_seed_candidate, nearest_control,
     )
 
-    by_zone: dict[int | None, list[dict]] = {}
+    by_zone: dict[Optional[int], list[dict]] = {}
     for p in extracted:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
 
@@ -553,7 +553,7 @@ def attach_osm_seeds(extracted: list[dict], osm_docs: list[dict]) -> dict:
 
 
 @lru_cache(maxsize=1)
-def load_osm_priors(path: str | None = None) -> dict:
+def load_osm_priors(path: Optional[str] = None) -> dict:
     p = Path(path) if path else OSM_PRIORS_FILE
     if not p.is_file():
         return {"n": 0, "ports": []}
@@ -627,7 +627,7 @@ def osm_priors_as_seeds(osm: dict | None = None) -> list[dict]:
 
 def attach_converted_osm(extracted: list[dict], osm_seeds: list[dict]) -> dict:
     """Merge already-converted OSM seeds (priors or cache)."""
-    by_zone: dict[int | None, list[dict]] = {}
+    by_zone: dict[Optional[int], list[dict]] = {}
     for p in extracted:
         by_zone.setdefault(p.get("mrgid"), []).append(p)
     merged_name = merged_near = created = 0
@@ -785,7 +785,7 @@ def match_named_seed(seeds: list[dict], mrgid: int, name: str) -> dict | None:
 
 
 def seed_from_files(mrgid: int, name: str, *,
-                    listing_ports: list[dict] | None = None,
+                    listing_ports: Optional[dict] = None,
                     priors_doc: dict | None = None) -> dict | None:
     """Lookup off Mongo: listing + OSM priors for an EEZ."""
     mid = int(mrgid)
@@ -798,8 +798,8 @@ def seed_from_files(mrgid: int, name: str, *,
     return match_named_seed(report["seeds"], mid, name)
 
 
-def build_seeds_offline(*, extracted: list[dict] | None = None,
-                        listing_ports: list[dict] | None = None,
+def build_seeds_offline(*, extracted: Optional[dict] = None,
+                        listing_ports: Optional[dict] = None,
                         priors_doc: dict | None = None,
                         include_priors: bool = True,
                         wpi_doc: dict | None = None,

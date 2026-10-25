@@ -27,7 +27,7 @@ def seamark_type(typ: str) -> dict | None:
     return None
 
 
-def export_tags_for(badge: str | None = None, field: str | None = None) -> list[dict]:
+def export_tags_for(badge: Optional[str] = None, field: Optional[str] = None) -> list[dict]:
     """Mapping inverse : badge / champ slim BI → tags OSM d'export."""
     rows = list(load_catalog().get("export_mapping") or [])
     if badge:

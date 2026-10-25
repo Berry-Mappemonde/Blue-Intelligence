@@ -95,15 +95,31 @@ async def store(db, records: list[dict]) -> int:
     return len(records)
 
 
-def sample_documents(mrgid: int | None) -> list[dict]:
-    """Documents from the committed official-page snapshots for a zone (one per section)."""
-    if mrgid is None or not SAMPLE_PAGES_DIR.is_dir():
+def sample_documents(mrgid: int | None = None, zone_name: str | None = None) -> list[dict]:
+    """Documents from the committed official-page snapshots for a zone (one per section).
+
+    Matching is done either by ``mrgid`` (authoritative) or, when ``mrgid`` is missing,
+    by a textual match of ``zone_name`` against ``page.get("zones", [])`` so that a
+    verify request without an mrgid still loads the official snapshot (e.g. Bermuda).
+    """
+    if not SAMPLE_PAGES_DIR.is_dir():
         return []
     docs = []
     for path in sorted(SAMPLE_PAGES_DIR.glob("*.json")):
         page = json.loads(path.read_text(encoding="utf-8"))
-        if int(mrgid) not in {int(z["mrgid"]) for z in page.get("zones") or []}:
-            continue
+        zones = page.get("zones") or []
+        zone_mrgids = {int(z["mrgid"]) for z in zones if z.get("mrgid") is not None}
+        zone_names = [str(z.get("zone_name") or "") for z in zones]
+        if mrgid is not None:
+            if int(mrgid) not in zone_mrgids:
+                continue
+        elif zone_name is not None:
+            needle = zone_name.strip().lower()
+            if not any(needle in zname.lower() or zname.lower() in needle for zname in zone_names):
+                continue
+        else:
+            # No mrgid and no zone name: load every official snapshot (safe fallback).
+            pass
         docs += [dict(url=page["url"], text=section["text"], sha256=page["sha256"],
                       fetched_at=page["fetched_at"], extract_level=page.get("extract_level"))
                  for section in page.get("sections") or []]
@@ -122,7 +138,8 @@ def _mongo_records(mrgid: int) -> list[dict]:
         client.close()
 
 
-def lookup(mrgid: int | None, port_names: list[str], run_id: str) -> list[dict]:
+def lookup(mrgid: int | None, port_names: list[str], run_id: str,
+           zone_name: str | None = None) -> list[dict]:
     """Stored evidence records for a zone's ports; [] on any failure (never official).
 
     SAMPLE_MODE=true reads the official-page snapshots and builds records with
@@ -134,13 +151,20 @@ def lookup(mrgid: int | None, port_names: list[str], run_id: str) -> list[dict]:
         if mrgid is None:
             source = "no-mrgid"
         elif (os.environ.get("SAMPLE_MODE") or "").strip().lower() == "true":
-            source, records = "sample_pages", build_records(mrgid, port_names, sample_documents(mrgid))
+            source, records = "sample_pages", build_records(
+                mrgid, port_names, sample_documents(mrgid=mrgid, zone_name=zone_name))
         else:
             try:
                 source, records = "mongo", _mongo_records(mrgid)
+                if not records:
+                    # Mongo responded but is empty for this mrgid: fall back to local snapshots
+                    error, status = "mongo empty", "fallback"
+                    source, records = "sample_pages", build_records(
+                        mrgid, port_names, sample_documents(mrgid=mrgid, zone_name=zone_name))
             except Exception as exc:  # noqa: BLE001 - Mongo down: use the snapshots
                 error, status = f"{type(exc).__name__}: {str(exc)[:120]}", "fallback"
-                source, records = "sample_pages", build_records(mrgid, port_names, sample_documents(mrgid))
+                source, records = "sample_pages", build_records(
+                    mrgid, port_names, sample_documents(mrgid=mrgid, zone_name=zone_name))
     except Exception as exc:  # noqa: BLE001 - no evidence is the safe answer
         source, status, records, error = "error", "error", [], f"{type(exc).__name__}: {str(exc)[:120]}"
     by_port = {}

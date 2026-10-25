@@ -13,14 +13,14 @@ from __future__ import annotations
 import re
 import time
 from collections import defaultdict
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 from app.core.events import HeartbeatWatch, emit
 from app.core.search import search_named
 from app.core.tinyfish import AMP_VISIT_PURPOSE, FETCH_URL_CAP, tf_api_key
 from app.db import get_settings
 from app.services import amp as amp_svc
 
-JudgeFn = Callable[[dict, list[dict]], Awaitable[str | None]]
+JudgeFn = Callable[[dict, list[dict]], Awaitable[Optional[str]]]
 AttrsFetchFn = Callable[[list[str]], Awaitable[dict[str, dict]]]
 
 VISIT_JUDGE_SYSTEM = (
@@ -52,13 +52,13 @@ FetchManyFn = Callable[[list[str]], Awaitable[dict[str, dict]]]
 SearchFn = Callable[..., Awaitable[list[dict]]]
 
 
-def manager_host(url: str | None) -> str | None:
+def manager_host(url: Optional[str]) -> Optional[str]:
     return amp_svc.url_host(url)
 
 
 def score_visit_candidate(
-    url: str | None,
-    manager_url: str | None,
+    url: Optional[str],
+    manager_url: Optional[str],
     *,
     title: str = "",
     snippet: str = "",
@@ -75,13 +75,13 @@ def score_visit_candidate(
 
 
 def pick_visit_from_urls(
-    manager_url: str | None,
+    manager_url: Optional[str],
     urls: list[str],
     *,
     titles: dict[str, str] | None = None,
     name: str = "",
     require_name: bool = False,
-) -> str | None:
+) -> Optional[str]:
     titles = titles or {}
     best_url, best_score = None, 0
     for raw in urls:
@@ -111,7 +111,7 @@ def urls_from_fetch_record(rec: dict | None) -> list[str]:
     return out
 
 
-def search_query(doc: dict) -> tuple[str, str | None]:
+def search_query(doc: dict) -> tuple[str, Optional[str]]:
     """Open query: the visit page is not always on the manager host."""
     name = (doc.get("name") or "").strip()
     country = (doc.get("country") or "").strip()
@@ -135,8 +135,8 @@ def visit_judge_prompt(doc: dict, candidates: list[dict]) -> str:
 def parse_visit_judge(
     data: dict | None,
     candidates: list[dict],
-    manager_url: str | None,
-) -> str | None:
+    manager_url: Optional[str],
+) -> Optional[str]:
     """Keep an already proposed URL. Refuse the manager and URLs not in the list."""
     from app.core.judge import parse_yes_no
     yes = parse_yes_no(
@@ -154,7 +154,7 @@ async def llm_judge_visit(
     *,
     settings: dict | None = None,
     log=None,
-) -> str | None:
+) -> Optional[str]:
     """NVIDIA (json chain) → OpenRouter → Claude. URL among the candidates."""
     if not candidates:
         return None
@@ -208,13 +208,13 @@ def search_candidates(
     return out
 
 
-def search_queries(doc: dict) -> list[tuple[str, str | None]]:
+def search_queries(doc: dict) -> list[tuple[str, Optional[str]]]:
     """site:host first (bonus), then open search if needed."""
     name = (doc.get("name") or "").strip()
     country = (doc.get("country") or "").strip()
     host = manager_host(doc.get("manager_url"))
     open_q, _ = search_query(doc)
-    out: list[tuple[str, str | None]] = []
+    out: list[tuple[str, Optional[str]]] = []
     if host:
         scoped = (
             f"site:{host} (visite OR visit OR plaisance OR mouillage OR permit "
@@ -263,7 +263,7 @@ async def _write_visit(db, doc: dict) -> None:
     await db.amp_sites.update_one({"_id": doc["_id"]}, {"$set": fields})
 
 
-async def _commit_discovered(db, doc: dict, url: str | None, source: str,
+async def _commit_discovered(db, doc: dict, url: Optional[str], source: str,
                              recorder=None) -> str:
     site_id = doc.get("site_id") or doc.get("_id")
     await emit(
@@ -413,7 +413,7 @@ async def _pick_from_search(
     hits: list[dict],
     *,
     judge: JudgeFn | None,
-) -> str | None:
+) -> Optional[str]:
     cands = search_candidates(doc, hits, require_name=True)
     if judge:
         return await judge(doc, cands)
@@ -435,12 +435,12 @@ async def discover_visit_urls(
     skip_search: bool = False,
     fetch_many_fn: FetchManyFn | None = None,
     search_fn: SearchFn | None = None,
-    tf_key: str | None = None,
+    tf_key: Optional[str] = None,
     refresh_attrs: bool = True,
     attrs_fetch_fn: AttrsFetchFn | None = None,
     use_llm_judge: bool = True,
     judge_fn: JudgeFn | None = None,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
     recorder=None,
     bbox: tuple[float, float, float, float] | None = None,
     from_scratch: bool = False,

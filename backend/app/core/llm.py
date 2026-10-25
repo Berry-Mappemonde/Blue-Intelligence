@@ -99,7 +99,7 @@ def parse_json_flexible(txt: str):
 # ---------------------------------------------------------------------------
 # Single backend: OpenRouter
 # ---------------------------------------------------------------------------
-async def _call_openrouter(prompt: str, system: str, key: str, model: str | None = None,
+async def _call_openrouter(prompt: str, system: str, key: str, model: Optional[str] = None,
                            json_mode: bool = True, max_tokens: int = 2000,
                            retries: int = 2,
                            images: list[bytes] | None = None) -> str:
@@ -151,7 +151,7 @@ GENERATOR_PROVIDERS = ("nightshift", "nvidia")  # a "sample" result means no mod
 LLM_TRACE_RUN_ID = "llm-calls"  # MeterlessGenerator events: logs/trace-llm-calls.jsonl
 
 
-def nightshift_model(role: str) -> str | None:
+def nightshift_model(role: str) -> Optional[str]:
     """METERLESS_MODEL when set, else the role's specialised Nemotron (first in its chain)."""
     if _env("METERLESS_MODEL"):
         return _env("METERLESS_MODEL")
@@ -462,7 +462,7 @@ def _as_bool_or_none(value):
     return None
 
 
-def coerce_ports(data, context: str | None = None) -> list[dict]:
+def coerce_ports(data, context: Optional[str] = None) -> list[dict]:
     ports = data.get("ports") if isinstance(data, dict) else None
     out = []
     for p in ports or []:
@@ -525,7 +525,7 @@ async def extract_ports_openrouter(context: str, zone: dict,
     return ports
 
 
-async def extract_ports_nightshift(context: str, zone: dict, log=None) -> list[dict] | None:
+async def extract_ports_nightshift(context: str, zone: dict, log=None) -> Optional[dict]:
     """Nemotron through Nightshift with the same prompt as OpenRouter; None if unavailable."""
     from app.services.poe_zone_label import search_polygon_name
     sent = reader_context(context)
@@ -655,7 +655,7 @@ def _fallback_domain(url: str) -> str:
         return ""
 
 
-async def grounded_search(prompt: str, log=None, domain_fn=None) -> tuple[list[dict], str | None]:
+async def grounded_search(prompt: str, log=None, domain_fn=None) -> tuple[list[dict], Optional[str]]:
     """Return (candidates [{url, domain}], text synthesis) via OpenRouter :online."""
     log = log or (lambda m: None)
     dom = domain_fn or _fallback_domain

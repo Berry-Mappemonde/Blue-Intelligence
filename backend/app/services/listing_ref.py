@@ -54,12 +54,12 @@ def _load_json(path: Path) -> dict:
 
 
 @lru_cache(maxsize=1)
-def load_listing_doc(path: str | None = None) -> dict:
+def load_listing_doc(path: Optional[str] = None) -> dict:
     return _load_json(Path(path) if path else LISTING_FILE)
 
 
 @lru_cache(maxsize=1)
-def load_overrides(path: str | None = None) -> dict[str, list[int]]:
+def load_overrides(path: Optional[str] = None) -> dict[str, list[int]]:
     raw = _load_json(Path(path) if path else OVERRIDES_FILE)
     out: dict[str, list[int]] = {}
     for slug, val in raw.items():
@@ -72,7 +72,7 @@ def load_overrides(path: str | None = None) -> dict[str, list[int]]:
 
 
 @lru_cache(maxsize=1)
-def load_eez_index(path: str | None = None) -> list[dict]:
+def load_eez_index(path: Optional[str] = None) -> list[dict]:
     raw = _load_json(Path(path) if path else EEZ_INDEX_FILE)
     return list(raw.get("zones") or raw)
 
@@ -108,7 +108,7 @@ def _prefer_sovereign(zones: list[dict]) -> list[dict]:
     return nm or zones
 
 
-def resolve_slug(slug: str, name: str, zones: list[dict] | None = None,
+def resolve_slug(slug: str, name: str, zones: Optional[dict] = None,
                  overrides: dict[str, list[int]] | None = None) -> dict:
     """Retourne {slug, name, mrgids, iso2, zone_names, method}."""
     zones = zones if zones is not None else load_eez_index()
@@ -149,8 +149,8 @@ def _resolution(slug: str, name: str, zones: list[dict], method: str) -> dict:
     }
 
 
-def pick_listing_mrgid(res: dict, port: dict | str | None,
-                       zones: list[dict] | None = None) -> int:
+def pick_listing_mrgid(res: dict, port: dict | Optional[str],
+                       zones: Optional[dict] = None) -> int:
     """Pick the VLIZ polygon of a listing port (group / name, not the first override)."""
     mrgids = [int(x) for x in (res.get("mrgids") or [])]
     slug = (res.get("slug") or "").lower()
@@ -175,7 +175,7 @@ def pick_listing_mrgid(res: dict, port: dict | str | None,
 
 
 def _emit_port(country: dict, res: dict, port: dict, role: str,
-               zones: list[dict] | None = None) -> dict:
+               zones: Optional[dict] = None) -> dict:
     name = (port.get("name") if isinstance(port, dict) else port) or ""
     group = port.get("group") if isinstance(port, dict) else None
     by_mrgid = {int(z["mrgid"]): z for z in (zones or [])}
@@ -198,7 +198,7 @@ def _emit_port(country: dict, res: dict, port: dict, role: str,
     }
 
 
-def project_listing(listing: dict | None = None, zones: list[dict] | None = None,
+def project_listing(listing: dict | None = None, zones: Optional[dict] = None,
                     overrides: dict[str, list[int]] | None = None) -> dict:
     """Build listing_ref: ports in run format + slug resolution."""
     listing = listing if listing is not None else load_listing_doc()

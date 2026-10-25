@@ -253,7 +253,7 @@ async def pre_gold_eez_mrgids(db) -> set[int]:
         return hits
 
 
-async def recommended_eez_run_id(db) -> str | None:
+async def recommended_eez_run_id(db) -> Optional[str]:
     """Prod run that covers the most of the 11 productively, then the most recent.
 
     A France rerun (1 zone) must not hide the run of the 11 (FR+NZ+EG…).
@@ -280,7 +280,7 @@ async def recommended_eez_run_id(db) -> str | None:
         rid = _sid(z.get("run_id"))
         if rid in by_id:
             scores[rid] = scores.get(rid, 0) + 1
-    best: str | None = None
+    best: Optional[str] = None
     best_score = 0
     best_at = ""
     for rid, n in scores.items():
@@ -388,8 +388,8 @@ async def published_snapshots(db) -> dict[int, dict]:
     return out
 
 
-async def visible_poe_port_docs(db, mrgid: int | None = None,
-                                  country: str | None = None) -> list[dict]:
+async def visible_poe_port_docs(db, mrgid: Optional[int] = None,
+                                  country: Optional[str] = None) -> list[dict]:
     """Ports of the certified Formalities run — never live `poe_ports`."""
     snaps = await published_snapshots(db)
     if mrgid is not None:
@@ -433,7 +433,7 @@ async def filter_visible(db, kind: str, docs: list[dict], id_fn) -> list[dict]:
     return out
 
 
-async def _load_fiche_for_gold(db, kind: str, eid: str, run_id: str | None,
+async def _load_fiche_for_gold(db, kind: str, eid: str, run_id: Optional[str],
                                comment: str, choices: dict) -> tuple:
     from app.services.review_queue import get_fiche
     packed = await get_fiche(db, kind, run_id, eid)
@@ -447,7 +447,7 @@ async def _load_fiche_for_gold(db, kind: str, eid: str, run_id: str | None,
 
 
 async def toggle_gold(db, kind: str, entity_id: str, *,
-                      run_id: str | None = None,
+                      run_id: Optional[str] = None,
                       snapshot: dict | None = None,
                       fiche: dict | None = None,
                       comment: str = "",
@@ -515,7 +515,7 @@ async def toggle_gold(db, kind: str, entity_id: str, *,
     }
 
 
-async def _toggle_eez_gold(db, eid: str, *, run_id: str | None,
+async def _toggle_eez_gold(db, eid: str, *, run_id: Optional[str],
                            fiche: dict | None, comment: str,
                            choices: dict | None) -> dict:
     pre = await is_pre_gold_entity(db, "eez", eid, None)

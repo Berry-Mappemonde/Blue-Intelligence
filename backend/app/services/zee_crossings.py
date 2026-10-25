@@ -68,7 +68,7 @@ SIMPLIFY_TOLERANCE_DEG = 0.01
 # Mapping MRGID (MarineRegions v12) → territory_code (territories.json)
 # MRGIDs verified on real VLIZ WFS + GeoPackage v12 data (2026-06).
 # ---------------------------------------------------------------------------
-MRGID_TO_TERRITORY: dict[int, str | None] = {
+MRGID_TO_TERRITORY: dict[int, Optional[str]] = {
     5677: "france_metropolitaine",     # French Exclusive Economic Zone (mainland)
     48966: "france_metropolitaine",    # Joint regime area: Spain / France (Golfe de Gascogne)
     48976: "france_metropolitaine",    # Joint regime area: France / Italy
@@ -98,7 +98,7 @@ MRGID_TO_TERRITORY: dict[int, str | None] = {
 
 # Fallback: substring match on the geoname (lower-cased),
 # from most specific to most generic.
-_EEZ_NAME_PATTERNS: list[tuple[str, str | None]] = [
+_EEZ_NAME_PATTERNS: list[tuple[str, Optional[str]]] = [
     ("french polynesia", "polynesie_francaise"),
     ("polynésie", "polynesie_francaise"),
     ("new caledonia", "nouvelle_caledonie"),
@@ -144,8 +144,8 @@ _EEZ_NAME_PATTERNS: list[tuple[str, str | None]] = [
 def _map_geoname_to_territory(
     geoname: str,
     sovereign: str = "",
-    mrgid: int | None = None,
-) -> str | None:
+    mrgid: Optional[int] = None,
+) -> Optional[str]:
     """Known MRGID > geoname substring (if French sovereignty) > None."""
     if mrgid and mrgid in MRGID_TO_TERRITORY:
         return MRGID_TO_TERRITORY[mrgid]
@@ -375,14 +375,14 @@ async def _crossings_via_point_api(
         logger(f"[zee-api] {len(sample_points)} sample points at {step_nm} NM intervals")
 
     crossings: list[dict] = []
-    prev_territory: str | None = "__start__"
+    prev_territory: Optional[str] = "__start__"
 
     async with httpx.AsyncClient() as client:
         for (seg_idx, lat, lon, seg_from, seg_to) in sample_points:
             records = await _point_in_eez(lat, lon, client, logger=logger)
             await asyncio.sleep(0.3)
 
-            territory_code: str | None = None
+            territory_code: Optional[str] = None
             geoname: str = "High Seas"
             for rec in records:
                 if rec.get("placeType") != "EEZ":

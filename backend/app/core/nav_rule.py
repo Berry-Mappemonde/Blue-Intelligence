@@ -45,7 +45,7 @@ def parse_navigation_rule(data: dict | None) -> dict:
     return {"navigation_rule": bool(flag), "quote": quote}
 
 
-def should_write_vhf(evidence_text: str | None, extracted_vhf) -> bool:
+def should_write_vhf(evidence_text: Optional[str], extracted_vhf) -> bool:
     """Write a channel only if the mention is a rule (C16)."""
     if extracted_vhf in (None, "", "null", "None"):
         return False

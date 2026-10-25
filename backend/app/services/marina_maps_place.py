@@ -68,7 +68,7 @@ _PLACE_PROJ = {
 }
 
 
-def is_google_place_url(url: str | None) -> bool:
+def is_google_place_url(url: Optional[str]) -> bool:
     raw = (url or "").strip()
     if not raw.startswith("http"):
         return False
@@ -92,12 +92,12 @@ def canonicalize_place_url(url: str) -> str:
     return f"https://www.google.com{cut}" if cut.startswith("/maps/place/") else raw.split("?")[0][:400]
 
 
-def name_tokens(name: str | None) -> set[str]:
+def name_tokens(name: Optional[str]) -> set[str]:
     raw = (name or "").lower()
     return {t for t in TOKEN_RE.findall(raw) if t not in STOPWORDS}
 
 
-def _norm_phrase(value: str | None) -> str:
+def _norm_phrase(value: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9]+", " ", unquote(value or "").lower()).strip()
 
 
@@ -111,7 +111,7 @@ def hit_blob(hit: dict) -> str:
     return " ".join(_norm_phrase(str(p)) for p in parts if p)
 
 
-def place_slug(url: str | None) -> str:
+def place_slug(url: Optional[str]) -> str:
     path = unquote(urlparse(url or "").path or "")
     parts = [p for p in path.split("/") if p]
     try:
@@ -124,7 +124,7 @@ def place_slug(url: str | None) -> str:
     return slug.replace("+", " ")
 
 
-def place_coords(url: str | None) -> tuple[float, float] | None:
+def place_coords(url: Optional[str]) -> tuple[float, float] | None:
     raw = unquote(url or "")
     match = COORDS_RE.search(raw) or DATA_COORDS_RE.search(raw)
     if not match:
@@ -147,8 +147,8 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def place_hit_matches(
     name: str,
     hit: dict,
-    lat: float | None = None,
-    lon: float | None = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
 ) -> bool:
     tokens = name_tokens(name)
     if not tokens:
@@ -185,9 +185,9 @@ def place_hit_matches(
 def pick_google_place(
     name: str,
     hits: Iterable[dict],
-    lat: float | None = None,
-    lon: float | None = None,
-) -> str | None:
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+) -> Optional[str]:
     for hit in hits or []:
         url = (hit.get("url") or "").strip()
         if not is_google_place_url(url):
@@ -197,7 +197,7 @@ def pick_google_place(
     return None
 
 
-def place_url_from_doc(doc: dict) -> str | None:
+def place_url_from_doc(doc: dict) -> Optional[str]:
     for raw in (
         doc.get("maps_place_url"),
         doc.get("website"),
@@ -258,7 +258,7 @@ def place_hits_from_fetch(rec: dict | None) -> list[dict]:
     return [{"url": u, "title": title, "snippet": snippet} for u in urls]
 
 
-def _maps_search_url(marina: dict) -> str | None:
+def _maps_search_url(marina: dict) -> Optional[str]:
     from app.services.marina_world import google_maps_url
     name = (marina.get("name") or "").strip()
     lat, lon = marina.get("lat"), marina.get("lon")
@@ -303,7 +303,7 @@ async def resolve_google_place(
     *,
     search_fn: SearchFn | None = None,
     fetch_fn: FetchFn | None = None,
-    now_iso: str | None = None,
+    now_iso: Optional[str] = None,
 ) -> dict[str, Any]:
     """Return the $set patch. Do not invent a /search/ URL.
     unnamed → skipped. Search/Fetch without /place/ → none.
@@ -385,7 +385,7 @@ def stored_place_still_valid(marina: dict) -> bool:
 
 
 async def apply_maps_place(coll, marina: dict, patch: dict, *,
-                           run_id: str | None = None, dest_db=None) -> None:
+                           run_id: Optional[str] = None, dest_db=None) -> None:
     if run_id and dest_db is not None:
         from app.services.isolated_runs import write_item
         await write_item(
@@ -415,7 +415,7 @@ def _patch_from_hits(marina: dict, hits: list[dict], *, source: str, now_iso: st
 
 
 async def _apply_result(coll, state, marina: dict, patch: dict, counters: dict,
-                       *, run_id: str | None = None, dest_db=None) -> None:
+                       *, run_id: Optional[str] = None, dest_db=None) -> None:
     await apply_maps_place(coll, marina, patch, run_id=run_id, dest_db=dest_db)
     if patch["maps_place_status"] == "found":
         counters["found"] += 1
@@ -505,7 +505,7 @@ async def resolve_maps_places(
     fetch_many_fn: FetchManyFn | None = None,
     batch_size: int = FETCH_BATCH,
     extra_filter: dict | None = None,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
     dest_db=None,
 ) -> dict:
     """Resumable (ignore already-statused cards). World: skip Search

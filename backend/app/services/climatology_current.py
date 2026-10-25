@@ -37,7 +37,7 @@ def current_npz_path(month: int) -> Path:
     return current_dir() / f"current-{int(month):02d}.npz"
 
 
-def has_snapshot(month: int | None = None) -> bool:
+def has_snapshot(month: Optional[int] = None) -> bool:
     if month is None:
         return current_npz_path(1).is_file()
     return current_npz_path(month).is_file()

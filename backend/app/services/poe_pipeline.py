@@ -20,6 +20,8 @@ Architecture:
   8. Storage               : non-destructive upsert via dedup_core (Bottom-Up
                              osm_confidence / anomaly enrichments are preserved).
 """
+from __future__ import annotations
+
 import asyncio
 import fcntl
 import json
@@ -100,7 +102,7 @@ _VARIANT_ALIASES = {
 }
 
 
-def normalize_variant(value: str | None) -> str:
+def normalize_variant(value: Optional[str]) -> str:
     """v1 = sequential SearXNG; v2 = parallel SearXNG; tinyfish = union."""
     raw = (value or "tinyfish").strip().lower()
     v = _VARIANT_ALIASES.get(raw, raw)
@@ -204,7 +206,7 @@ _POLYGON_SEARCH_LANG = {
 }
 
 
-def zone_search_lang(zone: dict) -> str | None:
+def zone_search_lang(zone: dict) -> Optional[str]:
     """SERP language: polygon ISO2 if it is in the matrix, otherwise the sovereign."""
     iso = (zone.get("iso2") or "").upper()
     if iso in _POLYGON_SEARCH_LANG:
@@ -224,7 +226,7 @@ def is_france_mainland_eez(zone: dict) -> bool:
     return key in ("hexagone", "metropole", "joint")
 
 
-def localized_query(zone: dict) -> str | None:
+def localized_query(zone: dict) -> Optional[str]:
     """Query translated into the VLIZ polygon language (not the country aggregate)."""
     place = serp_place_name(zone)
     if not place:
@@ -260,7 +262,7 @@ def localized_query(zone: dict) -> str | None:
 _LIST_CANDIDATE_BONUS = 0.45
 
 
-def family_classic_query(place: str, lang: str | None = None) -> str:
+def family_classic_query(place: str, lang: Optional[str] = None) -> str:
     """"Ports of entry / gazette" query for a polygon without an iso if."""
     if lang == "fr":
         return f"ports d'entrée officiels liste douane décret yacht plaisance {place}"
@@ -301,7 +303,7 @@ def google_style_tld_tokens(zone: dict) -> str:
     return " ".join(toks)
 
 
-def google_style_query(zone: dict, lang: str | None = None) -> str:
+def google_style_query(zone: dict, lang: Optional[str] = None) -> str:
     """Short Google-bar style phrase: place + PoE + sailing + official + TLD."""
     place = serp_place_name(zone) or search_polygon_name(zone) or ""
     place = place.replace("-", " ")
@@ -735,7 +737,7 @@ def save_exceptions(exc: dict):
         pass
 
 
-def iso2_of(iso3: str | None) -> str | None:
+def iso2_of(iso3: Optional[str]) -> Optional[str]:
     if not iso3:
         return None
     try:
@@ -775,7 +777,7 @@ def _preferred_gov_label(iso2: str) -> str:
     return "gov"
 
 
-def build_whitelist(iso2: str | None, sov_iso2: str | None, exceptions: dict | None = None) -> list[str]:
+def build_whitelist(iso2: Optional[str], sov_iso2: Optional[str], exceptions: dict | None = None) -> list[str]:
     """State domains of countries that have an EEZ (a hint, no longer a gate).
 
     A wildcard PSL suffix (Nepal, Jamaica…) no longer produces the 7 patterns:
@@ -1018,7 +1020,7 @@ async def search_searxng(query: str, log) -> list[dict]:
     return []
 
 
-async def search_grounded(zone: dict, whitelist: list[str], log, query_override: str | None = None):
+async def search_grounded(zone: dict, whitelist: list[str], log, query_override: Optional[str] = None):
     """Grounded search via llm_core (OpenRouter :online)."""
     name = search_polygon_name(zone)
     hints = ", ".join(whitelist[:6]) if whitelist else "official government domains"
@@ -1076,7 +1078,7 @@ def rank_candidates_ml(candidates: list[dict], log, scores_out: list | None = No
 # ---------------------------------------------------------------------------
 # 3. Collection & parsing — hybrid N1/N2/N3 cascade (extract_core)
 # ---------------------------------------------------------------------------
-async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
+async def fetch_and_parse(url: str, log) -> tuple[Optional[str], Optional[str]]:
     """Return (text, md5). N1/N2 cascade + local Chromium render (free).
     A blocked page (anti-bot interstitial) is invalidated, never ingested."""
     try:
@@ -1096,7 +1098,7 @@ async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
 # ---------------------------------------------------------------------------
 # Zetaris validation & H-MEM integration
 # ---------------------------------------------------------------------------
-def zetaris_name_key(name: str | None) -> str:
+def zetaris_name_key(name: Optional[str]) -> str:
     """Matching key: casefold, no accents, no apostrophes or punctuation.
 
     "Port of St. George's" == "Port of St. George’s"; "LUKA BRCKO" == "Luka Brčko".
@@ -1141,7 +1143,7 @@ def _pipeline_run_id(rec, zone: dict) -> str:
 
 
 async def extract_ports_llm(context: str, zone: dict, log, rec=None,
-                            catalog_text: str | None = None,
+                            catalog_text: Optional[str] = None,
                             settings: dict | None = None) -> list[dict]:
     """Extract once (see ``_extract_ports_core``), then cross-reference Zetaris."""
     ports = await _extract_ports_core(context, zone, log, rec=rec,
@@ -1165,7 +1167,7 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
 
 
 async def _extract_ports_core(context: str, zone: dict, log, rec=None,
-                              catalog_text: str | None = None,
+                              catalog_text: Optional[str] = None,
                               settings: dict | None = None) -> list[dict]:
     """LLM and local NER run IN PARALLEL on the same context and their
     lists are compared port by port (no longer a simple fallback):
@@ -1565,7 +1567,7 @@ def _search_agreement(a: list[dict], b: list[dict]) -> dict:
     }
 
 
-async def _resolve_serper_key(serper_key: str | None = None) -> str:
+async def _resolve_serper_key(serper_key: Optional[str] = None) -> str:
     if serper_key:
         return serper_key.strip()
     from app.core.serper import serper_api_key
@@ -1591,7 +1593,7 @@ async def _serper_search_safe(query: str, key: str, log, *, gl=None,
         return []
 
 
-async def _resolve_tf_key(tf_key: str | None = None) -> str:
+async def _resolve_tf_key(tf_key: Optional[str] = None) -> str:
     if tf_key:
         return tf_key.strip()
     from app.core.tinyfish import tf_api_key
@@ -1736,8 +1738,8 @@ async def _site_list_page_search(domains: list[str], zone: dict, log) -> list[di
 
 
 async def _find_sources(zone: dict, whitelist: list[str], exceptions: dict, log, rec=None,
-                        tf_key: str | None = None, variant: str = "tinyfish",
-                        ) -> tuple[list[dict], bool, str | None]:
+                        tf_key: Optional[str] = None, variant: str = "tinyfish",
+                        ) -> tuple[list[dict], bool, Optional[str]]:
     """Step 2 — classic round 1 then, if needed, lessons round 2.
     v1 = sequential SearXNG (EN then localized if empty);
     v2 = parallel EN ∥ local SearXNG, no TinyFish;
@@ -2119,7 +2121,7 @@ def _spatial_cand(lat, lon, source, geom, prepared, inland=None) -> dict:
     return cand
 
 
-def _pick_from_cands(row: dict, picks: dict) -> tuple[dict | None, str | None]:
+def _pick_from_cands(row: dict, picks: dict) -> tuple[dict | None, Optional[str]]:
     """Pick a candidate: table/source, dual agreement, Haiku tie-break, EEZ."""
     if row.get("hint") in ("not_geocodeable", "geocode_deferred"):
         return None, row["hint"]
@@ -2225,7 +2227,7 @@ def _hmem_remember(docs: list[dict], run_id: str) -> dict:
 
 
 async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict], log,
-                               rec=None, run=None, catalog_text: str | None = None,
+                               rec=None, run=None, catalog_text: Optional[str] = None,
                                settings: dict | None = None) -> list[dict]:
     """Step 4 — Parallel extraction (NIM → OR → Claude ∥ NER) then geocoding.
 

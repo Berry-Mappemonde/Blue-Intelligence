@@ -15,7 +15,7 @@ from __future__ import annotations
 from app.core.dedup import normalize_name, text_similarity
 
 
-def listing_role(name: str, listing_ports: list[dict] | None) -> str | None:
+def listing_role(name: str, listing_ports: Optional[dict]) -> Optional[str]:
     """'poe' | 'other' | None — the listing is not a source of truth."""
     if not name or not listing_ports:
         return None
@@ -35,7 +35,7 @@ def listing_role(name: str, listing_ports: list[dict] | None) -> str | None:
 
 def score_port(port: dict, *,
                official_source: bool = False,
-               listing_ports: list[dict] | None = None,
+               listing_ports: Optional[dict] = None,
                multi_run: bool = False) -> dict:
     """Retourne {confidence, parts, reasons, listing_role}."""
     from app.core.run_rules import get_rule
@@ -186,7 +186,7 @@ def apply_score(port: dict, scored: dict) -> dict:
     return port
 
 
-def zone_confidence_avg(ports: list[dict]) -> int | None:
+def zone_confidence_avg(ports: list[dict]) -> Optional[int]:
     vals = [p.get("confidence") for p in ports if p.get("confidence") is not None]
     if not vals:
         return None

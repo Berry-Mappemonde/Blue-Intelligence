@@ -34,7 +34,7 @@ def _sid(value) -> str:
     return "" if value is None else str(value)
 
 
-def _kind(value: str | None) -> str:
+def _kind(value: Optional[str]) -> str:
     k = (value or "eez").strip().lower()
     return k if k in LESSON_KINDS else "eez"
 
@@ -59,7 +59,7 @@ def fiche_entity_id(fiche: dict | None, kind: str = "eez") -> str:
     return _sid(fiche.get("id") or fiche.get("osm_id") or fiche.get("_id"))
 
 
-def path_tokens(url: str | None) -> list[str]:
+def path_tokens(url: Optional[str]) -> list[str]:
     raw = (url or "").strip()
     if not raw or raw.startswith(("identity", "gps", "overlay", "site:", "field:", "amp:")):
         return []
@@ -284,7 +284,7 @@ async def record_gold_lesson(db, fiche: dict, choices: dict, comment: str = "",
     return doc
 
 
-async def load_lessons(db, kind: str | None = "eez") -> list[dict]:
+async def load_lessons(db, kind: Optional[str] = "eez") -> list[dict]:
     try:
         docs = await db.review_lessons.find({}).to_list(4000)
     except Exception:
@@ -302,7 +302,7 @@ async def load_lessons(db, kind: str | None = "eez") -> list[dict]:
 
 
 def pick_fewshot(lessons: list[dict], fiche: dict | None = None,
-                 exclude_id: str | None = None, n: int = LESSON_FEWSHOT) -> list[dict]:
+                 exclude_id: Optional[str] = None, n: int = LESSON_FEWSHOT) -> list[dict]:
     fiche = fiche or {}
     eid = _sid(exclude_id or fiche.get("mrgid") or fiche.get("site_id")
                or fiche.get("id") or "")

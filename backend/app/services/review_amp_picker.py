@@ -132,7 +132,7 @@ def _listed(urls, allowed: set[str]) -> list[str]:
 
 
 def merge_amp(local: dict, llm: dict | None, allowed: set[str],
-              manager: str | None) -> dict:
+              manager: Optional[str]) -> dict:
     if not llm:
         return local
     keep = [u for u in _listed(llm.get("keep"), allowed)
@@ -156,7 +156,7 @@ def merge_amp(local: dict, llm: dict | None, allowed: set[str],
 
 
 async def _llm_pick_amp(fiche: dict, settings, log,
-                        lessons: list[dict] | None = None) -> dict | None:
+                        lessons: Optional[dict] = None) -> dict | None:
     allowed = {rec["url"] for rec in candidate_urls(fiche)}
     if not allowed:
         return None
@@ -187,7 +187,7 @@ async def _llm_pick_amp(fiche: dict, settings, log,
 async def suggest_amp_documents(db, entity_id: str, *,
                                 settings: dict | None = None,
                                 log=None,
-                                lessons: list[dict] | None = None) -> dict:
+                                lessons: Optional[dict] = None) -> dict:
     log = log or (lambda m: None)
     eid = _sid(entity_id)
     packed = await get_fiche(db, "amp", PUBLISHED_RUN, eid)

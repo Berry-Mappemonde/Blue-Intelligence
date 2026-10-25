@@ -20,7 +20,7 @@ _MEMORY_DEGRADED_PCT = 85.0
 _DB_PING_TIMEOUT_S = 1.0
 
 
-def _cgroup_v2_relative(cgroup_proc: Path) -> str | None:
+def _cgroup_v2_relative(cgroup_proc: Path) -> Optional[str]:
     try:
         lines = cgroup_proc.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -55,7 +55,7 @@ def _cgroup_bytes(base: Path) -> tuple[int, int] | None:
 def cgroup_memory_used_pct(
     cgroup_proc: Path | None = None,
     sysfs_root: Path | None = None,
-) -> float | None:
+) -> Optional[float]:
     """Percent of the service cgroup v2 memory.max, or None if unreadable."""
     proc = cgroup_proc or Path("/proc/self/cgroup")
     root = (sysfs_root or Path("/sys/fs/cgroup")).resolve()
@@ -77,7 +77,7 @@ def cgroup_memory_used_pct(
 def rss_memory_used_pct(
     status_path: Path | None = None,
     meminfo_path: Path | None = None,
-) -> float | None:
+) -> Optional[float]:
     """Process RSS / total RAM, in percent. None if /proc cannot be read."""
     status = status_path or Path("/proc/self/status")
     meminfo = meminfo_path or Path("/proc/meminfo")

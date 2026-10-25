@@ -21,7 +21,7 @@ def _module_has(mod: str, name: str) -> bool:
         return False
 
 
-def git_state(cwd: Path | None = None) -> tuple[str | None, bool | None]:
+def git_state(cwd: Path | None = None) -> tuple[Optional[str], bool | None]:
     """Return (sha, dirty). (None, None) if git is unavailable."""
     root = str(cwd or _REPO_ROOT)
     try:
@@ -47,7 +47,7 @@ def _key_configured(*candidates: str) -> bool:
 
 
 def build_code_fingerprint(settings: dict | None = None,
-                           zone_timeout_s: int | None = None) -> dict:
+                           zone_timeout_s: Optional[int] = None) -> dict:
     """Snapshot of the code and flags (not secrets) at run time."""
     from app.core import claude
 

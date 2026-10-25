@@ -221,7 +221,7 @@ def bbox_from_geom(geom: Any) -> tuple[float, float, float, float] | None:
     return _bbox_of_pairs(pairs)
 
 
-def bbox_from_wkt(wkt: str | None) -> tuple[float, float, float, float] | None:
+def bbox_from_wkt(wkt: Optional[str]) -> tuple[float, float, float, float] | None:
     """bbox of an EDMED WKT (POLYGON / MULTIPOLYGON / POINT, lon lat order)."""
     if not wkt or not str(wkt).strip():
         return None
@@ -247,7 +247,7 @@ def bbox_center(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
     return (lat, lon)
 
 
-def pairs_from_wkt(wkt: str | None) -> list[tuple[float, float]]:
+def pairs_from_wkt(wkt: Optional[str]) -> list[tuple[float, float]]:
     """(lon, lat) pairs of a POINT / LINESTRING / POLYGON WKT."""
     if not wkt or not str(wkt).strip():
         return []
@@ -279,7 +279,7 @@ def subsample_line(
     return out
 
 
-def _uri_tail(uri: str | None) -> str | None:
+def _uri_tail(uri: Optional[str]) -> Optional[str]:
     if not uri:
         return None
     tail = uri.rstrip("/").rsplit("/", 1)[-1]
@@ -290,7 +290,7 @@ def _uri_tail(uri: str | None) -> str | None:
 # GeoNetwork (Sextant / ODATIS) — hit Elasticsearch → fiche
 # ---------------------------------------------------------------------------
 
-def _first_str(value: Any) -> str | None:
+def _first_str(value: Any) -> Optional[str]:
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, list):
@@ -303,7 +303,7 @@ def _first_str(value: Any) -> str | None:
     return None
 
 
-def _gn_link_url(link: dict) -> str | None:
+def _gn_link_url(link: dict) -> Optional[str]:
     url = link.get("url")
     if isinstance(url, dict):
         url = url.get("default")
@@ -317,7 +317,7 @@ def _gn_link_url(link: dict) -> str | None:
     return None
 
 
-def _gn_doi(links: Any) -> str | None:
+def _gn_doi(links: Any) -> Optional[str]:
     if not isinstance(links, list):
         return None
     for link in links:
@@ -332,7 +332,7 @@ def _gn_doi(links: Any) -> str | None:
     return None
 
 
-def _gn_date(src: dict) -> str | None:
+def _gn_date(src: dict) -> Optional[str]:
     dates = src.get("resourceDate")
     if isinstance(dates, list):
         by_type = {str(d.get("type")): str(d.get("date") or "") for d in dates if isinstance(d, dict)}
@@ -380,7 +380,7 @@ def dataset_from_gn_hit(hit: dict, source: str) -> dict | None:
 # EDMED (SeaDataNet) — binding SPARQL → fiche
 # ---------------------------------------------------------------------------
 
-def _binding_value(binding: dict, key: str) -> str | None:
+def _binding_value(binding: dict, key: str) -> Optional[str]:
     cell = binding.get(key)
     if isinstance(cell, dict):
         val = cell.get("value")
@@ -476,7 +476,7 @@ def cruise_from_csr_binding(binding: dict) -> dict | None:
 # Argo (Coriolis / ERDDAP) — profile index → last position per float
 # ---------------------------------------------------------------------------
 
-def wmo_from_file(path: str | None) -> tuple[str | None, str | None, int | None]:
+def wmo_from_file(path: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[int]]:
     """(wmo, dac, cycle) from an index path ``aoml/1901514/profiles/R1901514_538.nc``."""
     if not path:
         return None, None, None
@@ -738,13 +738,13 @@ async def build_science(
     state,
     sources: tuple[str, ...] | list[str] | None = None,
     client: httpx.AsyncClient | None = None,
-    max_records: int | None = None,
-    argo_days: int | None = None,
+    max_records: Optional[int] = None,
+    argo_days: Optional[int] = None,
     fetch_gn: FetchGn | None = None,
     fetch_edmed: FetchEdmed | None = None,
     fetch_argo: FetchArgo | None = None,
     fetch_csr: FetchCsr | None = None,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
 ) -> dict:
     """Harvest requested sources into the live collection (upsert, no purge)."""
     state.running = True

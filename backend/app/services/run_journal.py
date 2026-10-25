@@ -92,7 +92,7 @@ def _strip_secrets(obj):
     return obj
 
 
-def _chosen_rules(p: dict) -> tuple[dict, str | None, str | None, dict | None]:
+def _chosen_rules(p: dict) -> tuple[dict, Optional[str], Optional[str], dict | None]:
     """Accept the Mongo snapshot (``rules.chosen``) or the already-public form."""
     rules = p.get("rules") if isinstance(p.get("rules"), dict) else {}
     if isinstance(rules.get("chosen"), dict):
@@ -206,7 +206,7 @@ def journal_header_to_text(params: dict | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def params_from_items(items: list[dict] | None) -> dict | None:
+def params_from_items(items: Optional[dict]) -> dict | None:
     for e in items or []:
         if e.get("kind") == JOURNAL_KIND_META and isinstance(e.get("params"), dict):
             return e["params"]
@@ -252,7 +252,7 @@ def _public_entry(entry: dict) -> dict:
     return out
 
 
-def append_journal(run_id: str, entry: dict, seq: int | None = None) -> dict:
+def append_journal(run_id: str, entry: dict, seq: Optional[int] = None) -> dict:
     """Append a line to the disk journal. Do not touch ``projects``."""
     rid = safe_run_id(run_id)
     rec = _public_entry(entry)
@@ -274,7 +274,7 @@ def append_journal(run_id: str, entry: dict, seq: int | None = None) -> dict:
     return rec
 
 
-def iter_journal_file(run_id: str, kind: str | None = None):
+def iter_journal_file(run_id: str, kind: Optional[str] = None):
     """Read the journal file (or the fallback .swarm.jsonl)."""
     want = (kind or "").strip().lower() or None
     if want == "all":
@@ -301,12 +301,12 @@ def iter_journal_file(run_id: str, kind: str | None = None):
         return
 
 
-def count_journal_file(run_id: str, kind: str | None = None) -> int:
+def count_journal_file(run_id: str, kind: Optional[str] = None) -> int:
     return sum(1 for _ in iter_journal_file(run_id, kind=kind))
 
 
 def read_journal_file(run_id: str, *, skip: int = 0, limit: int = JOURNAL_LIMIT_DEFAULT,
-                      kind: str | None = None, tail: bool = False) -> dict:
+                      kind: Optional[str] = None, tail: bool = False) -> dict:
     """Page the journal file. ``tail=true`` = the last *limit* lines."""
     items = list(iter_journal_file(run_id, kind=kind))
     total = len(items)
@@ -327,7 +327,7 @@ def read_journal_file(run_id: str, *, skip: int = 0, limit: int = JOURNAL_LIMIT_
     }
 
 
-def journal_to_text(run_id: str, items: list[dict] | None = None,
+def journal_to_text(run_id: str, items: Optional[dict] = None,
                     params: dict | None = None) -> str:
     """Readable narrative: parameters + rules, then the timestamped stream."""
     if items is None:
@@ -391,7 +391,7 @@ async def mongo_insert_journal(db, rec: dict) -> None:
 
 async def read_journal_mongo(db, run_id: str, *, skip: int = 0,
                               limit: int = JOURNAL_LIMIT_DEFAULT,
-                              kind: str | None = None, tail: bool = False) -> dict:
+                              kind: Optional[str] = None, tail: bool = False) -> dict:
     """Fallback if the file is gone: ``project_run_journal`` collection."""
     rid = safe_run_id(run_id)
     q: dict = {"run_id": rid}
@@ -424,7 +424,7 @@ async def read_journal_mongo(db, run_id: str, *, skip: int = 0,
 
 async def load_journal(db, run_id: str, *, skip: int = 0,
                        limit: int = JOURNAL_LIMIT_DEFAULT,
-                       kind: str | None = None, tail: bool = False) -> dict:
+                       kind: Optional[str] = None, tail: bool = False) -> dict:
     """File first, Mongo next. Never write ``projects``."""
     if _jsonl_paths(run_id):
         return read_journal_file(

@@ -199,7 +199,7 @@ def _pack(public: dict) -> dict:
     }
 
 
-def _norm_url(url: str | None) -> str:
+def _norm_url(url: Optional[str]) -> str:
     raw = (url or "").strip()
     if not raw:
         return ""
@@ -210,7 +210,7 @@ def _norm_url(url: str | None) -> str:
         return raw.rstrip("/").lower()
 
 
-def urls_same(a: str | None, b: str | None) -> bool:
+def urls_same(a: Optional[str], b: Optional[str]) -> bool:
     na, nb = _norm_url(a), _norm_url(b)
     return bool(na and nb and na == nb)
 
@@ -303,7 +303,7 @@ def project_urls(fiche: dict | None) -> list[str]:
     return out
 
 
-def comment_http_urls(comment: str | None) -> list[str]:
+def comment_http_urls(comment: Optional[str]) -> list[str]:
     """URLs pasted in the reviewer comment (lists found by hand)."""
     try:
         from app.services.amp import extract_urls
@@ -313,7 +313,7 @@ def comment_http_urls(comment: str | None) -> list[str]:
 
 
 def kept_official_urls(fiche: dict | None, choices: dict | None,
-                       comment: str | None = "") -> list[str]:
+                       comment: Optional[str] = "") -> list[str]:
     """Ticked TD + comment URLs — the polygon's documentary truth."""
     fiche = fiche or {}
     td_map = (choices or {}).get("td") or {}
@@ -351,8 +351,8 @@ def dropped_official_urls(fiche: dict | None, choices: dict | None) -> list[str]
     return out
 
 
-def gold_ready(fiche: dict | None, choices: dict | None, kind: str | None = None,
-               comment: str | None = "") -> bool:
+def gold_ready(fiche: dict | None, choices: dict | None, kind: Optional[str] = None,
+               comment: Optional[str] = "") -> bool:
     """Gold lights only if the reviewer decided what the mode requires."""
     fiche = fiche or {}
     ch = choices or empty_choices()
@@ -371,7 +371,7 @@ def gold_ready(fiche: dict | None, choices: dict | None, kind: str | None = None
     return _gold_ready_eez(fiche, ch, comment=comment)
 
 
-def _gold_ready_eez(fiche: dict, ch: dict, comment: str | None = "") -> bool:
+def _gold_ready_eez(fiche: dict, ch: dict, comment: Optional[str] = "") -> bool:
     """At least one official list kept (TD or pasted URL), or UNCLOS / none."""
     if kept_official_urls(fiche, ch, comment):
         return True
@@ -461,7 +461,7 @@ def finalize_choices(fiche: dict, choices: dict) -> dict:
 
 
 def build_gold_snapshot(fiche: dict, choices: dict, comment: str = "",
-                        kind: str | None = None) -> dict:
+                        kind: Optional[str] = None) -> dict:
     k = (kind or fiche.get("review_kind") or fiche.get("kind") or "eez").strip()
     if k == "project":
         return _snapshot_project(fiche, choices, comment)
@@ -760,9 +760,9 @@ async def save_choices_doc(db, kind: str, entity_id: str, public: dict) -> dict:
 
 
 async def save_choice(db, kind: str, entity_id: str, target: str, action: str,
-                      *, url: str | None = None, port_id: str | None = None,
-                      site_id: str | None = None, field: str | None = None,
-                      lat: float | None = None, lon: float | None = None) -> dict:
+                      *, url: Optional[str] = None, port_id: Optional[str] = None,
+                      site_id: Optional[str] = None, field: Optional[str] = None,
+                      lat: Optional[float] = None, lon: Optional[float] = None) -> dict:
     if kind not in CHOICE_KINDS:
         raise ValueError("choice kind must be eez|project|marina|capitainerie|amp")
     if target not in TARGETS:

@@ -33,7 +33,7 @@ def _sid(value) -> str:
     return "" if value is None else str(value)
 
 
-def _domain(url: str | None) -> str:
+def _domain(url: Optional[str]) -> str:
     try:
         host = (urlparse(url or "").hostname or "").lower()
     except Exception:
@@ -41,7 +41,7 @@ def _domain(url: str | None) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
-def _extract_urls(text: str | None) -> list[str]:
+def _extract_urls(text: Optional[str]) -> list[str]:
     try:
         from app.services.amp import extract_urls
         return extract_urls(text)
@@ -79,7 +79,7 @@ async def _title_for(db, kind: str, eid: str) -> str:
         return eid
 
 
-async def build_report(db, kind: str | None = None) -> dict:
+async def build_report(db, kind: Optional[str] = None) -> dict:
     """JSON report: items per card + aggregated pipeline actions."""
     kinds = list(REPORT_KINDS) if not kind or kind == "all" else [kind]
     filt = {"kind": {"$in": kinds}}

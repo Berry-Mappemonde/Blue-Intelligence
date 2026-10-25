@@ -6,6 +6,9 @@ no LLM, no scraping. Live collection ``science_items`` with non-destructive
 upsert; each harvest is recorded in ``science_runs``
 (rules snapshot included) for the console Runs tab.
 """
+
+from __future__ import annotations
+
 import asyncio
 import time
 import uuid
@@ -174,10 +177,10 @@ async def import_science_geojson(fc: dict = Body(...)):
 
 class ScienceBuildBody(BaseModel):
     sources: list[str] | None = None
-    profile: str | None = None
+    profile: Optional[str] = None
     rules: dict | None = None
-    scope: str | None = None
-    max_records: int | None = None
+    scope: Optional[str] = None
+    max_records: Optional[int] = None
 
 
 @router.post("/science/build")

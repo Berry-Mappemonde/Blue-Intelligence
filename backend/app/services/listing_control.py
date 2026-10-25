@@ -186,7 +186,7 @@ def compare_to_listing(run_ports: list[dict], listing_ports: list[dict],
     }
 
 
-def review_items(report: dict, run_id: str, variant: str | None = None) -> list[dict]:
+def review_items(report: dict, run_id: str, variant: Optional[str] = None) -> list[dict]:
     """Flatten the review queue (not confident matches)."""
     now = now_iso()
     items = []
@@ -311,7 +311,7 @@ def _add_reason(bucket: dict[int, list[str]], mrgid, reason: str) -> None:
 _SKIP_UNCLOS = {"uninhabited", "antarctic"}
 
 
-def _unclos_skip(name: str | None) -> str | None:
+def _unclos_skip(name: Optional[str]) -> Optional[str]:
     from app.services.poe_pipeline import qualify_unclos
     q = qualify_unclos({"name": name or "", "geoname": "", "poe_count": 0})
     code = (q or {}).get("code")

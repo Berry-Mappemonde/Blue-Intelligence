@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 LogFn = Callable[[str], None]
 HopFn = Callable[["YesNo"], bool]
-UrlKeyFn = Callable[[str], str | None]
+UrlKeyFn = Callable[[str], Optional[str]]
 
 _TRUE = {"true", "1", "yes", "y", "oui", "vrai"}
 _FALSE = {"false", "0", "no", "non", "n", "faux"}
@@ -39,7 +39,7 @@ class YesNo:
     """Normalized answer. ``raw`` keeps the specialist's business JSON."""
 
     accepted: bool | None
-    url: str | None
+    url: Optional[str]
     reason: str
     engine: str
     raw: dict = field(default_factory=dict)
@@ -75,7 +75,7 @@ def as_confidence(raw) -> int:
     return max(0, min(100, int(round(val))))
 
 
-def normalize_listed_url(url: str | None) -> str | None:
+def normalize_listed_url(url: Optional[str]) -> Optional[str]:
     """Comparison key: scheme, host without www, path without trailing slash."""
     raw = (url or "").strip()
     if not raw or raw.lower() in _NULL_URL:
@@ -100,7 +100,7 @@ def listed_url(
     allowed: Sequence | None,
     *,
     key: UrlKeyFn | None = None,
-) -> str | None:
+) -> Optional[str]:
     """Return the original candidate URL, or None if off-list / invented."""
     if allowed is None:
         return None
@@ -122,7 +122,7 @@ def listed_url(
     return wanted.get(got)
 
 
-def claude_engine_label(model: str | None) -> str:
+def claude_engine_label(model: Optional[str]) -> str:
     blob = (model or "").lower()
     if "sonnet" in blob:
         return "claude-sonnet"
@@ -190,11 +190,11 @@ async def complete_json_cascade(
     role: str = "json",
     max_tokens: int = 400,
     log: LogFn | None = None,
-    nvidia_model: str | None = None,
+    nvidia_model: Optional[str] = None,
     nvidia_fallback: bool = True,
-    claude_model: str | None = None,
-    claude_max_tokens: int | None = None,
-    openrouter_max_tokens: int | None = None,
+    claude_model: Optional[str] = None,
+    claude_max_tokens: Optional[int] = None,
+    openrouter_max_tokens: Optional[int] = None,
     images: list[bytes] | None = None,
 ) -> tuple[dict, str]:
     """NVIDIA → OpenRouter → Claude. One branch for strict JSON."""
@@ -326,9 +326,9 @@ async def ask_yes_no(
     log: LogFn | None = None,
     role: str = "json",
     max_tokens: int = 400,
-    nvidia_max_tokens: int | None = None,
-    openrouter_max_tokens: int | None = None,
-    claude_max_tokens: int | None = None,
+    nvidia_max_tokens: Optional[int] = None,
+    openrouter_max_tokens: Optional[int] = None,
+    claude_max_tokens: Optional[int] = None,
     allowed_urls: Sequence | None = None,
     forbidden_urls: Sequence[str] | None = None,
     url_key: UrlKeyFn | None = None,

@@ -65,7 +65,7 @@ _STOP_TOKENS = {
 
 
 @lru_cache(maxsize=1)
-def load_eez_geoms(path: str | None = None) -> dict[int, object]:
+def load_eez_geoms(path: Optional[str] = None) -> dict[int, object]:
     from shapely.geometry import shape
     p = Path(path) if path else MAP_FILE
     data = json.loads(p.read_text(encoding="utf-8"))
@@ -112,7 +112,7 @@ def _seed_key(seed: dict) -> str:
     return str(seed.get("dedup_key") or seed.get("_id") or "")
 
 
-def _mid(seed: dict) -> int | None:
+def _mid(seed: dict) -> Optional[int]:
     try:
         return int(seed["mrgid"]) if seed.get("mrgid") is not None else None
     except (TypeError, ValueError):
@@ -329,7 +329,7 @@ def _diameter_km(pts: list[tuple[float, float]]) -> float:
     return best
 
 
-def _listing_group_map(listing_ports: list[dict] | None) -> dict[str, str]:
+def _listing_group_map(listing_ports: Optional[dict]) -> dict[str, str]:
     out: dict[str, str] = {}
     for p in listing_ports or []:
         grp = (p.get("group") or "").strip()
@@ -346,7 +346,7 @@ def _listing_group_map(listing_ports: list[dict] | None) -> dict[str, str]:
     return out
 
 
-def _seed_group(seed: dict, groups: dict[str, str]) -> str | None:
+def _seed_group(seed: dict, groups: dict[str, str]) -> Optional[str]:
     key = _seed_key(seed)
     if key and groups.get(key):
         return groups[key]
@@ -472,7 +472,7 @@ def _plan_correction(seed: dict, spatial: dict, extra: dict,
 def flag_confirmed_seeds(
     seeds: list[dict], *,
     geoms: dict[int, object] | None = None,
-    listing_ports: list[dict] | None = None,
+    listing_ports: Optional[dict] = None,
 ) -> list[dict]:
     """Input: seed docs. Output: typed flags (does not mutate the docs)."""
     geoms = geoms if geoms is not None else load_eez_geoms()
@@ -486,7 +486,7 @@ def flag_confirmed_seeds(
     ]
     by_zone: dict[int, list[dict]] = defaultdict(list)
     by_group: dict[tuple, list[dict]] = defaultdict(list)
-    seed_group: dict[str, str | None] = {}
+    seed_group: dict[str, Optional[str]] = {}
     for s in confirmed:
         mid = _mid(s)
         if mid is not None:
@@ -572,7 +572,7 @@ def flag_confirmed_seeds(
 def audit_confirmed_seeds(
     seeds: list[dict], *,
     geoms: dict[int, object] | None = None,
-    listing_ports: list[dict] | None = None,
+    listing_ports: Optional[dict] = None,
 ) -> dict:
     """Comparable report (workshop). No write."""
     flags = flag_confirmed_seeds(
@@ -624,7 +624,7 @@ def _correction_set(seed: dict, plan: dict, spatial_after: dict, stamp: str,
 
 def persist_gps_audit(db, report: dict, *,
                       geoms: dict[int, object] | None = None,
-                      seeds: list[dict] | None = None) -> dict:
+                      seeds: Optional[dict] = None) -> dict:
     """Write gps_audit_*; correct obvious cases; log `gps_audit_correct`.
 
     `db` exposes poe_seed_ports, poe_ports, poe_audit_log (sync).

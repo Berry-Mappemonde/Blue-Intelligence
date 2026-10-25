@@ -48,7 +48,7 @@ export function clearAdminKey() {
 
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
-  timeout: 120000,
+  timeout: 180000,
   ...(adminKey ? { headers: { "X-Admin-Key": adminKey } } : {}),
 });
 

@@ -96,9 +96,9 @@ def apply_incoming(
 
 
 async def collect_page_urls(
-    official: str | None,
+    official: Optional[str],
     *,
-    extra: Sequence[str | None] | None = None,
+    extra: Sequence[Optional[str]] | None = None,
     search: Callable[[], Awaitable[Sequence[str]]] | None = None,
     max_urls: int = 8,
     url_ok_fn: Callable[[str], bool] | None = None,
@@ -108,7 +108,7 @@ async def collect_page_urls(
     urls: list[str] = []
     seen: set[str] = set()
 
-    def _add(raw: str | None) -> None:
+    def _add(raw: Optional[str]) -> None:
         u = (raw or "").strip()
         if not u or u in seen or not ok(u):
             return
@@ -193,7 +193,7 @@ class PageEnrichSpec:
     fields: tuple[str, ...]
     hole_fields: tuple[str, ...]
     from_tags: Callable[[dict], dict]
-    official_url: Callable[[dict], str | None]
+    official_url: Callable[[dict], Optional[str]]
     allow_web: Callable[[dict], bool]
     discover_urls: DiscoverFn
     fetch_pages: FetchFn

@@ -133,7 +133,7 @@ def leisure_marina_bbox_ql(
     )
 
 
-def google_maps_url(name: str | None, lat: float, lon: float) -> str:
+def google_maps_url(name: Optional[str], lat: float, lon: float) -> str:
     """Deterministic Maps search link — not a Places card."""
     if name and str(name).strip():
         q = f"{str(name).strip()} {lat:.5f},{lon:.5f}"
@@ -142,7 +142,7 @@ def google_maps_url(name: str | None, lat: float, lon: float) -> str:
     return "https://www.google.com/maps/search/?api=1&query=" + quote_plus(q)
 
 
-def osm_website_from_tags(tags: dict | None) -> str | None:
+def osm_website_from_tags(tags: dict | None) -> Optional[str]:
     tags = tags or {}
     for key in ("website", "contact:website", "url"):
         raw = str(tags.get(key) or "").strip()
@@ -215,7 +215,7 @@ def marina_from_overpass(elem: dict) -> dict | None:
     }
 
 
-def merge_website(existing: dict | None, raw_site: str | None) -> tuple[str | None, str | None, str | None]:
+def merge_website(existing: dict | None, raw_site: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
     existing = existing or {}
     status = existing.get("website_status")
     if status in LOCKED_WEBSITE_STATUSES and existing.get("website"):
@@ -231,7 +231,7 @@ def merge_website(existing: dict | None, raw_site: str | None) -> tuple[str | No
     return None, None, None
 
 
-def _apply_osm_google_place(patch: dict, website: str | None, existing: dict | None) -> None:
+def _apply_osm_google_place(patch: dict, website: Optional[str], existing: dict | None) -> None:
     """If the OSM tag is already a /maps/place/ URL, flag it without TinyFish."""
     raw = (website or "").strip()
     if "/maps/place/" not in raw or "/maps/search/" in raw:
@@ -245,7 +245,7 @@ def _apply_osm_google_place(patch: dict, website: str | None, existing: dict | N
     patch["maps_place_source"] = "osm_tag"
 
 
-def official_website(doc: dict) -> str | None:
+def official_website(doc: dict) -> Optional[str]:
     if doc.get("website"):
         return doc["website"]
     return osm_website_from_tags(doc.get("tags") or {})
@@ -462,7 +462,7 @@ async def ensure_indexes(marinas_coll, *, isolated: bool = False) -> None:
         pass
 
 
-def _throttle_s(explicit: float | None) -> float:
+def _throttle_s(explicit: Optional[float]) -> float:
     if explicit is not None:
         return float(explicit)
     try:
@@ -532,9 +532,9 @@ async def build_world_marinas(
     resume: bool = True,
     tiles: tuple[tuple[float, float, float, float], ...] | None = None,
     client: httpx.AsyncClient | None = None,
-    throttle_s: float | None = None,
+    throttle_s: Optional[float] = None,
     fetch_tile: FetchTile | None = None,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
     recorder=None,
 ) -> dict:
     """Sweep world tiles, upsert by osm_id, resume already-done tiles.

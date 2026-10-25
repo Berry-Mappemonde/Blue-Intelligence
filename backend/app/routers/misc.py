@@ -1,5 +1,8 @@
 """app.routers.misc — Health, settings, user manual, official route,
 route EEZ crossings."""
+
+from __future__ import annotations
+
 import asyncio
 import math
 import os
@@ -39,7 +42,7 @@ async def health():
 
 
 @router.get("/run-rules")
-async def read_run_rules(mode: str | None = None, profile: str | None = None,
+async def read_run_rules(mode: Optional[str] = None, profile: Optional[str] = None,
                          from_settings: bool = True):
     """Tunable-rules catalog + snapshot that would be taken for a run.
 
@@ -65,37 +68,37 @@ async def read_run_rules(mode: str | None = None, profile: str | None = None,
     return catalog
 
 class SettingsBody(BaseModel):
-    nvidia_api_key: str | None = None
-    llm_provider: str | None = None
-    openrouter_api_key: str | None = None
-    tinyfish_api_key: str | None = None
-    serper_api_key: str | None = None
-    tinyfish_agents: int | None = None
-    extract_concurrency: int | None = None
-    nvidia_max_concurrency: int | None = None
-    max_coast_km: float | None = None
-    max_inland_km: float | None = None
-    min_marine_score: float | None = None
-    gatekeeper_accept: float | None = None
-    gatekeeper_reject: float | None = None
+    nvidia_api_key: Optional[str] = None
+    llm_provider: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    tinyfish_api_key: Optional[str] = None
+    serper_api_key: Optional[str] = None
+    tinyfish_agents: Optional[int] = None
+    extract_concurrency: Optional[int] = None
+    nvidia_max_concurrency: Optional[int] = None
+    max_coast_km: Optional[float] = None
+    max_inland_km: Optional[float] = None
+    min_marine_score: Optional[float] = None
+    gatekeeper_accept: Optional[float] = None
+    gatekeeper_reject: Optional[float] = None
     allow_tinyfish_agent: bool | None = None
-    test_max_urls_per_seed: int | None = None
-    full_max_urls_per_seed: int | None = None
-    min_zoom: int | None = None
-    max_markers: int | None = None
+    test_max_urls_per_seed: Optional[int] = None
+    full_max_urls_per_seed: Optional[int] = None
+    min_zoom: Optional[int] = None
+    max_markers: Optional[int] = None
     follow_the_money: bool | None = None
-    max_partner_orgs: int | None = None
-    ftm_min_s_ocean: float | None = None
-    discover_concurrency: int | None = None
-    listing_judge_concurrency: int | None = None
-    saturation_limit: int | None = None
-    rescan_after_days: float | None = None
-    marina_search_radius_nm: float | None = None
-    marina_batch_concurrency: int | None = None
-    openrouter_min_credits_usd: float | None = None
-    enrich_stale_days: int | None = None
-    anthropic_api_key: str | None = None
-    claude_budget_usd: float | None = None
+    max_partner_orgs: Optional[int] = None
+    ftm_min_s_ocean: Optional[float] = None
+    discover_concurrency: Optional[int] = None
+    listing_judge_concurrency: Optional[int] = None
+    saturation_limit: Optional[int] = None
+    rescan_after_days: Optional[float] = None
+    marina_search_radius_nm: Optional[float] = None
+    marina_batch_concurrency: Optional[int] = None
+    openrouter_min_credits_usd: Optional[float] = None
+    enrich_stale_days: Optional[int] = None
+    anthropic_api_key: Optional[str] = None
+    claude_budget_usd: Optional[float] = None
 
 # Map controls are not catalog rules. The settings form already publishes these bounds.
 _MAP_SETTING_INTERVALS = {
@@ -116,7 +119,7 @@ def _settings_interval(key: str):
     return None, None
 
 
-def settings_out_of_range(updates: dict) -> str | None:
+def settings_out_of_range(updates: dict) -> Optional[str]:
     """English detail when a numeric update leaves the catalog interval."""
     from app.core.run_rules import RuleError, _assert_in_interval
     problems = []

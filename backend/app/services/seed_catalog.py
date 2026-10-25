@@ -310,7 +310,7 @@ def classify_home(name: str, urls: list[str]) -> dict:
     }
 
 
-def infer_own_listing(name: str, urls: list[str], home_url: str | None) -> str | None:
+def infer_own_listing(name: str, urls: list[str], home_url: Optional[str]) -> Optional[str]:
     """Common prefix of cards *on the owner domain*."""
     host = domain_of(home_url)
     if not host:
@@ -406,7 +406,7 @@ def build_v1_catalog(projects: list[dict]) -> list[dict]:
     ]
 
 
-def merge_curated_catalog(v1_seeds: list[dict], curated: list[dict] | None = None) -> list[dict]:
+def merge_curated_catalog(v1_seeds: list[dict], curated: Optional[dict] = None) -> list[dict]:
     """Name/alias union only: a CORDIS-hosted org is no longer dropped."""
     if curated is None:
         from app.static_data.seeds import CURATED_SEEDS
@@ -459,7 +459,7 @@ def merge_curated_catalog(v1_seeds: list[dict], curated: list[dict] | None = Non
     return out
 
 
-def build_enriched_master_seeds(projects: list[dict], curated: list[dict] | None = None) -> list[dict]:
+def build_enriched_master_seeds(projects: list[dict], curated: Optional[dict] = None) -> list[dict]:
     from app.services.master_seeds import set_frequent_hubs_from_projects
     set_frequent_hubs_from_projects(projects)
     return merge_curated_catalog(build_v1_catalog(projects), curated)
@@ -565,7 +565,7 @@ def _atomic_write_text(path: Path, text: str) -> Path:
     return path
 
 
-def apply_official_site_result(seed: dict, site: str | None) -> dict:
+def apply_official_site_result(seed: dict, site: Optional[str]) -> dict:
     """Apply a Search B hit. Keep `borrowed_domain` for audit."""
     site = (site or "").strip()
     if site:
@@ -623,7 +623,7 @@ def journal_done_names(
     records: dict[str, dict],
     *,
     retry_unknown: bool = False,
-    result_key: str | None = None,
+    result_key: Optional[str] = None,
 ) -> set[str]:
     """Names already Searched. Network errors are not "done" (resume)."""
     done: set[str] = set()
@@ -679,7 +679,7 @@ def search_candidates(
 def overlay_search_results(
     seeds: list[dict],
     *,
-    previous: list[dict] | None = None,
+    previous: Optional[dict] = None,
     journal: Path | dict | None = None,
 ) -> int:
     """Re-apply Search homes (previous catalog + journal). The journal wins."""
@@ -722,7 +722,7 @@ def write_search_progress(path: Path, payload: dict) -> Path:
     return _atomic_write_text(Path(path), json.dumps(body, ensure_ascii=False, indent=2) + "\n")
 
 
-def apply_listing_result(seed: dict, listing: str | None, *, source: str = LISTING_SOURCE_SEARCH) -> dict:
+def apply_listing_result(seed: dict, listing: Optional[str], *, source: str = LISTING_SOURCE_SEARCH) -> dict:
     """Set a list page on the home domain. Miss → homepage, still crawlable."""
     listing = (listing or "").strip()
     home = (seed.get("home_url") or seed.get("url") or "").strip()
@@ -790,7 +790,7 @@ def listing_candidates(
 def overlay_listing_results(
     seeds: list[dict],
     *,
-    previous: list[dict] | None = None,
+    previous: Optional[dict] = None,
     journal: Path | dict | None = None,
 ) -> int:
     """Re-apply list pages (previous catalog + journal C)."""
@@ -827,7 +827,7 @@ def overlay_listing_results(
     return len(touched)
 
 
-def infer_listings_onto_official_homes(seeds: list[dict], projects: list[dict] | None) -> int:
+def infer_listings_onto_official_homes(seeds: list[dict], projects: Optional[dict]) -> int:
     """C outside Search: common prefix of v1 cards on the official home."""
     buckets: dict[str, list[str]] = defaultdict(list)
     for doc in projects or []:
@@ -975,7 +975,7 @@ def _strip_partner(name: str) -> str:
     return re.sub(r"\s*\(partner\)\s*$", "", (name or "").strip(), flags=re.I).strip()
 
 
-def _is_org_part(part: str, seeds: list[dict] | None = None) -> bool:
+def _is_org_part(part: str, seeds: Optional[dict] = None) -> bool:
     """Avoid splitting "Science, Technology and …" into fake organizations."""
     part = _strip_partner(part)
     if not part or classify_name(part) != NAME_OK:
@@ -991,7 +991,7 @@ def _is_org_part(part: str, seeds: list[dict] | None = None) -> bool:
     return False
 
 
-def split_compound_parts(name: str, seeds: list[dict] | None = None) -> list[str] | None:
+def split_compound_parts(name: str, seeds: Optional[dict] = None) -> list[str] | None:
     """Split a glued name. None if a single organization or parts too vague."""
     if classify_name(name) != NAME_COMPOUND:
         return None
@@ -1134,9 +1134,9 @@ def dump_catalog(seeds: list[dict], path: Path | None = None, source: str = "") 
 
 
 def find_catalog_seed(
-    catalog: list[dict] | None,
+    catalog: Optional[dict],
     name: str,
-    url: str | None = None,
+    url: Optional[str] = None,
 ) -> dict | None:
     """Same organization as the partner: name/alias, else unique domain."""
     seeds = catalog or []
@@ -1153,7 +1153,7 @@ def find_catalog_seed(
     return None
 
 
-def accept_partner_url(name: str, url: str | None) -> dict | None:
+def accept_partner_url(name: str, url: Optional[str]) -> dict | None:
     """Official home (or list page): not a journal, not a borrowed hub."""
     raw = (url or "").strip()
     if not raw.startswith("http"):
@@ -1223,10 +1223,10 @@ def catalog_partner_seed(seed: dict) -> dict | None:
 
 def decide_follow_the_money_partner(
     name: str,
-    url: str | None = None,
+    url: Optional[str] = None,
     *,
-    catalog: list[dict] | None = None,
-    searched_home: str | None = None,
+    catalog: Optional[dict] = None,
+    searched_home: Optional[str] = None,
     did_search: bool = False,
 ) -> dict:
     """Same scale as catalog A–E: simple name, official home, no hub.
@@ -1332,7 +1332,7 @@ def ftm_page_allows_collect(
     return score >= float(min_s_ocean)
 
 
-def _ftm_inbox_penalty(name: str, url: str | None) -> float:
+def _ftm_inbox_penalty(name: str, url: Optional[str]) -> float:
     """Univ / .edu: do not drop, push back in the ranking."""
     penalty = 0.0
     if _UNI_NAME.search(name or ""):

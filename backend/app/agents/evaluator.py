@@ -77,7 +77,7 @@ def _with_run_id(state: dict) -> dict:
 
 
 def _trace_port(port: dict, retry_count: int, action: str,
-                *, run_id: str, handoff: str | None = None) -> dict:
+                *, run_id: str, handoff: Optional[str] = None) -> dict:
     """Build an event; the node writes its batch after processing all ports."""
     entry = {
         "timestamp": _now_iso(),
@@ -117,7 +117,7 @@ def _write_trace(entries: list[dict], run_id: str) -> None:
         print(payload, end="", flush=True)
 
 
-def is_official_source(urls: list[str | None] | None) -> bool:
+def is_official_source(urls: list[Optional[str]] | None) -> bool:
     """Recognize HTTP(S) hosts ending in .gov or a government label + ccTLD.
 
     Match exact labels gouv/gov/gob/gc/govt/go immediately before a two-letter
@@ -167,7 +167,7 @@ def _map_check(port: dict) -> tuple[bool, list[str]]:
     return True, []
 
 
-def _verdict(confidence: int, checks_ok: bool, retry_hint: str | None) -> str:
+def _verdict(confidence: int, checks_ok: bool, retry_hint: Optional[str]) -> str:
     if confidence < 40:
         return "retry" if retry_hint else "flag"
     if confidence > 60 and checks_ok:

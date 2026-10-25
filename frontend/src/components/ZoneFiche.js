@@ -156,11 +156,16 @@ function RegistryBadge({ port, t }) {
 
 /** Official evidence of a port (registry.official_evidence): source link, snippet collapsed. */
 function OfficialEvidence({ evidence, t }) {
-  if (!evidence?.length) return null;
+  const evidenceList = Array.isArray(evidence)
+    ? evidence
+    : typeof evidence === 'string' && evidence
+      ? [{ excerpt: evidence }]
+      : [];
+  if (!evidenceList.length) return null;
   return (
     <div className="mt-1 space-y-0.5" data-testid="poe-fiche-evidence">
       <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{t("poeEvidenceTitle")}</p>
-      {evidence.map((e) => (
+      {evidenceList.map((e) => (
         <details key={e.url} className="group" data-testid="poe-fiche-evidence-item">
           <summary className="cursor-pointer list-none font-mono text-[9px] text-slate-400 hover:text-slate-200">
             <a

@@ -1,5 +1,8 @@
 """app.routers.projects — Marine projects: list, imports/exports, categories,
 on-demand enrichment, community reports."""
+
+from __future__ import annotations
+
 import asyncio
 import difflib
 import html
@@ -44,7 +47,7 @@ def project_to_feature(p: dict) -> dict:
     }
 
 @router.get("/projects")
-async def get_projects(funder: str | None = None, visible: bool = False):
+async def get_projects(funder: Optional[str] = None, visible: bool = False):
     q = {}
     if funder and funder != "All":
         q = {"funders": funder}

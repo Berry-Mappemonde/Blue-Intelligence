@@ -181,7 +181,7 @@ FetchNoaa = Callable[
 ]
 
 
-def google_maps_url(name: str | None, lat: float, lon: float) -> str:
+def google_maps_url(name: Optional[str], lat: float, lon: float) -> str:
     if name and str(name).strip():
         q = f"{str(name).strip()} {lat:.5f},{lon:.5f}"
     else:
@@ -282,7 +282,7 @@ def _phones_in_chunk(chunk: str) -> list[str]:
     return found
 
 
-def _clean_phone(raw: str | None) -> str | None:
+def _clean_phone(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None
     text = str(raw).strip()
@@ -315,7 +315,7 @@ def _is_marine_channel(n: int) -> bool:
     return 1 <= n <= 28 or 60 <= n <= 88
 
 
-def _norm_vhf_part(part: str) -> str | None:
+def _norm_vhf_part(part: str) -> Optional[str]:
     part = str(part or "").strip()
     if not part.isdigit():
         return None
@@ -334,7 +334,7 @@ def _channels_from_fragment(fragment: str) -> list[str]:
     return nums
 
 
-def _clean_vhf(raw: str | None) -> str | None:
+def _clean_vhf(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None
     text = str(raw).strip()
@@ -357,7 +357,7 @@ def _clean_vhf(raw: str | None) -> str | None:
     return None
 
 
-def contact_from_text(text: str | None) -> tuple[str | None, str | None]:
+def contact_from_text(text: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     """Phone / VHF extracted from a page (Fetch markdown, readability, INFORM)."""
     if not text or not str(text).strip():
         return None, None
@@ -365,7 +365,7 @@ def contact_from_text(text: str | None) -> tuple[str | None, str | None]:
     return _clean_phone(blob), _clean_vhf(blob)
 
 
-def contact_from_tags(tags: dict | None) -> tuple[str | None, str | None]:
+def contact_from_tags(tags: dict | None) -> tuple[Optional[str], Optional[str]]:
     """Phone and VHF channel read from OSM/SHOM tags. Never invented."""
     tags = tags or {}
     phone = None
@@ -387,7 +387,7 @@ def contact_from_tags(tags: dict | None) -> tuple[str | None, str | None]:
     return phone, vhf
 
 
-def fill_contact(doc: dict, phone: str | None, vhf: str | None) -> dict:
+def fill_contact(doc: dict, phone: Optional[str], vhf: Optional[str]) -> dict:
     """Fill empty fields only."""
     if phone and not doc.get("telephone"):
         doc["telephone"] = phone
@@ -530,7 +530,7 @@ def capitainerie_from_shom(feat: dict, *, layer: str = "smcfac") -> dict | None:
     }
 
 
-def _better_name(current: str | None, incoming: str | None) -> str | None:
+def _better_name(current: Optional[str], incoming: Optional[str]) -> Optional[str]:
     incoming = (incoming or "").strip()
     if not incoming:
         return None
@@ -612,14 +612,14 @@ def _source_label(sources: list[str]) -> str:
 
 
 def nearest_office(
-    lat: float, lon: float, pts: list[dict], radius_km: float | None = None,
+    lat: float, lon: float, pts: list[dict], radius_km: Optional[float] = None,
 ):
     """Building overlay (≤ 250 m, distance only). Not Project/PoE card merge."""
     hit = find_building(lat, lon, pts, radius_km=radius_km)
     return None if hit is None else hit.doc
 
 
-def nearest_osm(lat: float, lon: float, osm_pts: list[dict], radius_km: float | None = None):
+def nearest_osm(lat: float, lon: float, osm_pts: list[dict], radius_km: Optional[float] = None):
     return nearest_office(lat, lon, osm_pts, radius_km=radius_km)
 
 
@@ -896,7 +896,7 @@ async def ensure_indexes(coll, *, isolated: bool = False) -> None:
         pass
 
 
-def _throttle_s(explicit: float | None) -> float:
+def _throttle_s(explicit: Optional[float]) -> float:
     if explicit is not None:
         return float(explicit)
     try:
@@ -1056,7 +1056,7 @@ _OFFICE_NAME_RE = re.compile(
 )
 
 
-def _chart_office_name(objnam: str | None, inform: str | None, fallback: str) -> str:
+def _chart_office_name(objnam: Optional[str], inform: Optional[str], fallback: str) -> str:
     objnam = (objnam or "").strip()
     if objnam:
         return objnam[:120]
@@ -1293,14 +1293,14 @@ async def build_world_capitaineries(
     resume: bool = True,
     tiles: tuple[tuple[float, float, float, float], ...] | None = None,
     client: httpx.AsyncClient | None = None,
-    throttle_s: float | None = None,
+    throttle_s: Optional[float] = None,
     fetch_tile: FetchTile | None = None,
     fetch_shom: FetchShom | None = None,
     fetch_noaa: FetchNoaa | None = None,
     shom_bboxes: tuple[tuple[float, float, float, float], ...] | None = None,
     skip_shom: bool = False,
     skip_noaa: bool = False,
-    run_id: str | None = None,
+    run_id: Optional[str] = None,
     recorder=None,
 ) -> dict:
     """Dump OSM harbour_master (tuiles), overlay SHOM, overlay NOAA ENC."""

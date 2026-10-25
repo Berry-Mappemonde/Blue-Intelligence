@@ -217,9 +217,9 @@ async def discover_marina_urls(
 async def resolve_marina_website(
     marina: dict,
     *,
-    key: str | None = None,
+    key: Optional[str] = None,
     logger: Optional[Callable[[str], None]] = None,
-) -> str | None:
+) -> Optional[str]:
     """OSM tag first; else ``search_named`` (TinyFish, DDG if no key)."""
     urls = await discover_marina_urls(marina, tinyfish_key=key, logger=logger)
     picked = urls[0] if urls else None
@@ -402,7 +402,7 @@ def _marina_prompt(marina: dict, context: str) -> str:
 async def enrich_via_openrouter(
     marina: dict,
     or_key: str,
-    model: str | None = None,
+    model: Optional[str] = None,
     min_credit_usd: float = 0.5,
     logger: Optional[Callable[[str], None]] = None,
     context: str = "",

@@ -42,12 +42,12 @@ def content_fingerprint(features: list) -> str:
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:12]
 
 
-def versioned_fc(fc: dict, dataset: str, *, license_note: str | None = None,
+def versioned_fc(fc: dict, dataset: str, *, license_note: Optional[str] = None,
                  now: datetime | None = None,
-                 period: str | None = None,
-                 month: int | None = None,
+                 period: Optional[str] = None,
+                 month: Optional[int] = None,
                  source_ids: list | None = None,
-                 doi: str | None = None,
+                 doi: Optional[str] = None,
                  extra_metadata: dict | None = None) -> dict:
     """Return a shallow copy of ``fc`` with the ``metadata`` block.
 
@@ -85,7 +85,7 @@ def versioned_fc(fc: dict, dataset: str, *, license_note: str | None = None,
 
 
 def export_response(fc: dict, dataset: str, filename: str, *,
-                    license_note: str | None = None) -> JSONResponse:
+                    license_note: Optional[str] = None) -> JSONResponse:
     """Uniform export response: metadata + Content-Disposition + HTTP version."""
     out = versioned_fc(fc, dataset, license_note=license_note)
     return JSONResponse(out, headers={

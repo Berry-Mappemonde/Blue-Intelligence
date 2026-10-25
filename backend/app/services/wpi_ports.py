@@ -75,7 +75,7 @@ def _wpi_index(raw: str) -> str:
     return text
 
 
-def parse_wpi_coord(raw) -> float | None:
+def parse_wpi_coord(raw) -> Optional[float]:
     """Decimal, or DMS like 36°50'00"N. None if empty / invalid."""
     if raw is None:
         return None
@@ -157,7 +157,7 @@ def parse_wpi_csv(src: str | Path | io.StringIO) -> list[dict]:
     return out
 
 
-def ingest_wpi_records(ports: list[dict], *, generated_at: str | None = None) -> dict:
+def ingest_wpi_records(ports: list[dict], *, generated_at: Optional[str] = None) -> dict:
     """Snapshot document (not PoE evidence)."""
     clean: list[dict] = []
     seen: set[str] = set()
@@ -184,7 +184,7 @@ def ingest_wpi_records(ports: list[dict], *, generated_at: str | None = None) ->
 
 
 def ingest_wpi_csv(src: str | Path | io.StringIO, *,
-                   generated_at: str | None = None) -> dict:
+                   generated_at: Optional[str] = None) -> dict:
     return ingest_wpi_records(parse_wpi_csv(src), generated_at=generated_at)
 
 
@@ -199,7 +199,7 @@ def write_wpi_snapshot(doc: dict, path: str | Path | None = None) -> Path:
 
 
 @lru_cache(maxsize=1)
-def load_wpi_ports(path: str | None = None) -> dict:
+def load_wpi_ports(path: Optional[str] = None) -> dict:
     p = Path(path) if path else WPI_FILE
     if not p.is_file():
         return {"n": 0, "ports": [], "source": WPI_SOURCE}
@@ -237,8 +237,8 @@ def wpi_matches_name(seed_name: str, rec: dict) -> bool:
         bool(rec.get("alt")) and _names_overlap(seed_name, rec.get("alt") or ""))
 
 
-def match_wpi_port(seed: dict, ports: list[dict] | None = None,
-                   radius_km: float | None = None) -> dict | None:
+def match_wpi_port(seed: dict, ports: Optional[dict] = None,
+                   radius_km: Optional[float] = None) -> dict | None:
     """Match an already-known seed. None without name+proximity (or a unique name).
 
     Do not create a seed. Do not copy the WPI GPS.

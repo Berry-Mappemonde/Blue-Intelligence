@@ -107,7 +107,7 @@ def _normalize_hit(raw: dict, *, default_engine="") -> dict | None:
     )
 
 
-def ddg_kl(location: str | None) -> str:
+def ddg_kl(location: Optional[str]) -> str:
     iso = (location or "").strip().lower()
     if len(iso) == 2 and iso.isalpha():
         return f"{iso}-{iso}"
@@ -178,7 +178,7 @@ async def duckduckgo_html_search(
     max_results: int = 3,
     *,
     include_domains=None,
-    location: str | None = None,
+    location: Optional[str] = None,
 ) -> list[dict]:
     """Liste ``{url, title, snippet, engine, domain}`` — best-effort, silencieux."""
     q = ddg_query(query, include_domains)
@@ -240,14 +240,14 @@ def _dedupe(hits: list[dict]) -> list[dict]:
 async def search_named(
     query: str,
     *,
-    key: str | None = None,
+    key: Optional[str] = None,
     include_domains=None,
     exclude_domains=None,
-    location: str | None = None,
-    language: str | None = None,
-    purpose: str | None = None,
+    location: Optional[str] = None,
+    language: Optional[str] = None,
+    purpose: Optional[str] = None,
     max_pages: int = 1,
-    max_results: int | None = None,
+    max_results: Optional[int] = None,
     extra_re=None,
     protect_fn=None,
     stop_when=None,

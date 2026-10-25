@@ -25,7 +25,7 @@ app = FastAPI(title='Blue Intelligence PoE Reconciler', version='1.0')
 
 class RunRequest(BaseModel):
     zone_name: str = Field(min_length=1, max_length=200, examples=['Bermuda'])
-    run_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,64}$')
+    run_id: Optional[str] = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,64}$')
 
 
 @app.get('/', response_class=HTMLResponse, include_in_schema=False)
@@ -42,7 +42,7 @@ async def run(request: RunRequest) -> dict:
 
 @app.get('/run/stream')
 async def run_stream(zone: str = Query(min_length=1, max_length=200),
-                     run_id: str | None = Query(default=None, pattern=r'^[A-Za-z0-9_-]{1,64}$')):
+                     run_id: Optional[str] = Query(default=None, pattern=r'^[A-Za-z0-9_-]{1,64}$')):
     """Server-Sent Events: one `trace` event per agent step as it happens, then `result`.
 
     The `result` data is the same JSON as POST /run, which stays the judges' entry point.
