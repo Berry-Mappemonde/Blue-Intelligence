@@ -196,18 +196,29 @@ def research(state: dict) -> dict:
     return out
 
 
+def _brief_sources(port: dict) -> list[str]:
+    """The port's own source URLs, then the official pages that designate it (registry
+    official evidence: fetched now or a stored snippet), as "domain: url"."""
+    provenance = port.get('source_provenance') or {}
+    urls = [u for u in port.get('source_urls') or [] if u]
+    out = [u + (' (from verification memory)' if provenance.get(u) == 'hmem' else '') for u in urls]
+    for e in (port.get('registry') or {}).get('official_evidence') or []:
+        url = e.get('url') if isinstance(e, dict) else None
+        if url and url not in urls:
+            urls.append(url)
+            out.append(f"{e.get('domain') or url}: {url} (official evidence)")
+    return out
+
+
 def _brief_rows(ports: list[dict]) -> list[dict]:
     rows = []
     for port in ports:
-        provenance = port.get('source_provenance') or {}
         why = list(port.get('check_reasons') or []) or list(port.get('reasons_en') or [])[:3]
         if port.get('source_urls') and not is_official_source(port['source_urls']):
             why.append('no government source')
         rows.append(dict(
             name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'), why=why,
-            tier=_tier_text(port),
-            sources=[u + (' (from verification memory)' if provenance.get(u) == 'hmem' else '')
-                     for u in port.get('source_urls') or []]))
+            tier=_tier_text(port), sources=_brief_sources(port)))
     return rows
 
 
@@ -227,11 +238,11 @@ def sample_brief(zone_name: str, ports: list[dict]) -> str:
     for r in confirmed:
         tier = f" {r['tier']}." if r['tier'] else ''
         lines.append(f"- {r['name']} (confidence {r['confidence']}/100).{tier} "
-                     f"Sources: {', '.join(r['sources'])}")
+                     f"Sources: {', '.join(r['sources']) or 'No source'}")
     if flagged:
         lines.append('Flagged, verify before relying on them:')
     for r in flagged:
-        sources = ', '.join(r['sources']) or 'no source on record'
+        sources = ', '.join(r['sources']) or 'No source'
         tier = f" {r['tier']}." if r['tier'] else ''
         lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}.{tier} "
                      f"Sources: {sources}")

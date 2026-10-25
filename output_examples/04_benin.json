@@ -1,0 +1,103 @@
+{
+  "run_id": "example-benin",
+  "zone": "Benin",
+  "mode": "sample",
+  "ports": [
+    {
+      "name": "Port Autonome de Cotonou",
+      "verdict": "flag",
+      "confidence": 34,
+      "lat": 6.3443587,
+      "lon": 2.4187131,
+      "reasons_en": [
+        "unknown source",
+        "single extractor",
+        "inside the EEZ",
+        "no direct source (empty URLs or synthesis only)",
+        "single geocoder, not cross-checked",
+        "unconfirmed after max retries"
+      ],
+      "sources": [],
+      "memories_recalled": 0,
+      "research": {
+        "outcome": "no prior official source"
+      },
+      "registry": {
+        "tier": "tier_registered",
+        "label": "Registered port, entry status unverified",
+        "validation": "registered - entry status unverified",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "BJCOO",
+            "name": "Cotonou",
+            "distance_km": null
+          },
+          {
+            "source": "wpi",
+            "code": "BJCOO",
+            "name": "Cotonou",
+            "distance_km": 1.73,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Registered port, entry status unverified: listed in UN/LOCODE BJCOO, WPI BJCOO (1.73 km), but no fetched official document names it; a registry listing does not establish port-of-entry status",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "flag": 1
+  },
+  "brief": "Clearance brief: Benin\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Port Autonome de Cotonou (confidence 34/100): no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Registered port, entry status unverified: listed in UN/LOCODE BJCOO, WPI BJCOO (1.73 km), but no fetched official document names it; a registry listing does not establish port-of-entry status. Sources: No source\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "llm": {
+    "provider": "sample",
+    "model": "caller-sample-fn",
+    "fallback_reason": "SAMPLE_MODE=true"
+  },
+  "components": {
+    "zetaris": "sample",
+    "registry": "sample",
+    "llm": "sample"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "BJ",
+    "registry_entries": 4,
+    "official_count": 0,
+    "tiers": {
+      "tier1": 0,
+      "tier2": 0,
+      "tier_registered": 1,
+      "tier3": 0
+    },
+    "coord_mismatch_count": 0
+  },
+  "retries": 2,
+  "memory": {
+    "recalled": 0,
+    "remembered": true,
+    "created": 1,
+    "reinforced": 0,
+    "superseded": 0
+  },
+  "trace_file": "logs/trace-example-benin.jsonl",
+  "timings_ms": {
+    "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 5.2,
+    "HMemAgent.recall": 0.7,
+    "EvaluatorAgent.evaluate": 1.1,
+    "ResearchAgent.research": 0.3,
+    "EvaluatorAgent.prepare_retry": 0.3,
+    "EvaluatorAgent.finalise": 0.1,
+    "BriefingAgent.brief": 0.1,
+    "HMemAgent.remember": 0.9,
+    "total": 9.4
+  },
+  "error": null
+}

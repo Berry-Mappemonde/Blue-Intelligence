@@ -322,6 +322,28 @@ def test_zone_iso2(zone, iso2):
     assert registry_check.zone_iso2(zone) == iso2
 
 
+def test_missing_pycountry_warns_once_and_gives_no_country(monkeypatch, caplog):
+    import sys
+    monkeypatch.setitem(sys.modules, "pycountry", None)  # import pycountry -> ImportError
+    monkeypatch.setattr(registry_check, "_PYCOUNTRY_WARNED", False)
+    with caplog.at_level("WARNING", logger="app.agents.registry_check"):
+        assert registry_check.zone_iso2("Alaska") is None
+        assert registry_check.zone_iso2("Azores") is None
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "pycountry is not installed" in warnings[0].getMessage()
+    assert "pycountry==26.2.16" in warnings[0].getMessage()
+    # Zones with their own ISO2 do not need pycountry.
+    assert registry_check.zone_iso2("Bermuda") == "BM"
+
+
+def test_pycountry_present_resolves_the_sovereign_without_warning(monkeypatch, caplog):
+    monkeypatch.setattr(registry_check, "_PYCOUNTRY_WARNED", False)
+    with caplog.at_level("WARNING", logger="app.agents.registry_check"):
+        assert registry_check.zone_iso2("Alaska") == "US"
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+
 def test_live_failure_falls_back_to_fixtures(monkeypatch, isolated):
     monkeypatch.setenv("SAMPLE_MODE", "false")
     monkeypatch.setenv("ZETARIS_API_KEY", "registry-test-key")

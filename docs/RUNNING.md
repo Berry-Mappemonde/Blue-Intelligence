@@ -16,10 +16,14 @@ ZetarisAdapter (candidates) → ZetarisAdapter (registry check: UN/LOCODE + Worl
 git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
 cd Blue-Intelligence
 python3 -m venv backend/.venv      # Python 3.12 or newer
-# The agent pipeline needs only these six packages (pinned as in backend/requirements.txt):
+# The agent pipeline needs only these seven packages (pinned as in backend/requirements.txt):
 backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
-    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3
+    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3 pycountry==26.2.16
 ```
+
+`pycountry` resolves a zone's country from its sovereign when the EEZ index has no
+code of its own (Alaska, the Azores). Without it those zones get no registry match,
+and the sample breakdown below changes.
 
 The full `backend/requirements.txt` is for the wider Blue Intelligence API. It
 pins `torch==2.13.0+cpu`, which needs
@@ -44,6 +48,15 @@ from the finalised ports (`llm.model = "caller-sample-fn"`).
 
 Run the same input twice: the second run's `memory.recalled` is non-zero, because
 H-MEM remembers the first run's verdicts (stored in `data/hmem/`, or `HMEM_DIR`).
+
+The four input examples cover the main paths:
+
+| Input | What it shows |
+| --- | --- |
+| `input_examples/01_bermuda.json` | `tier1` from stored official evidence (gov.bm) and a registry match; the WPI position (0.67 km) corroborates the geocode, so the port passes at 67 with no retry |
+| `input_examples/02_angola.json` | `tier_registered`: registry match, no official page |
+| `input_examples/03_azores.json` | `tier_registered`, with the country resolved from the sovereign (Portugal) |
+| `input_examples/04_benin.json` | a retry round: EvaluatorAgent critiques the port (`retry`, "find an official source"), ResearchAgent looks for a remembered official source, twice, then the port is finalised as `flag` |
 
 Zones in the sample fixture include Bermuda, Angola, Azores, Alaska, Albania,
 Anguilla, Argentina, Australia, Bahamas, Barbados, Belgium and Belize.
@@ -109,7 +122,8 @@ weighs two independent kinds of evidence. The first is two third-party registrie
   equivalents). A *strong* term is enough on its own: port(s) of entry, entry port,
   clearing/clear customs, clear in, clearance port, designated port, designated
   marina, port of call for clearing. A *weak* term (customs, immigration, quarantine,
-  harbour master) counts only with a port, harbour, marina or quay word in the same
+  harbour master, point(s) of entry, which also covers airports and land borders)
+  counts only with a port, harbour, marina or quay word in the same
   window and a match on the full name, not on the town left after stripping "Port
   of" (Hamilton's customs "Long Room" does not make the Port of Hamilton an entry
   point). A mention inside an address or contact listing ("Cabinet Building,
@@ -252,8 +266,8 @@ Every agent writes JSONL events with the same `run_id` to stdout and to
 silences stdout). Agents: `RunPipeline`, `ZetarisAdapter`, `HMemAgent`,
 `EvaluatorAgent`, `ResearchAgent`, `BriefingAgent`, `MeterlessGenerator`.
 Handoffs are recorded in `handoff`; retries appear as `prepare_retry` events and
-ResearchAgent `research_port` outcomes. `output_examples/*.trace.jsonl` are copies
-of real traces from the example runs.
+ResearchAgent `research_port` outcomes (see `output_examples/04_benin.trace.jsonl`).
+`output_examples/*.trace.jsonl` are copies of real traces from the example runs.
 
 ## 6. Tests
 

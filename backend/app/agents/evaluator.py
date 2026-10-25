@@ -93,6 +93,8 @@ def _trace_port(port: dict, retry_count: int, action: str,
     }
     if port.get("retry_hint"):
         entry["retry_hint"] = port["retry_hint"]
+    if port.get("geocode_corroboration"):
+        entry["geocode_corroboration"] = dict(port["geocode_corroboration"])
     if handoff is not None:
         entry["handoff"] = {"from": AGENT_NAME, "to": handoff}
     return entry
@@ -157,6 +159,16 @@ def _has_real_source(port: dict) -> bool:
     return bool(urls) and not bool(port.get("from_synthesis"))
 
 
+def _official_evidence_urls(port: dict) -> list[str]:
+    """Official URLs whose text designates the port (registry.official_evidence, tiers 1-2).
+
+    A registry match alone (tier_registered) adds nothing here: UN/LOCODE and the World
+    Port Index list ports, not clearance status.
+    """
+    evidence = (port.get("registry") or {}).get("official_evidence") or []
+    return [e["url"] for e in evidence if isinstance(e, dict) and is_official_source([e.get("url")])]
+
+
 def _map_check(port: dict) -> tuple[bool, list[str]]:
     if port.get("lat") is None or port.get("lon") is None:
         return False, ["not geocoded"]
@@ -165,6 +177,34 @@ def _map_check(port: dict) -> tuple[bool, list[str]]:
     if port.get("geocode_agree") is None:
         return True, ["single geocoder, not cross-checked"]
     return True, []
+
+
+_REGISTRY_NAMES = {"wpi": "WPI", "unlocode": "UN/LOCODE"}
+
+
+def _registry_geocode_corroboration(port: dict) -> dict | None:
+    """A registry entry within GEOCODE_AGREE_KM of the port's position, as a second geocode.
+
+    Only for ports with official evidence (tiers 1-2) and a single, unchecked geocode: the
+    registry's published position is independent of the seed geocoder. WPI is preferred,
+    since UN/LOCODE positions are rounded to the minute (~1.8 km).
+    """
+    from app.core.geo import GEOCODE_AGREE_KM
+    if (not _official_evidence_urls(port) or port.get("geocode_agree") is not None
+            or port.get("lat") is None or port.get("lon") is None):
+        return None
+    close = [m for m in (port.get("registry") or {}).get("matches") or []
+             if isinstance(m, dict) and m.get("distance_km") is not None
+             and m["distance_km"] <= GEOCODE_AGREE_KM]
+    if not close:
+        return None
+    best = min(close, key=lambda m: (m.get("source") != "wpi", m["distance_km"]))
+    return dict(source=best.get("source"), code=best.get("code"), distance_km=best["distance_km"])
+
+
+def _corroboration_reason(c: dict) -> str:
+    return (f"coordinates corroborated by {_REGISTRY_NAMES.get(c.get('source'), c.get('source'))} "
+            f"{c.get('code')}, {c['distance_km']:g} km")
 
 
 def _verdict(confidence: int, checks_ok: bool, retry_hint: str | None) -> str:
@@ -194,17 +234,27 @@ def evaluate(state: dict) -> dict:
         # Remove the legacy mixed reasons field; the three explicit fields replace it.
         port.pop("reasons", None)
         port.pop("retry_hint", None)
-        official = is_official_source(port.get("source_urls"))
+        # An official page that designates the port (registry evidence, fetched now or a
+        # stored snippet) is an official, direct source even when the seed carries no URL.
+        evidence_urls = _official_evidence_urls(port)
+        official = is_official_source(port.get("source_urls")) or bool(evidence_urls)
+        corroboration = _registry_geocode_corroboration(port)
+        if corroboration:
+            port["geocode_agree"] = True
+            port["agreement_km"] = corroboration["distance_km"]
+            port["geocode_corroboration"] = corroboration
         scored = score_port(port, official_source=official, listing_ports=state.get("listing_ports"))
         apply_score(port, scored)
         confidence = int(port["confidence"])
-        source_ok = _has_real_source(port)
+        source_ok = _has_real_source(port) or bool(evidence_urls)
         map_ok, map_reasons = _map_check(port)
         checks_ok = source_ok and map_ok
         check_reasons = []
         if not source_ok:
             check_reasons.append("no direct source (empty URLs or synthesis only)")
         check_reasons.extend(map_reasons)
+        if port.get("geocode_corroboration"):
+            check_reasons.append(_corroboration_reason(port["geocode_corroboration"]))
         # Non-official sources receive fewer source points in score_port.
         # Prefer improving the source if both source and coordinates need work.
         retry_hint = None

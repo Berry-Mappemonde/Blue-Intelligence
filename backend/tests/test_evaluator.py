@@ -564,3 +564,93 @@ def test_path_substring_does_not_receive_official_source_score():
     result = evaluate({"ports": [port]})["ports"][0]
     assert result["confidence"] == score_port(port, official_source=False)["confidence"]
     assert "source d'État" not in result["confidence_reasons"]
+
+
+# --- registry evidence (registry_check) and the score ------------------------------------
+SEED_PORT = {  # a Zetaris seed port: located, no source URL of its own
+    "name": "Port of St. George’s", "lat": 32.3810447, "lon": -64.676717, "validated": True,
+    "geocode_source": "nominatim", "zone_name": "Bermuda", "mrgid": 8402, "source_urls": [],
+}
+MATCHES = [{"source": "unlocode", "code": "BMSGE", "name": "Saint George", "distance_km": 0.67}]
+EVIDENCE = [{"url": "https://www.gov.bm/department/customs", "domain": "gov.bm", "name_found": "saint george",
+             "entry_term": "ports of entry", "snippet": "main ports of entry: St. George’s",
+             "evidence_source": "stored_snippet"}]
+
+
+def _evaluated(registry=None):
+    port = dict(SEED_PORT, **({"registry": registry} if registry else {}))
+    return evaluate({"ports": [port], "run_id": "registry-score"})["ports"][0]
+
+
+def test_tier1_port_is_not_flagged_for_lack_of_an_official_source():
+    far = [dict(MATCHES[0], distance_km=5.0)]  # isolate the source effect (no geocode corroboration)
+    plain, tier1 = _evaluated(), _evaluated({"tier": "tier1", "official_evidence": EVIDENCE, "matches": far})
+    assert "source d'État" in tier1["confidence_reasons"] and "source indéterminée" not in tier1["confidence_reasons"]
+    assert tier1["confidence_parts"]["source"] == 30 and plain["confidence_parts"]["source"] == 4
+    assert tier1["confidence"] == plain["confidence"] + 26
+    assert "no direct source (empty URLs or synthesis only)" not in tier1["check_reasons"]
+    assert tier1["verdict"] != "retry" and tier1.get("retry_hint") is None
+    assert "no direct source (empty URLs or synthesis only)" in plain["check_reasons"]
+
+
+def test_tier_registered_alone_gets_no_official_source_bonus():
+    plain = _evaluated()
+    registered = _evaluated({"tier": "tier_registered", "official_evidence": [], "matches": MATCHES})
+    assert registered["confidence"] == plain["confidence"]
+    assert registered["confidence_parts"] == plain["confidence_parts"]
+    assert "source indéterminée" in registered["confidence_reasons"]
+    assert registered["verdict"] == "retry" and registered["retry_hint"] == "find an official source"
+
+
+def test_official_evidence_counts_only_for_official_urls():
+    bogus = [dict(EVIDENCE[0], url="https://www.noonsite.com/place/bermuda", domain="noonsite.com")]
+    port = _evaluated({"tier": "tier1", "official_evidence": bogus, "matches": MATCHES})
+    assert port["confidence"] == _evaluated()["confidence"] and port["verdict"] == "retry"
+
+
+# --- registry coordinates as a second geocode (official-evidence ports only) ---------------
+WPI_067 = {"source": "wpi", "code": "BMSGE", "name": "St George", "distance_km": 0.67, "first_port_of_entry": "Yes"}
+LOCODE_067 = {"source": "unlocode", "code": "BMSGE", "name": "Saint George", "distance_km": 0.67}
+
+
+def test_tier1_with_a_registry_position_within_2_km_is_corroborated(trace_log_path):
+    port = _evaluated({"tier": "tier1", "official_evidence": EVIDENCE, "matches": [LOCODE_067, WPI_067]})
+    assert port["geocode_corroboration"] == {"source": "wpi", "code": "BMSGE", "distance_km": 0.67}
+    assert "coordinates corroborated by WPI BMSGE, 0.67 km" in port["check_reasons"]
+    assert "coordinates corroborated by WPI BMSGE, 0.67 km" in port["reasons_en"]
+    assert "single geocoder, not cross-checked" not in port["check_reasons"]
+    assert port["confidence_parts"]["map"] == 25 and port["confidence"] == 67 and port["verdict"] == "pass"
+    events = [json.loads(line) for line in trace_log_path.read_text().splitlines()]
+    assert events[-1]["geocode_corroboration"] == {"source": "wpi", "code": "BMSGE", "distance_km": 0.67}
+
+
+def test_wpi_is_preferred_over_a_closer_minute_rounded_un_locode_position():
+    matches = [dict(LOCODE_067, distance_km=0.3), dict(WPI_067, distance_km=1.5)]
+    port = _evaluated({"tier": "tier1", "official_evidence": EVIDENCE, "matches": matches})
+    assert port["geocode_corroboration"]["source"] == "wpi" and port["geocode_corroboration"]["distance_km"] == 1.5
+
+
+def test_tier_registered_with_a_close_registry_position_is_unchanged():
+    # Road Bay / Bridgetown: a government URL in the seed (scored as official) and a registry
+    # entry within 2 km, but no page designates the port, so no corroboration.
+    seed = dict(SEED_PORT, source_urls=["https://www.gov.uk/foreign-travel-advice/anguilla/entry-requirements"])
+    plain = evaluate({"ports": [seed], "run_id": "reg-plain"})["ports"][0]
+    registered = evaluate({"ports": [dict(seed, registry={"tier": "tier_registered", "official_evidence": [],
+                                                          "matches": [dict(WPI_067, distance_km=1.22)]})],
+                           "run_id": "reg-close"})["ports"][0]
+    assert "geocode_corroboration" not in registered
+    assert (registered["confidence"], registered["verdict"]) == (plain["confidence"], plain["verdict"]) == (60, "flag")
+    assert "single geocoder, not cross-checked" in registered["check_reasons"]
+
+
+def test_registry_position_beyond_2_km_is_not_corroboration():
+    port = _evaluated({"tier": "tier1", "official_evidence": EVIDENCE, "matches": [dict(WPI_067, distance_km=2.6)]})
+    assert "geocode_corroboration" not in port
+    assert "single geocoder, not cross-checked" in port["check_reasons"]
+    assert (port["confidence"], port["verdict"]) == (60, "flag")
+
+
+def test_registry_position_never_overrides_a_geocoder_disagreement():
+    port = evaluate({"ports": [dict(SEED_PORT, geocode_agree=False, registry={
+        "tier": "tier1", "official_evidence": EVIDENCE, "matches": [WPI_067]})], "run_id": "disagree"})["ports"][0]
+    assert "geocode_corroboration" not in port and "geocoders disagree" in port["check_reasons"]
