@@ -105,11 +105,16 @@ weighs two independent kinds of evidence. The first is two third-party registrie
   `coord_mismatch` with its distance. It is not a match, and the port is kept.
 - **Official source evidence:** a URL that passes `is_official_source()` **and** whose
   text names the port (or a matched registry name) within ~200 characters of an
-  entry term: port of entry, customs, clearance, clear in, immigration, quarantine,
-  harbour master, and their French, Spanish, Portuguese, Italian and Greek
-  equivalents (`ENTRY_TERMS` in `registry_check.py`). A mention inside an address or
-  contact listing ("Cabinet Building, Hamilton", a street number, a postcode, an
-  e-mail) does not count, and neither does a bare mention. The text is either
+  entry term (`registry_check.py`, with French, Spanish, Portuguese, Italian and Greek
+  equivalents). A *strong* term is enough on its own: port(s) of entry, entry port,
+  clearing/clear customs, clear in, clearance port, designated port, designated
+  marina, port of call for clearing. A *weak* term (customs, immigration, quarantine,
+  harbour master) counts only with a port, harbour, marina or quay word in the same
+  window and a match on the full name, not on the town left after stripping "Port
+  of" (Hamilton's customs "Long Room" does not make the Port of Hamilton an entry
+  point). A mention inside an address or contact listing ("Cabinet Building,
+  Hamilton", a street number, a postcode, an e-mail) does not count, and neither does
+  a bare mention. The text is either
   fetched now (`evidence_source: "fetched_now"`) or a stored snippet of an earlier
   fetch (`"stored_snippet"`); it is never model output. Without text, a URL proves
   nothing.
@@ -142,11 +147,12 @@ unreachable, the lookup reads small verbatim snapshots of real official pages in
 and builds the records the same way. A failed lookup gives no evidence, never an
 official tier. Each lookup is a `ZetarisAdapter` `evidence_lookup` trace event.
 
-In the sample run, 1 of the 20 sample ports is `tier1` (Port of St. George's,
-Bermuda: gov.bm Customs and a Bermuda planning report), 2 are `tier2` (Deep water
-Harbor, Antigua: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas Customs), 12
-are `tier_registered` and 5 are `tier3`. Before stored evidence, the same run gave
-13 `tier_registered` and 7 `tier3`.
+In the sample run, 2 of the 20 sample ports are `tier1` (Port of St. George's,
+Bermuda: gov.bm Customs and a Bermuda planning report; Anchorage Small Boat Harbor,
+Alaska: CBP's designated marina), 2 are `tier2` (Deep water Harbor, Antigua:
+customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas Customs), 11 are
+`tier_registered` and 5 are `tier3`. Before stored evidence, the same run gave 13
+`tier_registered` and 7 `tier3`.
 
 UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted to decimal degrees.
 The zone's country comes from the EEZ index (the sovereign's code for zones such as
