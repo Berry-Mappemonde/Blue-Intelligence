@@ -109,7 +109,8 @@ weighs two independent kinds of evidence. The first is two third-party registrie
   equivalents). A *strong* term is enough on its own: port(s) of entry, entry port,
   clearing/clear customs, clear in, clearance port, designated port, designated
   marina, port of call for clearing. A *weak* term (customs, immigration, quarantine,
-  harbour master) counts only with a port, harbour, marina or quay word in the same
+  harbour master, point(s) of entry, which also covers airports and land borders)
+  counts only with a port, harbour, marina or quay word in the same
   window and a match on the full name, not on the town left after stripping "Port
   of" (Hamilton's customs "Long Room" does not make the Port of Hamilton an entry
   point). A mention inside an address or contact listing ("Cabinet Building,

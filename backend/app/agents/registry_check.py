@@ -71,7 +71,8 @@ _TOKENS = {"st": "saint", "ste": "sainte", "mt": "mount", "ft": "fort", "pt": "p
 _GENERIC = set(_PREFIXES) | set(_SUFFIXES) | {"harbour", "harbor", "bay", "quay", "pier", "dock"}
 
 # Official evidence: the port's name must sit within PROXIMITY_CHARS of an entry term.
-# A strong term designates on its own; a weak term (a department or office) counts only
+# A strong term designates on its own; a weak term (a department or office, or "point of
+# entry", which also covers airports and land borders) counts only
 # with a port word in the same window and a match on the full name, not on the place
 # left after stripping "Port of" (so "the Hamilton ... Long Room ... Customs" does not count).
 PROXIMITY_CHARS = 200
@@ -96,12 +97,15 @@ STRONG_ENTRY_TERMS = (
 )
 WEAK_ENTRY_TERMS = (
     "customs", "immigration", "quarantine", "harbour master", "harbor master", "harbourmaster",
-    "harbormaster",
-    "douane", "douanes", "quarantaine", "capitainerie",
+    "harbormaster", "point of entry", "points of entry",
+    "douane", "douanes", "quarantaine", "capitainerie", "point d'entrée", "points d'entrée",
     "aduana", "aduanas", "migraciones", "inmigración", "cuarentena", "capitanía de puerto",
-    "alfândega", "alfândegas", "imigração", "quarentena", "capitania",
-    "dogana", "dogane", "immigrazione", "quarantena", "capitaneria di porto",
-    "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα",
+    "punto de entrada", "puntos de entrada",
+    "alfândega", "alfândegas", "imigração", "quarentena", "capitania", "ponto de entrada",
+    "pontos de entrada",
+    "dogana", "dogane", "immigrazione", "quarantena", "capitaneria di porto", "punto di ingresso",
+    "punti di ingresso", "punto di entrata",
+    "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα", "σημείο εισόδου", "σημεία εισόδου",
 )
 ENTRY_TERMS = STRONG_ENTRY_TERMS + WEAK_ENTRY_TERMS
 # Words that put a weak term in a port context.
