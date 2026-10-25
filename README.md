@@ -102,7 +102,7 @@ calls are replaced. Expected output:
   Zone:     Bermuda
   Mode:     sample
   Ports:    1
-  Summary:  {'flag': 1}
+  Summary:  {'pass': 1}
   LLM:      sample / caller-sample-fn
   Memory:   0 recalled, remembered
   ```
@@ -166,8 +166,9 @@ in [`docs/RUNNING.md`](docs/RUNNING.md).
 - **Sample data is small:** 20 real ports, one per zone, and small real
   subsets of the registries. Official evidence exists only for zones whose
   official pages have been fetched: 4 zones in the sample.
-- **Tier and verdict can differ** (definitions above). St. George's (Bermuda) is
-  `tier1` but `flag` at 60: `pass` needs more than 60, and seed ports have one geocoder.
+- **Tier and verdict can differ** (definitions above). Only a port with official
+  evidence can have its position corroborated by a registry (≤ 2 km), which `pass`
+  needs: St. George's passes (`tier1`, 67), Road Bay stays `flag` (`tier_registered`).
 - **Grounding is a heuristic:** it checks the official domain, the entry term
   and the distance. A port name with "Port of" stripped can match the town.
   The committed snapshots were reviewed by hand.
