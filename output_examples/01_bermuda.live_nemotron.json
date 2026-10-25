@@ -39,16 +39,6 @@
         ],
         "official_evidence": [
           {
-            "url": "https://www.gov.bm/department/customs",
-            "domain": "gov.bm",
-            "name_found": "saint george",
-            "entry_term": "ports of entry",
-            "snippet": ". Customs officers work in partnership with the Bermuda Police Service in preventing and detecting smuggling and other criminal activity. Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton Customs officers process customs declarations for all arriving passengers on ships, yachts, or aircraft and assess and collect duty and other",
-            "evidence_source": "stored_snippet",
-            "fetched_at": "2026-10-25T00:53:55+00:00",
-            "content_sha256": "c59a59b73f0f576b4674dab7b637af241af80cf7a4d850f38567707439b0261f"
-          },
-          {
             "url": "https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf",
             "domain": "planning.gov.bm",
             "name_found": "saint george",
@@ -57,18 +47,28 @@
             "evidence_source": "stored_snippet",
             "fetched_at": "2026-10-25T00:54:04+00:00",
             "content_sha256": "b4d431d840bc71d4533adf451ab7773278a1eeabfdb984eec628c03ec5f59a2d"
+          },
+          {
+            "url": "https://www.gov.bm/department/customs",
+            "domain": "gov.bm",
+            "name_found": "saint george",
+            "entry_term": "ports of entry",
+            "snippet": ". Customs officers work in partnership with the Bermuda Police Service in preventing and detecting smuggling and other criminal activity. Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton Customs officers process customs declarations for all arriving passengers on ships, yachts, or aircraft and assess and collect duty and other",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:53:55+00:00",
+            "content_sha256": "c59a59b73f0f576b4674dab7b637af241af80cf7a4d850f38567707439b0261f"
           }
         ],
         "coord_mismatch": [],
         "first_port_of_entry": "Yes",
         "reasons": [
-          "Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)",
+          "Official Commercial Port of Entry: named in official source https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), https://www.gov.bm/department/customs (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)",
           "World Port Index lists it as a First Port of Entry (supporting evidence only)"
         ]
       },
       "judge": {
         "verdict": "poe",
-        "reason": "Listed as a main port of entry; St. George’s harbour is the requisite Port of Call for clearing Customs.",
+        "reason": "St. George’s harbour is explicitly named as the requisite Port of Call for clearing Customs for non-commercial vessels entering Bermuda.",
         "quoted_excerpt": "St. George’s harbour is the requisite Port of Call for clearing Customs for all non-commercial vessels entering Bermuda.",
         "excerpt_verified": true,
         "disagrees": false
@@ -129,7 +129,7 @@
       },
       "judge": {
         "verdict": "poe",
-        "reason": "Listed among Bermuda’s main ports of entry where customs officers are stationed.",
+        "reason": "Customs officers are stationed at Bermuda’s main ports of entry, and Hamilton is listed among them.",
         "quoted_excerpt": "Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton",
         "excerpt_verified": true,
         "disagrees": false
@@ -181,15 +181,15 @@
   },
   "trace_file": "logs/trace-example-bermuda.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 5392.5,
-    "ZetarisAdapter.registry_check": 4528.0,
-    "HMemAgent.recall": 2.0,
-    "EvaluatorAgent.evaluate": 2.1,
-    "NemotronJudge.critique": 21932.6,
-    "EvaluatorAgent.finalise": 0.4,
-    "BriefingAgent.brief": 29779.2,
-    "HMemAgent.remember": 11.4,
-    "total": 61648.4
+    "ZetarisAdapter.get_ports": 3648.6,
+    "ZetarisAdapter.registry_check": 1013.8,
+    "HMemAgent.recall": 1.3,
+    "EvaluatorAgent.evaluate": 2.6,
+    "NemotronJudge.critique": 7290.9,
+    "EvaluatorAgent.finalise": 0.3,
+    "BriefingAgent.brief": 45046.2,
+    "HMemAgent.remember": 10.3,
+    "total": 57014.3
   },
   "error": null
 }

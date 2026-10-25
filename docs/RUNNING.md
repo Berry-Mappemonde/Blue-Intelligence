@@ -97,11 +97,10 @@ trace records both the requested and the served model, because the runtime may
 route a request to a different model. Zetaris returned two Bermuda ports, both
 `tier1` and `pass` at 67 with WPI-corroborated positions. The judge agreed with
 both, quoting the gov.bm Customs page (`excerpt_verified: true`). H-MEM started
-empty. No Mongo evidence store was available, so the evidence lookup fell back to
-the committed official-page snapshots (`evidence_lookup` event, `status:
-"fallback"`). The judge's reasons and excerpts were added to its `critique` trace
-event after the recording, copied verbatim from `port.judge` in the output JSON (the
-code now writes them there). It is a recording for reference: it cannot be reproduced
+empty. The official evidence came from the stored snippets in Mongo
+(`evidence_lookup` event: `status: "ok"`, `source: "mongo"`, three records). That
+collection had been filled from the official-page snapshots through the generation
+path (PR #49). It is a recording for reference: it cannot be reproduced
 without credentials, and no code reads it.
 
 ### Evidence tiers and independent registries (why "official" is not circular)
