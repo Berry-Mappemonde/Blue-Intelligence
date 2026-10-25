@@ -242,6 +242,48 @@ def test_sample_brief_is_built_from_port_data():
     ]
 
 
+GOV_BM_EVIDENCE = [
+    {'url': 'https://www.gov.bm/department/customs', 'domain': 'gov.bm', 'evidence_source': 'stored_snippet'},
+    {'url': 'https://planning.gov.bm/report.pdf', 'domain': 'planning.gov.bm', 'evidence_source': 'stored_snippet'},
+]
+
+
+def test_brief_lists_official_evidence_as_sources_and_never_an_empty_sources_line():
+    ports = [
+        {'name': 'Port of St. George’s', 'verdict': 'pass', 'confidence': 67, 'source_urls': [],
+         'registry': {'official_evidence': GOV_BM_EVIDENCE}},
+        {'name': 'Nowhere Quay', 'verdict': 'pass', 'confidence': 61, 'source_urls': []},
+        {'name': 'Other Quay', 'verdict': 'flag', 'confidence': 30, 'source_urls': [], 'check_reasons': ['not geocoded']},
+    ]
+    lines = pipeline.sample_brief('Bermuda', ports).splitlines()
+    assert lines[2] == ('- Port of St. George’s (confidence 67/100). Sources: '
+                        'gov.bm: https://www.gov.bm/department/customs (official evidence), '
+                        'planning.gov.bm: https://planning.gov.bm/report.pdf (official evidence)')
+    assert lines[3].endswith('Sources: No source') and lines[5].endswith('Sources: No source')
+    assert not any(line.rstrip().endswith('Sources:') for line in lines)
+
+
+def test_evidence_url_already_in_the_sources_is_not_repeated():
+    port = {'name': 'P', 'source_urls': ['https://www.gov.bm/department/customs'],
+            'registry': {'official_evidence': GOV_BM_EVIDENCE}}
+    assert pipeline._brief_sources(port) == [
+        'https://www.gov.bm/department/customs', 'planning.gov.bm: https://planning.gov.bm/report.pdf (official evidence)']
+
+
+def test_nemotron_brief_prompt_carries_the_official_evidence_sources():
+    port = {'name': 'Port of St. George’s', 'verdict': 'pass', 'confidence': 67, 'source_urls': [],
+            'registry': {'official_evidence': GOV_BM_EVIDENCE}}
+    prompt = pipeline.brief_prompt('Bermuda', [port])
+    rows = json.loads(prompt.split('Finalised ports (JSON):\n', 1)[1].split('\n', 1)[0])
+    assert rows[0]['sources'][0] == 'gov.bm: https://www.gov.bm/department/customs (official evidence)'
+
+
+def test_sample_run_brief_names_the_official_pages():
+    brief = run('Bermuda', 'brief-sources')['brief']
+    assert 'gov.bm: https://www.gov.bm/department/customs (official evidence)' in brief
+    assert not any(line.rstrip().endswith('Sources:') for line in brief.splitlines())
+
+
 @pytest.mark.skipif(os.environ.get('ZETARIS_LIVE') != '1', reason='Set ZETARIS_LIVE=1 for local Zetaris')
 def test_live_zone_through_real_zetaris(monkeypatch):
     monkeypatch.setenv('SAMPLE_MODE', 'false')
