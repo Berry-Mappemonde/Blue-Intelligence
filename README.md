@@ -45,17 +45,30 @@ RunPipeline ─► ZetarisAdapter  candidates from Zetaris (blue_intel.poe_ports
             ─► ZetarisAdapter  registry check (UN/LOCODE + WPI views in Zetaris)
                                + stored official evidence → evidence tier
             ─► HMemAgent       recall earlier verdicts (Meterless H-MEM engine)
-            ─► EvaluatorAgent ⇄ ResearchAgent   score, retry with memory (max 2)
+            ─► EvaluatorAgent  score each port: pass, flag or retry
+            ─► NemotronJudge   advisory critique of the official text (Nemotron)
+            ─► EvaluatorAgent ⇄ ResearchAgent   retry with memory (max 2)
             ─► EvaluatorAgent  finalise: pass or flag, never dropped
             ─► BriefingAgent   brief via Meterless Nightshift → NVIDIA Nemotron
             ─► HMemAgent       remember verdicts (created / reinforced / superseded)
 ```
 
-- **Agents:** six named agents share one `run_id` and one JSONL trace, with
-  handoffs and retry events: `RunPipeline` (the orchestrator), `ZetarisAdapter`,
-  `HMemAgent`, `EvaluatorAgent`, `ResearchAgent` and `BriefingAgent`. Each model
-  call is also traced as `MeterlessGenerator`, recording the requested and the
-  served model.
+- **Agents:** seven named agents share one `run_id` and one JSONL trace, with
+  handoffs, critique and retry events: `RunPipeline` (the orchestrator),
+  `ZetarisAdapter`, `HMemAgent`, `EvaluatorAgent`, `NemotronJudge`,
+  `ResearchAgent` and `BriefingAgent`. Each model call is also traced as
+  `MeterlessGenerator`, recording the requested and the served model.
+- **NemotronJudge (advisory critic):** one Nemotron call per zone, through
+  Nightshift, on the official evidence text the run already holds. It records a
+  verdict (`poe`, `not_poe`, `unclear`), a reason and a quoted excerpt per port,
+  and whether that excerpt is really in the evidence text. It never overrides
+  evidence: no tier, validation, official evidence or score comes from it. When it
+  calls a flagged port a port of entry, it triggers one more research round. It is
+  skipped, and the trace says why, without credentials (`SAMPLE_MODE`) or without
+  an answer. Code: [`poe_judge.py`](backend/app/agents/poe_judge.py); tests:
+  [`test_poe_judge.py`](backend/tests/test_poe_judge.py); live recording:
+  [`01_bermuda.live_nemotron.json`](output_examples/01_bermuda.live_nemotron.json)
+  and [its trace](output_examples/01_bermuda.live_nemotron.trace.jsonl).
 - **Zetaris (data layer):** ports, and the two independent registries, are read
   through Zetaris SQL with a read-only guard, a timeout and a fallback to bundled
   real fixtures.
@@ -109,7 +122,7 @@ calls are replaced. Expected output:
 
 - **stdout:** each trace event as one JSON line, then the result JSON, with keys
   `run_id`, `zone`, `mode`, `ports`, `summary`, `brief`, `llm`, `components`,
-  `registry`, `retries`, `memory`, `trace_file`, `timings_ms` and `error`.
+  `registry`, `judge`, `retries`, `memory`, `trace_file`, `timings_ms` and `error`.
   `--output` also writes the result to a file.
 - **Trace file:** `logs/trace-<run_id>.jsonl`. For the input example that's
   `logs/trace-example-bermuda.jsonl`.

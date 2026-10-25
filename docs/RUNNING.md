@@ -88,15 +88,19 @@ listens on 8888-8889. Public SearXNG instances remain as a fallback.
 (the served model, as reported by the runtime).
 
 **Recorded live run:** `output_examples/01_bermuda.live_nemotron.json` and its trace
-`output_examples/01_bermuda.live_nemotron.trace.jsonl` were recorded on 22 October 2026
+`output_examples/01_bermuda.live_nemotron.trace.jsonl` were recorded on 25 October 2026
 against a local Zetaris instance and Meterless Nightshift, with
 `METERLESS_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`. Nightshift served
-`nvidia/nemotron-3.5-super-vl-120b-a12b` (`llm.provider: "nightshift"`). The trace
-records both the requested and the served model, because the runtime may route a
-request to a different model. Zetaris returned two Bermuda ports, and H-MEM
-recalled memories from earlier local runs. It is a recording for reference: it
-cannot be reproduced without credentials, and no code reads it. It was recorded
-before port coordinates (`lat`, `lon`) were added to the output.
+`nvidia/nemotron-3.5-super-vl-120b-a12b` to NemotronJudge and
+`nvidia/nemotron-3-ultra-550b-a55b` to the brief (`provider: "nightshift"`). The
+trace records both the requested and the served model, because the runtime may
+route a request to a different model. Zetaris returned two Bermuda ports, both
+`tier1` and `pass` at 67 with WPI-corroborated positions. The judge agreed with
+both, quoting the gov.bm Customs page (`excerpt_verified: true`). H-MEM started
+empty. No Mongo evidence store was available, so the evidence lookup fell back to
+the committed official-page snapshots (`evidence_lookup` event, `status:
+"fallback"`). It is a recording for reference: it cannot be reproduced without
+credentials, and no code reads it.
 
 ### Evidence tiers and independent registries (why "official" is not circular)
 

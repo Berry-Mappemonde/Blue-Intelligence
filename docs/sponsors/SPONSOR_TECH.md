@@ -12,7 +12,7 @@ contains the runnable pipeline from PR #32 and the registry tiers from PR #34
 | Zetaris | Data layer: every run reads its ports through Zetaris SQL, then checks them against UN/LOCODE and the World Port Index held in Zetaris | [`zetaris.py`](../../backend/app/adapters/zetaris.py), [`registry_check.py`](../../backend/app/agents/registry_check.py) | ZetarisAdapter: `get_ports`, then `registry_check` (evidence tier per port) | [`test_zetaris_adapter.py`](../../backend/tests/test_zetaris_adapter.py), [`test_zetaris_registries.py`](../../backend/tests/test_zetaris_registries.py), `test_live_zone_through_real_zetaris`, `test_live_registry_views_for_bermuda` |
 | Meterless H-MEM engine | Verification memory across runs | [`engines/hmem/`](../../backend/app/engines/hmem/), [`memory.py`](../../backend/app/agents/memory.py) | ResearchAgent reuses a previously verified official source during retries | [`test_hmem_conformance.py`](../../backend/tests/test_hmem_conformance.py), `test_research_uses_remembered_official_source` |
 | Meterless Nightshift | Primary AI provider | [`generator.py`](../../backend/app/core/generator.py) | BriefingAgent writes the sailor-facing brief | [`test_generator.py`](../../backend/tests/test_generator.py), `test_live_brief_served_by_nemotron` |
-| NVIDIA | Nemotron models served through Nightshift | same as Nightshift | The brief in the recorded live run | `test_live_nightshift_nemotron`, [`01_bermuda.live_nemotron.json`](../../output_examples/01_bermuda.live_nemotron.json) |
+| NVIDIA | Nemotron models served through Nightshift | [`generator.py`](../../backend/app/core/generator.py), [`poe_judge.py`](../../backend/app/agents/poe_judge.py) | BriefingAgent's brief and NemotronJudge's advisory critique, both in the recorded live run | [`test_poe_judge.py`](../../backend/tests/test_poe_judge.py), `test_live_nightshift_nemotron`, [`01_bermuda.live_nemotron.json`](../../output_examples/01_bermuda.live_nemotron.json) |
 
 Tests named without a link are in
 [`test_run_pipeline.py`](../../backend/tests/test_run_pipeline.py) or
@@ -340,15 +340,50 @@ the `BriefingAgent` trace event record the provider and served model. Evidence:
 ## 4. NVIDIA: Nemotron through Nightshift
 
 NVIDIA contributes the Nemotron models that Nightshift serves to the generator.
-The recorded live run on 22 October 2026 used
-`METERLESS_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`. Nightshift's routing
-served `nvidia/nemotron-3.5-super-vl-120b-a12b`, a different Nemotron model.
-The application did not choose that model; it records what the runtime reports.
-Evidence: `llm` in
-[`01_bermuda.live_nemotron.json`](../../output_examples/01_bermuda.live_nemotron.json)
-(`provider: "nightshift"`) and the `MeterlessGenerator` event in
-[`01_bermuda.live_nemotron.trace.jsonl`](../../output_examples/01_bermuda.live_nemotron.trace.jsonl)
-(`requested_model` and `served_model`).
+Two agents call Nemotron in a live run: NemotronJudge (below) and BriefingAgent
+(section 3). The recorded live run on 25 October 2026 requested
+`METERLESS_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b` for both calls. Nightshift's
+routing served `nvidia/nemotron-3.5-super-vl-120b-a12b` for the judge and
+`nvidia/nemotron-3-ultra-550b-a55b` for the brief. The application did not choose
+those models; it records what the runtime reports. Evidence: `llm` and `judge` in
+[`01_bermuda.live_nemotron.json`](../../output_examples/01_bermuda.live_nemotron.json) (`provider: "nightshift"`) and the
+two `MeterlessGenerator` events in
+[`01_bermuda.live_nemotron.trace.jsonl`](../../output_examples/01_bermuda.live_nemotron.trace.jsonl) (`requested_model`
+and `served_model`, roles `judge` and `brief`).
+
+### Working feature: NemotronJudge, an advisory critic
+
+After the first evaluation, NemotronJudge makes one Nemotron call per zone through
+the same generator (Nightshift first). It reads only the official evidence text
+the run already holds (the snippets in `registry.official_evidence`) and does not
+see the pipeline's verdicts. For each port it answers `poe`, `not_poe` or
+`unclear`, with a reason and a quoted excerpt. The run records
+`port.judge = {verdict, reason, quoted_excerpt, excerpt_verified, disagrees}` and
+one `NemotronJudge` `critique` trace event under the run's `run_id`.
+
+- **Never overrides evidence.** It never writes a tier, validation, official
+  evidence or confidence. `excerpt_verified` is true only when the quote is inside
+  the evidence text, and even a verified quote is never evidence.
+- **Triggers one research round.** When it calls a port the evaluator flagged a
+  port of entry, that port goes through one more ResearchAgent → EvaluatorAgent
+  round. The verdict still comes from `score_port`.
+- **Skipped without credentials.** In `SAMPLE_MODE`, without official evidence
+  text, without a provider answer, after 90 s, or with an unusable answer, the
+  judge is skipped. The `critique` event then says why (`status: "skipped"`).
+
+In the recorded live run the judge answered `poe` for both Bermuda ports, with
+`excerpt_verified: true` and no disagreement with the pipeline. For Port of
+Hamilton it quoted "Customs officers are stationed at Bermuda’s main ports of
+entry: St. George’s L. F. Wade International Airport Hamilton" from the gov.bm
+Customs page. Evidence: [`poe_judge.py`](../../backend/app/agents/poe_judge.py),
+the `critique` event in [`01_bermuda.live_nemotron.trace.jsonl`](../../output_examples/01_bermuda.live_nemotron.trace.jsonl),
+and [`test_poe_judge.py`](../../backend/tests/test_poe_judge.py):
+
+- `test_judge_never_changes_tier_validation_evidence_or_confidence`
+- `test_unverified_or_verified_excerpt_never_counts_as_evidence`
+- `test_disagreement_on_a_flagged_port_triggers_one_evaluator_retry`
+- `test_skipped_in_sample_mode_without_a_provider_call`
+- `test_skipped_when_no_provider_answers_and_sample_mode_never_set`
 
 Two live tests passed against local Nightshift with `NIGHTSHIFT_LIVE=1`:
 
@@ -362,12 +397,20 @@ NVIDIA direct (`NVIDIA_API_KEY`, `NEMOTRON_MODEL`) is an optional fallback in
 [`generator.py`](../../backend/app/core/generator.py). It was not configured for
 the recorded run.
 
+The recorded run read its ports and registries from live Zetaris. No Mongo
+evidence store was available, so the evidence lookup used its documented fallback:
+the committed snapshots of the gov.bm Customs page and the Bermuda planning report
+(`evidence_lookup` event: `status: "fallback"`, `source: "sample_pages"`; see
+[Limitations](#7-limitations)).
+
 ## 5. Agent flow and traces
 
 ```text
 ZetarisAdapter.get_ports
+  -> ZetarisAdapter.registry_check
   -> HMemAgent.recall
   -> EvaluatorAgent.evaluate
+  -> NemotronJudge.critique -> MeterlessGenerator
   -> [while route == retry, at most 2 times: ResearchAgent -> prepare_retry -> evaluate]
   -> EvaluatorAgent.finalise
   -> BriefingAgent -> MeterlessGenerator
@@ -386,33 +429,31 @@ Each agent appends JSONL to `logs/trace-<run_id>.jsonl` and to stdout
 (`TRACE_LOG_PATH` overrides the file, `TRACE_STDOUT=0` silences stdout). The lines
 below are copied unchanged from the recorded live trace
 [`01_bermuda.live_nemotron.trace.jsonl`](../../output_examples/01_bermuda.live_nemotron.trace.jsonl).
-They are lines 1, 2, 3, 5, 7, 9, 19, 21, 22, 23 and 25. The omitted lines are the
-same events for Port of Hamilton, and the second retry round with the final evaluation. The recalled memories
-come from earlier local runs of the same input file, which is why they carry the
-same `run_id` label.
+They are lines 1, 2, 3, 8, 10, 11, 12, 13, 14, 15, 16 and 18. The omitted lines are the two registry
+queries, the `registry_check` events (tier1 for both ports, with the evidence
+snippets and registry matches), and the same recall and remember events for Port of
+Hamilton. H-MEM started empty for this run, so nothing is recalled and both ports
+are `created`.
 
-This run was recorded before `remember_node` stopped duplicating unchanged verdicts
-(section 2). That is why the three recalled memories are identical copies, and why
-the `remember` event shows the earlier outcome `helpful` with a new record `mem-7`.
-With the current code, an unchanged verdict and source gives the outcome
-`reinforced`, and no record is added. With PR #45 the Bermuda example no longer
-retries: St. George's has official evidence and a WPI-corroborated position, so it
-passes on the first evaluation. A current retry round is in
-`output_examples/04_benin.trace.jsonl` (also from #45): EvaluatorAgent critiques
-Benin's port, two ResearchAgent rounds follow, and the port is finalised as a flag.
+Both ports pass on the first evaluation, so this run has no retry. A retry round
+is in `output_examples/04_benin.trace.jsonl`: EvaluatorAgent critiques Benin's
+port, two ResearchAgent rounds follow, and the port is finalised as a flag. The
+judge-triggered round is covered by
+`test_disagreement_on_a_flagged_port_triggers_one_evaluator_retry`.
 
 ```jsonl
-{"timestamp": "2026-10-22T21:41:09.427362+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_start", "input_summary": {"zone_name": "Bermuda", "timeout_s": 300.0}}
-{"timestamp": "2026-10-22T21:41:11.206777+00:00", "agent_name": "ZetarisAdapter", "run_id": "example-bermuda", "action": "zetaris_query", "input_summary": {"sql": "SELECT name, lat, lon, to_json(source_urls) AS source_urls, validated, geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports WHERE zone_name = decode(unhex('4265726d756461'), 'UTF-8')"}, "row_count": 2, "duration_ms": 1778.974, "mode": "live", "status": "ok"}
-{"timestamp": "2026-10-22T21:41:11.216303+00:00", "agent_name": "HMemAgent", "run_id": "example-bermuda", "action": "recall", "input_summary": {"port_name": "Port of St. George’s", "zone_name": "Bermuda"}, "memories": [{"id": "mem-1", "content": "Port Port of St. George’s (Bermuda): verdict flag; official source none; reasons unknown source; single extractor; inside the EEZ; no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries", "score": 0.26436089189508927, "source": "evaluator", "provenance": {"origin": "model_response", "learnedAt": 1792702150144, "label": "evaluator run example-bermuda", "refs": ["example-bermuda"]}, "supersededBy": null}, {"id": "mem-3", "content": "Port Port of St. George’s (Bermuda): verdict flag; official source none; reasons unknown source; single extractor; inside the EEZ; no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries", "score": 0.26436089189508927, "source": "evaluator", "provenance": {"origin": "model_response", "learnedAt": 1792704685402, "label": "evaluator run example-bermuda", "refs": ["example-bermuda"]}, "supersededBy": null}, {"id": "mem-5", "content": "Port Port of St. George’s (Bermuda): verdict flag; official source none; reasons unknown source; single extractor; inside the EEZ; no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries", "score": 0.24673763284556377, "source": "evaluator", "provenance": {"origin": "model_response", "learnedAt": 1792704768070, "label": "evaluator run example-bermuda", "refs": ["example-bermuda"]}, "supersededBy": null}], "handoff": {"from": "HMemAgent", "to": "EvaluatorAgent"}}
-{"timestamp": "2026-10-22T21:41:11.219311+00:00", "agent_name": "EvaluatorAgent", "run_id": "example-bermuda", "action": "evaluate_port", "port_name": "Port of St. George’s", "input_summary": {"port_name": "Port of St. George’s", "retry_count": 0}, "verdict": "retry", "reasons": ["unknown source", "single extractor", "inside the EEZ", "no direct source (empty URLs or synthesis only)", "single geocoder, not cross-checked"], "retry_hint": "find an official source"}
-{"timestamp": "2026-10-22T21:41:11.219717+00:00", "agent_name": "ResearchAgent", "run_id": "example-bermuda", "action": "research_port", "input_summary": {"port_name": "Port of St. George’s", "zone_name": "Bermuda", "retry_hint": "find an official source", "memories": 3}, "outcome": "no prior official source", "handoff": {"from": "ResearchAgent", "to": "EvaluatorAgent"}}
-{"timestamp": "2026-10-22T21:41:11.219942+00:00", "agent_name": "EvaluatorAgent", "run_id": "example-bermuda", "action": "prepare_retry", "port_name": "Port of St. George’s", "input_summary": {"port_name": "Port of St. George’s", "retry_count": 1}, "verdict": "retry", "reasons": ["unknown source", "single extractor", "inside the EEZ", "no direct source (empty URLs or synthesis only)", "single geocoder, not cross-checked"], "retry_hint": "find an official source", "handoff": {"from": "EvaluatorAgent", "to": "retry"}}
-{"timestamp": "2026-10-22T21:41:11.220747+00:00", "agent_name": "EvaluatorAgent", "run_id": "example-bermuda", "action": "finalise_port", "port_name": "Port of St. George’s", "input_summary": {"port_name": "Port of St. George’s", "retry_count": 2}, "verdict": "flag", "reasons": ["unknown source", "single extractor", "inside the EEZ", "no direct source (empty URLs or synthesis only)", "single geocoder, not cross-checked", "unconfirmed after max retries"]}
-{"timestamp": "2026-10-22T21:41:38.903449+00:00", "agent_name": "MeterlessGenerator", "action": "generate", "run_id": "example-bermuda", "provider": "nightshift", "requested_model": "nvidia/nemotron-3.5-lightning-30b-a3b", "served_model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "duration_ms": 27682.128, "status": "success", "input_summary": {"prompt": "Zone: Bermuda\nFinalised ports (JSON):\n[{\"name\": \"Port of St. George’s\", \"verdict\": \"flag\", \"confidence\": 34, \"why\": [\"no direct source (empty URLs or synthesis only)\", \"single geocoder, not cross-chec", "role": "brief"}, "fallback_reason": null}
-{"timestamp": "2026-10-22T21:41:38.905033+00:00", "agent_name": "BriefingAgent", "run_id": "example-bermuda", "action": "brief", "input_summary": {"zone_name": "Bermuda", "ports": 2}, "provider": "nightshift", "served_model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "fallback_reason": null, "handoff": {"from": "BriefingAgent", "to": "HMemAgent"}}
-{"timestamp": "2026-10-22T21:41:38.911054+00:00", "agent_name": "HMemAgent", "run_id": "example-bermuda", "action": "remember", "input_summary": {"port_name": "Port of St. George’s", "zone_name": "Bermuda"}, "memory_id": "mem-7", "outcome": "helpful", "handoff": {"from": "EvaluatorAgent", "to": "HMemAgent"}}
-{"timestamp": "2026-10-22T21:41:38.913588+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_end", "status": "ok", "error": null, "summary": {"flag": 2}, "timings_ms": {"ZetarisAdapter.get_ports": 1784.7, "HMemAgent.recall": 4.7, "EvaluatorAgent.evaluate": 2.8, "ResearchAgent.research": 0.5, "EvaluatorAgent.prepare_retry": 0.2, "EvaluatorAgent.finalise": 0.1, "BriefingAgent.brief": 27684.5, "HMemAgent.remember": 7.6, "total": 29485.1}}
+{"timestamp": "2026-10-25T18:26:39.853172+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_start", "input_summary": {"zone_name": "Bermuda", "timeout_s": 300.0}}
+{"timestamp": "2026-10-25T18:26:45.244813+00:00", "agent_name": "ZetarisAdapter", "run_id": "example-bermuda", "action": "zetaris_query", "input_summary": {"sql": "SELECT name, lat, lon, to_json(source_urls) AS source_urls, validated, geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports WHERE zone_name = decode(unhex('4265726d756461'), 'UTF-8')"}, "row_count": 2, "duration_ms": 5391.09, "mode": "live", "status": "ok"}
+{"timestamp": "2026-10-25T18:26:47.503712+00:00", "agent_name": "ZetarisAdapter", "run_id": "example-bermuda", "action": "evidence_lookup", "mode": "live", "status": "fallback", "source": "sample_pages", "records": 3, "records_by_port": {"saint george": 2, "hamilton": 1}, "input_summary": {"mrgid": 8402, "ports": 2}, "error": "ServerSelectionTimeoutError: 127.0.0.1:1: [Errno 61] Connection refused (configured timeouts: socketTimeoutMS: 2000.0ms, connectTimeoutMS: 2000.0ms),"}
+{"timestamp": "2026-10-25T18:26:49.775618+00:00", "agent_name": "HMemAgent", "run_id": "example-bermuda", "action": "recall", "input_summary": {"port_name": "Port of St. George’s", "zone_name": "Bermuda"}, "memories": [], "handoff": {"from": "HMemAgent", "to": "EvaluatorAgent"}}
+{"timestamp": "2026-10-25T18:26:49.777937+00:00", "agent_name": "EvaluatorAgent", "run_id": "example-bermuda", "action": "evaluate_port", "port_name": "Port of St. George’s", "input_summary": {"port_name": "Port of St. George’s", "retry_count": 0}, "verdict": "pass", "reasons": ["government source", "single extractor", "inside the EEZ, geocoders agree", "coordinates corroborated by WPI BMSGE, 0.67 km"], "geocode_corroboration": {"source": "wpi", "code": "BMSGE", "distance_km": 0.67}}
+{"timestamp": "2026-10-25T18:26:49.777986+00:00", "agent_name": "EvaluatorAgent", "run_id": "example-bermuda", "action": "evaluate_port", "port_name": "Port of Hamilton", "input_summary": {"port_name": "Port of Hamilton", "retry_count": 0}, "verdict": "pass", "reasons": ["government source", "single extractor", "inside the EEZ, geocoders agree", "coordinates corroborated by WPI BMBDA, 0.93 km"], "geocode_corroboration": {"source": "wpi", "code": "BMBDA", "distance_km": 0.93}}
+{"timestamp": "2026-10-25T18:27:11.708597+00:00", "agent_name": "MeterlessGenerator", "action": "generate", "run_id": "example-bermuda", "provider": "nightshift", "requested_model": "nvidia/nemotron-3.5-lightning-30b-a3b", "served_model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "duration_ms": 21930.164, "status": "success", "input_summary": {"prompt": "Zone: Bermuda\nCandidate ports:\n- Port of St. George’s\n- Port of Hamilton\nOfficial texts:\n[1] https://www.gov.bm/department/customs\n. Customs officers work in partnership with the Bermuda Police Servic", "role": "judge"}, "fallback_reason": null}
+{"timestamp": "2026-10-25T18:27:11.710493+00:00", "agent_name": "NemotronJudge", "run_id": "example-bermuda", "action": "critique", "input_summary": {"zone_name": "Bermuda", "ports": 2, "evidence_texts": 3}, "status": "ok", "reason": null, "provider": "nightshift", "served_model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "retry_requested": [], "judgments": [{"port_name": "Port of St. George’s", "verdict": "poe", "port_verdict": "pass", "excerpt_verified": true, "disagrees": false}, {"port_name": "Port of Hamilton", "verdict": "poe", "port_verdict": "pass", "excerpt_verified": true, "disagrees": false}], "handoff": {"from": "NemotronJudge", "to": "EvaluatorAgent"}}
+{"timestamp": "2026-10-25T18:27:41.489131+00:00", "agent_name": "MeterlessGenerator", "action": "generate", "run_id": "example-bermuda", "provider": "nightshift", "requested_model": "nvidia/nemotron-3.5-lightning-30b-a3b", "served_model": "nvidia/nemotron-3-ultra-550b-a55b", "duration_ms": 29777.359, "status": "success", "input_summary": {"prompt": "Zone: Bermuda\nFinalised ports (JSON):\n[{\"name\": \"Port of St. George’s\", \"verdict\": \"pass\", \"confidence\": 67, \"why\": [\"coordinates corroborated by WPI BMSGE, 0.67 km\"], \"tier\": \"Official Commercial Por", "role": "brief"}, "fallback_reason": null}
+{"timestamp": "2026-10-25T18:27:41.490154+00:00", "agent_name": "BriefingAgent", "run_id": "example-bermuda", "action": "brief", "input_summary": {"zone_name": "Bermuda", "ports": 2}, "provider": "nightshift", "served_model": "nvidia/nemotron-3-ultra-550b-a55b", "fallback_reason": null, "handoff": {"from": "BriefingAgent", "to": "HMemAgent"}}
+{"timestamp": "2026-10-25T18:27:41.497639+00:00", "agent_name": "HMemAgent", "run_id": "example-bermuda", "action": "remember", "input_summary": {"port_name": "Port of St. George’s", "zone_name": "Bermuda"}, "memory_id": "mem-1", "outcome": "created", "handoff": {"from": "EvaluatorAgent", "to": "HMemAgent"}}
+{"timestamp": "2026-10-25T18:27:41.502599+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_end", "status": "ok", "error": null, "summary": {"pass": 2}, "timings_ms": {"ZetarisAdapter.get_ports": 5392.5, "ZetarisAdapter.registry_check": 4528.0, "HMemAgent.recall": 2.0, "EvaluatorAgent.evaluate": 2.1, "NemotronJudge.critique": 21932.6, "EvaluatorAgent.finalise": 0.4, "BriefingAgent.brief": 29779.2, "HMemAgent.remember": 11.4, "total": 61648.4}}
 ```
 
 ## 6. How judges run it
@@ -494,7 +535,15 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
   `score_port` in [`poe_confidence.py`](../../backend/app/services/poe_confidence.py)
   and `_verdict` in [`evaluator.py`](../../backend/app/agents/evaluator.py).
 - **Nightshift may serve a different Nemotron than requested.** The served model
-  is recorded, not chosen by the application (section 4).
+  is recorded, not chosen by the application (section 4). In the recorded run the
+  judge and the brief were served different models.
+- **NemotronJudge is advisory only.** It judges only the official text the run
+  already holds, so zones without stored evidence get no judgment. Its verdicts
+  never change a tier or a score (section 4).
+- **The recorded live run used the evidence snapshots.** No Mongo evidence store
+  was available, so `evidence_lookup` fell back to the committed official-page
+  snapshots, as it does whenever Mongo is unreachable. Zetaris, the registries and
+  Nightshift were live.
 - **Merge order.** This document (#31) targets `feat/integrate-poe-pipeline`
   (#33), which already contains the work of #26 (Zetaris), #28 (H-MEM), #30
   (Nightshift generator), #32 (run pipeline), #34 (registry tiers), #35, #36 (V2
@@ -569,3 +618,4 @@ hackathon work, all committed on 22 October 2026 or later:
 | "point(s) of entry" as a weak entry term | [#42](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/42) | `42d54df` |
 | `pycountry` in the minimal install, warning when missing | [#44](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/44) | `d0f6b4f` |
 | Official evidence in the score, registry-corroborated positions, brief sources, Benin example | [#45](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/45) | `e30ea65`, `a5698aa`, `47fd757`, `7f98ff9`, `0857c36`, `b29aaea`, `8932b76` |
+| NemotronJudge advisory critic, frontend portKey parity, live recording of 25 October | [#47](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/47) | `164f740`, `9404cea`, `74f6299` and this update |
