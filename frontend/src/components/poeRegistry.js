@@ -9,22 +9,21 @@
  * World Port Index match only; tier3 is neither. No registry: not verified yet.
  */
 
-export const TIER_TONE = {
-  tier1: "border-green-400 text-green-400 bg-green-400/10",
-  tier2: "border-teal-400 text-teal-300 bg-teal-400/10",
-  tier_registered: "border-amber-400 text-amber-400 bg-amber-400/10",
-  tier3: "border-amber-500 text-amber-400 bg-amber-500/10",
-  none: "border-slate-600 text-slate-400 bg-slate-700/20",
-};
-
-// Same tones as TIER_TONE, for the popup's inline HTML.
-const TIER_COLOR = {
+// One colour per tier, used by the sidebar badge and the popup so both match.
+// tier_registered (registry match only) has its own colour, apart from tier3.
+export const TIER_COLOR = {
   tier1: "#4ade80",
   tier2: "#5eead4",
-  tier_registered: "#7dd3fc",
+  tier_registered: "#a78bfa",
   tier3: "#fbbf24",
   none: "#94a3b8",
 };
+
+/** Inline badge style for a tier: coloured text, faint border and background. */
+export function tierStyle(tier) {
+  const color = TIER_COLOR[tier] || TIER_COLOR.none;
+  return { color, borderColor: `${color}66`, backgroundColor: `${color}1a` };
+}
 
 /** {tier, label} for a port: the i18n label of its registry tier, or "Not yet verified". */
 export function registryBadge(port, t) {
@@ -33,7 +32,7 @@ export function registryBadge(port, t) {
   if (!tier) return { tier: "none", label: t("poeTierNone") };
   const key = `poeTier_${tier}`;
   const label = t(key) !== key ? t(key) : (registry.label || tier);
-  return { tier: TIER_TONE[tier] ? tier : "none", label };
+  return { tier: TIER_COLOR[tier] ? tier : "none", label };
 }
 
 /** Closest same-name registry entry beyond the match distance, or null. */
@@ -64,8 +63,8 @@ export function registryNotes(port, t) {
 /** Popup (inline HTML) version of the badge. `esc` escapes HTML. */
 export function registryBadgeHtml(port, t, esc) {
   const { tier, label } = registryBadge(port, t);
-  const color = TIER_COLOR[tier];
-  return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${color}66;padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
+  const { color, borderColor, backgroundColor } = tierStyle(tier);
+  return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${borderColor};background:${backgroundColor};padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
 }
 
 function portKey(name) {

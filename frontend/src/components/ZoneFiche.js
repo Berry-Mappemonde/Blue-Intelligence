@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
-import { TIER_TONE, registryBadge, registryNotes } from "./poeRegistry";
+import { registryBadge, registryNotes, tierStyle } from "./poeRegistry";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
 
 /**
@@ -144,7 +144,8 @@ function RegistryBadge({ port, t }) {
   const { tier, label } = registryBadge(port, t);
   return (
     <span
-      className={`px-1.5 py-0.5 rounded-sm border font-mono text-[8px] uppercase tracking-widest leading-tight ${TIER_TONE[tier]}`}
+      className="px-1.5 py-0.5 rounded-sm border font-mono text-[8px] uppercase tracking-widest leading-tight"
+      style={tierStyle(tier)}
       data-testid={`poe-fiche-tier-${tier}`}
       title={(port?.registry?.reasons || [])[0] || label}
     >
@@ -224,7 +225,7 @@ export default function ZoneFiche({
         </p>
         {fiche.confidence_avg != null && (
           <span className="font-mono text-[9px] text-slate-300" data-testid="poe-fiche-score">
-            {t("poeConfidenceAvg")} {fiche.confidence_avg}%
+            {t("poeConfidenceAvg")} {fiche.confidence_avg}
           </span>
         )}
       </div>
@@ -411,7 +412,7 @@ export default function ZoneFiche({
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
                         className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
                       >
-                        {t("poeConfidence")} {score}%
+                        {t("poeConfidence")} {score}
                         <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
                       </button>
                     ) : (

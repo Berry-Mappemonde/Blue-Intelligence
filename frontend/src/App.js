@@ -812,8 +812,8 @@ const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
       setFicheLoading(false);
       return;
     }
-    // Phase 3 — fiche already enriched via verifyZonePoe in handleSelectZone.
-    // No redundant API call here.
+    // The fiche is loaded by handleSelectZone (read-only GET /poe/zones/{mrgid});
+    // POST /poe/verify only runs from the fiche's Verify button (handleVerifyZone).
     return () => { /* noop */ };
   }, [selectedZone, mapEpoch]);
 
