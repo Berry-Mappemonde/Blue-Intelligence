@@ -1,0 +1,77 @@
+{
+  "name": "PoE Reconciler (Blue Intelligence)",
+  "summary": "Give it one maritime zone and it returns the zone's Ports of Entry, where a sailor may legally clear customs on arrival, each with a verdict, a 0-100 confidence score, its sources and an evidence tier (official government page, independent port registry, both or neither), plus a short brief for sailors.",
+  "hackathon": "GenAI Works Open Agent Hackathon 2026",
+  "track": "01 Solving Fragmented Intelligence",
+  "repository": "https://github.com/Berry-Mappemonde/Blue-Intelligence",
+  "branch": "feat/integrate-poe-pipeline",
+  "license": ["MIT", "Apache-2.0"],
+  "team": [
+    {"github": "NAVIGUIDE-for-Berry-Mappemonde", "role": "team lead"},
+    {"github": "HamidZ11"},
+    {"github": "VarunGore36"}
+  ],
+  "run": {
+    "python": ">=3.12",
+    "install": "backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3 pycountry==26.2.16",
+    "cli": "backend/.venv/bin/python backend/run.py --input input_examples/01_bermuda.json --output bermuda.json",
+    "http": "backend/.venv/bin/python backend/run.py --serve",
+    "http_endpoint": "POST /run",
+    "input_schema": {"zone_name": "string, required", "run_id": "string, optional (letters, digits, _ and -)"},
+    "sample_mode": "No credentials needed: without a .env, run.py turns on SAMPLE_MODE and the agents run on bundled real data.",
+    "entry_point": "backend/run.py",
+    "docs": ["README.md", "docs/RUNNING.md"]
+  },
+  "agents": [
+    {"name": "RunPipeline", "role": "orchestrator; one run_id and one JSONL trace per run", "code": "backend/app/pipeline/run_pipeline.py"},
+    {"name": "ZetarisAdapter", "role": "reads candidate ports and the UN/LOCODE and World Port Index registries through Zetaris SQL; looks up stored official evidence; assigns evidence tiers", "code": "backend/app/adapters/zetaris.py"},
+    {"name": "HMemAgent", "role": "recalls and remembers verdicts with the Meterless H-MEM engine", "code": "backend/app/agents/memory.py"},
+    {"name": "EvaluatorAgent", "role": "scores each port and decides pass, flag or retry", "code": "backend/app/agents/evaluator.py"},
+    {"name": "NemotronJudge", "role": "advisory critic: one Nemotron call per zone on the official evidence text; never writes a tier or a score; may trigger one research round", "code": "backend/app/agents/poe_judge.py"},
+    {"name": "ResearchAgent", "role": "on retry, adds the official source H-MEM remembers for the port", "code": "backend/app/pipeline/run_pipeline.py"},
+    {"name": "BriefingAgent", "role": "writes the sailor-facing brief through Meterless Nightshift", "code": "backend/app/pipeline/run_pipeline.py"}
+  ],
+  "traces": {
+    "stdout": true,
+    "file": "logs/trace-<run_id>.jsonl",
+    "events": ["handoff", "critique", "prepare_retry", "research_port"],
+    "examples": ["output_examples/01_bermuda.live_nemotron.trace.jsonl", "output_examples/04_benin.trace.jsonl"]
+  },
+  "sponsor_technology": {
+    "zetaris": {
+      "use": "data layer: every run reads its ports and two independent registries through Zetaris SQL, with a timeout and a fallback to bundled fixtures",
+      "code": ["backend/app/adapters/zetaris.py", "backend/app/agents/registry_check.py"],
+      "tests": ["backend/tests/test_zetaris_adapter.py", "backend/tests/test_zetaris_registries.py"]
+    },
+    "meterless_engine": {
+      "engine": "H-MEM",
+      "use": "verification memory across runs; ResearchAgent reuses a previously verified official source on retry",
+      "code": ["backend/app/engines/hmem/", "backend/app/agents/memory.py"],
+      "tests": ["backend/tests/test_hmem_conformance.py", "backend/tests/test_hmem_memory.py"]
+    },
+    "meterless_nightshift": {
+      "use": "primary model provider for the brief and the NemotronJudge critique; records the requested and the served model",
+      "code": ["backend/app/core/generator.py"],
+      "tests": ["backend/tests/test_generator.py", "backend/tests/test_poe_judge.py"]
+    },
+    "nvidia_nemotron": {
+      "use": "served through Nightshift; the recorded live run requested nvidia/nemotron-3.5-lightning-30b-a3b",
+      "served_in_recorded_run": {
+        "judge": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "brief": "nvidia/nemotron-3-ultra-550b-a55b"
+      },
+      "recording": ["output_examples/01_bermuda.live_nemotron.json", "output_examples/01_bermuda.live_nemotron.trace.jsonl"]
+    },
+    "write_up": "docs/sponsors/SPONSOR_TECH.md"
+  },
+  "examples": {
+    "inputs": ["input_examples/01_bermuda.json", "input_examples/02_angola.json", "input_examples/03_azores.json", "input_examples/04_benin.json"],
+    "outputs": ["output_examples/01_bermuda.json", "output_examples/02_angola.json", "output_examples/03_azores.json", "output_examples/04_benin.json"]
+  },
+  "data": [
+    {"name": "Blue Intelligence Ports of Entry seed (1,169 ports)", "path": "seed/ports_of_entry.geojson"},
+    {"name": "UN/LOCODE (UNECE)", "path": "backend/data/sample/zetaris/unlocode_ports.json"},
+    {"name": "NGA World Port Index (US Government, public domain)", "path": "backend/data/sample/zetaris/wpi_ports.json"},
+    {"name": "Official-page snapshots (verbatim excerpts, fetched 25 Oct 2026)", "path": "backend/data/sample/official_pages/"}
+  ]
+}
