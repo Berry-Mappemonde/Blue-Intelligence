@@ -128,8 +128,13 @@ be finite and ordered. Each port then gets two kinds of evidence:
   Saint; WPI alternate names and UN/LOCODE names without diacritics count. A name
   and country match beyond 25 km is recorded as `coord_mismatch` with its
   distance. It is not a match, and the port is kept.
-- **Official source evidence:** a source URL that passes `is_official_source()`
-  *and* whose fetched text names the port. Text that was not fetched never counts.
+- **Official source evidence:** a URL that passes `is_official_source()` *and* whose
+  text names the port within ~200 characters of an entry term (port of entry,
+  customs, clearance, clear in, immigration, quarantine, harbour master, and their
+  French, Spanish, Portuguese, Italian and Greek equivalents). A mention inside an
+  address or contact listing, or with no entry term nearby, does not count. The
+  text is fetched now or is a stored snippet of an earlier fetch (PR #41); it is
+  never model output.
 
 | Tier | Label | Evidence |
 | --- | --- | --- |
@@ -160,15 +165,27 @@ and in [`test_zetaris_registries.py`](../../backend/tests/test_zetaris_registrie
 `test_outage_without_fallback_never_marks_official`.
 `test_live_registry_views_for_bermuda` passed against local Zetaris.
 
-**What the tiers can show today.** Fetched document text exists only inside the
-generation pipeline (`extract_ports_llm` in
-[`poe_pipeline.py`](../../backend/app/services/poe_pipeline.py)), which holds the
-pages it fetched as `[SOURCE: url]` blocks. Nothing stores that text. Seed ports,
-and therefore `run.py`, `POST /run`, `POST /api/poe/verify` and sample mode, carry
-source URLs but no document text, so on those paths a port can reach at most
-`tier_registered`; tiers 1 and 2 appear only during generation. In the sample run,
-13 of the 20 sample ports are `tier_registered` and 7 are `tier3`. Storing
-fetched text so the run pipeline can show official evidence is not built yet.
+**What the tiers can show today (with PR #41).** Generation builds evidence records
+from the official pages it fetched, deterministically: the port, the URL and its
+domain, a verbatim snippet of at most 400 characters around the grounded mention,
+the SHA-256 of the full fetched text, the fetch time and extraction level. At most
+three per port are stored in the Mongo collection `poe_evidence`, keyed on zone,
+port and URL. `run.py`, `POST /run` and `POST /api/poe/verify` read ports from
+Zetaris, so their registry step looks the records up by zone and runs the same
+check on each snippet before it counts (`evidence_source: "stored_snippet"`,
+against `"fetched_now"` during generation). In sample mode, or when Mongo is
+unreachable, the lookup reads small verbatim snapshots of real official pages
+(`backend/data/sample/official_pages/`) and builds the records the same way. A
+failed lookup gives no evidence and never an official tier; each lookup is a
+`ZetarisAdapter` `evidence_lookup` trace event.
+
+In the sample run, 1 of the 20 sample ports is `tier1` (Port of St. George's,
+Bermuda: gov.bm Customs and a Bermuda planning report), 2 are `tier2` (Deep water
+Harbor, Antigua and Barbuda: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas
+Customs), 12 are `tier_registered` and 5 are `tier3`; before stored evidence it was
+13 and 7. With records in Mongo and live Zetaris, St. George's and Hamilton
+(Bermuda) are `tier1`; no official page designates Angola's or the Azores' ports,
+so they stay at their registry tier.
 
 ## 2. Meterless H-MEM engine: verification memory
 
@@ -447,11 +464,16 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
   is recorded, not chosen by the application (section 4).
 - **Merge order.** This document (#31) targets `feat/integrate-poe-pipeline`
   (#33), which already contains the work of #26 (Zetaris), #28 (H-MEM), #30
-  (Nightshift generator), #32 (run pipeline), #34 (registry tiers) and #35. #33
-  then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
+  (Nightshift generator), #32 (run pipeline), #34 (registry tiers) and #35. The
+  stored-evidence paragraphs describe #41 (which builds on #36), so #36 and #41
+  merge before this document. #33 then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
   branch.
-- **Official evidence needs fetched text.** Outside the generation pipeline no
-  port can reach tier 1 or 2, because document text is not stored (section 1).
+- **Official evidence is only as good as the stored text.** Outside generation, a
+  port reaches tier 1 or 2 only from a stored snippet (section 1); zones whose
+  official pages were never fetched, or that have no page designating a port, stay
+  at their registry tier. A stripped name can be a city ("Port of Hamilton" also
+  matches "Hamilton"), so a city mentioned near "customs" on an official page can
+  still ground; the committed sample snapshots were reviewed by hand.
 - The 1,169-port GeoJSON is a repository snapshot, not current clearance advice;
   live Zetaris reads the REST table backed by that snapshot. The sample fixture
   contains only 20 rows, one per zone.
