@@ -166,6 +166,23 @@ unreachable, the lookup reads small verbatim snapshots of real official pages in
 and builds the records the same way. A failed lookup gives no evidence, never an
 official tier. Each lookup is a `ZetarisAdapter` `evidence_lookup` trace event.
 
+**Fill evidence on a deployment without regenerating.** A live deployment whose Mongo
+has no `poe_evidence` yet finds no stored evidence, and its ports stay at their
+registry tier. `backend/scripts/seed_evidence_from_snapshots.py` fills the collection
+from the committed snapshots through the generation path: each page's text and fetch
+metadata go through `documents_from_context`, `build_records` and `store`, exactly as
+after a fetch. The port names come from the zone's ports in Zetaris (live when
+configured, otherwise the sample fixture). No record is written by hand. Re-running
+writes the same records (upsert on `mrgid` + `port_key` + `url`).
+
+```bash
+cd backend
+.venv/bin/python scripts/seed_evidence_from_snapshots.py                          # dry run: prints each record, new / update / unchanged
+.venv/bin/python scripts/seed_evidence_from_snapshots.py --zone Bermuda --apply   # writes to MONGO_URL / DB_NAME (or --mongo-url, --db)
+```
+
+After `--apply`, a live run's `evidence_lookup` event shows `source: "mongo"`.
+
 In the sample run, 2 of the 20 sample ports are `tier1` (Port of St. George's,
 Bermuda: gov.bm Customs and a Bermuda planning report; Anchorage Small Boat Harbor,
 Alaska: CBP's designated marina), 2 are `tier2` (Deep water Harbor, Antigua:
