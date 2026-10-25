@@ -97,25 +97,38 @@ def test_poe_verify_runs_the_pipeline_in_sample_mode(isolated):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body['zone_name'] == 'Bermuda' and body['mrgid'] == 8493 and body['error'] is None
-    # Seed ports carry no fetched document text: a registry match alone is never "validated".
-    assert body['validated_ports'] == [] and body['zetaris_mode'] == 'sample'
-    assert [p['name'] for p in body['non_validated_ports']] == ['Port of St. George’s']
-    assert body['ports_by_tier'] == {'tier_registered': ['Port of St. George’s']}
-    evidence = body['non_validated_ports'][0]['registry']
-    assert evidence['tier'] == 'tier_registered' and evidence['validation'] == 'registered - entry status unverified'
+    # Sample mode grounds the committed official pages (backend/data/sample/official_pages):
+    # gov.bm names St. George's among the ports of entry, so with both registries it is tier 1.
+    assert body['zetaris_mode'] == 'sample' and body['non_validated_ports'] == []
+    assert [p['name'] for p in body['validated_ports']] == ['Port of St. George’s']
+    assert body['ports_by_tier'] == {'tier1': ['Port of St. George’s']}
+    evidence = body['validated_ports'][0]['registry']
+    assert evidence['tier'] == 'tier1' and evidence['validation'] == 'official'
+    assert [(e['domain'], e['evidence_source']) for e in evidence['official_evidence']] == [
+        ('gov.bm', 'stored_snippet'), ('planning.gov.bm', 'stored_snippet')]
+    assert all('George' in e['snippet'] and len(e['snippet']) <= 400 for e in evidence['official_evidence'])
     assert [(m['source'], m['code']) for m in evidence['matches']] == [('unlocode', 'BMSGE'), ('wpi', 'BMSGE')]
     assert all(m['distance_km'] < 1 for m in evidence['matches'])
-    assert body['registry'] == {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 0,
-                                'tiers': {'tier1': 0, 'tier2': 0, 'tier_registered': 1, 'tier3': 0},
+    assert body['registry'] == {'mode': 'sample', 'country_iso2': 'BM', 'registry_entries': 12, 'official_count': 1,
+                                'tiers': {'tier1': 1, 'tier2': 0, 'tier_registered': 0, 'tier3': 0},
                                 'coord_mismatch_count': 0}
     assert body['nemotron_status'] == {'provider': 'sample', 'model': 'caller-sample-fn',
                                        'nemotron': False, 'fallback_reason': 'SAMPLE_MODE=true'}
     assert body['brief'].startswith('Clearance brief: Bermuda')
-    assert 'Registered port, entry status unverified: listed in UN/LOCODE BMSGE' in body['brief']
-    assert 'does not establish port-of-entry status' in body['brief']
+    assert ('Official Commercial Port of Entry: named in official source '
+            'https://www.gov.bm/department/customs (stored snippet)') in body['brief']
     trace = Path(body['trace_path'])
     assert trace == isolated / 'trace.jsonl' and trace.is_file()
     assert body['run_id'] in trace.read_text()
+
+
+def test_poe_verify_registry_match_alone_is_never_validated(isolated):
+    # Angola has no committed official page that designates Luanda: registry evidence only.
+    body = verify_client().post('/api/poe/verify', json={'zone_name': 'Angola'}).json()
+    assert body['validated_ports'] == [] and body['ports_by_tier'] == {'tier_registered': ['Porto de Luanda']}
+    evidence = body['non_validated_ports'][0]['registry']
+    assert evidence['official_evidence'] == [] and evidence['validation'] == 'registered - entry status unverified'
+    assert 'does not establish port-of-entry status' in body['brief']
 
 
 def test_poe_verify_rejects_a_missing_zone():

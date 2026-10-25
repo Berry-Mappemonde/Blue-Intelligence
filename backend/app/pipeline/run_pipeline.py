@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from app.adapters import evidence_store
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents import registry_check
 from app.agents.evaluator import (
@@ -105,10 +106,12 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
 
 def check_registries(ports: list[dict], zone_name: str, run_id: str,
                      zetaris_mode: str | None = None) -> tuple[list[dict], dict]:
-    """Registry check step: UN/LOCODE + WPI evidence on every candidate port."""
+    """Registry check step: UN/LOCODE + WPI evidence on every candidate port, plus official
+    evidence from stored snippets of the zone (evidence_store.lookup; none on failure)."""
     mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    stored = evidence_store.lookup(mrgid, [p.get('name') for p in ports], run_id)
     return registry_check.check_ports(ports, dict(name=zone_name, mrgid=mrgid), run_id,
-                                      live_failed=zetaris_mode == 'fallback')
+                                      live_failed=zetaris_mode == 'fallback', stored_records=stored)
 
 
 def list_zones() -> dict:
