@@ -1,7 +1,35 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
+import { registryBadge, registryNotes, tierStyle } from "./poeRegistry";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
+
+/**
+ * ErrorBoundary — évite l'écran blanc si un composant enfant de la fiche
+ * plante au render (champ mannant, objet passé en enfant JSX, etc.).
+ */
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    // eslint-disable-next-line no-console
+    console.error("[ZoneFiche ErrorBoundary]", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="p-3 border-b border-line bg-raised/30">
+          <p className="font-mono text-[10px] text-amber-400" data-testid="poe-fiche-error">
+            Erreur d'affichage de la fiche — champ manquant ou donnée invalide.
+          </p>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function hostOf(url) {
   try {
@@ -111,14 +139,95 @@ function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId
   );
 }
 
+/** Registry tier badge, or a neutral "Not yet verified" when the port has no registry. */
+function RegistryBadge({ port, t }) {
+  const { tier, label } = registryBadge(port, t);
+  return (
+    <span
+      className="px-1.5 py-0.5 rounded-sm border font-mono text-[8px] uppercase tracking-widest leading-tight"
+      style={tierStyle(tier)}
+      data-testid={`poe-fiche-tier-${tier}`}
+      title={(port?.registry?.reasons || [])[0] || label}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Official evidence of a port (registry.official_evidence): source link, snippet collapsed. */
+function OfficialEvidence({ evidence, t }) {
+  if (!evidence?.length) return null;
+  return (
+    <div className="mt-1 space-y-0.5" data-testid="poe-fiche-evidence">
+      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{t("poeEvidenceTitle")}</p>
+      {evidence.map((e) => (
+        <details key={e.url} className="group" data-testid="poe-fiche-evidence-item">
+          <summary className="cursor-pointer list-none font-mono text-[9px] text-slate-400 hover:text-slate-200">
+            <a
+              href={e.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:text-white"
+              title={e.url}
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              {e.domain}
+            </a>
+            {" · "}
+            {t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched")}
+            <span className="ml-1 text-slate-600 group-open:hidden">{t("poeEvidenceShow")} ▸</span>
+            <span className="ml-1 text-slate-600 hidden group-open:inline">{t("poeEvidenceHide")} ▾</span>
+          </summary>
+          <p className="mt-0.5 pl-2 border-l border-line/60 text-[10px] leading-snug text-slate-400 whitespace-pre-line break-words">
+            {e.snippet}
+          </p>
+        </details>
+      ))}
+    </div>
+  );
+}
+
+/** Telemetry of the last verify run, read from its payload only. */
+function VerifyTelemetry({ verify, t }) {
+  const ns = verify?.nemotron_status || {};
+  const mem = verify?.memory || {};
+  const cell = (label, value, testId) => (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</span>
+      <span className="font-mono text-[9px] text-slate-100 truncate" data-testid={testId} title={value}>{value}</span>
+    </div>
+  );
+  return (
+    <div className="border border-line/60 bg-raised/40 rounded-sm p-2 space-y-1.5" data-testid="poe-fiche-telemetry">
+      <p className="font-mono text-[8px] uppercase tracking-[0.2em] text-slate-500">{t("telemetryTitle")}</p>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {cell(t("telemetryModel"), ns.model || "—", "poe-telemetry-model")}
+        {cell(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
+        {cell(
+          t("telemetryMemory"),
+          `${mem.recalled ?? 0} ${t("telemetryRecalled")} · ${mem.reinforced ?? 0} ${t("telemetryReinforced")} · ${mem.created ?? 0} ${t("telemetryCreated")}`,
+          "poe-telemetry-memory",
+        )}
+        {cell(t("telemetryZetaris"), verify?.zetaris_mode || "—", "poe-telemetry-zetaris")}
+        {cell(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run")}
+        {ns.fallback_reason ? cell(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback") : null}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Review sheet for a VLIZ polygon — same gesture as ProjectList:
  * Review (variant=page): every TD + every BU per port.
  * Map (sidebar): one TD URL + one BU per PoE. No Generate button.
+ *
+ * V2: each port's badge comes from its registry tier (PR #34); "Verify" runs
+ * POST /poe/verify and merges the result (see poeRegistry.mergeVerifyIntoFiche).
  */
+
 export default function ZoneFiche({
   t, lang, fiche, loading, onFlyToPort, variant = "sidebar",
-  choices, onChoice,
+  choices, onChoice, onVerify, verifyState,
 }) {
   // Hook avant les retours anticipés : React exige des appels inconditionnels.
   const [openPort, setOpenPort] = useState(null);
@@ -141,7 +250,8 @@ export default function ZoneFiche({
   const unclos = fiche.unclos && typeof fiche.unclos === "object" ? fiche.unclos : null;
   const unclosKey = unclos?.code ? `poeUnclos_${unclos.code}` : "";
   return (
-    <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
+    <ErrorBoundary>
+      <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
       <div className="flex items-baseline justify-between gap-2">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
           {t("poeFicheTitle")}
@@ -152,6 +262,51 @@ export default function ZoneFiche({
           </span>
         )}
       </div>
+      {typeof onVerify === "function" ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={onVerify}
+            disabled={Boolean(verifyState?.running)}
+            data-testid="poe-fiche-verify"
+            className="w-full px-2 py-1.5 border border-accent/50 text-accent font-mono text-[10px] uppercase tracking-widest rounded-sm hover:bg-accent/10 disabled:opacity-60 disabled:cursor-wait"
+          >
+            {verifyState?.running ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-1 h-4 w-4 inline"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                {t("poeVerifying")}
+              </>
+            ) : (
+              t("poeVerify")
+            )}
+          </button>
+          {verifyState?.error ? (
+            <p className="font-mono text-[10px] text-amber-400 break-words" data-testid="poe-fiche-verify-error">
+              {t("poeVerifyFailed")}: {verifyState.error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {fiche.verify ? <VerifyTelemetry verify={fiche.verify} t={t} /> : null}
       <div>
         <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
           {zoneDisplayName(fiche, t)}
@@ -248,6 +403,8 @@ export default function ZoneFiche({
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
               const canFly = p.lat != null && p.lon != null && onFlyToPort;
               const pid = p.port_id || p.id || p.name;
+              const score = p.confidence;
+              const notes = registryNotes(p, t);
               return (
                 <div
                   key={pid || p.name}
@@ -264,10 +421,23 @@ export default function ZoneFiche({
                       className="min-w-0 flex-1 text-left disabled:cursor-default"
                     >
                       <p className="text-xs font-semibold text-slate-200 leading-snug">{p.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <RegistryBadge port={p} t={t} />
+                      </div>
+                      {notes.map((n) => (
+                        <p
+                          key={n.key}
+                          className="mt-0.5 font-mono text-[9px] text-slate-500 leading-snug"
+                          data-testid={`poe-fiche-note-${n.key}`}
+                        >
+                          {n.text}
+                        </p>
+                      ))}
                     </button>
                   </div>
+                  <OfficialEvidence evidence={p.registry?.official_evidence} t={t} />
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    {p.confidence != null ? (
+                    {score != null ? (
                       <button
                         type="button"
                         onClick={() => setOpenPort(openPort === pid ? null : pid)}
@@ -276,7 +446,7 @@ export default function ZoneFiche({
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
                         className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
                       >
-                        {t("poeConfidence")} {p.confidence}
+                        {t("poeConfidence")} {score}
                         <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
                       </button>
                     ) : (
@@ -338,6 +508,7 @@ export default function ZoneFiche({
           </p>
         </div>
       ) : null}
-    </section>
+      </section>
+    </ErrorBoundary>
   );
 }

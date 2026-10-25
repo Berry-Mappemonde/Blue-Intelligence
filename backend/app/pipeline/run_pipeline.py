@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from app.adapters import evidence_store
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents import registry_check
 from app.agents.evaluator import (
@@ -105,10 +106,12 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
 
 def check_registries(ports: list[dict], zone_name: str, run_id: str,
                      zetaris_mode: str | None = None) -> tuple[list[dict], dict]:
-    """Registry check step: UN/LOCODE + WPI evidence on every candidate port."""
+    """Registry check step: UN/LOCODE + WPI evidence on every candidate port, plus official
+    evidence from stored snippets of the zone (evidence_store.lookup; none on failure)."""
     mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    stored = evidence_store.lookup(mrgid, [p.get('name') for p in ports], run_id)
     return registry_check.check_ports(ports, dict(name=zone_name, mrgid=mrgid), run_id,
-                                      live_failed=zetaris_mode == 'fallback')
+                                      live_failed=zetaris_mode == 'fallback', stored_records=stored)
 
 
 def list_zones() -> dict:
@@ -346,6 +349,15 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _memory_out(state: dict, ports: list[dict], remembered: bool) -> dict:
+    """H-MEM activity of the run: memories recalled, and what remember did per port."""
+    outcomes = [e.get('outcome') for e in state.get('trace') or []
+                if e.get('agent_name') == 'HMemAgent' and e.get('action') == 'remember']
+    return dict(recalled=sum(p['memories_recalled'] for p in ports), remembered=remembered,
+                created=outcomes.count('created'), reinforced=outcomes.count('reinforced'),
+                superseded=outcomes.count('superseded'))
+
+
 def _result(ctx: dict, total_ms: float) -> dict:
     state = ctx['state']
     ports = [_port_out(p) for p in state.get('ports') or []]
@@ -364,8 +376,7 @@ def _result(ctx: dict, total_ms: float) -> dict:
                         llm=brief.get('provider')),
         registry=ctx.get('registry'),
         retries=int(state.get('retry_count') or 0),
-        memory=dict(recalled=sum(p['memories_recalled'] for p in ports),
-                    remembered=bool(ctx.get('remembered'))),
+        memory=_memory_out(state, ports, bool(ctx.get('remembered'))),
         trace_file=_display_path(trace_path(ctx['run_id'])),
         timings_ms=dict(ctx['timings'], total=total_ms),
         error=ctx.get('error'),

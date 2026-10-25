@@ -208,7 +208,10 @@ def test_source_texts_from_context_keeps_documents_not_synthesis():
 ])
 def test_official_source_grounding(url, text, found):
     evidence = registry_check.official_source_evidence({"name": "Port of St. George’s"}, {url: text})
-    assert evidence == ([{"url": url, "name_found": found}] if found else [])
+    assert [(e["url"], e["name_found"]) for e in evidence] == ([(url, found)] if found else [])
+    if found:
+        assert evidence[0]["entry_term"] == "clear customs" and evidence[0]["evidence_source"] == "fetched_now"
+        assert evidence[0]["snippet"] == text and evidence[0]["domain"] == "customs.gov.bm"
 
 
 def test_grounding_needs_fetched_text_for_the_port_s_own_urls():
@@ -219,10 +222,11 @@ def test_grounding_needs_fetched_text_for_the_port_s_own_urls():
 
 def test_grounding_accepts_registry_alternate_names():
     port = {"name": "Antwerp"}
-    texts = {"https://www.ports.gov.be/fr": "Les ports d'Anvers et de Zeebrugge."}
+    texts = {"https://www.ports.gov.be/fr": "Les ports d'Anvers et de Zeebrugge disposent d'un bureau de douane."}
     assert registry_check.official_source_evidence(port, texts) == []
-    assert registry_check.official_source_evidence(port, texts, ("Antwerpen", "Antwerp; Anvers")) == [
-        {"url": "https://www.ports.gov.be/fr", "name_found": "anvers"}]
+    evidence = registry_check.official_source_evidence(port, texts, ("Antwerpen", "Antwerp; Anvers"))
+    assert [(e["url"], e["name_found"], e["entry_term"]) for e in evidence] == [
+        ("https://www.ports.gov.be/fr", "anvers", "douane")]
 
 
 # --- tiers through Zetaris (sample fixtures) ----------------------------------------------
@@ -232,7 +236,8 @@ def test_tier1_official_source_and_registry(isolated):
     reg = ports[0]["registry"]
     assert reg["tier"] == TIER1 and reg["label"] == "Official Commercial Port of Entry"
     assert reg["validation"] == ports[0]["zetaris_validation"] == OFFICIAL
-    assert reg["official_evidence"] == [{"url": GOV_BM, "name_found": "saint george"}]
+    assert [(e["url"], e["name_found"], e["evidence_source"]) for e in reg["official_evidence"]] == [
+        (GOV_BM, "saint george", "fetched_now")]
     assert reg["matches"] == ports[0]["registry_matches"] == [
         {"source": "unlocode", "code": "BMSGE", "name": "Saint George", "distance_km": 0.67},
         {"source": "wpi", "code": "BMSGE", "name": "St George", "distance_km": 0.67, "first_port_of_entry": "Yes"}]
