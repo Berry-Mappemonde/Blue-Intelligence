@@ -19,7 +19,7 @@ from app.agents.evaluator import (
     prepare_retry,
     route_after_evaluation,
 )
-from app.services.poe_confidence import apply_score, score_port
+from app.services.poe_confidence import REASONS_EN, apply_score, reasons_en, score_port
 
 # High score, real source, map agreed → pass.
 PASS_PORT = {
@@ -382,8 +382,8 @@ def test_every_scorer_reason_has_an_english_translation():
             )
             reasons.add(reason.value)
     assert reasons, "No scorer reasons found"
-    assert not (reasons - evaluator._REASONS_EN.keys()), (
-        f"Missing English translations: {sorted(reasons - evaluator._REASONS_EN.keys())}"
+    assert not (reasons - REASONS_EN.keys()), (
+        f"Missing English translations: {sorted(reasons - REASONS_EN.keys())}"
     )
 
 
@@ -415,7 +415,7 @@ def test_production_score_fields_and_separate_check_reasons(role):
     assert port["check_reasons"] == ["single geocoder, not cross-checked"]
     assert "reasons" not in port
     assert raw["reasons"] == ["obsolete evaluator reason"]
-    assert port["reasons_en"] == evaluator._reasons_en(
+    assert port["reasons_en"] == reasons_en(
         port["confidence_reasons"] + port["check_reasons"]
     )
     assert state["trace"][0]["reasons"] == port["reasons_en"]

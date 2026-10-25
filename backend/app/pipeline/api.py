@@ -1,18 +1,22 @@
-"""Minimal HTTP surface for the pipeline: demo page, POST /run, zones, traces, health.
+"""Minimal HTTP surface for the pipeline: demo page, POST /run, live stream, zones, traces.
 
 Separate from app.main (the production Blue Intelligence API), so judges can run
 the agent product without MongoDB. Started by `python backend/run.py --serve`.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.pipeline.run_pipeline import list_zones, load_trace, run_pipeline
+from app.pipeline.run_pipeline import (
+    list_zones, load_trace, run_pipeline, stream_run, validate_input,
+)
 
 DEMO_PAGE = Path(__file__).with_name('demo_page.html')
 
@@ -34,6 +38,27 @@ def demo_page() -> HTMLResponse:
 async def run(request: RunRequest) -> dict:
     """JSON in, JSON out. A timeout or step failure returns a partial result with `error`."""
     return await run_pipeline(request.zone_name, request.run_id)
+
+
+@app.get('/run/stream')
+async def run_stream(zone: str = Query(min_length=1, max_length=200),
+                     run_id: str | None = Query(default=None, pattern=r'^[A-Za-z0-9_-]{1,64}$')):
+    """Server-Sent Events: one `trace` event per agent step as it happens, then `result`.
+
+    The `result` data is the same JSON as POST /run, which stays the judges' entry point.
+    """
+    try:
+        zone_name, run_id = validate_input(zone, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    run_id = run_id or str(uuid4())
+
+    async def events():
+        async for kind, payload in stream_run(zone_name, run_id):
+            yield f'event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n'
+
+    return StreamingResponse(events(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @app.get('/zones')

@@ -210,8 +210,10 @@ def _trace(result, prompt, role, requested_model):
 
 
 async def generate(prompt, system=None, *, json_mode=False, role='json', run_id=None,
-                   sample_fn=None) -> dict:
+                   sample_fn=None, model=None) -> dict:
     """Generate via Nightshift first; return honest provider/model provenance.
+
+    model, if given, is the Nightshift model to request instead of METERLESS_MODEL.
 
     sample_fn(prompt, system), if given, supplies the sample result (a dict in
     JSON mode, a str otherwise) when SAMPLE_MODE is on or every provider fails.
@@ -225,7 +227,7 @@ async def generate(prompt, system=None, *, json_mode=False, role='json', run_id=
     started = time.monotonic()
     deadline = started + GENERATE_BUDGET_S
     reasons, result, provider = [], None, 'sample'
-    requested_model = _setting('METERLESS_MODEL', 'MODEL_NAME', DEFAULT_MODEL)
+    requested_model = model or _setting('METERLESS_MODEL', 'MODEL_NAME', DEFAULT_MODEL)
     if _env('SAMPLE_MODE').lower() == 'true':
         reasons.append('SAMPLE_MODE=true')
     else:

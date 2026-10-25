@@ -270,18 +270,6 @@ def test_default_trace_path_and_safe_run_id(monkeypatch, tmp_path):
         asyncio.run(generator.generate('test', run_id='../outside'))
 
 
-@pytest.mark.parametrize('provider', [None, 'auto', 'nvidia', 'openrouter'])
-def test_llm_ask_json_unchanged_without_opt_in(monkeypatch, provider):
-    from app.core import judge
-    if provider:
-        monkeypatch.setenv('LLM_PROVIDER', provider)
-    cascade = AsyncMock(return_value=({'ports': []}, 'nvidia-gpt-oss'))
-    monkeypatch.setattr(judge, 'complete_json_cascade', cascade)
-    monkeypatch.setattr(generator, 'generate', AsyncMock(side_effect=AssertionError('Must not use generator')))
-    settings = {'custom': 'setting'}
-    assert asyncio.run(llm.ask_json('prompt', 'system', settings, max_tokens=123, role='extract')) == {'ports': []}
-    cascade.assert_awaited_once_with('system', 'prompt', settings, role='extract', max_tokens=123, log=None)
-
 
 @pytest.mark.skipif(os.environ.get('NIGHTSHIFT_LIVE') != '1', reason='Set NIGHTSHIFT_LIVE=1 for local Nightshift')
 def test_live_nightshift_nemotron(monkeypatch):
@@ -294,30 +282,7 @@ def test_live_nightshift_nemotron(monkeypatch):
     assert result['parsed']['ports'][0]['name'].lower() == 'papeete'
 
 
-@pytest.mark.parametrize('entrypoint', ['ask_json', 'ask_json_tracked', 'ask_text'])
-def test_llm_meterless_opt_in(monkeypatch, entrypoint):
-    monkeypatch.setenv('LLM_PROVIDER', 'meterless')
-    generated = AsyncMock(return_value=dict(text='answer', parsed={'ports': []}, provider='nightshift'))
-    monkeypatch.setattr(generator, 'generate', generated)
-    function = getattr(llm, entrypoint)
-    result = asyncio.run(function('prompt', 'system'))
-    if entrypoint == 'ask_text':
-        assert result == 'answer'
-        generated.assert_awaited_once_with('prompt', 'system', role='text')
-    else:
-        assert result == (({'ports': []}, 'nightshift') if entrypoint == 'ask_json_tracked' else {'ports': []})
-        generated.assert_awaited_once_with('prompt', 'system', json_mode=True, role='json')
 
-
-def test_llm_text_default_preserves_nvidia_route(monkeypatch):
-    from app.core import nvidia
-    monkeypatch.setattr(nvidia, 'nvidia_enabled', lambda settings: True)
-    complete = AsyncMock(return_value='original nvidia response')
-    monkeypatch.setattr(nvidia, 'complete_text_nvidia', complete)
-    monkeypatch.setattr(generator, 'generate', AsyncMock(side_effect=AssertionError('Must not use generator')))
-    settings = {'custom': 'setting'}
-    assert asyncio.run(llm.ask_text('prompt', 'system', settings, max_tokens=55)) == 'original nvidia response'
-    complete.assert_awaited_once_with('system', 'prompt', settings, max_tokens=55)
 
 
 def test_official_env_names_and_default_model(transport, monkeypatch, isolated_environment):
@@ -436,3 +401,90 @@ def test_sample_fn_wrong_type_is_rejected(json_mode, value, monkeypatch):
     monkeypatch.setenv('SAMPLE_MODE', 'true')
     with pytest.raises(TypeError, match='sample_fn'):
         run(json_mode=json_mode, sample_fn=lambda prompt, system: value)
+
+
+def served(provider='nightshift', model='nvidia/nemotron-3-super-120b-a12b', **extra):
+    return {**dict(text='answer', parsed={'ports': [{'name': 'Papeete'}]}, provider=provider, model=model), **extra}
+
+
+@pytest.mark.parametrize('role, expected_model', [('json', 'nvidia/nemotron-3-super-120b-a12b'),
+                                                   ('judge', 'nvidia/nemotron-3-ultra-550b-a55b'),
+                                                   ('filter', 'nvidia/nemotron-3.5-lightning-30b-a3b')])
+def test_llm_ask_json_goes_through_nightshift_first(monkeypatch, role, expected_model):
+    monkeypatch.delenv('METERLESS_MODEL', raising=False)
+    generated = AsyncMock(return_value=served(model=expected_model))
+    monkeypatch.setattr(generator, 'generate', generated)
+    data, engine = asyncio.run(llm.ask_json_tracked('prompt', 'system', role=role))
+    assert data == {'ports': [{'name': 'Papeete'}]}
+    assert engine == 'nightshift-' + expected_model.split('/')[-1]
+    generated.assert_awaited_once_with('prompt', 'system', json_mode=True, role=role,
+                                       run_id=llm.LLM_TRACE_RUN_ID, model=expected_model)
+
+
+def test_llm_meterless_model_env_overrides_the_role_model(monkeypatch):
+    monkeypatch.setenv('METERLESS_MODEL', 'nvidia/nemotron-3.5-lightning-30b-a3b')
+    generated = AsyncMock(return_value=served())
+    monkeypatch.setattr(generator, 'generate', generated)
+    asyncio.run(llm.ask_json('prompt', 'system', role='judge'))
+    assert generated.await_args.kwargs['model'] == 'nvidia/nemotron-3.5-lightning-30b-a3b'
+
+
+def test_llm_sample_generator_result_falls_back_to_nim_then_cascade(monkeypatch):
+    from app.core import judge, nvidia
+    monkeypatch.setattr(generator, 'generate', AsyncMock(return_value=served(
+        provider='sample', model='deterministic-heuristic', fallback_reason='nightshift: offline')))
+    # NIM role chain: first model fails, second answers with (data, served_model).
+    nim = AsyncMock(side_effect=[RuntimeError('http_503'), ({'ports': []}, 'openai/gpt-oss-20b')])
+    monkeypatch.setattr(nvidia, 'get_nvidia_key', lambda settings=None: 'test-key')
+    monkeypatch.setattr(nvidia, 'complete_json_nvidia_tracked', nim)
+    cascade = AsyncMock(side_effect=AssertionError('NIM answered; cascade not needed'))
+    monkeypatch.setattr(judge, 'complete_json_cascade', cascade)
+    data, engine = asyncio.run(llm.ask_json_tracked('prompt', 'system', role='json'))
+    assert data == {'ports': []} and engine == 'nvidia-nim-gpt-oss-20b'  # a dict, never the tuple
+
+
+def test_llm_without_nightshift_or_nim_uses_the_old_cascade(monkeypatch):
+    from app.core import judge, nvidia
+    monkeypatch.setattr(generator, 'generate', AsyncMock(return_value=served(provider='sample')))
+    monkeypatch.setattr(nvidia, 'get_nvidia_key', lambda settings=None: '')
+    cascade = AsyncMock(return_value=({'ports': []}, 'openrouter'))
+    monkeypatch.setattr(judge, 'complete_json_cascade', cascade)
+    settings = {'custom': 'setting'}
+    assert asyncio.run(llm.ask_json('prompt', 'system', settings, max_tokens=123, role='extract')) == {'ports': []}
+    cascade.assert_awaited_once_with('system', 'prompt', settings, role='extract', max_tokens=123, log=None)
+
+
+def test_llm_text_nightshift_first_then_nvidia(monkeypatch):
+    from app.core import nvidia
+    monkeypatch.setattr(generator, 'generate', AsyncMock(return_value=served(provider='nightshift')))
+    assert asyncio.run(llm.ask_text('prompt', 'system')) == 'answer'
+    monkeypatch.setattr(generator, 'generate', AsyncMock(return_value=served(provider='sample')))
+    monkeypatch.setattr(nvidia, 'nvidia_enabled', lambda settings: True)
+    complete = AsyncMock(return_value='original nvidia response')
+    monkeypatch.setattr(nvidia, 'complete_text_nvidia', complete)
+    settings = {'custom': 'setting'}
+    assert asyncio.run(llm.ask_text('prompt', 'system', settings, max_tokens=55)) == 'original nvidia response'
+    complete.assert_awaited_once_with('system', 'prompt', settings, max_tokens=55)
+
+
+def test_extract_ports_uses_nightshift_and_labels_the_engine(monkeypatch):
+    monkeypatch.setattr(generator, 'generate', AsyncMock(return_value=served(
+        parsed={'ports': [{'name': 'Papeete', 'city': 'Papeete'}]}, model='nvidia/nemotron-3-super-120b-a12b')))
+    ports = asyncio.run(llm.extract_ports('Papeete is the port of entry.', {'name': 'French Polynesia'}, settings={}))
+    assert [p['name'] for p in ports] == ['Papeete']
+    assert ports[0]['extraction_engine'] == 'nightshift'
+    assert ports[0]['extraction_model'] == 'nvidia/nemotron-3-super-120b-a12b'
+
+
+def test_model_argument_overrides_meterless_model(transport, isolated_environment, monkeypatch):
+    monkeypatch.setenv('METERLESS_MODEL', 'meterless/fast')
+    def handler(request):
+        if request.method == 'GET':
+            return httpx.Response(200, json={'data': []})
+        assert json.loads(request.content)['model'] == 'nvidia/nemotron-3-ultra-550b-a55b'
+        return answer(model='nvidia/nemotron-3-ultra-550b-a55b')
+    transport(handler)
+    result = run(model='nvidia/nemotron-3-ultra-550b-a55b')
+    assert result['provider'] == 'nightshift'
+    entry = json.loads(isolated_environment.read_text())
+    assert entry['requested_model'] == entry['served_model'] == 'nvidia/nemotron-3-ultra-550b-a55b'

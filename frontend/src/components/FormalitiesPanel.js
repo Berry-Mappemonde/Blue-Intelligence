@@ -27,7 +27,7 @@ const flagEmoji = (iso2) => {
   return String.fromCodePoint(0x1f1e6 + cc.charCodeAt(0) - 65, 0x1f1e6 + cc.charCodeAt(1) - 65);
 };
 
-export default function FormalitiesPanel({ t, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort }) {
+export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -142,7 +142,7 @@ export default function FormalitiesPanel({ t, zones, zonesLoading, selectedZone,
 
       {(selectedZone || ficheLoading) && (
         <div className="shrink-0 max-h-[46%] overflow-y-auto border-b border-line">
-          <ZoneFiche t={t} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} />
+          <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} />
         </div>
       )}
 

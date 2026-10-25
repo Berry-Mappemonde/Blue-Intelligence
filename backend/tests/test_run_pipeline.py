@@ -19,8 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIRST_INPUT = sorted((REPO_ROOT / 'input_examples').glob('*.json'))[0]
 AGENTS = {'ZetarisAdapter', 'HMemAgent', 'EvaluatorAgent', 'ResearchAgent', 'BriefingAgent', 'MeterlessGenerator'}
 OUTPUT_KEYS = {'run_id', 'zone', 'mode', 'ports', 'summary', 'brief', 'llm', 'components', 'retries',
-               'memory', 'trace_file', 'timings_ms', 'error'}
-PORT_KEYS = {'name', 'verdict', 'confidence', 'reasons_en', 'sources', 'memories_recalled', 'research'}
+               'memory', 'trace_file', 'timings_ms', 'error', 'registry'}
+PORT_KEYS = {'name', 'verdict', 'confidence', 'lat', 'lon', 'reasons_en', 'sources', 'memories_recalled', 'research',
+             'registry'}
 _CREDENTIAL_ENV = ('ZETARIS_API_KEY', 'ZETARIS_ORG_ID', 'ZETARIS_REST_URL', 'METERLESS_BASE_URL',
                    'METERLESS_RUNTIME_TOKEN', 'METERLESS_MODEL', 'MODEL_BASE_URL', 'MODEL_API_KEY',
                    'MODEL_NAME', 'NVIDIA_API_KEY')
@@ -80,13 +81,38 @@ def test_fresh_clone_cli_succeeds_in_sample_mode(cli_runs):
     assert 'SAMPLE_MODE enabled automatically' in proc.stderr
     assert_schema(result)
     assert result['error'] is None and result['mode'] == 'sample'
-    assert result['components'] == {'zetaris': 'sample', 'llm': 'sample'}
+    assert result['components'] == {'zetaris': 'sample', 'registry': 'sample', 'llm': 'sample'}
     assert result['llm']['model'] == 'caller-sample-fn'
     # stdout: JSONL trace events, then the same result as pretty JSON.
     lines = proc.stdout.splitlines()
     start = lines.index('{')
     assert all(json.loads(line)['run_id'] == result['run_id'] for line in lines[:start])
     assert json.loads('\n'.join(lines[start:])) == result
+
+
+@pytest.mark.parametrize('cwd, script', [('repo', 'backend/run.py'), ('backend', 'run.py')])
+def test_fresh_clone_cli_zone_interface(cwd, script, tmp_path):
+    """--zone / --run-id / --sample-mode / --timeout / --trace, from a clean env, from either directory."""
+    trace = tmp_path / 'zone.trace.jsonl'
+    env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(tmp_path), 'HMEM_DIR': str(tmp_path / 'hmem')}
+    proc = subprocess.run(
+        [sys.executable, script, '--no-dotenv', '--zone', 'Angola', '--run-id', 'cli-zone', '--sample-mode',
+         '--timeout', '60', '--trace', str(trace)],
+        cwd=REPO_ROOT if cwd == 'repo' else REPO_ROOT / 'backend', env=env, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()
+    result = json.loads('\n'.join(lines[lines.index('{'):]))
+    assert_schema(result)
+    assert result['run_id'] == 'cli-zone' and result['zone'] == 'Angola' and result['mode'] == 'sample'
+    assert 'Pipeline Result' in proc.stderr and 'Run ID:   cli-zone' in proc.stderr  # summary on stderr
+    assert {r['run_id'] for r in trace_rows(trace)} == {'cli-zone'}
+
+
+def test_cli_rejects_bad_zone_input(tmp_path):
+    env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(tmp_path)}
+    proc = subprocess.run([sys.executable, 'backend/run.py', '--no-dotenv', '--zone', 'Angola', '--run-id', '../x'],
+                          cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 2 and 'Invalid input' in proc.stderr
 
 
 def test_trace_has_every_agent_one_run_id_and_retry(cli_runs):
@@ -153,9 +179,13 @@ def test_zetaris_live_failure_falls_back_to_sample(monkeypatch, isolated):
     assert result['error'] is None and result['ports']
     assert result['components']['zetaris'] == 'fallback' and result['mode'] == 'sample'
     assert result['llm']['provider'] == 'sample'
+    assert result['components']['registry'] == 'fallback'
     rows = trace_rows(isolated / 'trace.jsonl')
-    statuses = [r.get('status') for r in rows if r['agent_name'] == 'ZetarisAdapter']
-    assert statuses == ['error', 'fallback', 'ok']
+    events = [(r['action'], r.get('status')) for r in rows if r['agent_name'] == 'ZetarisAdapter']
+    # One wait on the dead server: the registry step reuses the outage and reads the fixtures.
+    assert events == [('zetaris_query', 'error'), ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'),
+                      ('zetaris_fallback', 'fallback'), ('zetaris_query', 'ok'), ('zetaris_query', 'ok'),
+                      ('registry_check', 'tier_registered')]
     assert 'test-key' not in (isolated / 'trace.jsonl').read_text()
 
 
@@ -213,14 +243,76 @@ def test_live_brief_served_by_nemotron(monkeypatch):
     assert 'Luanda' in result['brief']
 
 
-def test_demo_page_is_self_contained_html():
+def test_demo_page_serves_with_pinned_map_library_and_offline_fallback():
+    import re
     response = TestClient(app).get('/')
     assert response.status_code == 200 and response.headers['content-type'].startswith('text/html')
     page = response.text
     assert '<title>PoE Reconciler</title>' in page
-    assert "api('/zones')" in page and "api('/run'" in page and '/trace' in page
-    assert 'src="http' not in page and 'href="http' not in page  # no CDN or remote assets
-    assert '<script src=' not in page and '<link rel="stylesheet"' not in page  # no external assets
+    assert "api('/zones')" in page and "new EventSource('/run/stream?zone='" in page
+    # Only the pinned Leaflet build (with SRI) and OSM tiles are remote; no static <script src> or stylesheet.
+    remote = set(re.findall(r"https://[^'\"\s)]+", page)) - {'https://www.openstreetmap.org/copyright'}
+    assert remote == {'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+                      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
+    assert page.count('sha256-') == 2
+    assert '<script src=' not in page and '<link rel="stylesheet"' not in page
+    assert 'function svgPlot' in page  # offline chart when Leaflet or tiles are unavailable
+
+
+def _sse(response):
+    """Parse a text/event-stream body into [(event, data), ...]."""
+    events, kind, data = [], None, []
+    for line in response.iter_lines():
+        if line.startswith('event: '):
+            kind = line[7:]
+        elif line.startswith('data: '):
+            data.append(line[6:])
+        elif line == '' and kind:
+            events.append((kind, json.loads('\n'.join(data))))
+            kind, data = None, []
+    return events
+
+
+def test_run_stream_emits_trace_in_order_then_result(isolated):
+    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Bermuda', 'run_id': 'sse-1'}) as response:
+        assert response.status_code == 200
+        assert response.headers['content-type'].startswith('text/event-stream')
+        events = _sse(response)
+    kinds = [kind for kind, _ in events]
+    assert kinds[-1] == 'result' and set(kinds[:-1]) == {'trace'}
+    trace = [data for kind, data in events if kind == 'trace']
+    assert {e['run_id'] for e in trace} == {'sse-1'}
+    assert trace[0]['action'] == 'run_start' and trace[-1]['action'] == 'run_end'
+    assert trace == pipeline.load_trace('sse-1')  # same events, same order as the trace file
+    assert [e['timestamp'] for e in trace] == sorted(e['timestamp'] for e in trace)
+    assert AGENTS <= {e['agent_name'] for e in trace}
+    result = events[-1][1]
+    assert_schema(result)
+    assert result['run_id'] == 'sse-1' and result['error'] is None
+
+
+def test_run_stream_generates_run_id_and_filters_shared_trace_file(isolated):
+    client = TestClient(app)
+    client.post('/run', json={'zone_name': 'Angola', 'run_id': 'other-run'})  # same TRACE_LOG_PATH
+    with client.stream('GET', '/run/stream', params={'zone': 'Angola'}) as response:
+        events = _sse(response)
+    run_id = events[-1][1]['run_id']
+    assert run_id and {d['run_id'] for k, d in events if k == 'trace'} == {run_id}
+
+
+def test_run_stream_rejects_bad_input():
+    client = TestClient(app)
+    assert client.get('/run/stream').status_code == 422
+    assert client.get('/run/stream', params={'zone': ''}).status_code == 422
+    assert client.get('/run/stream', params={'zone': 'Bermuda', 'run_id': '../x'}).status_code == 422
+
+
+def test_run_stream_unknown_zone_ends_with_error_result():
+    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Atlantis'}) as response:
+        events = _sse(response)
+    assert events[-1][0] == 'result' and 'no ports of entry' in events[-1][1]['error']
+    assert [d['action'] for k, d in events if k == 'trace'][-1] == 'run_end'
 
 
 def test_zones_in_sample_mode():

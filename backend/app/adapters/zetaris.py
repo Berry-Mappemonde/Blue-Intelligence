@@ -36,6 +36,7 @@ from collections.abc import Callable
 import httpx
 
 from app.core import paths
+from app.adapters.registry_sources import UNLOCODE_COLUMNS, WPI_COLUMNS
 
 DEFAULT_TRACE_LOG_DIR = paths.LOGS_DIR
 SAMPLE_DIR = paths.SAMPLE_DATA_DIR / "zetaris"
@@ -54,6 +55,27 @@ _PORT_SELECT = (
     "SELECT name, lat, lon, to_json(source_urls) AS source_urls, validated, "
     "geocode_source, zone_name, mrgid, id FROM blue_intel.poe_ports"
 )
+
+
+_REGISTRIES = {
+    "unlocode": ("blue_intel.unlocode_ports", UNLOCODE_COLUMNS),
+    "wpi": ("blue_intel.wpi_ports", WPI_COLUMNS),
+}
+
+
+def _valid_bbox(bbox) -> tuple[float, float, float, float]:
+    """(min_lat, min_lon, max_lat, max_lon) of finite, ordered, in-range floats."""
+    if not isinstance(bbox, (tuple, list)) or len(bbox) != 4 or any(isinstance(v, bool) for v in bbox):
+        raise ValueError("bbox must be (min_lat, min_lon, max_lat, max_lon)")
+    try:
+        min_lat, min_lon, max_lat, max_lon = (float(v) for v in bbox)
+    except (TypeError, ValueError):
+        raise ValueError("bbox values must be numbers") from None
+    values = (min_lat, min_lon, max_lat, max_lon)
+    if (not all(math.isfinite(v) for v in values) or not -90 <= min_lat <= max_lat <= 90
+            or not -180 <= min_lon <= max_lon <= 180):
+        raise ValueError("bbox must be finite, ordered and within latitude/longitude ranges")
+    return values
 
 
 class ReadOnlyViolation(ValueError):
@@ -218,6 +240,72 @@ class ZetarisClient:
             raise ZetarisUnavailable("PoE response contains invalid field values") from None
         return port
 
+    def get_registry_ports(self, country_iso2: str | None = None, bbox: tuple | None = None,
+                           source: str = "unlocode", limit: int = 5000) -> list[dict]:
+        """Read independent registry ports (UN/LOCODE or WPI) through Zetaris.
+
+        country_iso2: two letters. bbox: (min_lat, min_lon, max_lat, max_lon), finite and
+        ordered (no antimeridian wrap). Both are validated before entering SQL; the country
+        literal can only be two ASCII letters and the bounds are formatted as decimals.
+        """
+        if source not in _REGISTRIES:
+            raise ValueError("source must be 'unlocode' or 'wpi'")
+        view, columns = _REGISTRIES[source]
+        conditions = []
+        if country_iso2 is not None:
+            if not isinstance(country_iso2, str) or not re.fullmatch(r"[A-Za-z]{2}", country_iso2):
+                raise ValueError("country_iso2 must be two letters")
+            country_iso2 = country_iso2.upper()
+            conditions.append(f"country_iso2 = '{country_iso2}'")
+        if bbox is not None:
+            bbox = _valid_bbox(bbox)
+            min_lat, min_lon, max_lat, max_lon = bbox
+            conditions.append(f"lat BETWEEN {min_lat:.6f} AND {max_lat:.6f} "
+                              f"AND lon BETWEEN {min_lon:.6f} AND {max_lon:.6f}")
+        sql = f"SELECT {', '.join(columns)} FROM {view}"
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+
+        def matches(row: list) -> bool:
+            entry = self._registry_dict(columns, row)
+            if country_iso2 is not None and entry["country_iso2"] != country_iso2:
+                return False
+            if bbox is not None:
+                if entry["lat"] is None or entry["lon"] is None:
+                    return False
+                return bbox[0] <= entry["lat"] <= bbox[2] and bbox[1] <= entry["lon"] <= bbox[3]
+            return True
+
+        rows = self.query(sql, limit=limit, fixture=f"{source}_ports", _sample_filter=matches)
+        return [dict(self._registry_dict(columns, row), source=source) for row in rows]
+
+    @staticmethod
+    def _registry_dict(columns: tuple[str, ...], row: list) -> dict:
+        """String REST cells -> typed dict; 'null' / '' become None, lat/lon floats."""
+        if len(row) != len(columns):
+            raise ZetarisUnavailable("Registry response has an unexpected number of columns")
+        entry = {}
+        for column, cell in zip(columns, row):
+            value = None if cell is None or str(cell).strip() in ("", "null") else cell
+            if column in ("lat", "lon") and value is not None:
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    raise ZetarisUnavailable("Registry response contains an invalid coordinate") from None
+                if not math.isfinite(value) or abs(value) > (90 if column == "lat" else 180):
+                    raise ZetarisUnavailable("Registry response contains an invalid coordinate")
+            elif value is not None:
+                value = str(value)
+            entry[column] = value
+        return entry
+
+    def trace_event(self, action: str, status: str = "ok", **fields) -> None:
+        """Write a ZetarisAdapter event (e.g. a registry check) to this run's trace."""
+        self._write_trace({
+            "timestamp": datetime.now(timezone.utc).isoformat(), "agent_name": "ZetarisAdapter",
+            "run_id": self.run_id, "action": action, "mode": self.mode, "status": status, **fields,
+        })
+
     def test_connection(self) -> dict:
         """Probe SQL execution and database discovery; return a safe status report."""
         try:
@@ -307,6 +395,9 @@ class ZetarisClient:
             "mode": self.mode,
             "status": status,
         }
+        self._write_trace(entry)
+
+    def _write_trace(self, entry: dict) -> None:
         line = json.dumps(entry, ensure_ascii=False) + "\n"
         # Redact the complete serialized entry too (e.g. a caller-supplied run ID).
         if self._api_key:

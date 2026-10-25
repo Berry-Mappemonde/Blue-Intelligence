@@ -1,7 +1,7 @@
 """Runnable PoE verification pipeline: one zone in, verified ports and a brief out.
 
-ZetarisAdapter.get_ports -> HMemAgent.recall -> EvaluatorAgent.evaluate
-  -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
+ZetarisAdapter.get_ports -> ZetarisAdapter.registry_check -> HMemAgent.recall
+  -> EvaluatorAgent.evaluate -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
   -> finalise -> BriefingAgent -> HMemAgent.remember
 
 Plain Python: LangGraph is not a dependency of this repository. Every step shares
@@ -14,6 +14,9 @@ source a previous run verified for that same port, tagged provenance "hmem".
 BriefingAgent makes Nightshift load-bearing: the sailor-facing brief is generated
 through Meterless (Nemotron when the route serves it), and its sample fallback
 builds the same brief deterministically from the finalised port data.
+The registry check tiers each candidate with official-source evidence (needs fetched
+document text, which seed ports do not carry) and UN/LOCODE / World Port Index matches
+held in Zetaris (app/agents/registry_check.py), independent of BI's own seed data.
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
+from app.agents import registry_check
 from app.agents.evaluator import (
     RETRY_LIMIT, evaluate, finalise, is_official_source, prepare_retry,
     route_after_evaluation,
@@ -99,6 +103,14 @@ def fetch_ports(zone_name: str, run_id: str) -> tuple[list[dict], str]:
         return fallback.get_ports(zone_name=zone_name), 'fallback'
 
 
+def check_registries(ports: list[dict], zone_name: str, run_id: str,
+                     zetaris_mode: str | None = None) -> tuple[list[dict], dict]:
+    """Registry check step: UN/LOCODE + WPI evidence on every candidate port."""
+    mrgid = next((p.get('mrgid') for p in ports if p.get('mrgid') is not None), None)
+    return registry_check.check_ports(ports, dict(name=zone_name, mrgid=mrgid), run_id,
+                                      live_failed=zetaris_mode == 'fallback')
+
+
 def list_zones() -> dict:
     """Zones the current mode can run: live Zetaris, or the sample fixture as fallback."""
     client = ZetarisClient(run_id='zones')
@@ -136,7 +148,7 @@ def load_trace(run_id: str) -> list[dict]:
     return events
 
 
-def _remembered_official_sources(memories: list[dict]) -> list[tuple[str, str]]:
+def remembered_official_sources(memories: list[dict]) -> list[tuple[str, str]]:
     """(url, memory_id) for official sources in recalled verdicts, active ones first."""
     found: list[tuple[str, str]] = []
     for memory in sorted(memories, key=lambda m: m.get('supersededBy') is not None):
@@ -154,7 +166,7 @@ def research(state: dict) -> dict:
         port = dict(raw)
         if port.get('verdict') == 'retry':
             urls = list(port.get('source_urls') or [])
-            remembered = _remembered_official_sources(port.get('memory') or [])
+            remembered = remembered_official_sources(port.get('memory') or [])
             new = [(url, memory_id) for url, memory_id in remembered if url not in urls]
             if new:
                 url, memory_id = new[0]
@@ -190,9 +202,16 @@ def _brief_rows(ports: list[dict]) -> list[dict]:
             why.append('no government source')
         rows.append(dict(
             name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'), why=why,
+            tier=_tier_text(port),
             sources=[u + (' (from verification memory)' if provenance.get(u) == 'hmem' else '')
                      for u in port.get('source_urls') or []]))
     return rows
+
+
+def _tier_text(port: dict) -> str | None:
+    """The registry check's first reason: the tier and why (None before the check ran)."""
+    reasons = (port.get('registry') or {}).get('reasons') or []
+    return reasons[0] if reasons else None
 
 
 def sample_brief(zone_name: str, ports: list[dict]) -> str:
@@ -203,12 +222,16 @@ def sample_brief(zone_name: str, ports: list[dict]) -> str:
     lines = [f'Clearance brief: {zone_name}']
     lines.append('Confirmed ports of entry:' + ('' if confirmed else ' none confirmed in this run.'))
     for r in confirmed:
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100). Sources: {', '.join(r['sources'])}")
+        tier = f" {r['tier']}." if r['tier'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100).{tier} "
+                     f"Sources: {', '.join(r['sources'])}")
     if flagged:
         lines.append('Flagged, verify before relying on them:')
     for r in flagged:
         sources = ', '.join(r['sources']) or 'no source on record'
-        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}. Sources: {sources}")
+        tier = f" {r['tier']}." if r['tier'] else ''
+        lines.append(f"- {r['name']} (confidence {r['confidence']}/100): {'; '.join(r['why'])}.{tier} "
+                     f"Sources: {sources}")
     lines.append(DISCLAIMER)
     return '\n'.join(lines)
 
@@ -217,7 +240,9 @@ def brief_prompt(zone_name: str, ports: list[dict]) -> str:
     return (f'Zone: {zone_name}\nFinalised ports (JSON):\n'
             f'{json.dumps(_brief_rows(ports), ensure_ascii=False)}\n'
             'Write the brief: which ports are confirmed (verdict "pass"), which are flagged and why, '
-            f'each with its sources. End with: "{DISCLAIMER}"')
+            'each with its sources and its evidence tier (state the tier as given; a registry listing '
+            'alone is not port-of-entry status). '
+            f'End with: "{DISCLAIMER}"')
 
 
 async def write_brief(state: dict, zone_name: str) -> dict:
@@ -283,6 +308,9 @@ async def _run(ctx: dict) -> None:
     if not ports:
         ctx['error'] = f'no ports of entry found for zone {zone_name!r}'
         return
+    ports, ctx['registry'] = await _step(ctx, 'ZetarisAdapter.registry_check', check_registries,
+                                         ports, zone_name, run_id, ctx['zetaris_mode'])
+    state = ctx['state'] = {'run_id': run_id, 'ports': ports}
     state = ctx['state'] = await _step(ctx, 'HMemAgent.recall', recall_node, state)
     state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.evaluate', evaluate, state)
     for _ in range(RETRY_LIMIT):  # route_after_evaluation also enforces the cap
@@ -303,10 +331,12 @@ async def _run(ctx: dict) -> None:
 def _port_out(port: dict) -> dict:
     provenance = port.get('source_provenance') or {}
     return dict(name=port.get('name'), verdict=port.get('verdict'), confidence=port.get('confidence'),
+                lat=port.get('lat'), lon=port.get('lon'),
                 reasons_en=list(port.get('reasons_en') or []),
                 sources=[dict(url=u, provenance=provenance.get(u, 'zetaris'))
                          for u in port.get('source_urls') or []],
-                memories_recalled=len(port.get('memory') or []), research=port.get('research'))
+                memories_recalled=len(port.get('memory') or []), research=port.get('research'),
+                registry=port.get('registry'))
 
 
 def _display_path(path: Path) -> str:
@@ -330,7 +360,9 @@ def _result(ctx: dict, total_ms: float) -> dict:
         ports=ports, summary=summary, brief=brief.get('text'),
         llm=dict(provider=brief.get('provider'), model=brief.get('model'),
                  fallback_reason=brief.get('fallback_reason')),
-        components=dict(zetaris=zetaris_mode, llm=brief.get('provider')),
+        components=dict(zetaris=zetaris_mode, registry=(ctx.get('registry') or {}).get('mode'),
+                        llm=brief.get('provider')),
+        registry=ctx.get('registry'),
         retries=int(state.get('retry_count') or 0),
         memory=dict(recalled=sum(p['memories_recalled'] for p in ports),
                     remembered=bool(ctx.get('remembered'))),
@@ -362,3 +394,35 @@ async def run_pipeline(zone_name: str, run_id: str | None = None, *,
                                  status='error' if result['error'] else 'ok', error=result['error'],
                                  summary=result['summary'], timings_ms=result['timings_ms'])])
     return result
+
+
+async def stream_run(zone_name: str, run_id: str, *, poll_s: float = 0.05):
+    """Run the pipeline and yield ('trace', event) as each agent writes it, then ('result', result).
+
+    Agents append to the run's trace file; this tails it from the current end,
+    keeps only this run_id (TRACE_LOG_PATH may be shared) and reads once more
+    after the run finishes, so no event is lost.
+    """
+    path = trace_path(run_id)
+    offset = path.stat().st_size if path.is_file() else 0
+    task = asyncio.create_task(run_pipeline(zone_name, run_id))
+    pending = b''
+    while True:
+        finished = task.done()
+        if path.is_file():
+            with path.open('rb') as stream:
+                stream.seek(offset)
+                chunk = stream.read()
+            offset += len(chunk)
+            *lines, pending = (pending + chunk).split(b'\n')
+            for line in lines:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(event, dict) and event.get('run_id') == run_id:
+                    yield 'trace', event
+        if finished:
+            break
+        await asyncio.sleep(poll_s)
+    yield 'result', task.result()

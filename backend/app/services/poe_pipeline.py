@@ -45,8 +45,12 @@ from app.core.extract import (
     official_attachments, serp_filter, should_follow_attachments,
 )
 from app.core.geo import classify_poe_point, geocode_port_dual, inland_exception_flags
-from app.core.llm import extract_ports, grounded_search, llm_geocode_port
+from app.core.llm import (
+    LLM_CONTEXT_CHARS, extract_ports, grounded_search, llm_context_chars, llm_geocode_port,
+)
 from app.core.rag import select_list_context, semantic_similarity
+from app.adapters.zetaris import ZetarisClient
+from app.agents import registry_check
 from app.services.poe_confidence import apply_score, listing_role, score_port, zone_confidence_avg
 from app.services.poe_zone_label import (
     keep_extracted_in_zone, search_polygon_name, serp_place_name,
@@ -85,8 +89,9 @@ SEARX_PUBLIC_INSTANCES = [
     "https://search.sapti.me",
 ]
 
-# Our local process (see infra/searxng/). Not a vendor key.
-LOCAL_SEARXNG_URL = "http://127.0.0.1:8888"
+# Our local process (see infra/searxng/). Not a vendor key. Port 8890, because
+# Zetaris uses 8888-8889 on the same machine.
+LOCAL_SEARXNG_URL = "http://127.0.0.1:8890"
 
 PIPELINE_VARIANTS = ("v1", "v2", "tinyfish")
 _VARIANT_ALIASES = {
@@ -105,7 +110,7 @@ def normalize_variant(value: str | None) -> str:
 
 
 def configured_searxng_url() -> str:
-    """URL of our instance. SEARXNG_URL if set, otherwise loopback:8888."""
+    """URL of our instance. SEARXNG_URL if set, otherwise loopback:8890."""
     own = (os.environ.get("SEARXNG_URL") or "").strip().rstrip("/")
     return own or LOCAL_SEARXNG_URL
 
@@ -113,7 +118,7 @@ def configured_searxng_url() -> str:
 def searx_instances() -> list[str]:
     """Self-hosted SearXNG instance first, public instances as fallback.
 
-    If SEARXNG_URL is empty, still prefix http://127.0.0.1:8888
+    If SEARXNG_URL is empty, still prefix http://127.0.0.1:8890
     (without duplicating). Public instances remain as fallback.
     """
     own = configured_searxng_url()
@@ -1088,11 +1093,79 @@ async def fetch_and_parse(url: str, log) -> tuple[str | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
+# Zetaris validation & H-MEM integration
+# ---------------------------------------------------------------------------
+def zetaris_name_key(name: str | None) -> str:
+    """Matching key: casefold, no accents, no apostrophes or punctuation.
+
+    "Port of St. George's" == "Port of St. George’s"; "LUKA BRCKO" == "Luka Brčko".
+    """
+    return registry_check.name_key(name)
+
+
+async def validate_ports_zetaris(zone: dict | str, run_id: str, settings: dict | None = None,
+                                 candidates: list[dict] | None = None) -> dict:
+    """Independent registry entries (UN/LOCODE + World Port Index) for the zone, via Zetaris.
+
+    The zone resolves to a country ISO2 (its iso2, the EEZ index, or its sovereign);
+    without one, a box around the candidates' coordinates is queried instead. A live
+    Zetaris failure falls back to the sample fixtures (traced as zetaris_fallback). The
+    client is synchronous, so it runs in a worker thread.
+    Returns {mode, country_iso2, entries, registry_entries}.
+    """
+    registry = await asyncio.to_thread(registry_check.fetch_for_zone, zone, candidates or [], run_id)
+    return {**registry, "registry_entries": len(registry["entries"])}
+
+
+async def cross_reference_zetaris(ports: list[dict], zone: dict, zetaris_result: dict,
+                                  source_texts: dict[str, str] | None = None) -> list[dict]:
+    """Tier each port (see app.agents.registry_check): official-source evidence needs the
+    fetched text of an official URL to name the port (source_texts, {url: text}); registry
+    evidence is a same-country UN/LOCODE / WPI name match within 25 km. zetaris_validation
+    is "official" for tiers 1-2 only. Traces one registry_check per port.
+    """
+    run_id = zetaris_result.get("run_id") or f"poe-{zone.get('mrgid', 'zone')}-{uuid.uuid4().hex[:8]}"
+    ports, _ = await asyncio.to_thread(registry_check.annotate, ports, zetaris_result, run_id, source_texts)
+    return ports
+
+
+# ---------------------------------------------------------------------------
 # 4. Compared PARALLEL extraction: LLM (OpenRouter) ∥ local NER (spaCy)
 # ---------------------------------------------------------------------------
+def _pipeline_run_id(rec, zone: dict) -> str:
+    """Run id of the versioned run when recording, else a filename-safe one for traces."""
+    recorder = getattr(rec, "_rec", None)
+    run_id = getattr(recorder, "run_id", None)
+    return run_id or f"poe-{zone.get('mrgid', 'zone')}-{uuid.uuid4().hex[:8]}"
+
+
 async def extract_ports_llm(context: str, zone: dict, log, rec=None,
                             catalog_text: str | None = None,
                             settings: dict | None = None) -> list[dict]:
+    """Extract once (see ``_extract_ports_core``), then cross-reference Zetaris."""
+    ports = await _extract_ports_core(context, zone, log, rec=rec,
+                                      catalog_text=catalog_text, settings=settings)
+    run_id = _pipeline_run_id(rec, zone)
+    zetaris_result = await validate_ports_zetaris(zone, run_id, settings, candidates=ports)
+    # Fetched documents, as the "[SOURCE: url]" blocks of the raw collected text.
+    source_texts = registry_check.source_texts_from_context(catalog_text or context)
+    ports = await cross_reference_zetaris(ports, zone, {**zetaris_result, "run_id": run_id}, source_texts)
+    official = [p for p in ports if p.get("zetaris_validation") == "official"]
+    tiers = {t: [p["name"] for p in ports if p["registry"]["tier"] == t] for t in registry_check.TIER_LABELS}
+    log(f"Zetaris registries ({zetaris_result['mode']}, {zetaris_result['country_iso2'] or 'bbox'}): "
+        + ", ".join(f"{len(names)} {registry_check.TIER_LABELS[t]}" for t, names in tiers.items())
+        + f" ({len(source_texts)} fetched document(s) checked for official evidence)")
+    await emit(rec, "zetaris_crossref", mode=zetaris_result["mode"],
+               country_iso2=zetaris_result["country_iso2"],
+               registry_entries=zetaris_result["registry_entries"],
+               official_count=len(official), matched=[p["name"] for p in official],
+               tiers=tiers, documents_with_text=len(source_texts))
+    return ports
+
+
+async def _extract_ports_core(context: str, zone: dict, log, rec=None,
+                              catalog_text: str | None = None,
+                              settings: dict | None = None) -> list[dict]:
     """LLM and local NER run IN PARALLEL on the same context and their
     lists are compared port by port (no longer a simple fallback):
       - port seen by both → extraction_agreement=True (confidence signal);
@@ -1118,7 +1191,7 @@ async def extract_ports_llm(context: str, zone: dict, log, rec=None,
         log("catalogue marqué suffisant mais 0 port retenu — LLM non sauté")
 
     _KNOWN_ENGINES = (
-        "claude", "openrouter", "catalog", "ner",
+        "claude", "openrouter", "catalog", "ner", "nightshift",
         "nvidia-laguna", "nvidia-muse", "nvidia-kimi", "nvidia-deepseek",
         "nvidia-gpt-oss", "nvidia-gemma", "nvidia-minimax", "nvidia-nemotron",
         "nvidia-llama", "llm",
@@ -2117,6 +2190,37 @@ async def _haiku_tiebreak_zone(zone, rows, settings, log, rec) -> dict:
     return picks or {}
 
 
+# ---------------------------------------------------------------------------
+# H-MEM: prior verifications as evidence, outcomes remembered after scoring
+# ---------------------------------------------------------------------------
+PASS_CONFIDENCE = 60  # same threshold as EvaluatorAgent: pass above 60, else flag
+
+
+def _hmem_recall(docs: list[dict], run_id: str) -> list[list[dict]]:
+    """Prior verifications per port, through memory.py's locked engine (traced)."""
+    from app.agents.memory import recall_node
+    state = recall_node({"run_id": run_id, "ports": [
+        {"name": d["name"], "zone_name": d.get("zone_name")} for d in docs]})
+    return [p.get("memory") or [] for p in state["ports"]]
+
+
+def _hmem_remember(docs: list[dict], run_id: str) -> dict:
+    """Remember each scored port: reinforce an unchanged verdict, supersede a flip (traced)."""
+    from app.agents.evaluator import _reasons_en
+    from app.agents.memory import remember_node
+    state = remember_node({"run_id": run_id, "ports": [{
+        "name": d["name"], "zone_name": d.get("zone_name"),
+        "verdict": "pass" if (d.get("confidence") or 0) > PASS_CONFIDENCE else "flag",
+        "source_urls": d.get("source_urls") or [],
+        "reasons_en": _reasons_en(d.get("confidence_reasons") or []),
+    } for d in docs]})
+    outcomes: dict = {}
+    for entry in state["trace"]:
+        if entry.get("action") == "remember":
+            outcomes[entry["outcome"]] = outcomes.get(entry["outcome"], 0) + 1
+    return outcomes
+
+
 async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict], log,
                                rec=None, run=None, catalog_text: str | None = None,
                                settings: dict | None = None) -> list[dict]:
@@ -2233,6 +2337,7 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
         picks = await _haiku_tiebreak_zone(zone, disagreements, settings, log, rec)
 
     docs = []
+    built = []  # ports kept in this polygon, scored after the H-MEM recall below
     for row in rows:
         p, norm, geo, cands = row["port"], row["norm"], row["geo"], row["cands"]
         chosen, arbitration = _pick_from_cands(row, picks)
@@ -2287,11 +2392,39 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
             "extracted_at": now_iso(),
             "dedup_key": f"{mrgid}:{norm}",
         }
-        apply_score(doc, score_port(doc, official_source=official_source,
-                                    listing_ports=listing_ports))
         if run is not None:
             doc["run_id"] = run.run_id
             doc["pipeline_variant"] = getattr(run, "variant", None)
+        built.append((doc, p, geo, lat, lon, validated, dist_km, spatial_kind, arbitration))
+
+    # H-MEM before scoring: prior verifications of these ports, as evidence.
+    run_id = run.run_id if run is not None else f"poe-{mrgid}-{uuid.uuid4().hex[:8]}"
+    memories = [[] for _ in built]
+    if built:
+        try:
+            memories = await asyncio.to_thread(_hmem_recall, [b[0] for b in built], run_id)
+        except Exception as e:
+            log(f"H-MEM recall: {type(e).__name__}: {str(e)[:100]}")
+        await emit(rec, "hmem_recall", ports=len(built), memories=sum(len(m) for m in memories))
+
+    for (doc, p, geo, lat, lon, validated, dist_km, spatial_kind, arbitration), recalled in zip(built, memories):
+        port_official = official_source
+        if not official_source:
+            # Weak port (no State source in this zone's sources): reuse the official
+            # source a previous verification of this same port recorded.
+            from app.pipeline.run_pipeline import remembered_official_sources
+            fresh = [(u, mid) for u, mid in remembered_official_sources(recalled) if u not in doc["source_urls"]]
+            if fresh:
+                url, memory_id = fresh[0]
+                doc["source_urls"] = doc["source_urls"] + [url]
+                doc["source_provenance"] = {url: "hmem"}
+                doc["hmem_memory_id"] = memory_id
+                port_official = True
+                log(f"  H-MEM: {p['name']} → source officielle mémorisée réutilisée ({url})")
+                await emit(rec, "hmem_source_reused", port=p["name"], url=url, memory_id=memory_id)
+        doc["memories_recalled"] = len(recalled)
+        apply_score(doc, score_port(doc, official_source=port_official,
+                                    listing_ports=listing_ports))
         docs.append(doc)
         agree_note = ""
         if geo.get("agree") is True:
@@ -2315,6 +2448,15 @@ async def _extract_and_geocode(zone: dict, context: str, used_sources: list[dict
                    spatial_kind=spatial_kind, confidence=doc.get("confidence"),
                    extraction_agreement=p.get("extraction_agreement"),
                    geocode_agree=geo.get("agree"))
+
+    # H-MEM after scoring: remember each outcome (reinforce unchanged, supersede flips).
+    if docs:
+        try:
+            outcomes = await asyncio.to_thread(_hmem_remember, docs, run_id)
+            log(f"H-MEM: {outcomes}")
+            await emit(rec, "hmem_remember", outcomes=outcomes)
+        except Exception as e:
+            log(f"H-MEM remember: {type(e).__name__}: {str(e)[:100]}")
     return docs
 
 
@@ -2426,6 +2568,23 @@ async def _persist_zone(db, zone: dict, docs: list[dict], status: str,
     return await db.eez_zones.find_one({"mrgid": mrgid})
 
 
+CATALOG_CONTEXT_CHARS = 40000
+
+
+def extraction_context(raw: str, raw_catalog: list, rag_q: str) -> tuple[str, int, str]:
+    """Context for the LLM readers, the window they may send, and the branch that chose it.
+
+    A port catalog or legal phrasing keeps the raw text (the readers send up to 40,000
+    chars); longer text is condensed by RAG to 20,000; short text is sent as is.
+    """
+    if looks_like_port_catalog(raw) or raw_catalog:
+        return raw[:CATALOG_CONTEXT_CHARS], CATALOG_CONTEXT_CHARS, "catalog"
+    if len(raw) > 15000:
+        return (select_list_context(rag_q, raw, max_chars=LLM_CONTEXT_CHARS),
+                LLM_CONTEXT_CHARS, "rag")
+    return raw, LLM_CONTEXT_CHARS, "raw"
+
+
 async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                             run=None, refresh: bool = False) -> dict:
     """Orchestrator: search -> collect -> extract -> write.
@@ -2453,6 +2612,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
     variant = normalize_variant(getattr(run, "variant", None) if run is not None else "tinyfish")
     from app.core.extract import allow_tinyfish_fetch
     _tf_token = allow_tinyfish_fetch.set(variant == "tinyfish")
+    _ctx_token = llm_context_chars.set(LLM_CONTEXT_CHARS)
     log(f"=== {name} (mrgid {mrgid}) — variant={variant} whitelist: {', '.join(whitelist[:8]) or 'vide'}")
     await emit(rec, "zone_start", iso2=zone.get("iso2"), sov_iso2=zone.get("sov_iso2"),
                sovereign=zone.get("sovereign"), pol_type=zone.get("pol_type"),
@@ -2530,17 +2690,16 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                 await emit(rec, "seed_remembered", iso2=zone.get("iso2"), urls=remembered)
         rag_q = (f"official designated ports of entry customs gazette decree "
                  f"puertos habilitados puertos de entrada port of entry {name}")
-        if looks_like_port_catalog(raw) or raw_catalog:
-            context = raw[:40000]
+        context, window, branch = extraction_context(raw, raw_catalog, rag_q)
+        llm_context_chars.set(window)
+        sent_chars = min(len(context), window)
+        if branch == "catalog":
             log(f"catalogue / tournure légale ({len(raw_catalog)} nom(s)) — "
-                f"texte brut conservé pour le parseur, LLM sur {len(context)} chars")
-        elif len(raw) > 15000:
-            context = select_list_context(rag_q, raw, max_chars=20000)
+                f"texte brut conservé pour le parseur, LLM sur {sent_chars} chars")
+        elif branch == "rag":
             log(f"RAG: contexte condensé à {len(context)} chars (listes d'abord, puis similarité)")
-        else:
-            context = raw
         await emit(rec, "context", sources=len(texts), synthesis=bool(synthesis),
-                   raw_chars=raw_chars, final_chars=len(context),
+                   raw_chars=raw_chars, final_chars=len(context), llm_chars=sent_chars,
                    catalog_n=len(raw_catalog))
 
         # 4. Extraction + geocoding + spatial validation
@@ -2559,7 +2718,9 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                        query="(retry synthèse après 0 port)", retry=True,
                        n=0, synthesis_chars=len(syn_retry or ""))
             if syn_retry:
-                context_retry = f"{context}\n\n[SYNTHÈSE DE RECHERCHE (à recouper)]\n{syn_retry[:6000]}"
+                # Synthesis first: readers send only the start of the context (see
+                # llm_context_chars), so appended after a full context it was never read.
+                context_retry = f"[SYNTHÈSE DE RECHERCHE (à recouper)]\n{syn_retry[:6000]}\n\n{context}"
                 docs = await _extract_and_geocode(zone, context_retry, used_sources, log, rec, run,
                                                   catalog_text=context_retry, settings=settings)
                 if docs:
@@ -2587,6 +2748,7 @@ async def generate_zone_poe(db, mrgid: int, logger=None, force: bool = False,
                    duration_s=round(time.time() - t0, 1))
         raise
     finally:
+        llm_context_chars.reset(_ctx_token)
         allow_tinyfish_fetch.reset(_tf_token)
 
 
@@ -2625,6 +2787,8 @@ def zone_to_item(doc: dict) -> dict:
 
 
 def ports_to_geojson(docs: list[dict]) -> dict:
+    from app.agents.evaluator import _reasons_en
+
     feats = []
     for d in docs:
         if d.get("lat") is None or d.get("lon") is None:
@@ -2646,6 +2810,12 @@ def ports_to_geojson(docs: list[dict]) -> dict:
                 "spatial_anomaly": d.get("spatial_anomaly"),
                 "confidence": d.get("confidence"),
                 "confidence_reasons": d.get("confidence_reasons"),
+                "confidence_parts": d.get("confidence_parts"),
+                "reasons_en": (
+                    _reasons_en(d.get("confidence_reasons") or [])
+                    if d.get("confidence_reasons")
+                    else None
+                ),
                 "spatial_kind": d.get("spatial_kind"),
             },
         })

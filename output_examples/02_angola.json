@@ -7,6 +7,8 @@
       "name": "Porto de Luanda",
       "verdict": "flag",
       "confidence": 60,
+      "lat": -8.7912966,
+      "lon": 13.2719595,
       "reasons_en": [
         "government source",
         "single extractor",
@@ -24,13 +26,40 @@
         }
       ],
       "memories_recalled": 0,
-      "research": null
+      "research": null,
+      "registry": {
+        "tier": "tier_registered",
+        "label": "Registered port, entry status unverified",
+        "validation": "registered - entry status unverified",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "AOLAD",
+            "name": "Luanda",
+            "distance_km": null
+          },
+          {
+            "source": "wpi",
+            "code": "AOLAD",
+            "name": "Luanda",
+            "distance_km": 2.6,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Registered port, entry status unverified: listed in UN/LOCODE AOLAD, WPI AOLAD (2.6 km), but no fetched official document names it; a registry listing does not establish port-of-entry status",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      }
     }
   ],
   "summary": {
     "flag": 1
   },
-  "brief": "Clearance brief: Angola\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto de Luanda (confidence 60/100): single geocoder, not cross-checked. Sources: https://amn.gov.ao/web/perfil-entidade/552, https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Clearance brief: Angola\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto de Luanda (confidence 60/100): single geocoder, not cross-checked. Registered port, entry status unverified: listed in UN/LOCODE AOLAD, WPI AOLAD (2.6 km), but no fetched official document names it; a registry listing does not establish port-of-entry status. Sources: https://amn.gov.ao/web/perfil-entidade/552, https://cms.minfin.gov.ao/api/assets/portal-minfin/2e41f3ea-5837-4202-8ece-d797d58a9dab/\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "sample",
     "model": "caller-sample-fn",
@@ -38,7 +67,21 @@
   },
   "components": {
     "zetaris": "sample",
+    "registry": "sample",
     "llm": "sample"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "AO",
+    "registry_entries": 56,
+    "official_count": 0,
+    "tiers": {
+      "tier1": 0,
+      "tier2": 0,
+      "tier_registered": 1,
+      "tier3": 0
+    },
+    "coord_mismatch_count": 0
   },
   "retries": 0,
   "memory": {
@@ -47,13 +90,14 @@
   },
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.5,
-    "HMemAgent.recall": 0.4,
-    "EvaluatorAgent.evaluate": 2.2,
-    "EvaluatorAgent.finalise": 0.1,
+    "ZetarisAdapter.get_ports": 1.9,
+    "ZetarisAdapter.registry_check": 18.8,
+    "HMemAgent.recall": 3.2,
+    "EvaluatorAgent.evaluate": 2.0,
+    "EvaluatorAgent.finalise": 0.2,
     "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 0.9,
-    "total": 4.3
+    "HMemAgent.remember": 3.0,
+    "total": 29.3
   },
   "error": null
 }
