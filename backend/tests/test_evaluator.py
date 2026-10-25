@@ -564,3 +564,44 @@ def test_path_substring_does_not_receive_official_source_score():
     result = evaluate({"ports": [port]})["ports"][0]
     assert result["confidence"] == score_port(port, official_source=False)["confidence"]
     assert "source d'État" not in result["confidence_reasons"]
+
+
+# --- registry evidence (registry_check) and the score ------------------------------------
+SEED_PORT = {  # a Zetaris seed port: located, no source URL of its own
+    "name": "Port of St. George’s", "lat": 32.3810447, "lon": -64.676717, "validated": True,
+    "geocode_source": "nominatim", "zone_name": "Bermuda", "mrgid": 8402, "source_urls": [],
+}
+MATCHES = [{"source": "unlocode", "code": "BMSGE", "name": "Saint George", "distance_km": 0.67}]
+EVIDENCE = [{"url": "https://www.gov.bm/department/customs", "domain": "gov.bm", "name_found": "saint george",
+             "entry_term": "ports of entry", "snippet": "main ports of entry: St. George’s",
+             "evidence_source": "stored_snippet"}]
+
+
+def _evaluated(registry=None):
+    port = dict(SEED_PORT, **({"registry": registry} if registry else {}))
+    return evaluate({"ports": [port], "run_id": "registry-score"})["ports"][0]
+
+
+def test_tier1_port_is_not_flagged_for_lack_of_an_official_source():
+    plain, tier1 = _evaluated(), _evaluated({"tier": "tier1", "official_evidence": EVIDENCE, "matches": MATCHES})
+    assert "source d'État" in tier1["confidence_reasons"] and "source indéterminée" not in tier1["confidence_reasons"]
+    assert tier1["confidence_parts"]["source"] == 30 and plain["confidence_parts"]["source"] == 4
+    assert tier1["confidence"] == plain["confidence"] + 26
+    assert "no direct source (empty URLs or synthesis only)" not in tier1["check_reasons"]
+    assert tier1["verdict"] != "retry" and tier1.get("retry_hint") is None
+    assert "no direct source (empty URLs or synthesis only)" in plain["check_reasons"]
+
+
+def test_tier_registered_alone_gets_no_official_source_bonus():
+    plain = _evaluated()
+    registered = _evaluated({"tier": "tier_registered", "official_evidence": [], "matches": MATCHES})
+    assert registered["confidence"] == plain["confidence"]
+    assert registered["confidence_parts"] == plain["confidence_parts"]
+    assert "source indéterminée" in registered["confidence_reasons"]
+    assert registered["verdict"] == "retry" and registered["retry_hint"] == "find an official source"
+
+
+def test_official_evidence_counts_only_for_official_urls():
+    bogus = [dict(EVIDENCE[0], url="https://www.noonsite.com/place/bermuda", domain="noonsite.com")]
+    port = _evaluated({"tier": "tier1", "official_evidence": bogus, "matches": MATCHES})
+    assert port["confidence"] == _evaluated()["confidence"] and port["verdict"] == "retry"

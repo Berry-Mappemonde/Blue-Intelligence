@@ -115,15 +115,29 @@ def test_cli_rejects_bad_zone_input(tmp_path):
     assert proc.returncode == 2 and 'Invalid input' in proc.stderr
 
 
-def test_trace_has_every_agent_one_run_id_and_retry(cli_runs):
+def test_cli_trace_has_one_run_id_and_handoffs(cli_runs):
     (_, result, rows), _ = cli_runs
-    assert AGENTS <= {r['agent_name'] for r in rows}
+    assert AGENTS - {'ResearchAgent'} <= {r['agent_name'] for r in rows}
     assert {r['run_id'] for r in rows} == {result['run_id']}
-    assert any(r['action'] == 'prepare_retry' for r in rows)
+    handoffs = {(r['handoff']['from'], r['handoff']['to']) for r in rows if r.get('handoff')}
+    assert {('HMemAgent', 'EvaluatorAgent'), ('BriefingAgent', 'HMemAgent')} <= handoffs
+    assert [r['agent_name'] for r in rows][0] == 'RunPipeline' and rows[-1]['action'] == 'run_end'
+    # Bermuda is tier 1 from stored official evidence: no retry for a missing official source.
+    assert not any(r['action'] == 'prepare_retry' for r in rows)
+
+
+def test_trace_has_every_agent_one_run_id_and_retry(isolated):
+    # Benin's sample port has a registry match only (tier_registered) and no source URL,
+    # so it goes through the retry round.
+    result = run('Benin', 'retry-round')
+    rows = trace_rows(isolated / 'trace.jsonl')
+    assert AGENTS <= {r['agent_name'] for r in rows}
+    assert {r['run_id'] for r in rows} == {'retry-round'} == {result['run_id']}
+    assert rows[0]['agent_name'] == 'RunPipeline' and rows[-1]['action'] == 'run_end'
+    assert any(r['action'] == 'prepare_retry' for r in rows) and result['retries'] == RETRY_LIMIT
     handoffs = {(r['handoff']['from'], r['handoff']['to']) for r in rows if r.get('handoff')}
     assert {('HMemAgent', 'EvaluatorAgent'), ('ResearchAgent', 'EvaluatorAgent'),
             ('BriefingAgent', 'HMemAgent')} <= handoffs
-    assert [r['agent_name'] for r in rows][0] == 'RunPipeline' and rows[-1]['action'] == 'run_end'
 
 
 def test_second_run_recalls_first_run_memories(cli_runs):
@@ -202,7 +216,7 @@ def test_timeout_returns_partial_result(monkeypatch):
 
 
 def test_retries_are_capped_and_every_port_is_finalised():
-    result = run('Bermuda')
+    result = run('Benin')
     assert result['retries'] == RETRY_LIMIT
     assert {p['verdict'] for p in result['ports']} <= {'pass', 'flag'}
 
@@ -277,7 +291,7 @@ def _sse(response):
 
 
 def test_run_stream_emits_trace_in_order_then_result(isolated):
-    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Bermuda', 'run_id': 'sse-1'}) as response:
+    with TestClient(app).stream('GET', '/run/stream', params={'zone': 'Benin', 'run_id': 'sse-1'}) as response:
         assert response.status_code == 200
         assert response.headers['content-type'].startswith('text/event-stream')
         events = _sse(response)
@@ -336,7 +350,7 @@ def test_zones_fall_back_when_zetaris_is_down(monkeypatch):
 
 def test_trace_route_returns_the_runs_events():
     client = TestClient(app)
-    result = client.post('/run', json={'zone_name': 'Bermuda', 'run_id': 'trace-api'}).json()
+    result = client.post('/run', json={'zone_name': 'Benin', 'run_id': 'trace-api'}).json()
     response = client.get('/runs/trace-api/trace')
     assert response.status_code == 200
     events = response.json()['events']
@@ -344,7 +358,7 @@ def test_trace_route_returns_the_runs_events():
     assert AGENTS <= {e['agent_name'] for e in events}
     assert events[0]['action'] == 'run_start' and events[-1]['action'] == 'run_end'
     # A reused run_id appends to the trace; the route returns only the latest run.
-    client.post('/run', json={'zone_name': 'Bermuda', 'run_id': 'trace-api'})
+    client.post('/run', json={'zone_name': 'Benin', 'run_id': 'trace-api'})
     again = client.get('/runs/trace-api/trace').json()['events']
     assert [e['action'] for e in again].count('run_start') == 1
     assert client.get('/runs/never-ran/trace').status_code == 404
