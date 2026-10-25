@@ -82,18 +82,21 @@
   "retries": 0,
   "memory": {
     "recalled": 0,
-    "remembered": true
+    "remembered": true,
+    "created": 1,
+    "reinforced": 0,
+    "superseded": 0
   },
   "trace_file": "logs/trace-example-azores.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.6,
-    "ZetarisAdapter.registry_check": 21.9,
-    "HMemAgent.recall": 0.9,
-    "EvaluatorAgent.evaluate": 1.6,
+    "ZetarisAdapter.get_ports": 0.8,
+    "ZetarisAdapter.registry_check": 18.4,
+    "HMemAgent.recall": 1.1,
+    "EvaluatorAgent.evaluate": 1.2,
     "EvaluatorAgent.finalise": 0.1,
-    "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 1.6,
-    "total": 27.0
+    "BriefingAgent.brief": 0.3,
+    "HMemAgent.remember": 1.4,
+    "total": 23.4
   },
   "error": null
 }
