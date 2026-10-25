@@ -49,7 +49,7 @@ The four input examples cover the main paths:
 
 | Input | What it shows |
 | --- | --- |
-| `input_examples/01_bermuda.json` | `tier1` from stored official evidence (gov.bm) and a registry match; no retry |
+| `input_examples/01_bermuda.json` | `tier1` from stored official evidence (gov.bm) and a registry match; the WPI position (0.67 km) corroborates the geocode, so the port passes at 67 with no retry |
 | `input_examples/02_angola.json` | `tier_registered`: registry match, no official page |
 | `input_examples/03_azores.json` | `tier_registered`, with the country resolved from the sovereign (Portugal) |
 | `input_examples/04_benin.json` | a retry round: EvaluatorAgent critiques the port (`retry`, "find an official source"), ResearchAgent looks for a remembered official source, twice, then the port is finalised as `flag` |

@@ -88,16 +88,16 @@
   },
   "trace_file": "logs/trace-example-benin.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.6,
-    "ZetarisAdapter.registry_check": 8.6,
+    "ZetarisAdapter.get_ports": 0.7,
+    "ZetarisAdapter.registry_check": 5.4,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 1.3,
-    "ResearchAgent.research": 0.3,
+    "EvaluatorAgent.evaluate": 1.1,
+    "ResearchAgent.research": 0.2,
     "EvaluatorAgent.prepare_retry": 0.3,
-    "EvaluatorAgent.finalise": 0.1,
+    "EvaluatorAgent.finalise": 0.2,
     "BriefingAgent.brief": 0.1,
     "HMemAgent.remember": 0.9,
-    "total": 12.8
+    "total": 9.7
   },
   "error": null
 }
