@@ -154,6 +154,39 @@ function RegistryBadge({ port, t }) {
   );
 }
 
+/** Official evidence of a port (registry.official_evidence): source link, snippet collapsed. */
+function OfficialEvidence({ evidence, t }) {
+  if (!evidence?.length) return null;
+  return (
+    <div className="mt-1 space-y-0.5" data-testid="poe-fiche-evidence">
+      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{t("poeEvidenceTitle")}</p>
+      {evidence.map((e) => (
+        <details key={e.url} className="group" data-testid="poe-fiche-evidence-item">
+          <summary className="cursor-pointer list-none font-mono text-[9px] text-slate-400 hover:text-slate-200">
+            <a
+              href={e.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:text-white"
+              title={e.url}
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              {e.domain}
+            </a>
+            {" · "}
+            {t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched")}
+            <span className="ml-1 text-slate-600 group-open:hidden">{t("poeEvidenceShow")} ▸</span>
+            <span className="ml-1 text-slate-600 hidden group-open:inline">{t("poeEvidenceHide")} ▾</span>
+          </summary>
+          <p className="mt-0.5 pl-2 border-l border-line/60 text-[10px] leading-snug text-slate-400 whitespace-pre-line break-words">
+            {e.snippet}
+          </p>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 /** Telemetry of the last verify run, read from its payload only. */
 function VerifyTelemetry({ verify, t }) {
   const ns = verify?.nemotron_status || {};
@@ -402,6 +435,7 @@ export default function ZoneFiche({
                       ))}
                     </button>
                   </div>
+                  <OfficialEvidence evidence={p.registry?.official_evidence} t={t} />
                   <div className="flex items-center justify-between mt-1 gap-2">
                     {score != null ? (
                       <button
