@@ -196,6 +196,19 @@ def test_disagreement_is_recorded_on_the_port(isolated, live_judge):
                                  disagrees=True)
     row = critique(isolated)['judgments'][0]
     assert row['port_verdict'] == 'pass' and row['disagrees'] is True
+    assert (row['reason'], row['quoted_excerpt']) == ('x', '')
+
+
+def test_trace_event_carries_reason_and_excerpt_cut_to_200_chars(isolated, live_judge):
+    set_answer, _ = live_judge
+    reason, excerpt = 'r' * 300, 'St. George’s ' * 30
+    set_answer(lambda prompt: {'ports': [{'name': ST_GEORGES, 'verdict': 'poe', 'reason': reason,
+                                          'quoted_excerpt': excerpt}]})
+    port = run('Bermuda')['ports'][0]
+    row = critique(isolated)['judgments'][0]
+    assert len(row['reason']) == len(row['quoted_excerpt']) == poe_judge.TRACE_TEXT_CHARS
+    assert row['reason'].endswith('…') and row['quoted_excerpt'] == excerpt.strip()[:199] + '…'
+    assert port['judge']['reason'] == reason[:300]  # the port keeps the full (300-char capped) text
 
 
 def test_unverified_or_verified_excerpt_never_counts_as_evidence(isolated, live_judge):
@@ -238,7 +251,8 @@ def test_disagreement_on_a_flagged_port_triggers_one_evaluator_retry(isolated, l
     assert event['status'] == 'ok' and event['retry_requested'] == [DEEP_WATER]
     assert event['provider'] == 'nightshift' and event['served_model'] == 'nvidia/nemotron-test'
     assert event['judgments'] == [dict(port_name=DEEP_WATER, verdict='poe', port_verdict='flag',
-                                       excerpt_verified=True, disagrees=True)]
+                                       excerpt_verified=True, disagrees=True, reason='designated',
+                                       quoted_excerpt=quote)]
     retries = [r for r in trace if r['action'] == 'prepare_retry']
     assert len(retries) == 1 and retries[0]['retry_hint'] == poe_judge.RETRY_HINT
     assert any(r['action'] == 'research_port' for r in trace)

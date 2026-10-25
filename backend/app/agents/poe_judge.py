@@ -7,9 +7,10 @@ each candidate port, poe / not_poe / unclear with a reason and a quoted excerpt:
 
     port.judge = {verdict, reason, quoted_excerpt, excerpt_verified, disagrees}
 
-excerpt_verified is true only when the quote appears in that evidence text. The judge never
-writes tier, validation, official_evidence or confidence, so an excerpt, verified or not,
-never counts as evidence. When it calls a flagged port a port of entry, it routes that port
+excerpt_verified is true only when the quote appears in that evidence text. The critique
+trace event repeats each verdict, reason and excerpt (cut to TRACE_TEXT_CHARS). The judge
+never writes tier, validation, official_evidence or confidence, so an excerpt, verified or
+not, never counts as evidence. When it calls a flagged port a port of entry, it routes that port
 into one more ResearchAgent -> EvaluatorAgent round; the verdict still comes from the same
 deterministic scoring.
 
@@ -33,6 +34,7 @@ VERDICTS = ('poe', 'not_poe', 'unclear')
 MIN_EXCERPT_CHARS = 20
 MAX_EXCERPT_CHARS = 400
 MAX_TEXTS = 20
+TRACE_TEXT_CHARS = 200  # reason / excerpt length in the trace event (port.judge keeps them whole)
 RETRY_HINT = 'Nemotron judge: named a port of entry in the official text; re-check its sources'
 JUDGE_SYSTEM = (
     'You audit port-of-entry designations for a maritime clearance tool. Use only the official '
@@ -97,6 +99,10 @@ def parse_judgments(parsed, texts: list[dict]) -> dict[str, dict]:
     return out
 
 
+def _clip(text: str) -> str:
+    return text if len(text) <= TRACE_TEXT_CHARS else text[:TRACE_TEXT_CHARS - 1] + '…'
+
+
 def _disagrees(judge_verdict: str, port_verdict: str | None) -> bool:
     return ((judge_verdict == 'poe' and port_verdict != 'pass')
             or (judge_verdict == 'not_poe' and port_verdict == 'pass'))
@@ -137,7 +143,8 @@ async def judge_zone(state: dict, zone_name: str, *, timeout_s: float = JUDGE_TI
             port['judge'] = dict(judge, disagrees=_disagrees(judge['verdict'], port.get('verdict')))
             rows.append(dict(port_name=port.get('name'), verdict=judge['verdict'],
                              port_verdict=port.get('verdict'), excerpt_verified=judge['excerpt_verified'],
-                             disagrees=port['judge']['disagrees']))
+                             disagrees=port['judge']['disagrees'], reason=_clip(judge['reason']),
+                             quoted_excerpt=_clip(judge['quoted_excerpt'])))
             # Routing only: evaluate() recomputes the verdict from the same scoring.
             if judge['verdict'] == 'poe' and port.get('verdict') == 'flag' and retry_allowed:
                 port['verdict'], port['retry_hint'] = 'retry', RETRY_HINT
