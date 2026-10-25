@@ -24,6 +24,159 @@ The live voyage application **NAVIGUIDE** is a separate repository:
 ([naviguide.fr](https://naviguide.fr)). It reads Blue Intelligence over its
 public API, `https://blueintelligence.online/api`.
 
+## PoE Reconciler (Open Agent Hackathon 2026)
+
+**What it does.** Give it one maritime zone (an EEZ, such as Bermuda or the Azores)
+and it returns that zone's Ports of Entry, the places where a sailor may legally
+clear customs and immigration on arrival. Each port comes with a verdict, a 0–100
+confidence score with reasons, its sources, and an **evidence tier** that says what
+backs it: an official government page that designates it, an independent port
+registry (UN/LOCODE, NGA World Port Index), both, or neither. A short brief for
+sailors closes each run. The answer is built from scattered public sources, and a
+registry listing alone is never presented as port-of-entry status.
+
+- **Tier = legal-status evidence:** what says this port is a port of entry (an official page, a registry, both or neither).
+- **Verdict = data-quality review:** whether the record is reliable enough to use as is (`pass`) or needs a human look (`flag`), from its sources, reading and coordinates.
+
+### Architecture
+
+```text
+RunPipeline ─► ZetarisAdapter  candidates from Zetaris (blue_intel.poe_ports)
+            ─► ZetarisAdapter  registry check (UN/LOCODE + WPI views in Zetaris)
+                               + stored official evidence → evidence tier
+            ─► HMemAgent       recall earlier verdicts (Meterless H-MEM engine)
+            ─► EvaluatorAgent ⇄ ResearchAgent   score, retry with memory (max 2)
+            ─► EvaluatorAgent  finalise: pass or flag, never dropped
+            ─► BriefingAgent   brief via Meterless Nightshift → NVIDIA Nemotron
+            ─► HMemAgent       remember verdicts (created / reinforced / superseded)
+```
+
+- **Agents:** six named agents share one `run_id` and one JSONL trace, with
+  handoffs and retry events: `RunPipeline` (the orchestrator), `ZetarisAdapter`,
+  `HMemAgent`, `EvaluatorAgent`, `ResearchAgent` and `BriefingAgent`. Each model
+  call is also traced as `MeterlessGenerator`, recording the requested and the
+  served model.
+- **Zetaris (data layer):** ports, and the two independent registries, are read
+  through Zetaris SQL with a read-only guard, a timeout and a fallback to bundled
+  real fixtures.
+- **Evidence tiers:**
+
+  | Tier | Meaning |
+  | --- | --- |
+  | `tier1` Official Commercial Port of Entry | official page designates it, and a registry lists it |
+  | `tier2` Official Yachting Port of Entry | official page designates it, and no registry lists it (typical for marinas) |
+  | `tier_registered` | registry match only; entry status unverified |
+  | `tier3` | neither: review needed |
+
+  An official page counts only if its URL is a government domain and its text
+  names the port near an entry term. A strong term ("port of entry", "clear
+  customs", "designated marina") is enough on its own. A weak term ("customs",
+  "immigration") also needs a port word nearby and the port's full name. Pages
+  fetched during generation are stored as verbatim snippets, never model output.
+  Runs then look the snippets up by zone.
+- **Meterless:** the H-MEM engine (a Python port that passes the 13 official
+  conformance vectors) makes memory load-bearing. Nightshift is the primary model
+  provider and serves Nemotron.
+
+### Quickstart: fresh clone, no credentials, no database
+
+```bash
+git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
+cd Blue-Intelligence
+python3 -m venv backend/.venv   # Python 3.12+ (macOS's /usr/bin/python3 is 3.9: too old)
+backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
+    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3 pycountry==26.2.16
+backend/.venv/bin/python backend/run.py --zone Bermuda
+backend/.venv/bin/python backend/run.py --input input_examples/01_bermuda.json --output bermuda.json
+```
+
+With no `.env`, `run.py` turns on `SAMPLE_MODE` and logs it on stderr. In this
+mode the agents run for real on bundled data, and only the Zetaris and model
+calls are replaced. Expected output:
+
+- **stderr:** a summary block (abridged):
+
+  ```text
+  WARNING run: SAMPLE_MODE enabled automatically; missing: ZETARIS_API_KEY, ZETARIS_ORG_ID, METERLESS_RUNTIME_TOKEN or MODEL_API_KEY
+  Pipeline Result
+  Zone:     Bermuda
+  Mode:     sample
+  Ports:    1
+  Summary:  {'pass': 1}
+  LLM:      sample / caller-sample-fn
+  Memory:   0 recalled, remembered
+  ```
+
+- **stdout:** each trace event as one JSON line, then the result JSON, with keys
+  `run_id`, `zone`, `mode`, `ports`, `summary`, `brief`, `llm`, `components`,
+  `registry`, `retries`, `memory`, `trace_file`, `timings_ms` and `error`.
+  `--output` also writes the result to a file.
+- **Trace file:** `logs/trace-<run_id>.jsonl`. For the input example that's
+  `logs/trace-example-bermuda.jsonl`.
+- **Memory:** run the same zone again and `memory.recalled` is no longer 0, because
+  H-MEM stored the first run in `data/hmem/`.
+
+The 20 sample zones include Bermuda, Angola, Azores, Alaska, Bahamas and Antigua
+and Barbuda. `input_examples/04_benin.json` shows a retry round: EvaluatorAgent
+critiques the port, ResearchAgent looks for a remembered official source, twice. Across them the sample run gives 2 `tier1`, 2 `tier2`, 11
+`tier_registered` and 5 `tier3`. Official evidence comes from small verbatim
+snapshots of real government pages in
+[`backend/data/sample/official_pages/`](backend/data/sample/official_pages/).
+
+The same pipeline runs over HTTP:
+
+```bash
+backend/.venv/bin/python backend/run.py --serve   # http://127.0.0.1:8000; PORT=… if taken
+curl -s -X POST http://127.0.0.1:8000/run -H 'Content-Type: application/json' \
+     -d '{"zone_name": "Angola"}'
+```
+
+It also serves `GET /healthz` and a demo page at `/`.
+
+### Live mode
+
+```bash
+cp .env.example .env     # fill in the values below
+backend/.venv/bin/python backend/run.py --input input_examples/02_angola.json
+```
+
+- **Zetaris:** `ZETARIS_REST_URL`, `ZETARIS_ORG_ID` and `ZETARIS_API_KEY`. The
+  PoE view and the registry views are registered once by
+  `backend/scripts/zetaris_setup.py`.
+- **Meterless Nightshift:** `METERLESS_BASE_URL` (default
+  `http://127.0.0.1:8088/v1`), `METERLESS_RUNTIME_TOKEN` and `METERLESS_MODEL`
+  (default `meterless/auto`).
+- **Optional:** `NVIDIA_API_KEY`, for a direct Nemotron fallback when Nightshift
+  is down.
+
+Every external call has a timeout and a fallback, in this order: Nightshift, then
+NVIDIA, then the sample brief. A Zetaris failure falls back to the bundled
+fixtures. `llm.provider` and `llm.model` report the model that actually wrote the
+brief; Nightshift may route to a different Nemotron than the one requested.
+
+### Sponsor technology and evidence
+
+[`docs/sponsors/SPONSOR_TECH.md`](docs/sponsors/SPONSOR_TECH.md) (merges with
+PR #31) links every claim about Zetaris, Meterless H-MEM, Nightshift and NVIDIA
+Nemotron to the code and tests that back it. Setup details, bounds and tests are
+in [`docs/RUNNING.md`](docs/RUNNING.md).
+
+### Limits, stated plainly
+
+- **Sample data is small:** 20 real ports, one per zone, and small real
+  subsets of the registries. Official evidence exists only for zones whose
+  official pages have been fetched: 4 zones in the sample.
+- **Tier and verdict can differ** (definitions above). Only a port with official
+  evidence can have its position corroborated by a registry (≤ 2 km), which `pass`
+  needs: St. George's passes (`tier1`, 67), Road Bay stays `flag` (`tier_registered`).
+- **Grounding is a heuristic:** it checks the official domain, the entry term
+  and the distance. A port name with "Port of" stripped can match the town.
+  The committed snapshots were reviewed by hand.
+- **Recorded output:** the recorded live run in `output_examples/` is for
+  reference. Nothing reads it, and judges cannot reproduce it without
+  credentials.
+- **Not for navigation:** always check official publications before arriving.
+
 ## Dependencies
 
 | Part | Runtime | Dependencies |
