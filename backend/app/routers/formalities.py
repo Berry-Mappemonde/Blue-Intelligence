@@ -490,7 +490,7 @@ async def export_poe_geojson():
 
 @router.post("/poe/verify")
 async def poe_verify(payload: dict):
-    """Verify PoE for a zone: run pipeline and return Nemotron status + registry validation + trace path.
+    """Verify PoE for a zone: run pipeline and return Nemotron status + registry validation + H-MEM activity.
 
     Validated ports are tiers 1-2 of the run's registry check (official-source evidence);
     a UN/LOCODE / World Port Index match alone is tier_registered, never validated. Each
@@ -499,10 +499,11 @@ async def poe_verify(payload: dict):
 
     Input: { "zone_name": str, "mrgid": int | None }
     Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
-              ports_by_tier, zetaris_mode, registry, brief, error, trace_path }
+              ports_by_tier, zetaris_mode, registry, memory, brief, error, trace_name }
+    memory is {recalled, remembered, created, reinforced, superseded}. trace_name is the
+    trace file's name (logs/trace-<run_id>.jsonl on the server), never a filesystem path.
     """
-    from pathlib import Path
-    from app.core import paths
+    from pathlib import PurePath
     from app.pipeline.run_pipeline import run_pipeline, validate_input
 
     try:
@@ -521,10 +522,6 @@ async def poe_verify(payload: dict):
     ports_by_tier: dict[str, list[str]] = {}
     for p in ports:
         ports_by_tier.setdefault((p.get("registry") or {}).get("tier") or "unchecked", []).append(p.get("name"))
-
-    # Trace written by the run (relative to the repo root unless TRACE_LOG_PATH points elsewhere)
-    trace_file = Path(result["trace_file"])
-    trace_path = trace_file if trace_file.is_absolute() else paths.REPO_ROOT / trace_file
 
     # Which model actually wrote the brief (served model, as reported by the runtime)
     llm = result.get("llm") or {}
@@ -545,7 +542,8 @@ async def poe_verify(payload: dict):
         "zetaris_mode": (result.get("components") or {}).get("zetaris"),
         "ports_by_tier": ports_by_tier,
         "registry": result.get("registry"),
+        "memory": result.get("memory"),
         "brief": result.get("brief"),
         "error": result.get("error"),
-        "trace_path": str(trace_path),
+        "trace_name": PurePath(result["trace_file"]).name,
     }

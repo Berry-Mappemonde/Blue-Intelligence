@@ -27,7 +27,7 @@ const flagEmoji = (iso2) => {
   return String.fromCodePoint(0x1f1e6 + cc.charCodeAt(0) - 65, 0x1f1e6 + cc.charCodeAt(1) - 65);
 };
 
-export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort }) {
+export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort, onVerify, verifyState }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -142,7 +142,7 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
 
       {(selectedZone || ficheLoading) && (
         <div className="shrink-0 max-h-[46%] overflow-y-auto border-b border-line">
-          <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} />
+          <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} onVerify={onVerify} verifyState={verifyState} />
         </div>
       )}
 
@@ -160,7 +160,7 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
             <button
               key={z.mrgid}
               data-testid={`poe-zone-row-${z.mrgid}`}
-              onClick={() => onSelectZone && onSelectZone(z.mrgid, z.bbox, z.anchor)}
+              onClick={() => onSelectZone && onSelectZone(z.mrgid, zoneDisplayName(z, t), z.bbox, z.anchor)}
               title={z.status === "erreur" && z.last_error ? z.last_error : zoneDisplayName(z, t)}
               className={`w-full text-left px-4 py-2.5 border-b border-line hover:bg-raised transition-colors group ${
                 isSelected ? "bg-amberx/5 border-l-2 border-l-amberx" : ""
