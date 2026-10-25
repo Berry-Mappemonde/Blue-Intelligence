@@ -163,28 +163,36 @@ and in [`test_zetaris_registries.py`](../../backend/tests/test_zetaris_registrie
 `test_outage_without_fallback_never_marks_official`.
 `test_live_registry_views_for_bermuda` passed against local Zetaris.
 
-**What the tiers can show today (with PR #41).** Generation builds evidence records
+**What the tiers can show today (PR #41).** Generation builds evidence records
 from the official pages it fetched, deterministically: the port, the URL and its
 domain, a verbatim snippet of at most 400 characters around the grounded mention,
 the SHA-256 of the full fetched text, the fetch time and extraction level. At most
 three per port are stored in the Mongo collection `poe_evidence`, keyed on zone,
-port and URL. `run.py`, `POST /run` and `POST /api/poe/verify` read ports from
-Zetaris, so their registry step looks the records up by zone and runs the same
+port and URL ([`evidence_store.py`](../../backend/app/adapters/evidence_store.py)).
+`run.py`, `POST /run` and `POST /api/poe/verify` read ports from Zetaris, so their
+registry step (`check_registries` in
+[`run_pipeline.py`](../../backend/app/pipeline/run_pipeline.py)) looks the records up
+by zone and runs the same
 check on each snippet before it counts (`evidence_source: "stored_snippet"`,
 against `"fetched_now"` during generation). In sample mode, or when Mongo is
 unreachable, the lookup reads small verbatim snapshots of real official pages
-(`backend/data/sample/official_pages/`) and builds the records the same way. A
-failed lookup gives no evidence and never an official tier; each lookup is a
-`ZetarisAdapter` `evidence_lookup` trace event.
+([`backend/data/sample/official_pages/`](../../backend/data/sample/official_pages/),
+with a [`README`](../../backend/data/sample/official_pages/README.md) saying why each
+page qualifies) and builds the records the same way. A failed lookup gives no
+evidence and never an official tier; each lookup is a `ZetarisAdapter`
+`evidence_lookup` trace event. Evidence:
+[`test_evidence_store.py`](../../backend/tests/test_evidence_store.py).
 
 A *strong* entry term is enough on its own: port(s) of entry, entry port,
 clearing/clear customs, clear in, clearance port, designated port, designated
 marina, port of call for clearing (with French, Spanish, Portuguese, Italian and
-Greek equivalents). A *weak* term (customs, immigration, quarantine, harbour master,
-point(s) of entry) counts only with a port, harbour, marina or quay word in the same
-window and a match on the full name, not the town left after stripping "Port of":
-Bermuda's customs "Long Room" in Hamilton, where goods are declared, does not make
-the Port of Hamilton an entry point, and an airport-only "point of entry" does not
+Greek equivalents). A *weak* term (customs, immigration, quarantine, harbour master)
+counts only with a port, harbour, marina or quay word in the same window and a match
+on the full name, not the town left after stripping "Port of": Bermuda's customs
+"Long Room" in Hamilton, where goods are declared, does not make the Port of
+Hamilton an entry point (`ENTRY_TERMS` and `entry_mention` in
+[`registry_check.py`](../../backend/app/agents/registry_check.py)). PR #42 adds
+"point(s) of entry" as a weak term, so an airport-only "point of entry" will not
 count. In the sample run, 2 of the 20 sample ports are `tier1` (Port of St.
 George's, Bermuda: gov.bm Customs and a Bermuda planning report; Anchorage Small
 Boat Harbor, Alaska: CBP's designated marina), 2 are `tier2` (Deep water Harbor,
@@ -471,8 +479,8 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
   is recorded, not chosen by the application (section 4).
 - **Merge order.** This document (#31) targets `feat/integrate-poe-pipeline`
   (#33), which already contains the work of #26 (Zetaris), #28 (H-MEM), #30
-  (Nightshift generator), #32 (run pipeline), #34 (registry tiers) and #35. The
-  stored-evidence paragraphs describe #41 (which builds on #36), so #36 and #41
+  (Nightshift generator), #32 (run pipeline), #34 (registry tiers), #35, #36 (V2
+  UI) and #41 (stored evidence). #42 (point(s) of entry as a weak term) should
   merge before this document. #33 then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
   branch.
 - **Official evidence is only as good as the stored text.** Outside generation, a
