@@ -3,8 +3,9 @@
 Two kinds of evidence, kept separate:
 
 - Official source: an official URL (``is_official_source()``) whose text names the port
-  (normalised, with alternates) within PROXIMITY_CHARS of an entry term (port of entry,
-  customs, clearance, ... in EN/FR/ES/PT/IT/GR), not in an address. The text is either
+  (normalised, with alternates) within PROXIMITY_CHARS of a strong entry term (port of
+  entry, clear customs, designated marina, ... in EN/FR/ES/PT/IT/GR), or of a weak one
+  (customs, immigration, ...) with a port word nearby and the full name, not in an address. The text is either
   fetched now or a stored snippet from an earlier fetch (app/adapters/evidence_store.py);
   never model output. No text, no evidence: a URL alone proves nothing.
 - Registry: a UN/LOCODE port (UNECE) or World Port Index entry (NGA Pub 150) in the same
@@ -69,29 +70,45 @@ _TOKENS = {"st": "saint", "ste": "sainte", "mt": "mount", "ft": "fort", "pt": "p
 # A facility word on its own ("Porto" from "Porto / Marina de X") never names a port.
 _GENERIC = set(_PREFIXES) | set(_SUFFIXES) | {"harbour", "harbor", "bay", "quay", "pier", "dock"}
 
-# Official evidence: the port's name must sit within PROXIMITY_CHARS of one of these terms.
+# Official evidence: the port's name must sit within PROXIMITY_CHARS of an entry term.
+# A strong term designates on its own; a weak term (a department or office) counts only
+# with a port word in the same window and a match on the full name, not on the place
+# left after stripping "Port of" (so "the Hamilton ... Long Room ... Customs" does not count).
 PROXIMITY_CHARS = 200
 SNIPPET_CHARS = 400
-ENTRY_TERMS = (
+STRONG_ENTRY_TERMS = (
     # English
-    "port of entry", "ports of entry", "entry port", "entry ports", "point of entry",
-    "points of entry", "customs", "clearance", "clear in", "cleared in", "immigration",
-    "quarantine", "harbour master", "harbor master", "harbourmaster", "harbormaster",
+    "port of entry", "ports of entry", "entry port", "entry ports", "clearing customs",
+    "clear customs", "clear in", "clearance port", "clearance ports", "designated port",
+    "designated ports", "designated marina", "designated marinas", "port of call for clearing",
     # French
-    "port d'entrée", "ports d'entrée", "point d'entrée", "points d'entrée", "douane", "douanes",
-    "dédouanement", "quarantaine", "capitainerie",
+    "port d'entrée", "ports d'entrée", "dédouanement", "dédouaner", "port désigné", "ports désignés",
     # Spanish
     "puerto de entrada", "puertos de entrada", "puerto habilitado", "puertos habilitados",
-    "aduana", "aduanas", "despacho aduanero", "migraciones", "inmigración", "cuarentena",
-    "capitanía de puerto", "paso internacional", "pasos internacionales",
+    "despacho aduanero", "puerto designado", "paso internacional", "pasos internacionales",
     # Portuguese
-    "porto de entrada", "portos de entrada", "posto de fronteira", "postos de fronteira",
-    "alfândega", "alfândegas", "desembaraço aduaneiro", "imigração", "quarentena", "capitania",
+    "porto de entrada", "portos de entrada", "desembaraço aduaneiro", "porto designado",
+    "portos designados", "posto de fronteira", "postos de fronteira",
     # Italian
-    "porto di entrata", "punto di ingresso", "dogana", "dogane", "sdoganamento",
-    "immigrazione", "quarantena", "capitaneria di porto",
+    "porto di entrata", "porti di entrata", "porto di ingresso", "sdoganamento", "porto designato",
     # Greek
-    "λιμένας εισόδου", "πύλη εισόδου", "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα",
+    "λιμένας εισόδου", "λιμάνι εισόδου", "πύλη εισόδου", "εκτελωνισμός",
+)
+WEAK_ENTRY_TERMS = (
+    "customs", "immigration", "quarantine", "harbour master", "harbor master", "harbourmaster",
+    "harbormaster",
+    "douane", "douanes", "quarantaine", "capitainerie",
+    "aduana", "aduanas", "migraciones", "inmigración", "cuarentena", "capitanía de puerto",
+    "alfândega", "alfândegas", "imigração", "quarentena", "capitania",
+    "dogana", "dogane", "immigrazione", "quarantena", "capitaneria di porto",
+    "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα",
+)
+ENTRY_TERMS = STRONG_ENTRY_TERMS + WEAK_ENTRY_TERMS
+# Words that put a weak term in a port context.
+PORT_WORDS = (
+    "port", "ports", "harbour", "harbours", "harbor", "harbors", "marina", "marinas", "quay", "quays",
+    "quai", "quais", "puerto", "puertos", "muelle", "muelles", "porto", "portos", "cais", "porti",
+    "banchina", "approdo", "λιμάνι", "λιμάνια", "λιμένας", "λιμένα", "μαρίνα",
 )
 # A name inside an address or contact block is not a designation ("Cabinet Building, Hamilton").
 ADDRESS_WINDOW = 40
@@ -240,11 +257,34 @@ def port_key(name: str | None) -> str:
     return " ".join(_TOKENS.get(t, t) for t in stripped.split())
 
 
-def grounding_variants(name: str | None, alternates: tuple = ()) -> list[tuple[str, ...]]:
+class Variant(tuple):
+    """A name variant's tokens. ``stripped``: only what is left after removing facility
+    words ("hamilton" from "Port of Hamilton"), so it may just be the town."""
+    stripped = False
+
+
+def _full_keys(*names: str | None) -> set[str]:
+    """Variant keys of the names as written (split on / ; ( ), possessive dropped), not stripped."""
+    out = set()
+    for name in names:
+        for part in re.split(r"[/;()]|,\s", _POSSESSIVE.sub("", name or "")):
+            key = name_key(part)
+            forms = {key} | ({key[:-1]} if re.search(r"[a-z]{3}[^s]s$", key) else set())
+            out |= {" ".join(_TOKENS.get(t, t) for t in f.split()) for f in forms if f}
+    return out
+
+
+def grounding_variants(name: str | None, alternates: tuple = ()) -> list[Variant]:
     """Name variants as token tuples, longest first: whole words, 4+ characters, not generic."""
     keys = {" ".join(_TOKENS.get(t, t) for t in v.split()) for v in name_variants(name, *alternates)}
     keys = {k for k in keys if len(k) >= 4 and k not in _GENERIC}
-    return [tuple(k.split()) for k in sorted(keys, key=len, reverse=True)]
+    full = _full_keys(name, *alternates)
+    out = []
+    for key in sorted(keys, key=len, reverse=True):
+        variant = Variant(key.split())
+        variant.stripped = key not in full
+        out.append(variant)
+    return out
 
 
 def _fold(text: str) -> str:
@@ -264,7 +304,13 @@ def _tokens(text: str) -> list[tuple[str, int, int]]:
             for m in re.finditer(r"[^\W_]+", _fold(text))]
 
 
-_ENTRY_PHRASES = sorted({tuple(t for t, _, _ in _tokens(term)) for term in ENTRY_TERMS}, key=len, reverse=True)
+def _phrases(terms: tuple[str, ...]) -> list[tuple[str, ...]]:
+    return sorted({tuple(t for t, _, _ in _tokens(term)) for term in terms}, key=len, reverse=True)
+
+
+_STRONG_PHRASES = _phrases(STRONG_ENTRY_TERMS)
+_WEAK_PHRASES = _phrases(WEAK_ENTRY_TERMS)
+_PORT_WORDS = {t for word in PORT_WORDS for t, _, _ in _tokens(word)}
 
 
 def _spans(tokens: list[tuple[str, int, int]], phrase: tuple[str, ...], plural_s: bool = False):
@@ -284,16 +330,26 @@ def _in_address(text: str, tokens: list[tuple[str, int, int]], start: int, end: 
             or bool(_STREET_ADDRESS.search(text, max(0, start - 60), start)))
 
 
+def _port_word_near(tokens: list[tuple[str, int, int]], start: int, end: int, term: tuple[int, int]) -> bool:
+    """A port word within PROXIMITY_CHARS of the name (the name counts), outside the term itself."""
+    return any(t in _PORT_WORDS and start - PROXIMITY_CHARS <= s and e <= end + PROXIMITY_CHARS
+               and not (term[0] <= s < term[1]) for t, s, e in tokens)
+
+
 def entry_mention(text: str | None, variants: list[tuple[str, ...]]) -> dict | None:
     """Closest mention of a variant within PROXIMITY_CHARS of an entry term, outside addresses.
 
-    Returns {matched_name, entry_term, gap, snippet}: snippet is a verbatim slice of at most
-    SNIPPET_CHARS around both. A bare name (no entry term nearby) gives None.
+    A strong term (port of entry, clear customs, designated marina, ...) is enough. A weak
+    term (customs, immigration, quarantine, harbour master) also needs a port word in the
+    window and a full-name match, not a variant that is only the place left after stripping
+    facility words. Returns {matched_name, entry_term, strength, gap, snippet}: snippet is a
+    verbatim slice of at most SNIPPET_CHARS around both. A bare name gives None.
     """
     if not text or not variants:
         return None
     tokens = _tokens(text)
-    terms = [(" ".join(p), s, e) for p in _ENTRY_PHRASES for s, e in _spans(tokens, p)]
+    terms = ([(" ".join(p), s, e, "strong") for p in _STRONG_PHRASES for s, e in _spans(tokens, p)]
+             + [(" ".join(p), s, e, "weak") for p in _WEAK_PHRASES for s, e in _spans(tokens, p)])
     if not terms:
         return None
     best = None
@@ -301,18 +357,25 @@ def entry_mention(text: str | None, variants: list[tuple[str, ...]]) -> dict | N
         for ns, ne in _spans(tokens, variant, plural_s=True):
             if _in_address(text, tokens, ns, ne):
                 continue
-            for term, ts, te in terms:
+            for term, ts, te, strength in terms:
                 gap = max(ts - ne, ns - te, 0)
-                if gap <= PROXIMITY_CHARS and (best is None or gap < best[0]):
-                    best = (gap, " ".join(variant), term, min(ns, ts), max(ne, te))
+                if gap > PROXIMITY_CHARS:
+                    continue
+                if strength == "weak" and (getattr(variant, "stripped", False)
+                                           or not _port_word_near(tokens, ns, ne, (ts, te))):
+                    continue
+                rank = (strength != "strong", gap)
+                if best is None or rank < best[0]:
+                    best = (rank, " ".join(variant), term, strength, min(ns, ts), max(ne, te))
     if best is None:
         return None
-    gap, matched, term, core_start, core_end = best
+    (_, gap), matched, term, strength, core_start, core_end = best
     pad = max(0, (SNIPPET_CHARS - (core_end - core_start)) // 2)
     start = max(0, core_start - pad)
     end = min(len(text), start + max(SNIPPET_CHARS, core_end - core_start))
     start = max(0, min(start, end - SNIPPET_CHARS))
-    return dict(matched_name=matched, entry_term=term, gap=gap, snippet=text[start:end].strip())
+    return dict(matched_name=matched, entry_term=term, strength=strength, gap=gap,
+                snippet=text[start:end].strip())
 
 
 def _domain(url: str) -> str:

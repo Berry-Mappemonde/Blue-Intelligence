@@ -81,6 +81,10 @@ def test_at_most_three_records_per_port_best_match_per_url():
     "Please contact Customs at the following locations: Cabinet Building, Hamilton.",
     "Customs Department, Custom House, 40 Front Street, Hamilton HM 12.",
     "BRIDGETOWN PORT University Row Hamilton immigration.seaport@gov.bm",
+    # Strong terms, so only the address check can reject these.
+    "Ports of entry enquiries: Cabinet Building, Hamilton.",
+    "To clear customs, visit Custom House, 40 Front Street, Hamilton HM 12.",
+    "Hamilton office, write to clear-in@customs.gov.bm",
     # A bare mention far from any entry term.
     "Hamilton is the capital of Bermuda. " + "It has shops and restaurants. " * 9 + "Customs forms are online.",
     "Hamilton is the capital of Bermuda.",
@@ -104,6 +108,49 @@ def test_entry_term_near_the_name_counts_in_english_and_other_languages(name, te
     assert found is not None and found["entry_term"] == term and found["gap"] <= registry_check.PROXIMITY_CHARS
 
 
+# Verbatim from the Bermuda customs declaration notice (gov.bm): goods are declared in
+# Hamilton's Long Room, which does not make the Port of Hamilton an entry point.
+LONG_ROOM = ("3.2 How do I present the BCD? \nThe BCD and supporting documents should be presented at the "
+             "Hamilton or Airport Long Room.  \nYou do not have to lodge the BCD at the same location the goods "
+             "arrive. \n3.3 Can I get assistance in completing my Declaration? \nYes.  Customs Officers are not "
+             "permitted to fill out your form for you")
+# Verbatim from CBP's Alaska pleasure-boat page (cbp.gov).
+CBP_ALASKA = ("Anchorage, Alaska\nDesignated Marina: Anchorage Small Boat Harbor\nHours of Operation: 8 a.m. to "
+              "4 p.m., Seven Days a Week\nPhone Number: 907-271-6309, ext. 360")
+
+
+def test_long_room_customs_case_does_not_count():
+    assert mention(LONG_ROOM, "Port of Hamilton") is None
+
+
+def test_weak_term_with_only_the_town_left_by_stripping_does_not_count():
+    # A port word is nearby, but the match is only "Hamilton" from "Port of Hamilton".
+    assert mention("Customs officers board yachts in Hamilton harbour.", "Port of Hamilton") is None
+
+
+def test_weak_term_without_a_port_word_does_not_count():
+    # Full name, weak term, no port word ("Antigua and Barbuda Customs").
+    assert mention("Antigua and Barbuda Customs and Excise Division.", "Barbuda") is None
+
+
+def test_weak_term_counts_with_the_full_name_and_a_port_word():
+    found = mention("The customs office is at the Port of Hamilton ferry terminal.", "Port of Hamilton")
+    assert found is not None and found["strength"] == "weak" and found["matched_name"] == "port of hamilton"
+
+
+def test_strong_term_is_enough_even_for_the_town_name():
+    text = ("Customs officers are stationed at Bermuda’s main ports of entry: St. George’s "
+            "L. F. Wade International Airport Hamilton")
+    found = mention(text, "Port of Hamilton")
+    assert found is not None and found["entry_term"] == "ports of entry" and found["strength"] == "strong"
+
+
+def test_designated_marina_is_a_strong_term_at_its_real_distance():
+    found = mention(CBP_ALASKA, "Anchorage Small Boat Harbor")
+    assert found["entry_term"] == "designated marina" and found["strength"] == "strong" and found["gap"] == 2
+    assert registry_check.PROXIMITY_CHARS == 200  # not widened for this case
+
+
 def test_a_facility_word_alone_never_names_the_port():
     # "Porto" is a variant of "Porto / Marina de Ponta Delgada" only as a facility word.
     assert mention("O porto tem alfândega.", "Porto / Marina de Ponta Delgada") is None
@@ -118,7 +165,7 @@ def test_stored_snippet_reaches_tier1_with_a_registry_match(isolated):
     reg = ports[0]["registry"]
     assert reg["tier"] == TIER1 and ports[0]["zetaris_validation"] == "official"
     assert reg["official_evidence"] == [{
-        "url": GOV_BM, "domain": "customs.gov.bm", "name_found": "saint george", "entry_term": "customs",
+        "url": GOV_BM, "domain": "customs.gov.bm", "name_found": "saint george", "entry_term": "clear customs",
         "snippet": "All yachts must clear customs at St. George's Harbour.", "evidence_source": "stored_snippet",
         "fetched_at": "2026-10-01T00:00:00+00:00", "content_sha256": "a" * 64}]
     assert reg["reasons"][0].startswith(f"Official Commercial Port of Entry: named in official source {GOV_BM} "
@@ -273,7 +320,7 @@ def test_generation_stores_records_from_the_collected_text_never_the_model():
 # --- committed official pages and sample mode end to end ----------------------------------
 def test_committed_official_pages_are_well_formed_and_designate_their_ports():
     pages = sorted(evidence_store.SAMPLE_PAGES_DIR.glob("*.json"))
-    assert len(pages) == 4
+    assert len(pages) == 5
     for path in pages:
         page = json.loads(path.read_text(encoding="utf-8"))
         assert re.fullmatch(r"[0-9a-f]{64}", page["sha256"]) and page["chars"] > 0
@@ -304,6 +351,6 @@ def test_sample_mode_end_to_end_tier_counts(isolated):
 
     asyncio.run(run_all())
     assert len(zones) == 20
-    assert dict(tiers) == {TIER1: 1, TIER2: 2, TIER_REGISTERED: 12, "tier3": 5}
+    assert dict(tiers) == {TIER1: 2, TIER2: 2, TIER_REGISTERED: 11, "tier3": 5}
     assert evidence == {"Port of St. George’s": ["stored_snippet"], "Deep water Harbor": ["stored_snippet"],
-                        "Conch Inn Marina": ["stored_snippet"]}
+                        "Conch Inn Marina": ["stored_snippet"], "Anchorage Small Boat Harbor": ["stored_snippet"]}

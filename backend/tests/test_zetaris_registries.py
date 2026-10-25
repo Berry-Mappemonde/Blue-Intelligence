@@ -210,7 +210,7 @@ def test_official_source_grounding(url, text, found):
     evidence = registry_check.official_source_evidence({"name": "Port of St. George’s"}, {url: text})
     assert [(e["url"], e["name_found"]) for e in evidence] == ([(url, found)] if found else [])
     if found:
-        assert evidence[0]["entry_term"] == "customs" and evidence[0]["evidence_source"] == "fetched_now"
+        assert evidence[0]["entry_term"] == "clear customs" and evidence[0]["evidence_source"] == "fetched_now"
         assert evidence[0]["snippet"] == text and evidence[0]["domain"] == "customs.gov.bm"
 
 
