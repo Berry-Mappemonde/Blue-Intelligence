@@ -16,10 +16,14 @@ ZetarisAdapter (candidates) → ZetarisAdapter (registry check: UN/LOCODE + Worl
 git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
 cd Blue-Intelligence
 python3 -m venv backend/.venv      # Python 3.12 or newer
-# The agent pipeline needs only these six packages (pinned as in backend/requirements.txt):
+# The agent pipeline needs only these seven packages (pinned as in backend/requirements.txt):
 backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
-    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3
+    python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3 pycountry==26.2.16
 ```
+
+`pycountry` resolves a zone's country from its sovereign when the EEZ index has no
+code of its own (Alaska, the Azores). Without it those zones get no registry match,
+and the sample breakdown below changes.
 
 The full `backend/requirements.txt` is for the wider Blue Intelligence API. It
 pins `torch==2.13.0+cpu`, which needs
