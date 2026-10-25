@@ -117,7 +117,8 @@ calls are replaced. Expected output:
   H-MEM stored the first run in `data/hmem/`.
 
 The 20 sample zones include Bermuda, Angola, Azores, Alaska, Bahamas and Antigua
-and Barbuda. Across them the sample run gives 2 `tier1`, 2 `tier2`, 11
+and Barbuda. `input_examples/04_benin.json` shows a retry round: EvaluatorAgent
+critiques the port, ResearchAgent looks for a remembered official source, twice. Across them the sample run gives 2 `tier1`, 2 `tier2`, 11
 `tier_registered` and 5 `tier3`. Official evidence comes from small verbatim
 snapshots of real government pages in
 [`backend/data/sample/official_pages/`](backend/data/sample/official_pages/).
