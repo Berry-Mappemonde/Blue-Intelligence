@@ -80,7 +80,7 @@ RunPipeline ─► ZetarisAdapter  candidates from Zetaris (blue_intel.poe_ports
 ```bash
 git clone https://github.com/Berry-Mappemonde/Blue-Intelligence.git
 cd Blue-Intelligence
-python3 -m venv backend/.venv                    # Python 3.12 or newer
+python3 -m venv backend/.venv   # Python 3.12+ (macOS's /usr/bin/python3 is 3.9: too old)
 backend/.venv/bin/pip install fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4 \
     python-dotenv==1.2.3 uvicorn==0.25.0 filelock==3.32.3 pycountry==26.2.16
 backend/.venv/bin/python backend/run.py --zone Bermuda
@@ -122,7 +122,7 @@ snapshots of real government pages in
 The same pipeline runs over HTTP:
 
 ```bash
-backend/.venv/bin/python backend/run.py --serve     # http://127.0.0.1:8000 (PORT)
+backend/.venv/bin/python backend/run.py --serve   # http://127.0.0.1:8000; PORT=… if taken
 curl -s -X POST http://127.0.0.1:8000/run -H 'Content-Type: application/json' \
      -d '{"zone_name": "Angola"}'
 ```
