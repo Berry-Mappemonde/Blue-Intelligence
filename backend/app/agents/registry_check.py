@@ -2,9 +2,11 @@
 
 Two kinds of evidence, kept separate:
 
-- Official source: one of the port's source URLs passes ``is_official_source()`` AND the
-  port's name (normalised, with alternates) appears in that document's fetched text. No
-  fetched text, no evidence: a URL alone proves nothing.
+- Official source: an official URL (``is_official_source()``) whose text names the port
+  (normalised, with alternates) within PROXIMITY_CHARS of an entry term (port of entry,
+  customs, clearance, ... in EN/FR/ES/PT/IT/GR), not in an address. The text is either
+  fetched now or a stored snippet from an earlier fetch (app/adapters/evidence_store.py);
+  never model output. No text, no evidence: a URL alone proves nothing.
 - Registry: a UN/LOCODE port (UNECE) or World Port Index entry (NGA Pub 150) in the same
   country whose name matches, within MAX_DISTANCE_KM when both sides have coordinates. A
   name + country match further away is recorded as ``coord_mismatch`` (with the distance),
@@ -28,6 +30,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from urllib.parse import urlparse
 
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
 from app.agents.evaluator import is_official_source
@@ -63,6 +66,47 @@ _SUFFIXES = (
     "harbour", "harbor", "port", "marina", "jetty", "terminal",
 )
 _TOKENS = {"st": "saint", "ste": "sainte", "mt": "mount", "ft": "fort", "pt": "point"}
+# A facility word on its own ("Porto" from "Porto / Marina de X") never names a port.
+_GENERIC = set(_PREFIXES) | set(_SUFFIXES) | {"harbour", "harbor", "bay", "quay", "pier", "dock"}
+
+# Official evidence: the port's name must sit within PROXIMITY_CHARS of one of these terms.
+PROXIMITY_CHARS = 200
+SNIPPET_CHARS = 400
+ENTRY_TERMS = (
+    # English
+    "port of entry", "ports of entry", "entry port", "entry ports", "point of entry",
+    "points of entry", "customs", "clearance", "clear in", "cleared in", "immigration",
+    "quarantine", "harbour master", "harbor master", "harbourmaster", "harbormaster",
+    # French
+    "port d'entrée", "ports d'entrée", "point d'entrée", "points d'entrée", "douane", "douanes",
+    "dédouanement", "quarantaine", "capitainerie",
+    # Spanish
+    "puerto de entrada", "puertos de entrada", "puerto habilitado", "puertos habilitados",
+    "aduana", "aduanas", "despacho aduanero", "migraciones", "inmigración", "cuarentena",
+    "capitanía de puerto", "paso internacional", "pasos internacionales",
+    # Portuguese
+    "porto de entrada", "portos de entrada", "posto de fronteira", "postos de fronteira",
+    "alfândega", "alfândegas", "desembaraço aduaneiro", "imigração", "quarentena", "capitania",
+    # Italian
+    "porto di entrata", "punto di ingresso", "dogana", "dogane", "sdoganamento",
+    "immigrazione", "quarantena", "capitaneria di porto",
+    # Greek
+    "λιμένας εισόδου", "πύλη εισόδου", "τελωνείο", "τελωνεία", "λιμεναρχείο", "καραντίνα",
+)
+# A name inside an address or contact block is not a designation ("Cabinet Building, Hamilton").
+ADDRESS_WINDOW = 40
+ADDRESS_TOKENS = {
+    "street", "road", "rd", "avenue", "ave", "lane", "drive", "highway", "row", "building",
+    "bldg", "floor", "suite", "box", "tel", "telephone", "phone", "fax", "email", "rue",
+    "boulevard", "bp", "calle", "avenida", "edificio", "piso", "rua", "andar", "piazza",
+    "palazzo", "οδος",
+}
+_POSTCODE_AFTER = re.compile(r"[\s,]*(?:[A-Z]{2}\s?\d{1,2}|\d{4,6})\b")
+# A numbered street address shortly after (or before) the name marks a contact listing.
+_STREET_ADDRESS = re.compile(
+    r"\b\d{1,4}\s+(?:[A-Z][\w'’.-]*\s+){1,3}(?:Street|St\.|Road|Rd\.?|Avenue|Ave\.?|Lane|Way|Drive|Highway|Boulevard)\b")
+# Entry terms inside e-mail addresses or URLs ("immigration.seaport@...") do not count.
+_EMAIL_OR_URL = re.compile(r"\S+@\S+|https?://\S+|www\.\S+")
 
 
 def name_key(name: str | None) -> str:
@@ -189,37 +233,150 @@ def source_texts_from_context(text: str | None) -> dict[str, str]:
     return out
 
 
-def _text_key(text: str) -> str:
-    """Document text normalised like names: " saint george harbour ... " (padded for whole words)."""
-    # After the possessive, an apostrophe is an elision: "d'Anvers" -> "d Anvers".
-    key = name_key(_APOSTROPHES.sub(" ", _POSSESSIVE.sub("", text)))
-    return " " + " ".join(_TOKENS.get(t, t) for t in key.split()) + " "
+def port_key(name: str | None) -> str:
+    """Storage key for a port: its name without facility words, St spelled out ("saint george")."""
+    key = name_key(_POSSESSIVE.sub("", name or ""))
+    stripped = _strip(_strip(key, _PREFIXES, leading=True), _SUFFIXES, leading=False) or key
+    return " ".join(_TOKENS.get(t, t) for t in stripped.split())
+
+
+def grounding_variants(name: str | None, alternates: tuple = ()) -> list[tuple[str, ...]]:
+    """Name variants as token tuples, longest first: whole words, 4+ characters, not generic."""
+    keys = {" ".join(_TOKENS.get(t, t) for t in v.split()) for v in name_variants(name, *alternates)}
+    keys = {k for k in keys if len(k) >= 4 and k not in _GENERIC}
+    return [tuple(k.split()) for k in sorted(keys, key=len, reverse=True)]
+
+
+def _fold(text: str) -> str:
+    """Same-length casefolded text without accents, apostrophes or possessive "'s"."""
+    text = _POSSESSIVE.sub(lambda m: " " * len(m.group()), text)
+    text = _EMAIL_OR_URL.sub(lambda m: " " * len(m.group()), text)
+    out = []
+    for char in _APOSTROPHES.sub(" ", text):
+        base = "".join(c for c in unicodedata.normalize("NFKD", char) if not unicodedata.combining(c))
+        out.append((base.casefold() or " ")[0])
+    return "".join(out)
+
+
+def _tokens(text: str) -> list[tuple[str, int, int]]:
+    """(token, start, end) with offsets into the original text; St/Mt/... spelled out."""
+    return [(_TOKENS.get(m.group(), m.group()), m.start(), m.end())
+            for m in re.finditer(r"[^\W_]+", _fold(text))]
+
+
+_ENTRY_PHRASES = sorted({tuple(t for t, _, _ in _tokens(term)) for term in ENTRY_TERMS}, key=len, reverse=True)
+
+
+def _spans(tokens: list[tuple[str, int, int]], phrase: tuple[str, ...], plural_s: bool = False):
+    n = len(phrase)
+    for i in range(len(tokens) - n + 1):
+        words = [t for t, _, _ in tokens[i:i + n]]
+        if words[:-1] == list(phrase[:-1]) and (
+                words[-1] == phrase[-1] or (plural_s and words[-1] == phrase[-1] + "s")):
+            yield tokens[i][1], tokens[i + n - 1][2]
+
+
+def _in_address(text: str, tokens: list[tuple[str, int, int]], start: int, end: int) -> bool:
+    near = {t for t, s, e in tokens
+            if (start - ADDRESS_WINDOW <= s < start) or (end < e <= end + ADDRESS_WINDOW)}
+    return (bool(near & ADDRESS_TOKENS) or bool(_POSTCODE_AFTER.match(text, end, end + 12))
+            or bool(_STREET_ADDRESS.search(text, end, end + 150))
+            or bool(_STREET_ADDRESS.search(text, max(0, start - 60), start)))
+
+
+def entry_mention(text: str | None, variants: list[tuple[str, ...]]) -> dict | None:
+    """Closest mention of a variant within PROXIMITY_CHARS of an entry term, outside addresses.
+
+    Returns {matched_name, entry_term, gap, snippet}: snippet is a verbatim slice of at most
+    SNIPPET_CHARS around both. A bare name (no entry term nearby) gives None.
+    """
+    if not text or not variants:
+        return None
+    tokens = _tokens(text)
+    terms = [(" ".join(p), s, e) for p in _ENTRY_PHRASES for s, e in _spans(tokens, p)]
+    if not terms:
+        return None
+    best = None
+    for variant in variants:
+        for ns, ne in _spans(tokens, variant, plural_s=True):
+            if _in_address(text, tokens, ns, ne):
+                continue
+            for term, ts, te in terms:
+                gap = max(ts - ne, ns - te, 0)
+                if gap <= PROXIMITY_CHARS and (best is None or gap < best[0]):
+                    best = (gap, " ".join(variant), term, min(ns, ts), max(ne, te))
+    if best is None:
+        return None
+    gap, matched, term, core_start, core_end = best
+    pad = max(0, (SNIPPET_CHARS - (core_end - core_start)) // 2)
+    start = max(0, core_start - pad)
+    end = min(len(text), start + max(SNIPPET_CHARS, core_end - core_start))
+    start = max(0, min(start, end - SNIPPET_CHARS))
+    return dict(matched_name=matched, entry_term=term, gap=gap, snippet=text[start:end].strip())
+
+
+def _domain(url: str) -> str:
+    host = (urlparse(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
 
 
 def official_source_evidence(port: dict, source_texts: dict[str, str] | None,
                              alternates: tuple = ()) -> list[dict]:
-    """[{url, name_found}] for official source URLs whose fetched text names the port.
+    """Evidence from text fetched now: official URLs whose text designates the port.
 
     Candidate URLs are the port's source_urls (else every fetched document). A URL counts
-    only if is_official_source() accepts it AND its fetched text contains a name variant
-    (whole words, at least 4 characters, optional possessive "s") of the port name or an alternate. Text that was
-    not fetched or kept never counts.
+    only if is_official_source() accepts it AND its text names the port (or an alternate)
+    near an entry term, outside an address (see entry_mention). Text that was not fetched
+    never counts. Each item: {url, domain, name_found, entry_term, snippet, evidence_source}.
     """
     if not source_texts:
         return []
-    variants = sorted((v for v in name_variants(port.get("name"), *alternates) if len(v) >= 4),
-                      key=len, reverse=True)
+    variants = grounding_variants(port.get("name"), alternates)
     out = []
     for url in port.get("source_urls") or list(source_texts):
         text = source_texts.get(url)
         if not text or not is_official_source([url]):
             continue
-        key = _text_key(text)
-        # "St Georges" (possessive without apostrophe) still names "St George".
-        found = next((v for v in variants if f" {v} " in key or f" {v}s " in key), None)
-        if found:
-            out.append(dict(url=url, name_found=found))
+        mention = entry_mention(text, variants)
+        if mention:
+            out.append(dict(url=url, domain=_domain(url), name_found=mention["matched_name"],
+                            entry_term=mention["entry_term"], snippet=mention["snippet"],
+                            evidence_source="fetched_now"))
     return out
+
+
+def stored_snippet_evidence(port: dict, records: list[dict] | None, alternates: tuple = ()) -> list[dict]:
+    """Evidence from stored records (an earlier fetch): the same check, run on each snippet.
+
+    Records are those of the port's zone; one applies when its port_key is one of the
+    port's name variants and its snippet passes entry_mention for this port's names.
+    """
+    if not records:
+        return []
+    variants = grounding_variants(port.get("name"), alternates)
+    keys = {" ".join(v) for v in variants}
+    out = []
+    for record in records:
+        url = record.get("url") or ""
+        if record.get("port_key") not in keys or not is_official_source([url]):
+            continue
+        mention = entry_mention(record.get("snippet"), variants)
+        if mention:
+            out.append(dict(url=url, domain=_domain(url), name_found=mention["matched_name"],
+                            entry_term=mention["entry_term"], snippet=record["snippet"],
+                            evidence_source="stored_snippet", fetched_at=record.get("fetched_at"),
+                            content_sha256=record.get("content_sha256")))
+    return out
+
+
+def _merge_evidence(fetched: list[dict], stored: list[dict], limit: int = 3) -> list[dict]:
+    """Fetched-now evidence first, then stored snippets for other URLs; at most `limit`."""
+    out, seen = [], set()
+    for item in fetched + stored:
+        if item["url"] not in seen:
+            seen.add(item["url"])
+            out.append(item)
+    return out[:limit]
 
 
 def _label(match: dict) -> str:
@@ -237,7 +394,8 @@ def tier_reasons(tier: str, official: list[dict], matches: list[dict], mismatche
                  country: str | None) -> list[str]:
     """English reasons: the tier, why, and what is missing. Never claims entry status from a registry."""
     registry = ", ".join(_label(m) for m in matches)
-    sources = ", ".join(e["url"] for e in official)
+    sources = ", ".join(e["url"] + (" (stored snippet)" if e.get("evidence_source") == "stored_snippet" else "")
+                        for e in official)
     reasons = {
         TIER1: f"{TIER_LABELS[TIER1]}: named in official source {sources}, and listed in {registry}",
         TIER2: f"{TIER_LABELS[TIER2]}: named in official source {sources}; not listed in UN/LOCODE "
@@ -342,8 +500,12 @@ def fetch_for_zone(zone: dict | str | None, ports: list[dict], run_id: str,
 
 
 def annotate(ports: list[dict], registry: dict, run_id: str,
-             source_texts: dict[str, str] | None = None) -> tuple[list[dict], dict]:
+             source_texts: dict[str, str] | None = None,
+             stored_records: list[dict] | None = None) -> tuple[list[dict], dict]:
     """Tier copies of ports and trace one registry_check event per port.
+
+    Official evidence comes from source_texts (fetched now) or stored_records (stored
+    snippets of the zone, see app/adapters/evidence_store.py), each passing the same check.
 
     Each port gets ``registry`` {tier, label, validation, matches, official_evidence,
     coord_mismatch, first_port_of_entry, reasons}, plus the backward-compatible
@@ -360,7 +522,8 @@ def annotate(ports: list[dict], registry: dict, run_id: str,
         alternates = tuple(n for e in entries for n in _entry_names(e)
                            if any(_entry_code(e) == m["code"] and e.get("source") == m["source"]
                                   for m in matches))
-        official = official_source_evidence(port, source_texts, alternates)
+        official = _merge_evidence(official_source_evidence(port, source_texts, alternates),
+                                   stored_snippet_evidence(port, stored_records, alternates))
         tier = tier_for(official, matches)
         fpoe = next((m["first_port_of_entry"] for m in matches if m.get("first_port_of_entry")), None)
         port["registry"] = dict(
@@ -373,7 +536,8 @@ def annotate(ports: list[dict], registry: dict, run_id: str,
             "registry_check", status=tier,
             input_summary={"port_name": port.get("name"), "country_iso2": port.get("country_iso2") or country,
                            "has_coordinates": _coords(port) is not None,
-                           "documents_with_text": len(source_texts or {})},
+                           "documents_with_text": len(source_texts or {}),
+                           "stored_records": len(stored_records or [])},
             registry_entries=len(entries), tier=tier, label=TIER_LABELS[tier],
             validation=VALIDATION[tier], matches=matches, official_evidence=official,
             coord_mismatch=mismatched[:3], max_distance_km=MAX_DISTANCE_KM,
@@ -388,6 +552,8 @@ def annotate(ports: list[dict], registry: dict, run_id: str,
 
 def check_ports(ports: list[dict], zone: dict | str | None, run_id: str,
                 live_failed: bool = False,
-                source_texts: dict[str, str] | None = None) -> tuple[list[dict], dict]:
+                source_texts: dict[str, str] | None = None,
+                stored_records: list[dict] | None = None) -> tuple[list[dict], dict]:
     """fetch_for_zone + annotate: the registry check step of the run pipeline."""
-    return annotate(ports, fetch_for_zone(zone, ports, run_id, live_failed), run_id, source_texts)
+    return annotate(ports, fetch_for_zone(zone, ports, run_id, live_failed), run_id,
+                    source_texts, stored_records)

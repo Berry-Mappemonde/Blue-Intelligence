@@ -41,7 +41,9 @@ def test_extract_ports_llm_runs_extraction_once_then_cross_references_zetaris(mo
     # Named in the fetched official document AND listed in both registries: tier 1.
     assert by_name['Port of St. George’s']['registry']['tier'] == 'tier1'
     assert by_name['Port of St. George’s']['registry']['official_evidence'] == [
-        {'url': 'https://www.customs.gov.bm/yachts', 'name_found': 'saint george'}]
+        {'url': 'https://www.customs.gov.bm/yachts', 'domain': 'customs.gov.bm', 'name_found': 'saint george',
+         'entry_term': 'ports of entry', 'snippet': "Ports of entry: St. George's Harbour.",
+         'evidence_source': 'fetched_now'}]
     assert by_name['Port of St. George’s']['zetaris_validation'] == 'official'
     # Independent registries, not BI's seed: no coordinates on the candidate, so no distance.
     assert by_name['Port of St. George’s']['registry_matches'] == [
