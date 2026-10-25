@@ -200,7 +200,11 @@ Antigua and Barbuda: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas Customs)
 11 are `tier_registered` and 5 are `tier3`; before stored evidence it was 13 and 7.
 With records in Mongo and live Zetaris, St. George's and Hamilton (Bermuda) are
 `tier1`; no official page designates Angola's or the Azores' ports, so they stay at
-their registry tier.
+their registry tier. With PR #45 the evaluator also uses this evidence: a `tier1` or
+`tier2` port is scored with an official source, and its position can be corroborated
+by a registry entry within 2.0 km. St. George's and Anchorage Small Boat Harbor then
+pass at 67 (live Hamilton too), while every other sample port stays `flag`
+(see [Limitations](#7-limitations)).
 
 ## 2. Meterless H-MEM engine: verification memory
 
@@ -324,6 +328,8 @@ from the response, never relabelled) and a sanitized `fallback_reason`. Evidence
 BriefingAgent sends the zone's finalised ports (name, verdict, confidence, reasons,
 sources) to `generator.generate()` and asks for a short clearance brief for
 sailors: which ports are confirmed, which are flagged and why, with their sources.
+With PR #45 a port's sources also list the official pages that designate it
+(`domain: url (official evidence)`), and a port with none says "No source".
 Its `sample_fn` builds the same brief deterministically from the same port data,
 so sample mode runs the real logic on real inputs. The output's `llm` field and
 the `BriefingAgent` trace event record the provider and served model. Evidence:
@@ -389,7 +395,11 @@ This run was recorded before `remember_node` stopped duplicating unchanged verdi
 (section 2). That is why the three recalled memories are identical copies, and why
 the `remember` event shows the earlier outcome `helpful` with a new record `mem-7`.
 With the current code, an unchanged verdict and source gives the outcome
-`reinforced`, and no record is added.
+`reinforced`, and no record is added. With PR #45 the Bermuda example no longer
+retries: St. George's has official evidence and a WPI-corroborated position, so it
+passes on the first evaluation. A current retry round is in
+`output_examples/04_benin.trace.jsonl` (also from #45): EvaluatorAgent critiques
+Benin's port, two ResearchAgent rounds follow, and the port is finalised as a flag.
 
 ```jsonl
 {"timestamp": "2026-10-22T21:41:09.427362+00:00", "agent_name": "RunPipeline", "run_id": "example-bermuda", "action": "run_start", "input_summary": {"zone_name": "Bermuda", "timeout_s": 300.0}}
@@ -466,12 +476,20 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
 
 ## 7. Limitations
 
-- **Sample ports end as flags.** The Zetaris view and the sample fixture carry
-  name, location, validation, geocoder and source URLs, but none of the reading,
-  geocoder-agreement or external-check fields that `score_port` rewards. A port
-  with a government source therefore reaches at most 60 (source 30, single
-  extractor 12, inside the EEZ 18), and the evaluator needs more than 60 for
-  `pass`. Evidence: the view in [`zetaris_setup_poe.sql`](../../backend/scripts/zetaris_setup_poe.sql),
+- **Most sample ports end as flags.** The Zetaris view and the sample fixture
+  carry name, location, validation, geocoder and source URLs, but none of the
+  reading or external-check fields that `score_port` rewards, and each seed port
+  has one geocode. A port with a government source therefore reaches 60 (source
+  30, single extractor 12, inside the EEZ 18), and the evaluator needs more than 60
+  for `pass`. With PR #45, a port with official evidence (`tier1`/`tier2`) whose
+  position lies within 2.0 km of a registry entry counts that entry as an
+  independent second geocode (WPI preferred, since UN/LOCODE positions are rounded
+  to the minute), which raises the map part from 18 to 25. Port of St. George's
+  (WPI BMSGE, 0.67 km) and Anchorage Small Boat Harbor (WPI USANC, 0.28 km) then
+  pass at 67. Ports without official evidence never get this: Road Bay (Anguilla)
+  and BRIDGETOWN PORT (Barbados) score 60 from government seed URLs that do not
+  designate them, have registry entries within 2 km, and stay `flag`
+  (`_registry_geocode_corroboration` in `evaluator.py` and its tests, PR #45). Evidence: the view in [`zetaris_setup_poe.sql`](../../backend/scripts/zetaris_setup_poe.sql),
   [`poe_ports.json`](../../backend/data/sample/zetaris/poe_ports.json),
   `score_port` in [`poe_confidence.py`](../../backend/app/services/poe_confidence.py)
   and `_verdict` in [`evaluator.py`](../../backend/app/agents/evaluator.py).
@@ -480,8 +498,9 @@ ZETARIS_LIVE=1 NIGHTSHIFT_LIVE=1 \
 - **Merge order.** This document (#31) targets `feat/integrate-poe-pipeline`
   (#33), which already contains the work of #26 (Zetaris), #28 (H-MEM), #30
   (Nightshift generator), #32 (run pipeline), #34 (registry tiers), #35, #36 (V2
-  UI) and #41 (stored evidence). #42 (point(s) of entry as a weak term) should
-  merge before this document. #33 then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
+  UI) and #41 (stored evidence). #42 (point(s) of entry as a weak term) and #45
+  (official evidence in the score, registry-corroborated positions, evidence pages
+  in the brief) must merge before this document, because it describes them. #33 then merges into `main`. `docs/RUNNING.md` tells judges to clone the default
   branch.
 - **Official evidence is only as good as the stored text.** Outside generation, a
   port reaches tier 1 or 2 only from a stored snippet (section 1); zones whose
@@ -546,3 +565,7 @@ hackathon work, all committed on 22 October 2026 or later:
 | Run pipeline, CLI, `POST /run`, examples and docs | [#32](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/32) | `f11d972`, `04f9368`, `6f1265c`, `44a7aeb`, `4cdd51f`, `953b11d`, `1892f87` |
 | UN/LOCODE and WPI registries in Zetaris, evidence tiers | [#34](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/34) | `78afc7b`, `785ec5a`, `5a7fa93`, `8359a6d`, `01aebfe`, `c10f09b` |
 | Reader context window, H-MEM label, SearXNG port, health probe | [#35](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/35) | `69d1a55`, `93609ca`, `dea81a2`, `af98049`, `f32764d`, `87769b5` |
+| Stored official evidence, official-page snapshots, strong/weak entry terms, evidence UI | [#41](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/41) | `9403ef7`, `4114000`, `8a33d79`, `2081bc6`, `b368381`, `974da96`, `803066c` |
+| "point(s) of entry" as a weak entry term | [#42](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/42) | `42d54df` |
+| `pycountry` in the minimal install, warning when missing | [#44](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/44) | `d0f6b4f` |
+| Official evidence in the score, registry-corroborated positions, brief sources, Benin example | [#45](https://github.com/Berry-Mappemonde/Blue-Intelligence/pull/45) | `e30ea65`, `a5698aa`, `47fd757`, `7f98ff9`, `0857c36`, `b29aaea`, `8932b76` |
