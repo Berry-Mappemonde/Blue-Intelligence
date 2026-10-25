@@ -125,8 +125,8 @@ supporting evidence only. Each port carries `registry` (`tier`, `label`,
 (`poe_pipeline.extract_ports_llm`), which holds the fetched pages as
 `[SOURCE: url]` blocks. Seed ports, and therefore `run.py`, `POST /run`,
 `/poe/verify` and sample mode, carry source URLs but no document text. There, ports
-can reach at most `tier_registered`. In the sample run, 14 of the 20 sample ports are
-`tier_registered` and 6 are `tier3`.
+can reach at most `tier_registered`. In the sample run, 13 of the 20 sample ports are
+`tier_registered` and 7 are `tier3`.
 
 UN/LOCODE coordinates are `DDMMN DDDMMW` and are converted to decimal degrees.
 The zone's country comes from the EEZ index (the sovereign's code for zones such as
