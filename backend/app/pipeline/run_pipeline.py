@@ -1,7 +1,8 @@
 """Runnable PoE verification pipeline: one zone in, verified ports and a brief out.
 
 ZetarisAdapter.get_ports -> ZetarisAdapter.registry_check -> HMemAgent.recall
-  -> EvaluatorAgent.evaluate -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
+  -> EvaluatorAgent.evaluate -> NemotronJudge.critique
+  -> [while route == retry: ResearchAgent -> prepare_retry -> evaluate]
   -> finalise -> BriefingAgent -> HMemAgent.remember
 
 Plain Python: LangGraph is not a dependency of this repository. Every step shares
@@ -17,6 +18,9 @@ builds the same brief deterministically from the finalised port data.
 The registry check tiers each candidate with official-source evidence (needs fetched
 document text, which seed ports do not carry) and UN/LOCODE / World Port Index matches
 held in Zetaris (app/agents/registry_check.py), independent of BI's own seed data.
+NemotronJudge (app/agents/poe_judge.py) is an advisory critic: one Nemotron call per zone
+on that official evidence text. It records port.judge and may route a flagged port into one
+more research round, but never writes a tier, validation, evidence or confidence.
 """
 from __future__ import annotations
 
@@ -32,7 +36,7 @@ from uuid import uuid4
 
 from app.adapters import evidence_store
 from app.adapters.zetaris import ZetarisClient, ZetarisUnavailable
-from app.agents import registry_check
+from app.agents import poe_judge, registry_check
 from app.agents.evaluator import (
     RETRY_LIMIT, evaluate, finalise, is_official_source, prepare_retry,
     route_after_evaluation,
@@ -315,6 +319,17 @@ async def _step(ctx: dict, name: str, fn, *args):
         ctx['timings'][name] = round(ctx['timings'].get(name, 0) + elapsed, 1)
 
 
+async def _timed(ctx: dict, name: str, awaitable):
+    """Await an async step (the event loop's own timeout applies) and record its duration."""
+    ctx['step'] = name
+    started = time.monotonic()
+    try:
+        return await awaitable
+    finally:
+        elapsed = round((time.monotonic() - started) * 1000, 1)
+        ctx['timings'][name] = round(ctx['timings'].get(name, 0) + elapsed, 1)
+
+
 async def _run(ctx: dict) -> None:
     zone_name, run_id = ctx['zone'], ctx['run_id']
     ports, ctx['zetaris_mode'] = await _step(ctx, 'ZetarisAdapter.get_ports', fetch_ports, zone_name, run_id)
@@ -327,6 +342,7 @@ async def _run(ctx: dict) -> None:
     state = ctx['state'] = {'run_id': run_id, 'ports': ports}
     state = ctx['state'] = await _step(ctx, 'HMemAgent.recall', recall_node, state)
     state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.evaluate', evaluate, state)
+    state = ctx['state'] = await _timed(ctx, 'NemotronJudge.critique', poe_judge.judge_zone(state, zone_name))
     for _ in range(RETRY_LIMIT):  # route_after_evaluation also enforces the cap
         if route_after_evaluation(state) != 'retry':
             break
@@ -334,10 +350,7 @@ async def _run(ctx: dict) -> None:
         state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.prepare_retry', prepare_retry, state)
         state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.evaluate', evaluate, state)
     state = ctx['state'] = await _step(ctx, 'EvaluatorAgent.finalise', finalise, state)
-    ctx['step'] = 'BriefingAgent.brief'
-    started = time.monotonic()
-    ctx['brief'] = await write_brief(state, zone_name)
-    ctx['timings']['BriefingAgent.brief'] = round((time.monotonic() - started) * 1000, 1)
+    ctx['brief'] = await _timed(ctx, 'BriefingAgent.brief', write_brief(state, zone_name))
     ctx['state'] = await _step(ctx, 'HMemAgent.remember', remember_node, state)
     ctx['remembered'] = True
 
@@ -350,7 +363,7 @@ def _port_out(port: dict) -> dict:
                 sources=[dict(url=u, provenance=provenance.get(u, 'zetaris'))
                          for u in port.get('source_urls') or []],
                 memories_recalled=len(port.get('memory') or []), research=port.get('research'),
-                registry=port.get('registry'))
+                registry=port.get('registry'), judge=port.get('judge'))
 
 
 def _display_path(path: Path) -> str:
@@ -384,8 +397,8 @@ def _result(ctx: dict, total_ms: float) -> dict:
         llm=dict(provider=brief.get('provider'), model=brief.get('model'),
                  fallback_reason=brief.get('fallback_reason')),
         components=dict(zetaris=zetaris_mode, registry=(ctx.get('registry') or {}).get('mode'),
-                        llm=brief.get('provider')),
-        registry=ctx.get('registry'),
+                        llm=brief.get('provider'), judge=(state.get('judge') or {}).get('status')),
+        registry=ctx.get('registry'), judge=state.get('judge'),
         retries=int(state.get('retry_count') or 0),
         memory=_memory_out(state, ports, bool(ctx.get('remembered'))),
         trace_file=_display_path(trace_path(ctx['run_id'])),

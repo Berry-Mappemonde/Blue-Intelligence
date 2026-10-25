@@ -17,11 +17,12 @@ from app.pipeline.api import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIRST_INPUT = sorted((REPO_ROOT / 'input_examples').glob('*.json'))[0]
-AGENTS = {'ZetarisAdapter', 'HMemAgent', 'EvaluatorAgent', 'ResearchAgent', 'BriefingAgent', 'MeterlessGenerator'}
+AGENTS = {'ZetarisAdapter', 'HMemAgent', 'EvaluatorAgent', 'NemotronJudge', 'ResearchAgent', 'BriefingAgent',
+          'MeterlessGenerator'}
 OUTPUT_KEYS = {'run_id', 'zone', 'mode', 'ports', 'summary', 'brief', 'llm', 'components', 'retries',
-               'memory', 'trace_file', 'timings_ms', 'error', 'registry'}
+               'memory', 'trace_file', 'timings_ms', 'error', 'registry', 'judge'}
 PORT_KEYS = {'name', 'verdict', 'confidence', 'lat', 'lon', 'reasons_en', 'sources', 'memories_recalled', 'research',
-             'registry'}
+             'registry', 'judge'}
 _CREDENTIAL_ENV = ('ZETARIS_API_KEY', 'ZETARIS_ORG_ID', 'ZETARIS_REST_URL', 'METERLESS_BASE_URL',
                    'METERLESS_RUNTIME_TOKEN', 'METERLESS_MODEL', 'MODEL_BASE_URL', 'MODEL_API_KEY',
                    'MODEL_NAME', 'NVIDIA_API_KEY')
@@ -81,7 +82,8 @@ def test_fresh_clone_cli_succeeds_in_sample_mode(cli_runs):
     assert 'SAMPLE_MODE enabled automatically' in proc.stderr
     assert_schema(result)
     assert result['error'] is None and result['mode'] == 'sample'
-    assert result['components'] == {'zetaris': 'sample', 'registry': 'sample', 'llm': 'sample'}
+    assert result['components'] == {'zetaris': 'sample', 'registry': 'sample', 'llm': 'sample', 'judge': 'skipped'}
+    assert result['judge']['reason'] == 'SAMPLE_MODE=true'
     assert result['llm']['model'] == 'caller-sample-fn'
     # stdout: JSONL trace events, then the same result as pretty JSON.
     lines = proc.stdout.splitlines()

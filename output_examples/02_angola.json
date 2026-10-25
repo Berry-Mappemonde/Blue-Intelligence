@@ -53,7 +53,8 @@
           "Registered port, entry status unverified: listed in UN/LOCODE AOLAD, WPI AOLAD (2.6 km), but no fetched official document names it; a registry listing does not establish port-of-entry status",
           "World Port Index lists it as a First Port of Entry (supporting evidence only)"
         ]
-      }
+      },
+      "judge": null
     }
   ],
   "summary": {
@@ -68,7 +69,8 @@
   "components": {
     "zetaris": "sample",
     "registry": "sample",
-    "llm": "sample"
+    "llm": "sample",
+    "judge": "skipped"
   },
   "registry": {
     "mode": "sample",
@@ -83,6 +85,13 @@
     },
     "coord_mismatch_count": 0
   },
+  "judge": {
+    "status": "skipped",
+    "reason": "SAMPLE_MODE=true",
+    "provider": null,
+    "served_model": null,
+    "retry_requested": []
+  },
   "retries": 0,
   "memory": {
     "recalled": 0,
@@ -93,14 +102,15 @@
   },
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 0.6,
-    "ZetarisAdapter.registry_check": 5.6,
+    "ZetarisAdapter.get_ports": 0.5,
+    "ZetarisAdapter.registry_check": 5.7,
     "HMemAgent.recall": 0.6,
-    "EvaluatorAgent.evaluate": 0.9,
+    "EvaluatorAgent.evaluate": 1.0,
+    "NemotronJudge.critique": 0.1,
     "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.2,
     "HMemAgent.remember": 0.9,
-    "total": 8.9
+    "total": 9.1
   },
   "error": null
 }

@@ -67,14 +67,51 @@ export function registryBadgeHtml(port, t, esc) {
   return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${borderColor};background:${backgroundColor};padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
 }
 
-function portKey(name) {
+// Same rules as registry_check.port_key in the backend, so a /poe/verify port ("Port of
+// St. George’s") matches its fiche port ("St. George's"). Both sides are tested against
+// __tests__/portKeyCases.json, generated from the backend.
+const POSSESSIVE = /['’‘`´]s(?![\p{L}\p{N}_])/giu;
+const APOSTROPHES = /['’‘`´]/g;
+// Leading facility words ("Port of X", "Porto de X", "Luka X"); one is removed.
+const PORT_PREFIXES = [
+  "port autonome de", "port autonome d", "pkk porti i", "porti i", "port of", "port de", "port d",
+  "porto de", "porto do", "porto da", "puerto de", "puerto del", "harbour of", "harbor of",
+  "marina de", "marina di", "marina", "luka", "porto", "puerto", "port", "the",
+];
+// Trailing facility words ("Bridgetown Port", "Anchorage Small Boat Harbor"); one is removed.
+const PORT_SUFFIXES = [
+  "small boat harbour", "small boat harbor", "deep water harbour", "deep water harbor",
+  "harbour", "harbor", "port", "marina", "jetty", "terminal",
+];
+const PORT_TOKENS = { st: "saint", ste: "sainte", mt: "mount", ft: "fort", pt: "point" };
+
+/** Casefold, strip accents and punctuation: "Luka Brčko" -> "luka brcko" (backend name_key). */
+function nameKey(name) {
   return String(name || "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .normalize("NFKD")
+    .replace(/\p{Mn}/gu, "")
     .toLowerCase()
-    .replace(/['’`]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/ß/g, "ss")
+    .replace(/ς/g, "σ")
+    .replace(APOSTROPHES, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+/** The first matching facility word removed, at the start or the end (backend _strip). */
+function stripOnce(key, words, leading) {
+  for (const word of words) {
+    if (leading && key.startsWith(`${word} `)) return key.slice(word.length + 1);
+    if (!leading && key.endsWith(` ${word}`)) return key.slice(0, -word.length - 1);
+  }
+  return key;
+}
+
+/** A port's name without facility words, St spelled out ("saint george"). */
+export function portKey(name) {
+  const key = nameKey(String(name || "").replace(POSSESSIVE, ""));
+  const stripped = stripOnce(stripOnce(key, PORT_PREFIXES, true), PORT_SUFFIXES, false) || key;
+  return stripped.split(" ").filter(Boolean).map((t) => PORT_TOKENS[t] || t).join(" ");
 }
 
 /**
