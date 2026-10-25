@@ -86,18 +86,21 @@
   "retries": 0,
   "memory": {
     "recalled": 0,
-    "remembered": true
+    "remembered": true,
+    "created": 1,
+    "reinforced": 0,
+    "superseded": 0
   },
   "trace_file": "logs/trace-example-angola.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 1.9,
-    "ZetarisAdapter.registry_check": 18.8,
-    "HMemAgent.recall": 3.2,
-    "EvaluatorAgent.evaluate": 2.0,
-    "EvaluatorAgent.finalise": 0.2,
+    "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 5.6,
+    "HMemAgent.recall": 0.6,
+    "EvaluatorAgent.evaluate": 0.9,
+    "EvaluatorAgent.finalise": 0.1,
     "BriefingAgent.brief": 0.2,
-    "HMemAgent.remember": 3.0,
-    "total": 29.3
+    "HMemAgent.remember": 0.9,
+    "total": 8.9
   },
   "error": null
 }

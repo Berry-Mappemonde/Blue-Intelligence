@@ -49,6 +49,15 @@ from the finalised ports (`llm.model = "caller-sample-fn"`).
 Run the same input twice: the second run's `memory.recalled` is non-zero, because
 H-MEM remembers the first run's verdicts (stored in `data/hmem/`, or `HMEM_DIR`).
 
+The four input examples cover the main paths:
+
+| Input | What it shows |
+| --- | --- |
+| `input_examples/01_bermuda.json` | `tier1` from stored official evidence (gov.bm) and a registry match; the WPI position (0.67 km) corroborates the geocode, so the port passes at 67 with no retry |
+| `input_examples/02_angola.json` | `tier_registered`: registry match, no official page |
+| `input_examples/03_azores.json` | `tier_registered`, with the country resolved from the sovereign (Portugal) |
+| `input_examples/04_benin.json` | a retry round: EvaluatorAgent critiques the port (`retry`, "find an official source"), ResearchAgent looks for a remembered official source, twice, then the port is finalised as `flag` |
+
 Zones in the sample fixture include Bermuda, Angola, Azores, Alaska, Albania,
 Anguilla, Argentina, Australia, Bahamas, Barbados, Belgium and Belize.
 
@@ -257,8 +266,8 @@ Every agent writes JSONL events with the same `run_id` to stdout and to
 silences stdout). Agents: `RunPipeline`, `ZetarisAdapter`, `HMemAgent`,
 `EvaluatorAgent`, `ResearchAgent`, `BriefingAgent`, `MeterlessGenerator`.
 Handoffs are recorded in `handoff`; retries appear as `prepare_retry` events and
-ResearchAgent `research_port` outcomes. `output_examples/*.trace.jsonl` are copies
-of real traces from the example runs.
+ResearchAgent `research_port` outcomes (see `output_examples/04_benin.trace.jsonl`).
+`output_examples/*.trace.jsonl` are copies of real traces from the example runs.
 
 ## 6. Tests
 
