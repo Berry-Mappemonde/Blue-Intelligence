@@ -162,10 +162,10 @@ in [`docs/RUNNING.md`](docs/RUNNING.md).
 - **Sample data is small:** 20 real ports, one per zone, and small real
   subsets of the registries. Official evidence exists only for zones whose
   official pages have been fetched: 4 zones in the sample.
-- **The evidence tier and the verdict are separate.** The confidence score
-  comes from the seed port's own fields, so a `tier1` port can still be
-  `flag` with a low score. For example, St. George's (Bermuda) is `tier1` and
-  `flag`, at 34 in sample mode.
+- **The evidence tier and the verdict are separate checks.** Official
+  evidence gives a port the official-source score, but `pass` also needs more
+  than 60 and a cross-checked geocode, which seed ports lack. St. George's
+  (Bermuda) is `tier1` and `flag` at 60 in sample mode.
 - **Grounding is a heuristic:** it checks the official domain, the entry term
   and the distance. A port name with "Port of" stripped can match the town.
   The committed snapshots were reviewed by hand.
