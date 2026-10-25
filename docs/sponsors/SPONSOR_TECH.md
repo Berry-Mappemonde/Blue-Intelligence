@@ -129,12 +129,10 @@ be finite and ordered. Each port then gets two kinds of evidence:
   and country match beyond 25 km is recorded as `coord_mismatch` with its
   distance. It is not a match, and the port is kept.
 - **Official source evidence:** a URL that passes `is_official_source()` *and* whose
-  text names the port within ~200 characters of an entry term (port of entry,
-  customs, clearance, clear in, immigration, quarantine, harbour master, and their
-  French, Spanish, Portuguese, Italian and Greek equivalents). A mention inside an
-  address or contact listing, or with no entry term nearby, does not count. The
-  text is fetched now or is a stored snippet of an earlier fetch (PR #41); it is
-  never model output.
+  text names the port within ~200 characters of an entry term (strong or weak, see
+  below). A mention inside an address or contact listing, or with no entry term
+  nearby, does not count. The text is fetched now or is a stored snippet of an
+  earlier fetch (PR #41); it is never model output.
 
 | Tier | Label | Evidence |
 | --- | --- | --- |
@@ -179,13 +177,22 @@ unreachable, the lookup reads small verbatim snapshots of real official pages
 failed lookup gives no evidence and never an official tier; each lookup is a
 `ZetarisAdapter` `evidence_lookup` trace event.
 
-In the sample run, 1 of the 20 sample ports is `tier1` (Port of St. George's,
-Bermuda: gov.bm Customs and a Bermuda planning report), 2 are `tier2` (Deep water
-Harbor, Antigua and Barbuda: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas
-Customs), 12 are `tier_registered` and 5 are `tier3`; before stored evidence it was
-13 and 7. With records in Mongo and live Zetaris, St. George's and Hamilton
-(Bermuda) are `tier1`; no official page designates Angola's or the Azores' ports,
-so they stay at their registry tier.
+A *strong* entry term is enough on its own: port(s) of entry, entry port,
+clearing/clear customs, clear in, clearance port, designated port, designated
+marina, port of call for clearing (with French, Spanish, Portuguese, Italian and
+Greek equivalents). A *weak* term (customs, immigration, quarantine, harbour master,
+point(s) of entry) counts only with a port, harbour, marina or quay word in the same
+window and a match on the full name, not the town left after stripping "Port of":
+Bermuda's customs "Long Room" in Hamilton, where goods are declared, does not make
+the Port of Hamilton an entry point, and an airport-only "point of entry" does not
+count. In the sample run, 2 of the 20 sample ports are `tier1` (Port of St.
+George's, Bermuda: gov.bm Customs and a Bermuda planning report; Anchorage Small
+Boat Harbor, Alaska: CBP's designated marina), 2 are `tier2` (Deep water Harbor,
+Antigua and Barbuda: customs.gov.ag; Conch Inn Marina, Bahamas: Bahamas Customs),
+11 are `tier_registered` and 5 are `tier3`; before stored evidence it was 13 and 7.
+With records in Mongo and live Zetaris, St. George's and Hamilton (Bermuda) are
+`tier1`; no official page designates Angola's or the Azores' ports, so they stay at
+their registry tier.
 
 ## 2. Meterless H-MEM engine: verification memory
 
