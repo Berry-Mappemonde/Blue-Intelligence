@@ -5,70 +5,191 @@
   "ports": [
     {
       "name": "Port of St. George’s",
-      "verdict": "flag",
-      "confidence": 34,
+      "verdict": "pass",
+      "confidence": 67,
+      "lat": 32.3810447,
+      "lon": -64.676717,
       "reasons_en": [
-        "unknown source",
+        "government source",
         "single extractor",
-        "inside the EEZ",
-        "no direct source (empty URLs or synthesis only)",
-        "single geocoder, not cross-checked",
-        "unconfirmed after max retries"
+        "inside the EEZ, geocoders agree",
+        "coordinates corroborated by WPI BMSGE, 0.67 km"
       ],
       "sources": [],
-      "memories_recalled": 3,
-      "research": {
-        "outcome": "no prior official source"
+      "memories_recalled": 0,
+      "research": null,
+      "registry": {
+        "tier": "tier1",
+        "label": "Official Commercial Port of Entry",
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "BMSGE",
+            "name": "Saint George",
+            "distance_km": 0.67
+          },
+          {
+            "source": "wpi",
+            "code": "BMSGE",
+            "name": "St George",
+            "distance_km": 0.67,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [
+          {
+            "url": "https://www.gov.bm/department/customs",
+            "domain": "gov.bm",
+            "name_found": "saint george",
+            "entry_term": "ports of entry",
+            "snippet": ". Customs officers work in partnership with the Bermuda Police Service in preventing and detecting smuggling and other criminal activity. Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton Customs officers process customs declarations for all arriving passengers on ships, yachts, or aircraft and assess and collect duty and other",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:53:55+00:00",
+            "content_sha256": "c59a59b73f0f576b4674dab7b637af241af80cf7a4d850f38567707439b0261f"
+          },
+          {
+            "url": "https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf",
+            "domain": "planning.gov.bm",
+            "name_found": "saint george",
+            "entry_term": "port of call for clearing",
+            "snippet": "arch vessels \ngenerally call at St. George’s with the BIOS vessel operating out of Ferry Reach. Bulk carriers \ndischarge aggregate at Penno’s Wharf in St. George’s. \n \nSt. George’s harbour is the requisite Port of Call for clearing Customs for all non-commercial \nvessels entering Bermuda. Total Yacht visitors for 2014 were 4,280, boosted by the biennial \nNewport to Bermuda Race; arrivals were 27.5",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:54:04+00:00",
+            "content_sha256": "b4d431d840bc71d4533adf451ab7773278a1eeabfdb984eec628c03ec5f59a2d"
+          }
+        ],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      },
+      "judge": {
+        "verdict": "poe",
+        "reason": "Listed as a main port of entry; St. George’s harbour is the requisite Port of Call for clearing Customs.",
+        "quoted_excerpt": "St. George’s harbour is the requisite Port of Call for clearing Customs for all non-commercial vessels entering Bermuda.",
+        "excerpt_verified": true,
+        "disagrees": false
       }
     },
     {
       "name": "Port of Hamilton",
-      "verdict": "flag",
-      "confidence": 34,
+      "verdict": "pass",
+      "confidence": 67,
+      "lat": 32.2923908,
+      "lon": -64.7792374,
       "reasons_en": [
-        "unknown source",
+        "government source",
         "single extractor",
-        "inside the EEZ",
-        "no direct source (empty URLs or synthesis only)",
-        "single geocoder, not cross-checked",
-        "unconfirmed after max retries"
+        "inside the EEZ, geocoders agree",
+        "coordinates corroborated by WPI BMBDA, 0.93 km"
       ],
       "sources": [],
-      "memories_recalled": 3,
-      "research": {
-        "outcome": "no prior official source"
+      "memories_recalled": 0,
+      "research": null,
+      "registry": {
+        "tier": "tier1",
+        "label": "Official Commercial Port of Entry",
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "BMBDA",
+            "name": "Hamilton",
+            "distance_km": null
+          },
+          {
+            "source": "wpi",
+            "code": "BMBDA",
+            "name": "Hamilton",
+            "distance_km": 0.93,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [
+          {
+            "url": "https://www.gov.bm/department/customs",
+            "domain": "gov.bm",
+            "name_found": "hamilton",
+            "entry_term": "ports of entry",
+            "snippet": "k in partnership with the Bermuda Police Service in preventing and detecting smuggling and other criminal activity. Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton Customs officers process customs declarations for all arriving passengers on ships, yachts, or aircraft and assess and collect duty and other taxes. Customs officer",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:53:55+00:00",
+            "content_sha256": "c59a59b73f0f576b4674dab7b637af241af80cf7a4d850f38567707439b0261f"
+          }
+        ],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), and listed in UN/LOCODE BMBDA, WPI BMBDA (0.93 km)",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      },
+      "judge": {
+        "verdict": "poe",
+        "reason": "Listed among Bermuda’s main ports of entry where customs officers are stationed.",
+        "quoted_excerpt": "Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton",
+        "excerpt_verified": true,
+        "disagrees": false
       }
     }
   ],
   "summary": {
-    "flag": 2
+    "pass": 2
   },
-  "brief": "Confirmed ports: None.\n\nFlagged ports:\n1. Port of St. George’s – flag (confidence 34%). Reasons: no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Sources: none.\n2. Port of Hamilton – flag (confidence 34%). Reasons: no direct source (empty URLs or synthesis only); single geocoder, not cross-checked; unconfirmed after max retries. Sources: none.\n\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "brief": "Confirmed ports:\n1. Port of St. George’s – pass (67% confidence). Why: coordinates corroborated by WPI BMSGE, 0.67 km. Tier: Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km). Sources: gov.bm: https://www.gov.bm/department/customs (official evidence); planning.gov.bm: https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (official evidence).\n2. Port of Hamilton – pass (67% confidence). Why: coordinates corroborated by WPI BMBDA, 0.93 km. Tier: Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), and listed in UN/LOCODE BMBDA, WPI BMBDA (0.93 km). Sources: gov.bm: https://www.gov.bm/department/customs (official evidence).\n\nFlagged ports: None.\n\nIndicative only: confirm entry formalities with the official authorities before departure.",
   "llm": {
     "provider": "nightshift",
-    "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "fallback_reason": null
   },
   "components": {
     "zetaris": "live",
-    "llm": "nightshift"
+    "registry": "live",
+    "llm": "nightshift",
+    "judge": "ok"
   },
-  "retries": 2,
+  "registry": {
+    "mode": "live",
+    "country_iso2": "BM",
+    "registry_entries": 12,
+    "official_count": 2,
+    "tiers": {
+      "tier1": 2,
+      "tier2": 0,
+      "tier_registered": 0,
+      "tier3": 0
+    },
+    "coord_mismatch_count": 0
+  },
+  "judge": {
+    "status": "ok",
+    "reason": null,
+    "provider": "nightshift",
+    "served_model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "retry_requested": []
+  },
+  "retries": 0,
   "memory": {
-    "recalled": 6,
-    "remembered": true
+    "recalled": 0,
+    "remembered": true,
+    "created": 2,
+    "reinforced": 0,
+    "superseded": 0
   },
   "trace_file": "logs/trace-example-bermuda.jsonl",
   "timings_ms": {
-    "ZetarisAdapter.get_ports": 1784.7,
-    "HMemAgent.recall": 4.7,
-    "EvaluatorAgent.evaluate": 2.8,
-    "ResearchAgent.research": 0.5,
-    "EvaluatorAgent.prepare_retry": 0.2,
-    "EvaluatorAgent.finalise": 0.1,
-    "BriefingAgent.brief": 27684.5,
-    "HMemAgent.remember": 7.6,
-    "total": 29485.1
+    "ZetarisAdapter.get_ports": 5392.5,
+    "ZetarisAdapter.registry_check": 4528.0,
+    "HMemAgent.recall": 2.0,
+    "EvaluatorAgent.evaluate": 2.1,
+    "NemotronJudge.critique": 21932.6,
+    "EvaluatorAgent.finalise": 0.4,
+    "BriefingAgent.brief": 29779.2,
+    "HMemAgent.remember": 11.4,
+    "total": 61648.4
   },
   "error": null
 }
