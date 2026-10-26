@@ -284,7 +284,7 @@ export default function ZoneFiche({
         <h3
           ref={headingRef}
           tabIndex={-1}
-          className="m-0 text-[15px] leading-5 font-medium text-m-fg rounded-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
+          className="m-focus-target m-0 text-[15px] leading-5 font-medium text-m-fg rounded-sm"
           data-testid="poe-fiche-zone-label"
         >
           {zoneDisplayName(fiche, t)}

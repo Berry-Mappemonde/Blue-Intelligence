@@ -22,6 +22,27 @@ export function restoreFocus(el, options = { preventScroll: true }) {
   return true;
 }
 
+/**
+ * Track how the user last interacted (pointer or keyboard) on <html data-input>,
+ * so a focus ring moved by script (the sheet heading) shows only after keyboard use.
+ */
+export function installInputModality(doc) {
+  if (!doc || !doc.documentElement || doc.documentElement.dataset?.inputTracked === "1") return () => {};
+  const root = doc.documentElement;
+  root.dataset.inputTracked = "1";
+  const pointer = () => { root.dataset.input = "pointer"; };
+  const keyboard = (e) => { if (!e || e.key !== "Shift") root.dataset.input = "keyboard"; };
+  doc.addEventListener("pointerdown", pointer, true);
+  doc.addEventListener("mousedown", pointer, true);
+  doc.addEventListener("keydown", keyboard, true);
+  return () => {
+    doc.removeEventListener("pointerdown", pointer, true);
+    doc.removeEventListener("mousedown", pointer, true);
+    doc.removeEventListener("keydown", keyboard, true);
+    delete root.dataset.inputTracked;
+  };
+}
+
 /** Test id of a zone row, the element "All zones" hands focus back to. */
 export function zoneRowTestId(mrgid) {
   return mrgid == null ? null : `poe-zone-row-${mrgid}`;
