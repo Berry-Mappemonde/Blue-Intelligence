@@ -45,10 +45,16 @@ export const ZONE_SELECTED_COLOR = "#fbbf24";
 export const ZONE_NEUTRAL_LINE = "#5e5e5e";
 export const ZONE_NEUTRAL_FILL = "#8f8f8f";
 export const ZONE_ERROR_COLOR = "#eb5a5a";
-export const zoneStyle = (status, selected = false) => {
+// Above this zoom the selected zone is framed on its ports: the outline would only
+// trace the coastline, so it is hidden (outline and fill) until the user zooms out.
+export const ZONE_SELECTED_MAX_ZOOM = 9;
+export const zoneStyle = (status, selected = false, zoom = null) => {
   const s = status || "non_generee";
+  if (selected && zoom != null && zoom > ZONE_SELECTED_MAX_ZOOM) {
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0, dashArray: null };
+  }
   if (selected) {
-    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.05, dashArray: null };
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
   }
   const generated = s === "ia" || s === "ia_sans_source";
   const erreur = s === "erreur";

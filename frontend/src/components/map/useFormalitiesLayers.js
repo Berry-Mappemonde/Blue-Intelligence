@@ -61,7 +61,7 @@ export default function useFormalitiesLayers({
       layer.eachLayer((lyr) => {
         const mrgid = lyr.feature?.properties?.mrgid;
         const selected = selectedZoneRef?.current != null && Number(selectedZoneRef.current) === Number(mrgid);
-        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected)); } catch (_) { /* noop */ }
+        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected, mapObj.current?.getZoom())); } catch (_) { /* noop */ }
       });
     }
     const map = mapObj.current;
@@ -72,18 +72,26 @@ export default function useFormalitiesLayers({
     // eslint-disable-next-line
   }, [poeZones]);
 
-  // Only the selected polygon is amber; the previous one goes back to neutral.
+  // Only the selected polygon is amber; the previous one goes back to neutral. Above
+  // ZONE_SELECTED_MAX_ZOOM the selected outline is hidden, so re-apply on every zoom.
   useEffect(() => {
     const layer = eezLayerRef.current;
-    if (!layer) return;
-    layer.eachLayer((lyr) => {
-      const mrgid = lyr.feature?.properties?.mrgid;
-      const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
-      try {
-        lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected));
-        if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
-      } catch (_) { /* noop */ }
-    });
+    const map = mapObj.current;
+    if (!layer) return undefined;
+    const apply = () => {
+      const zoom = map ? map.getZoom() : null;
+      layer.eachLayer((lyr) => {
+        const mrgid = lyr.feature?.properties?.mrgid;
+        const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
+        try {
+          lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected, zoom));
+          if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
+        } catch (_) { /* noop */ }
+      });
+    };
+    apply();
+    if (map) map.on("zoomend", apply);
+    return () => { if (map) map.off("zoomend", apply); };
     // eslint-disable-next-line
   }, [selectedZone]);
 
@@ -151,12 +159,10 @@ export default function useFormalitiesLayers({
         }).join("") + (allEvidence.length > 2
           ? `<div class="poe-popup__muted">+${allEvidence.length - 2} ${escH(t("poeMoreSources"))}</div>`
           : "");
-        // The seed note is written in French: shown as is in the French UI, labelled otherwise.
+        // The seed note is shown only when its language matches the UI language.
         const lang = langRef?.current || "en";
-        const noteHtml = p.note
-          ? (lang === "fr" || !_looksFrench(p.note)
-            ? `<div class="poe-popup__note">${escH(p.note)}</div>`
-            : `<div class="poe-popup__note"><span style="color:rgb(var(--m-fg-3));">${escH(t("poeSourceNoteFr"))}:</span> ${escH(p.note)}</div>`)
+        const noteHtml = p.note && ((lang === "fr") === _looksFrench(p.note))
+          ? `<div class="poe-popup__note">${escH(p.note)}</div>`
           : "";
         const meta = [p.city, p.zone_name].filter(Boolean).map(escH).join(" · ");
         return `<div class="poe-popup" style="min-width:230px;max-width:300px;">
@@ -200,8 +206,14 @@ export default function useFormalitiesLayers({
       try { lyr.openPopup(at || undefined); } catch (_) { /* not attached yet */ }
     };
     map.once("moveend", open);
+    // With ports, frame the ports (island and markers clearly visible); otherwise the EEZ.
+    const portLatLngs = (poePorts?.features || [])
+      .filter((f) => Number(f.properties?.mrgid) === Number(flyToZone.mrgid) && Array.isArray(f.geometry?.coordinates))
+      .map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]]);
     try {
-      if (e - w > 350 && anchorLatLng) {
+      if (portLatLngs.length) {
+        map.flyToBounds(L.latLngBounds(portLatLngs).pad(0.25), { duration: 0.8, maxZoom: 11, padding: [64, 64] });
+      } else if (e - w > 350 && anchorLatLng) {
         map.flyTo(anchorLatLng, 5, { duration: 0.8 });
       } else {
         // Whole outline visible: generous padding, the sheet's popup tip included.

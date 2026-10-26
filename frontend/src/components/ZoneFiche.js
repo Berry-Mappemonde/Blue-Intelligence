@@ -310,7 +310,7 @@ export default function ZoneFiche({
           ) : (
             <p className="mt-1.5 text-[12px] leading-4 text-m-fg3 text-center">
               {fiche.verify
-                ? `${t("poeVerifiedWith")} ${telemetryWord(fiche.verify?.nemotron_status?.provider, t)}, Zetaris ${telemetryWord(fiche.verify?.zetaris_mode, t).toLowerCase()}`
+                ? `${t("poeVerifiedWith")} ${telemetryWord(fiche.verify?.nemotron_status?.provider, t, { inSentence: true })}, Zetaris ${telemetryWord(fiche.verify?.zetaris_mode, t, { inSentence: true })}`
                 : t("poeVerifyHint")}
             </p>
           )}

@@ -3,6 +3,7 @@ import L from "leaflet";
 
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
 import { createPanes } from "./map/layerOrder";
+import { installAttributionDedupe } from "./map/attribution";
 import { zonePopupHtml } from "./map/zonePopup";
 import useAmpLayer, { popupHtml as ampPopupHtml, ampPointToLayer } from "./map/useAmpLayer";
 import useAnchoragesLayer from "./map/useAnchoragesLayer";
@@ -140,6 +141,8 @@ export default function MapView({
       maxBounds: WORLD,
       maxBoundsViscosity: 1.0,
     });
+    // Presentation only: each provider once in the attribution bar.
+    installAttributionDedupe(map.attributionControl);
     tileRef.current = L.tileLayer(TILE_URLS.dark, {
       attribution: "&copy; Esri &copy; OpenStreetMap contributors",
       maxZoom: 16,
@@ -198,10 +201,11 @@ export default function MapView({
             cb(mrgid, zoneName, Array.isArray(z?.bbox) && z.bbox.length === 4 ? z.bbox : null, z?.anchor || null);
           }
         });
-        lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
+        const isSelected = () => selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+        const hiddenSelected = () => isSelected() && zoneStyle(null, true, map.getZoom()).opacity === 0;
+        lyr.on("mouseover", () => { if (hiddenSelected()) return; try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
         lyr.on("mouseout", () => {
-          const selected = selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
-          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected)); } catch (_) {}
+          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, isSelected(), map.getZoom())); } catch (_) {}
         });
       },
     });

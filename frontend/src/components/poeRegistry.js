@@ -122,10 +122,16 @@ export function evidenceMarkOptions(evidence) {
 }
 
 // Telemetry values as words (display only; the raw value stays in the title).
-export function telemetryWord(value, t) {
+export function telemetryWord(value, t, { inSentence = false } = {}) {
   const v = String(value || "").trim();
   if (!v) return "—";
-  const key = `poeTelemetry_${v.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+  const slug = v.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  if (inSentence) {
+    // Lower-case form for the middle of a sentence; names (Nightshift, NVIDIA) keep their case.
+    const inner = `poeTelemetryIn_${slug}`;
+    if (t(inner) !== inner) return t(inner);
+  }
+  const key = `poeTelemetry_${slug}`;
   return t(key) !== key ? t(key) : v;
 }
 

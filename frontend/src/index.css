@@ -580,6 +580,11 @@ button { transition: background-color 0.15s ease, border-color 0.15s ease, color
 /* Matched port name / entry term inside an evidence excerpt */
 .m-mark { background: color-mix(in oklab, rgb(var(--m-accent)) 22%, transparent); color: rgb(var(--m-fg)); border-radius: 3px; padding: 0 2px; }
 
+/* Attribution bar: never clipped at the map edge; neutral in Ports of entry mode */
+.leaflet-control-attribution { max-width: min(70vw, 960px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-mode="formalities"] .leaflet-control-attribution { background: rgb(var(--m-overlay) / 0.92); color: rgb(var(--m-fg-3)); font-family: var(--m-font); font-size: 11px; line-height: 16px; padding: 2px 8px; }
+[data-mode="formalities"] .leaflet-control-attribution a { color: rgb(var(--m-fg-2)); }
+
 /* Legend swatches */
 .legend-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 9999px; flex: none; background: var(--poe-marker); border: 1px solid #121212; box-shadow: 0 0 0 1px var(--poe-marker); }
