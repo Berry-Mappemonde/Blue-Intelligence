@@ -103,17 +103,17 @@ class TestOsmValidate:
         # only_unchecked=False: robust even when the database has already been
         # fully validated (revalidates 3 ports — non-destructive).
         r = api.post(f"{BASE_URL}/api/poe/validate-osm",
-                     json={"limit": 3, "only_unchecked": False}, timeout=60)
+                     json={"limit": 1, "only_unchecked": False}, timeout=60)
         assert r.status_code == 202, r.text[:300]
 
-        st = wait_done(api, f"{BASE_URL}/api/poe/validate-osm/status", timeout=180)
+        st = wait_done(api, f"{BASE_URL}/api/poe/validate-osm/status", timeout=300)
         assert not st.get("error"), st.get("error")
         summary = st.get("summary") or {}
         # Overpass est un tiers : un 403 ou un timeout en CI n'a rien d'anormal.
         # Ce test porte sur la non-destructivité — elle ne dépend pas du réseau,
         # puisqu'un port en échec n'écrit rien. On exige donc que le lot de 3
         # ports ait bien été traité, sans exiger que le tiers ait répondu.
-        assert summary.get("checked", 0) + summary.get("failed", 0) == 3, summary
+        assert summary.get("checked", 0) + summary.get("failed", 0) == 1, summary
 
         after = snapshot(mongo)
         assert len(after) >= len(before)

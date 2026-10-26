@@ -25,6 +25,8 @@ from app.services.osm_validate import overpass_around, score_confidence  # noqa:
 _CONCURRENCY = 3
 _ROUNDS = 4
 _CACHE_ENV = "CI_OSM_CACHE"
+_BUDGET_ENV = "CI_OSM_BUDGET_S"
+_BUDGET_DEFAULT = 600
 
 
 def osm_updates(port: dict, elements: list[dict]) -> dict:
@@ -100,10 +102,15 @@ def _remember(cache: dict, port: dict, elements: list[dict]) -> None:
 
 
 async def _validate_port(db, port: dict, sem: asyncio.Semaphore, cache: dict,
-                         stats: dict) -> None:
+                         stats: dict, budget_s: int, t0: float,
+                         budget_state: dict) -> None:
     cached = _cached_elements(port, cache)
     try:
         if cached is None:
+            if budget_state["stopped"] or time.time() - t0 >= budget_s:
+                budget_state["stopped"] = True
+                stats["budget_stopped"] += 1
+                return
             async with sem:
                 elements = await overpass_around(port["lat"], port["lon"])
             _remember(cache, port, elements)
@@ -134,20 +141,27 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
         "lon": {"$ne": None},
         "osm_checked_at": {"$exists": False},
     }
+    budget_s = int(os.environ.get(_BUDGET_ENV, _BUDGET_DEFAULT))
+    t0 = time.time()
+    budget_state = {"stopped": False}
     try:
         for round_n in range(1, _ROUNDS + 1):
+            if budget_state["stopped"]:
+                break
             ports = await db.poe_ports.find(pending_filter).to_list(20_000)
             if not ports:
                 break
-            stats = {"checked": 0, "failed": 0, "cache": 0, "errors": []}
+            stats = {"checked": 0, "failed": 0, "cache": 0, "budget_stopped": 0, "errors": []}
             started = time.time()
             await asyncio.gather(*[
-                _validate_port(db, port, sem, cache, stats) for port in ports
+                _validate_port(db, port, sem, cache, stats, budget_s, t0, budget_state)
+                for port in ports
             ])
             _save_cache(cache_file, cache)
             print(
                 f"round {round_n}: {stats['checked']} validés, "
                 f"{stats['failed']} échecs, {stats['cache']} depuis le cache, "
+                f"{stats.get('budget_stopped', 0)} sautés (budget temps), "
                 f"{time.time() - started:.0f}s",
                 flush=True,
             )
@@ -155,8 +169,14 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
                 print(f"  {line}", flush=True)
             if stats["failed"] and round_n < _ROUNDS:
                 await asyncio.sleep(8)
+            if budget_state["stopped"]:
+                print(f"budget de {budget_s}s dépassé: arret des requetes Overpass", flush=True)
+                break
     finally:
         _save_cache(cache_file, cache)
+
+    if budget_state["stopped"]:
+        print(f"budget de {budget_s}s atteint: cache sauvegarde, arret propre", flush=True)
 
     missing = await db.poe_ports.count_documents(pending_filter)
     total = await db.poe_ports.count_documents({})
