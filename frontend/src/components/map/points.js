@@ -48,6 +48,8 @@ export function applyPenRadii(group, zoom) {
   if (!group || typeof group.eachLayer !== "function") return;
   group.eachLayer((lyr) => {
     if (typeof lyr.setRadius !== "function") return;
+    // A layer may carry its own zoom-dependent style (PoE markers: dot + halo).
+    if (typeof lyr._biZoomStyle === "function") { lyr.setStyle(lyr._biZoomStyle(zoom)); return; }
     const bump = lyr._biBump || 0;
     lyr.setRadius(penRadius(zoom, bump));
   });

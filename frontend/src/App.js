@@ -958,6 +958,7 @@ const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
               poeZones={poeZones.items}
               poePorts={poePorts}
               selectedZone={selectedZone}
+              lang={lang}
               onSelectZone={handleSelectZone}
               flyToMarina={flyToMarina}
               flyToZone={flyToZone}

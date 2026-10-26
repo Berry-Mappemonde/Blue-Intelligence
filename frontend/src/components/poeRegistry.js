@@ -47,6 +47,100 @@ export function sourceTitle(url) {
   }
 }
 
+// Entry terms highlighted in an evidence excerpt when the run did not record one
+// (display only; the tier never depends on this list).
+export const ENTRY_TERMS = [
+  "first port of entry", "ports of entry", "port of entry", "port d'entrée", "ports d'entrée",
+  "customs and immigration", "customs clearance", "clear customs", "customs", "immigration",
+  "clearance", "douane", "dédouanement", "yacht reporting centre",
+];
+const PREFIX_RE = /^(port autonome d[e']?|port of|port de|port d'|porto d[eoa]|puerto de[l]?|harbou?r of|marina d[ei]|marina|luka|porto|puerto|port)\s+/iu;
+
+/** Name variants of a port worth highlighting: the name, without its facility word, and the match recorded by the run. */
+export function portNameVariants(port, evidence) {
+  const names = [evidence?.name_found, port?.name].filter(Boolean).map((n) => String(n).trim());
+  const bare = names.map((n) => n.replace(PREFIX_RE, "")).filter((n) => n && n.length > 2);
+  return [...new Set([...names, ...bare])];
+}
+
+/** Cut a stored excerpt to word boundaries; `lead` / `trail` say where an ellipsis belongs. */
+export function trimSnippet(snippet) {
+  let text = String(snippet || "").replace(/\s+/g, " ").trim();
+  let lead = false;
+  let trail = false;
+  if (text && !/^[\p{Lu}\p{N}("“'[«]/u.test(text)) {
+    const i = text.indexOf(" ");
+    if (i > 0 && i < 30) text = text.slice(i + 1);
+    lead = true;
+  }
+  if (text && !/[.!?…)”"'»]$/u.test(text)) {
+    const i = text.lastIndexOf(" ");
+    if (i > 0 && text.length - i < 30) text = text.slice(0, i);
+    trail = true;
+  }
+  return { text, lead, trail };
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/['’]/g, "['’]");
+
+/**
+ * Excerpt as segments [{text, mark}] with the port name and the entry term marked.
+ * Terms: the run's name_found / entry_term when present, else the name variants and
+ * the ENTRY_TERMS list. Longest term first so "first port of entry" wins over "customs".
+ */
+export function snippetSegments(snippet, terms, { repeat = [] } = {}) {
+  const { text, lead, trail } = trimSnippet(snippet);
+  const list = [...new Set((terms || []).filter(Boolean).map((t) => String(t).trim()).filter((t) => t.length > 1))]
+    .sort((a, b) => b.length - a.length);
+  if (!text || !list.length) return { lead, trail, segments: [{ text, mark: false }] };
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${list.map(escapeRe).join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  const segments = [];
+  const seen = new Set();
+  const again = new Set(repeat.map((t) => String(t).toLowerCase().replace(/[’]/g, "'")));
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    // Each term is marked once (names, generic entry terms); only the entry term the
+    // run recorded is marked at every occurrence, so the excerpt stays readable.
+    const key = m[0].toLowerCase().replace(/[’]/g, "'");
+    if (seen.has(key) && !again.has(key)) continue;
+    seen.add(key);
+    if (m.index > last) segments.push({ text: text.slice(last, m.index), mark: false });
+    segments.push({ text: m[0], mark: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ text: text.slice(last), mark: false });
+  return { lead, trail, segments };
+}
+
+/** Terms to mark for one evidence item of a port, and whether to mark each once. */
+export function evidenceTerms(port, evidence) {
+  const names = portNameVariants(port, evidence);
+  return evidence?.entry_term ? [...names, evidence.entry_term] : [...names, ...ENTRY_TERMS];
+}
+export function evidenceMarkOptions(evidence) {
+  return { repeat: evidence?.entry_term ? [evidence.entry_term] : [] };
+}
+
+// Telemetry values as words (display only; the raw value stays in the title).
+export function telemetryWord(value, t) {
+  const v = String(value || "").trim();
+  if (!v) return "—";
+  const key = `poeTelemetry_${v.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+  return t(key) !== key ? t(key) : v;
+}
+
+/** "nightshift: offline; nvidia: not_configured" -> "Nightshift offline, NVIDIA not configured". */
+export function fallbackReasonText(reason, t) {
+  const raw = String(reason || "").trim();
+  if (!raw) return "";
+  const parts = raw.split(/;\s*/).map((part) => {
+    const [name, state] = part.split(/:\s*/);
+    if (!state) return part;
+    return `${telemetryWord(name, t)} ${telemetryWord(state, t)}`;
+  });
+  return parts.join(", ");
+}
+
 /** Inline SVG glyph of a tier (12 px): filled disc + check, ring + check, half ring, dashed ring. */
 export function tierGlyphSvg(tier) {
   const c = TIER_COLOR[tier] || TIER_COLOR.none;

@@ -48,17 +48,19 @@ export const ZONE_ERROR_COLOR = "#eb5a5a";
 export const zoneStyle = (status, selected = false) => {
   const s = status || "non_generee";
   if (selected) {
-    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.08, dashArray: null };
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.05, dashArray: null };
   }
   const generated = s === "ia" || s === "ia_sans_source";
   const erreur = s === "erreur";
+  // Generated: solid fg-3 hairline. Not generated: dotted fg-4. No official source: dashed.
   return {
-    color: erreur ? ZONE_ERROR_COLOR : ZONE_NEUTRAL_LINE,
+    color: erreur ? ZONE_ERROR_COLOR : generated ? ZONE_NEUTRAL_FILL : ZONE_NEUTRAL_LINE,
     weight: 1,
-    opacity: erreur ? 0.7 : generated ? 0.75 : 0.4,
+    opacity: erreur ? 0.7 : generated ? 0.6 : 0.55,
     fillColor: erreur ? ZONE_ERROR_COLOR : ZONE_NEUTRAL_FILL,
     fillOpacity: erreur ? 0.04 : generated ? 0.04 : 0.015,
-    dashArray: s === "ia_sans_source" ? "4 4" : null,
+    dashArray: s === "ia_sans_source" ? "4 4" : s === "non_generee" ? "1 4" : null,
+    lineCap: s === "non_generee" ? "round" : "butt",
   };
 };
 

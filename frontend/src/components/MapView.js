@@ -49,6 +49,7 @@ export default function MapView({
   poeZones,
   poePorts,
   selectedZone = null,
+  lang = "en",
   route,
   onSelectZone,
   flyToMarina,
@@ -100,6 +101,8 @@ export default function MapView({
   zoneFicheRef.current = zoneFiche;
   const selectedZoneRef = useRef(selectedZone);
   selectedZoneRef.current = selectedZone;
+  const langRef = useRef(lang);
+  langRef.current = lang;
   const basemapRef = useRef(basemap);
   basemapRef.current = basemap;
 
@@ -191,7 +194,8 @@ export default function MapView({
           if (typeof cb === "function") {
             const z = zoneItemsRef.current.get(mrgid);
             const zoneName = z ? (z.label || z.name || z.geoname || "") : "";
-            cb(mrgid, zoneName, null);
+            // Same as a row click: the map fits the zone so its whole outline is visible.
+            cb(mrgid, zoneName, Array.isArray(z?.bbox) && z.bbox.length === 4 ? z.bbox : null, z?.anchor || null);
           }
         });
         lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
@@ -294,7 +298,7 @@ export default function MapView({
     mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
     poeMarkersById,
     mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
-    selectedZone, selectedZoneRef,
+    selectedZone, selectedZoneRef, langRef,
   });
   useProjectsLayer({
     mapObj, clusterRef, zoomingRef, pendingRef, markersById: projectMarkersById,

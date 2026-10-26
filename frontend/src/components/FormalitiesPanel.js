@@ -18,8 +18,8 @@ const STATUS_LABEL_KEY = {
 
 // Mirrors zoneStyle() in map/constants.js: neutral hairlines, amber only when selected.
 const ZONE_SWATCH = {
-  ia: { background: "rgba(143,143,143,0.10)", border: "1px solid rgba(94,94,94,0.95)" },
-  non_generee: { background: "rgba(143,143,143,0.04)", border: "1px solid rgba(94,94,94,0.5)" },
+  ia: { background: "rgba(143,143,143,0.10)", border: "1px solid #8f8f8f" },
+  non_generee: { background: "rgba(143,143,143,0.03)", border: "1px dotted #6f6f6f" },
   erreur: { background: "rgba(235,90,90,0.10)", border: "1px solid #eb5a5a" },
   selected: { background: "rgba(251,191,36,0.14)", border: "1px solid #fbbf24" },
 };

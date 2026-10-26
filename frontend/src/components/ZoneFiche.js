@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
-import { registryBadge, registryNotes, sourceTitle, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
+import { evidenceMarkOptions, evidenceTerms, fallbackReasonText, registryBadge, registryNotes, snippetSegments, sourceTitle, telemetryWord, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
 import { zoneDisplayName } from "./map/zoneLabel";
 
 /**
@@ -139,33 +139,39 @@ function RegistryBadge({ port, t }) {
 }
 
 /** Official evidence of a port (registry.official_evidence): source domain, excerpt collapsed. */
-function OfficialEvidence({ evidence, t }) {
+function OfficialEvidence({ evidence, port, t }) {
   if (!evidence?.length) return null;
   return (
     <div className="mt-1.5 space-y-1" data-testid="poe-fiche-evidence">
-      {evidence.map((e) => (
-        <details key={e.url} className="m-details" data-testid="poe-fiche-evidence-item">
-          <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
-            <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
-            <span className="truncate">
-              {t("poeEvidenceTitle")}: <a
-                href={e.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-m-accent-fg hover:underline underline-offset-2"
-                title={e.url}
-                onClick={(ev) => ev.stopPropagation()}
-              >
-                {e.domain}
-              </a>
-              {" "}({t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched")})
-            </span>
-          </summary>
-          <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 whitespace-pre-line break-words">
-            {e.snippet}
-          </p>
-        </details>
-      ))}
+      {evidence.map((e) => {
+        const { lead, trail, segments } = snippetSegments(e.snippet, evidenceTerms(port, e), evidenceMarkOptions(e));
+        return (
+          <details key={e.url} className="m-details" data-testid="poe-fiche-evidence-item">
+            <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
+              <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {t("poeEvidenceTitle")}: <a
+                  href={e.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-m-accent-fg hover:underline underline-offset-2"
+                  title={e.url}
+                  onClick={(ev) => ev.stopPropagation()}
+                >
+                  {e.domain}
+                </a>
+              </span>
+            </summary>
+            <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 break-words">
+              {lead ? "… " : ""}
+              {segments.map((s, i) => (s.mark
+                ? <mark key={i} className="m-mark">{s.text}</mark>
+                : <React.Fragment key={i}>{s.text}</React.Fragment>))}
+              {trail ? " …" : ""}
+            </p>
+          </details>
+        );
+      })}
     </div>
   );
 }
@@ -184,17 +190,17 @@ function VerifyTelemetry({ verify, t }) {
     <div className="rounded-[10px] border border-m-line bg-m-panel px-3 py-2.5" data-testid="poe-fiche-telemetry">
       <p className="text-[12px] leading-4 font-medium text-m-fg2">{t("telemetryTitle")}</p>
       <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px] leading-4">
-        {row(t("telemetryZetaris"), verify?.zetaris_mode || "—", "poe-telemetry-zetaris")}
+        {row(t("telemetryZetaris"), telemetryWord(verify?.zetaris_mode, t), "poe-telemetry-zetaris")}
         {row(
           t("telemetryMemory"),
           `${mem.recalled ?? 0} ${t("telemetryRecalled")}, ${mem.reinforced ?? 0} ${t("telemetryReinforced")}, ${mem.created ?? 0} ${t("telemetryCreated")}`,
           "poe-telemetry-memory",
         )}
         {row(t("telemetryModel"), ns.model || "—", "poe-telemetry-model", true)}
-        {row(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
+        {row(t("telemetryProvider"), telemetryWord(ns.provider, t), "poe-telemetry-provider")}
         {row(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run", true)}
         {ns.fallback_reason && ns.provider && ns.provider !== "nightshift"
-          ? row(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback")
+          ? row(t("telemetryFallback"), fallbackReasonText(ns.fallback_reason, t), "poe-telemetry-fallback")
           : null}
       </dl>
     </div>
@@ -304,7 +310,7 @@ export default function ZoneFiche({
           ) : (
             <p className="mt-1.5 text-[12px] leading-4 text-m-fg3 text-center">
               {fiche.verify
-                ? `${t("poeVerifiedWith")} ${fiche.verify?.nemotron_status?.provider || "—"}, Zetaris ${fiche.verify?.zetaris_mode || "—"}`
+                ? `${t("poeVerifiedWith")} ${telemetryWord(fiche.verify?.nemotron_status?.provider, t)}, Zetaris ${telemetryWord(fiche.verify?.zetaris_mode, t).toLowerCase()}`
                 : t("poeVerifyHint")}
             </p>
           )}
@@ -417,9 +423,10 @@ export default function ZoneFiche({
                       {verdict ? (
                         <span
                           key={verdict.key}
-                          className={`tier-chip-in text-[12px] leading-4 ${verdict.key === "pass" ? "text-m-success-fg" : "text-m-fg3"}`}
+                          className={`tier-chip-in inline-flex items-center gap-1 text-[12px] leading-4 ${verdict.key === "pass" ? "text-m-fg2" : "text-m-fg3"}`}
                           data-testid={`poe-fiche-verdict-${verdict.key}`}
                         >
+                          {verdict.key === "pass" ? <Check size={12} strokeWidth={2} aria-hidden="true" /> : null}
                           {verdict.text}
                         </span>
                       ) : null}
@@ -460,7 +467,13 @@ export default function ZoneFiche({
                       {n.text}
                     </p>
                   ))}
-                  <OfficialEvidence evidence={p.registry?.official_evidence} t={t} />
+                  {/* Without official evidence, the run's first reason says why the tier is what it is. */}
+                  {!(p.registry?.official_evidence || []).length && (p.registry?.reasons || [])[0] ? (
+                    <p className="mt-1 text-[12px] leading-4 text-m-fg3" data-testid="poe-fiche-reason">
+                      {p.registry.reasons[0]}
+                    </p>
+                  ) : null}
+                  <OfficialEvidence evidence={p.registry?.official_evidence} port={p} t={t} />
                   {isOpen && (
                     <ConfidenceBreakdown
                       parts={p.confidence_parts}
