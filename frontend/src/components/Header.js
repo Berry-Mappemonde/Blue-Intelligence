@@ -12,14 +12,15 @@ const BASEMAP_NEXT_UI = {
 };
 
 // Seven data modes: projects / marinas / capitaineries / formalities / amp / science / climatology.
+// Explicit test ids (the backend source checks look for the literals).
 const MODES = [
-  { id: "projects", Icon: Compass, labelKey: "modeProjects" },
-  { id: "marinas", Icon: Anchor, labelKey: "modeMarinas" },
-  { id: "capitaineries", Icon: Radio, labelKey: "modeCapitaineries" },
-  { id: "formalities", Icon: ScrollText, labelKey: "modeFormalities" },
-  { id: "amp", Icon: Shield, labelKey: "modeAmp" },
-  { id: "science", Icon: FlaskConical, labelKey: "modeScience" },
-  { id: "climatology", Icon: Wind, labelKey: "modeClimatology" },
+  { id: "projects", testId: "mode-toggle-projects", Icon: Compass, labelKey: "modeProjects" },
+  { id: "marinas", testId: "mode-toggle-marinas", Icon: Anchor, labelKey: "modeMarinas" },
+  { id: "capitaineries", testId: "mode-toggle-capitaineries", Icon: Radio, labelKey: "modeCapitaineries" },
+  { id: "formalities", testId: "mode-toggle-formalities", Icon: ScrollText, labelKey: "modeFormalities" },
+  { id: "amp", testId: "mode-toggle-amp", Icon: Shield, labelKey: "modeAmp" },
+  { id: "science", testId: "mode-toggle-science", Icon: FlaskConical, labelKey: "modeScience" },
+  { id: "climatology", testId: "mode-toggle-climatology", Icon: Wind, labelKey: "modeClimatology" },
 ];
 
 const ICON = { size: 14, strokeWidth: 1.75 };
@@ -53,11 +54,11 @@ export default function Header({
       <nav className="flex items-center gap-1.5" aria-label={t("modeSwitchTitle")}>
         {/* Seven-mode switch — projects / marinas / capitaineries / formalities / amp / science / climatology */}
         <div className="nav-group" title={t("modeSwitchTitle")} data-testid="mode-switch">
-          {MODES.map(({ id, Icon, labelKey }) => (
+          {MODES.map(({ id, testId, Icon, labelKey }) => (
             <button
               key={id}
               type="button"
-              data-testid={`mode-toggle-${id}`}
+              data-testid={testId}
               onClick={() => setMode(id)}
               className="nav-tab"
               aria-current={mode === id ? "true" : undefined}

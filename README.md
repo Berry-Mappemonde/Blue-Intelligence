@@ -208,7 +208,7 @@ cd Blue-Intelligence
 # API
 cd backend
 python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements.txt   # pins a Linux-only torch +cpu wheel: on macOS use the Quickstart pins above, or install requirements.txt without the torch line
 cat > .env <<'EOF'
 MONGO_URL=mongodb://127.0.0.1:27017
 DB_NAME=blueintel_db
