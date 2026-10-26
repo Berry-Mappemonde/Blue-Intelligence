@@ -1,10 +1,11 @@
-import { ZONE_COLORS, escH, flagEmoji } from "./constants";
+import { escH } from "./constants";
 import { zoneDisplayName, zoneSubtitle } from "./zoneLabel";
-import { registryBadgeHtml } from "../poeRegistry";
+import { registryBadgeHtml, sourceTitle, verdictLabel } from "../poeRegistry";
 
 /**
  * HTML popup for a VLIZ polygon sheet: kept TD URLs,
  * PoE list, BU URL per port. No Generate button.
+ * Markup classes live in index.css (.poe-popup*), shared with the port popup.
  */
 
 function _tdUrl(fiche, z) {
@@ -37,6 +38,8 @@ function _pathHint(url) {
   }
 }
 
+const EXT_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+
 function _tdBlock(t, recs) {
   const rows = (recs || []).map((rec, i) => {
     const url = rec?.url || "";
@@ -44,18 +47,18 @@ function _tdBlock(t, recs) {
     const host = (url || "").replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
     const leaf = url ? _pathHint(url) : "";
     const testId = i === 0 ? "poe-fiche-popup-td-url" : `poe-fiche-popup-td-url-${i}`;
-    return `<div style="margin-top:4px;font-size:11px;line-height:1.4;display:flex;gap:6px;align-items:flex-start;justify-content:space-between;">
-        <a href="${escH(url)}" target="_blank" rel="noreferrer" data-testid="${testId}" style="color:#00f0ff;text-decoration:none;min-width:0;">
-          <span style="display:block;">${escH(host)}</span>
-          ${leaf ? `<span style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:#94a3b8;word-break:break-all;">${escH(leaf)}</span>` : ""}
+    return `<div class="poe-popup__src">
+        <a href="${escH(url)}" target="_blank" rel="noreferrer" data-testid="${testId}" title="${escH(leaf || url)}">
+          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(sourceTitle(url))}</span>
+          <span class="poe-popup__host">${escH(host)}</span>
         </a>
-        ${both ? `<span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#39ff14;border:1px solid rgba(57,255,20,0.4);padding:0 4px;border-radius:2px;">★</span>` : ""}
+        ${both ? `<span class="poe-popup__chip">${escH(t("poeSourceBoth"))}</span>` : ""}
       </div>`;
   }).join("");
   const link = rows
-    || `<div style="margin-top:4px;font-size:11px;color:#64748b;">${escH(t("poeFicheEmptyTd"))}</div>`;
-  return `<div data-testid="poe-fiche-popup-td" style="margin-top:8px;">
-    <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid rgba(251,191,36,0.25);padding-bottom:2px;">${escH(t("poeSourcesTd"))}</div>
+    || `<div class="poe-popup__muted">${escH(t("poeFicheEmptyTd"))}</div>`;
+  return `<div data-testid="poe-fiche-popup-td">
+    <div class="poe-popup__h">${escH(t("poeSourcesTd"))}</div>
     ${link}
   </div>`;
 }
@@ -68,17 +71,14 @@ function _officialSourcesBlock(t, sources) {
   const list = (sources || []).filter((u) => u);
   if (!list.length) return "";
   const links = list.map((u, i) => `
-    <div style="margin-top:3px;font-size:10px;">
+    <div class="poe-popup__src">
       <a href="${escH(u)}" target="_blank" rel="noopener noreferrer"
-         data-testid="poe-fiche-popup-official-source-${i}"
-         style="color:#00f0ff;text-decoration:none;word-break:break-all;">
-        ${escH(u)}
-      </a>
+         data-testid="poe-fiche-popup-official-source-${i}" title="${escH(u)}"
+         style="word-break:break-all;">${escH(u.replace(/^https?:\/\/(www\.)?/, ""))}</a>
     </div>`).join("");
-  return `<div data-testid="poe-fiche-popup-official-sources" style="margin-top:8px;">
-    <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid rgba(251,191,36,0.25);padding-bottom:2px;">${escH(t("poeSourcesTd"))}</div>
+  return `<div data-testid="poe-fiche-popup-official-sources">
+    <div class="poe-popup__h">${escH(t("poeSourcesTitle"))}</div>
     ${links}
-    <div style="margin-top:2px;font-size:9px;color:#64748b;">${list.length} ${escH(t("poeSourcesTitle"))}</div>
   </div>`;
 }
 
@@ -87,20 +87,27 @@ function _portsBlock(t, ports) {
     const href = _buUrl(p);
     const badge = registryBadgeHtml(p, t, escH);
     const score = p.confidence;
-    const scoreTxt = score != null ? ` · ${escH(t("poeConfidence"))} ${Number(score)}` : "";
+    const verdict = verdictLabel(p, t);
+    const scoreHtml = score != null
+      ? `<span class="poe-popup__port-score" title="${escH(t("poeConfidence"))}"><span style="color:rgb(var(--m-fg-3));">${escH(t("poeScore"))}</span> ${Number(score)}</span>`
+      : "<span></span>";
+    const verdictHtml = verdict
+      ? `<span class="poe-popup__verdict ${verdict.key === "pass" ? "poe-popup__verdict--pass" : ""}">${escH(verdict.text)}</span>`
+      : "";
     const link = href
-      ? `<a href="${escH(href)}" target="_blank" rel="noreferrer" data-testid="poe-fiche-popup-port-bu" style="color:#00f0ff;text-decoration:none;">↗</a>`
-      : `<span style="color:#64748b;">—</span>`;
-    return `<div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px;font-size:11px;color:#e2e8f0;">
-      <span style="display:flex;align-items:center;gap:4px;">⚓ ${escH(p.name)} ${badge}${scoreTxt}</span>${link}
+      ? `<a href="${escH(href)}" target="_blank" rel="noreferrer" data-testid="poe-fiche-popup-port-bu" title="${escH(href)}" style="color:rgb(var(--m-fg-3));margin-left:auto;display:inline-flex;">${EXT_ICON}</a>`
+      : "";
+    return `<div class="poe-popup__port">
+      <span class="poe-popup__port-name" title="${escH(p.name)}">${escH(p.name)}</span>${scoreHtml}
+      <span class="poe-popup__port-status">${badge}${verdictHtml}${link}</span>
     </div>`;
   }).join("");
   const more = (ports || []).length > 24
-    ? `<div style="margin-top:4px;font-size:10px;color:#64748b;">+${(ports.length - 24)}</div>`
+    ? `<div class="poe-popup__muted">+${(ports.length - 24)} ${escH(t("poeMore"))}</div>`
     : "";
-  return `<div data-testid="poe-fiche-popup-ports" style="margin-top:8px;">
-    <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid rgba(251,191,36,0.25);padding-bottom:2px;">${escH(t("poeFichePorts"))} (${(ports || []).length})</div>
-    ${rows || `<div style="margin-top:4px;font-size:11px;color:#64748b;">${escH(t("poeFicheNoPorts"))}</div>`}
+  return `<div data-testid="poe-fiche-popup-ports">
+    <div class="poe-popup__h">${escH(t("poeFichePorts"))} <span style="color:rgb(var(--m-fg-3));font-variant-numeric:tabular-nums;">${(ports || []).length}</span></div>
+    ${rows || `<div class="poe-popup__muted">${escH(t("poeFicheNoPorts"))}</div>`}
     ${more}
   </div>`;
 }
@@ -130,42 +137,48 @@ export function zonePopupHtml(mrgid, props, { tRef, zoneItemsRef, zoneFicheRef, 
     ? zoneFicheRef.current
     : null;
   const status = z.status || "non_generee";
-  const col = ZONE_COLORS[status] || ZONE_COLORS.non_generee;
   const statusLabel = {
     non_generee: t("poeStatusNonGeneree"), ia: t("poeStatusIa"),
     ia_sans_source: t("poeStatusIaSansSource"), erreur: t("poeStatusErreur"),
   }[status];
-  const flag = flagEmoji(z.iso2 || z.sov_iso2 || props?.iso2);
   const gen = z.generated_at ? String(z.generated_at).slice(0, 10) : null;
   const tdRecs = _tdRecs(fiche, z);
   const ports = fiche?.ports || _portsFromGeojson(mrgid, poePortsRef?.current);
   const officialSources = fiche?.official_sources || [];
   const noSourceWarn = status === "ia_sans_source"
-    ? `<div style="margin-top:6px;padding:4px 6px;background:rgba(255,74,74,0.08);border:1px solid rgba(255,74,74,0.35);color:#fecaca;font-size:10px;line-height:1.4;border-radius:2px;">⚠️ ${escH(t("poeNoSourceWarning"))}</div>`
+    ? `<div class="poe-popup__warn">${escH(t("poeNoSourceWarning"))}</div>`
     : "";
   const errHtml = z.last_error
-    ? `<div style="margin-top:6px;font-size:10px;color:#fca5a5;">${escH(t("poeLastError"))}: ${escH(z.last_error)}</div>` : "";
-  const body = `${noSourceWarn}${errHtml}${_tdBlock(t, tdRecs)}${_officialSourcesBlock(t, officialSources)}${_portsBlock(t, ports)}`;
+    ? `<div class="poe-popup__warn">${escH(t("poeLastError"))}: ${escH(z.last_error)}</div>` : "";
+  // The sidebar sheet already lists the sources when it is open for this zone:
+  // the popup then keeps only what the map needs (status, ports, tiers).
+  const sourcesHtml = fiche ? "" : `${_tdBlock(t, tdRecs)}${_officialSourcesBlock(t, officialSources)}`;
+  const body = `${noSourceWarn}${errHtml}${sourcesHtml}${_portsBlock(t, ports)}`;
   const polType = z.pol_type || props?.pol_type;
+  const confAvg = fiche?.confidence_avg ?? z.confidence_avg;
   const unclosHtml = z.unclos && z.unclos.code
-    ? `<div data-testid="zone-unclos-block" style="margin-top:6px;padding:5px 7px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.35);border-radius:2px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#60a5fa;text-transform:uppercase;letter-spacing:0.08em;">§ ${escH(t("poeUnclosTitle"))}${z.unclos.basis ? " · " + escH(z.unclos.basis) : ""}</div>
-        <div style="font-size:10px;color:#bfdbfe;line-height:1.45;margin-top:2px;">${escH(t("poeUnclos_" + z.unclos.code) || z.unclos.code)}</div>
+    ? `<div data-testid="zone-unclos-block" class="poe-popup__info">
+        <div style="font-weight:500;color:rgb(var(--m-fg-2));">${escH(t("poeUnclosTitle"))}${z.unclos.basis ? ` (${escH(z.unclos.basis)})` : ""}</div>
+        <div style="margin-top:2px;">${escH(t("poeUnclos_" + z.unclos.code) || z.unclos.code)}</div>
       </div>`
     : "";
+  const nPorts = ports.length || z.poe_count || 0;
+  // The common status (generated from official sources) is implied by the port list;
+  // only the exceptions are labelled.
+  const statusChip = status === "ia" ? "" : `<span class="poe-popup__chip ${status === "erreur" ? "poe-popup__chip--danger" : ""}">${escH(statusLabel)}</span>`;
+  const subtitle = zoneSubtitle({ ...props, ...z }) || (polType && polType !== "200NM" ? polType : "");
   return `
-    <div data-testid="poe-zone-fiche-popup" style="max-width:100%;font-family:Manrope,sans-serif;">
-      <div data-testid="poe-fiche-popup-title" style="font-family:'IBM Plex Sans',sans-serif;font-weight:700;font-size:14px;color:#fff;line-height:1.3;">${flag} ${escH(zoneDisplayName({ ...props, ...z }, t))}</div>
-      <div style="font-size:11px;color:#94a3b8;margin:3px 0 6px;">${escH(zoneSubtitle({ ...props, ...z }) || (polType && polType !== "200NM" ? polType : ""))}</div>
-      <div style="margin:4px 0 6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col};border:1px solid ${col}55;padding:2px 6px;border-radius:2px;">${escH(statusLabel)}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#f8fafc;border:1px solid #f8fafc55;padding:2px 6px;border-radius:2px;">⚓ ${ports.length || z.poe_count || 0} ${escH(t("poePortsCount"))}</span>
-        ${(fiche?.confidence_avg ?? z.confidence_avg) != null ? `<span data-testid="zone-confidence" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${Number(fiche?.confidence_avg ?? z.confidence_avg) >= 70 ? "#39ff14" : Number(fiche?.confidence_avg ?? z.confidence_avg) >= 40 ? "#fbbf24" : "#fca5a5"};border:1px solid #33415555;padding:2px 6px;border-radius:2px;">${escH(t("poeConfidenceAvg"))} ${Number(fiche?.confidence_avg ?? z.confidence_avg)}</span>` : ""}
-        ${z.stale ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#fbbf24;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);padding:2px 6px;border-radius:2px;">⏰ ${escH(t("poeStale"))}</span>` : ""}
+    <div data-testid="poe-zone-fiche-popup" class="poe-popup" style="max-width:100%;">
+      <div data-testid="poe-fiche-popup-title" class="poe-popup__title">${escH(zoneDisplayName({ ...props, ...z }, t))}</div>
+      ${subtitle ? `<div class="poe-popup__meta">${escH(subtitle)}${gen ? ` · ${escH(t("poeGeneratedAt"))} ${escH(gen)}` : ""}</div>` : (gen ? `<div class="poe-popup__meta">${escH(t("poeGeneratedAt"))} ${escH(gen)}</div>` : "")}
+      <div class="poe-popup__row">
+        <span class="poe-popup__chip poe-popup__chip--num">${nPorts} ${escH(t("poePortsCount"))}</span>
+        ${confAvg != null ? `<span data-testid="zone-confidence" class="poe-popup__chip poe-popup__chip--num">${escH(t("poeConfidenceAvg"))} ${Number(confAvg)}</span>` : ""}
+        ${statusChip}
+        ${z.stale ? `<span class="poe-popup__chip" title="${escH(t("poeStaleTooltip"))}">${escH(t("poeStale"))}</span>` : ""}
       </div>
-      ${gen ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;">${escH(t("poeGeneratedAt"))}: ${escH(gen)}</div>` : ""}
       ${unclosHtml}
       ${body}
-      <div style="margin-top:8px;font-size:10px;color:#cbd5e1;">${escH(t("poeEezAttribution"))}</div>
+      <div class="poe-popup__footer">${escH(t("poeEezAttribution"))}</div>
     </div>`;
 }

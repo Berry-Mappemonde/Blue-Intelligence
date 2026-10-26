@@ -18,6 +18,7 @@ describe("pane order (locked)", () => {
       "climatology-raster@280",
       "climatology-vector@290",
       "route@380",
+      "poe-ports@410",
       "amp@420",
       "formalities-escales@500",
     ]);
@@ -35,6 +36,9 @@ describe("pane order (locked)", () => {
     // NAVIGUIDE route above tiles, under overlayPane.
     expect(z.route).toBeGreaterThan(LEAFLET_BUILTIN_PANES.tilePane);
     expect(z.route).toBeLessThan(LEAFLET_BUILTIN_PANES.overlayPane);
+    // PoE markers above the EEZ polygons (overlayPane), under MPAs.
+    expect(z["poe-ports"]).toBeGreaterThan(LEAFLET_BUILTIN_PANES.overlayPane);
+    expect(z["poe-ports"]).toBeLessThan(z.amp);
     // MPA above overlayPane, stopovers above MPAs.
     expect(z.amp).toBeGreaterThan(LEAFLET_BUILTIN_PANES.overlayPane);
     expect(z["formalities-escales"]).toBeGreaterThan(z.amp);

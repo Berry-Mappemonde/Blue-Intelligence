@@ -9,30 +9,180 @@
  * World Port Index match only; tier3 is neither. No registry: not verified yet.
  */
 
-// One colour per tier, used by the sidebar badge and the popup so both match.
-// tier_registered (registry match only) has its own colour, apart from tier3.
+// Meridian status pattern: shape + colour + label, the same in the sidebar cards,
+// the map popups and the legend. Colours live in index.css (--tier1 … --tier-none).
 export const TIER_COLOR = {
-  tier1: "#4ade80",
-  tier2: "#5eead4",
-  tier_registered: "#a78bfa",
-  tier3: "#fbbf24",
-  none: "#94a3b8",
+  tier1: "#4fb67f",
+  tier2: "#3cb5a8",
+  tier_registered: "#9b87f5",
+  tier3: "#8f8f8f",
+  none: "#5e5e5e",
 };
+export const TIER_ORDER = ["tier1", "tier2", "tier_registered", "tier3"];
 
-/** Inline badge style for a tier: coloured text, faint border and background. */
-export function tierStyle(tier) {
-  const color = TIER_COLOR[tier] || TIER_COLOR.none;
-  return { color, borderColor: `${color}66`, backgroundColor: `${color}1a` };
+/**
+ * Readable title of a source URL: the last path segment without its hash/date
+ * prefix, extension and separators ("ca0e0347-bermuda_customs_guidelines.pdf" ->
+ * "Bermuda customs guidelines (PDF)"); the host when the path is empty.
+ */
+export function sourceTitle(url) {
+  try {
+    const u = new URL(url);
+    const segs = decodeURIComponent(u.pathname).split("/").filter(Boolean);
+    let leaf = segs.pop() || "";
+    const ext = (leaf.match(/\.([a-z0-9]{2,5})$/i) || [])[1] || "";
+    if (ext) leaf = leaf.slice(0, -(ext.length + 1));
+    leaf = leaf
+      .replace(/^[0-9a-f]{6,}[-_]/i, "")
+      .replace(/^\d{6,}[-_]/, "")
+      .replace(/[-_.+]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!leaf || /^(index|default|home)$/i.test(leaf)) leaf = segs.pop() || u.hostname.replace(/^www\./, "");
+    leaf = leaf.charAt(0).toUpperCase() + leaf.slice(1);
+    const kind = /^(pdf|docx?|xlsx?|pptx?)$/i.test(ext) ? ` (${ext.toUpperCase()})` : "";
+    return leaf + kind;
+  } catch (_) {
+    return String(url || "");
+  }
 }
 
-/** {tier, label} for a port: the i18n label of its registry tier, or "Not yet verified". */
+// Entry terms highlighted in an evidence excerpt when the run did not record one
+// (display only; the tier never depends on this list).
+export const ENTRY_TERMS = [
+  "first port of entry", "ports of entry", "port of entry", "port d'entrée", "ports d'entrée",
+  "customs and immigration", "customs clearance", "clear customs", "customs", "immigration",
+  "clearance", "douane", "dédouanement", "yacht reporting centre",
+];
+const PREFIX_RE = /^(port autonome d[e']?|port of|port de|port d'|porto d[eoa]|puerto de[l]?|harbou?r of|marina d[ei]|marina|luka|porto|puerto|port)\s+/iu;
+
+/** Name variants of a port worth highlighting: the name, without its facility word, and the match recorded by the run. */
+export function portNameVariants(port, evidence) {
+  const names = [evidence?.name_found, port?.name].filter(Boolean).map((n) => String(n).trim());
+  const bare = names.map((n) => n.replace(PREFIX_RE, "")).filter((n) => n && n.length > 2);
+  return [...new Set([...names, ...bare])];
+}
+
+/** Cut a stored excerpt to word boundaries; `lead` / `trail` say where an ellipsis belongs. */
+export function trimSnippet(snippet) {
+  let text = String(snippet || "").replace(/\s+/g, " ").trim();
+  let lead = false;
+  let trail = false;
+  if (text && !/^[\p{Lu}\p{N}("“'[«]/u.test(text)) {
+    const i = text.indexOf(" ");
+    if (i > 0 && i < 30) text = text.slice(i + 1);
+    lead = true;
+  }
+  if (text && !/[.!?…)”"'»]$/u.test(text)) {
+    const i = text.lastIndexOf(" ");
+    if (i > 0 && text.length - i < 30) text = text.slice(0, i);
+    trail = true;
+  }
+  return { text, lead, trail };
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/['’]/g, "['’]");
+
+/**
+ * Excerpt as segments [{text, mark}] with the port name and the entry term marked.
+ * Terms: the run's name_found / entry_term when present, else the name variants and
+ * the ENTRY_TERMS list. Longest term first so "first port of entry" wins over "customs".
+ */
+export function snippetSegments(snippet, terms, { repeat = [] } = {}) {
+  const { text, lead, trail } = trimSnippet(snippet);
+  const list = [...new Set((terms || []).filter(Boolean).map((t) => String(t).trim()).filter((t) => t.length > 1))]
+    .sort((a, b) => b.length - a.length);
+  if (!text || !list.length) return { lead, trail, segments: [{ text, mark: false }] };
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${list.map(escapeRe).join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  const segments = [];
+  const seen = new Set();
+  const again = new Set(repeat.map((t) => String(t).toLowerCase().replace(/[’]/g, "'")));
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    // Each term is marked once (names, generic entry terms); only the entry term the
+    // run recorded is marked at every occurrence, so the excerpt stays readable.
+    const key = m[0].toLowerCase().replace(/[’]/g, "'");
+    if (seen.has(key) && !again.has(key)) continue;
+    seen.add(key);
+    if (m.index > last) segments.push({ text: text.slice(last, m.index), mark: false });
+    segments.push({ text: m[0], mark: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ text: text.slice(last), mark: false });
+  return { lead, trail, segments };
+}
+
+/** Terms to mark for one evidence item of a port, and whether to mark each once. */
+export function evidenceTerms(port, evidence) {
+  const names = portNameVariants(port, evidence);
+  return evidence?.entry_term ? [...names, evidence.entry_term] : [...names, ...ENTRY_TERMS];
+}
+export function evidenceMarkOptions(evidence) {
+  return { repeat: evidence?.entry_term ? [evidence.entry_term] : [] };
+}
+
+// Telemetry values as words (display only; the raw value stays in the title).
+export function telemetryWord(value, t, { inSentence = false } = {}) {
+  const v = String(value || "").trim();
+  if (!v) return "—";
+  const slug = v.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  if (inSentence) {
+    // Lower-case form for the middle of a sentence; names (Nightshift, NVIDIA) keep their case.
+    const inner = `poeTelemetryIn_${slug}`;
+    if (t(inner) !== inner) return t(inner);
+  }
+  const key = `poeTelemetry_${slug}`;
+  return t(key) !== key ? t(key) : v;
+}
+
+/** "nightshift: offline; nvidia: not_configured" -> "Nightshift offline, NVIDIA not configured". */
+export function fallbackReasonText(reason, t) {
+  const raw = String(reason || "").trim();
+  if (!raw) return "";
+  const parts = raw.split(/;\s*/).map((part) => {
+    const [name, state] = part.split(/:\s*/);
+    if (!state) return part;
+    return `${telemetryWord(name, t)} ${telemetryWord(state, t)}`;
+  });
+  return parts.join(", ");
+}
+
+/** Inline SVG glyph of a tier (12 px): filled disc + check, ring + check, half ring, dashed ring. */
+export function tierGlyphSvg(tier) {
+  const c = TIER_COLOR[tier] || TIER_COLOR.none;
+  const check = (stroke) => `<path d="M3.9 6.2l1.5 1.5 2.9-3" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  let body;
+  if (tier === "tier1") body = `<circle cx="6" cy="6" r="5.25" fill="${c}"/>${check("#121212")}`;
+  else if (tier === "tier2") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/>${check(c)}`;
+  else if (tier === "tier_registered") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/><path d="M6 1.25a4.75 4.75 0 0 1 0 9.5z" fill="${c}"/>`;
+  else if (tier === "tier3") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4" stroke-dasharray="2.2 1.9" stroke-linecap="round"/>`;
+  else body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/>`;
+  return `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+/** Inline chip style for a tier (kept for the review page): chip colour as a CSS variable. */
+export function tierStyle(tier) {
+  const color = TIER_COLOR[tier] || TIER_COLOR.none;
+  return { "--tier-c": color };
+}
+
+/** {tier, label, short} for a port: its registry tier labels, or "Not yet verified". */
 export function registryBadge(port, t) {
   const registry = port?.registry;
   const tier = registry?.tier;
-  if (!tier) return { tier: "none", label: t("poeTierNone") };
+  if (!tier) return { tier: "none", label: t("poeTierNone"), short: t("poeTierNone") };
   const key = `poeTier_${tier}`;
   const label = t(key) !== key ? t(key) : (registry.label || tier);
-  return { tier: TIER_COLOR[tier] ? tier : "none", label };
+  const shortKey = `poeTierShort_${tier}`;
+  const short = t(shortKey) !== shortKey ? t(shortKey) : label;
+  return { tier: TIER_COLOR[tier] ? tier : "none", label, short };
+}
+
+/** Verdict of the last run in words, or null before any Verify. */
+export function verdictLabel(port, t) {
+  if (port?.verdict === "pass") return { key: "pass", text: t("poeVerdictPass") };
+  if (port?.verdict === "flag" || port?.verdict === "retry") return { key: "flag", text: t("poeVerdictFlag") };
+  return null;
 }
 
 /** Closest same-name registry entry beyond the match distance, or null. */
@@ -60,11 +210,12 @@ export function registryNotes(port, t) {
   return notes;
 }
 
-/** Popup (inline HTML) version of the badge. `esc` escapes HTML. */
+/** Popup (inline HTML) version of the chip: glyph + short label, full label as title. */
 export function registryBadgeHtml(port, t, esc) {
-  const { tier, label } = registryBadge(port, t);
-  const { color, borderColor, backgroundColor } = tierStyle(tier);
-  return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${borderColor};background:${backgroundColor};padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
+  const { tier, label, short } = registryBadge(port, t);
+  const color = TIER_COLOR[tier] || TIER_COLOR.none;
+  const cls = tier === "none" ? "tier-chip tier-chip--none" : "tier-chip";
+  return `<span class="${cls}" style="--tier-c:${color}" title="${esc(label)}" data-testid="poe-popup-tier-${esc(tier)}"><span class="tier-glyph">${tierGlyphSvg(tier)}</span>${esc(short)}</span>`;
 }
 
 // Same rules as registry_check.port_key in the backend, so a /poe/verify port ("Port of

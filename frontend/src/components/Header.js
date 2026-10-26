@@ -1,5 +1,6 @@
 import { Anchor, ClipboardCheck, Compass, Eye, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Waves, Wind } from "lucide-react";
 import RunSelector from "./RunSelector";
+import { reviewToggleClass, reviewToggleLabelClass } from "./headerState";
 import { HELLOASSO_MEMBERSHIP_URL } from "../config/helloasso";
 import { nextBasemap } from "./map/basemaps";
 
@@ -10,6 +11,19 @@ const BASEMAP_NEXT_UI = {
   sea: { Icon: Ship, titleKey: "seaMap" },
 };
 
+// Seven data modes: projects / marinas / capitaineries / formalities / amp / science / climatology.
+const MODES = [
+  { id: "projects", Icon: Compass, labelKey: "modeProjects" },
+  { id: "marinas", Icon: Anchor, labelKey: "modeMarinas" },
+  { id: "capitaineries", Icon: Radio, labelKey: "modeCapitaineries" },
+  { id: "formalities", Icon: ScrollText, labelKey: "modeFormalities" },
+  { id: "amp", Icon: Shield, labelKey: "modeAmp" },
+  { id: "science", Icon: FlaskConical, labelKey: "modeScience" },
+  { id: "climatology", Icon: Wind, labelKey: "modeClimatology" },
+];
+
+const ICON = { size: 14, strokeWidth: 1.75 };
+
 export default function Header({
   lang, setLang, view, setView, showSettings, setShowSettings,
   status, t, basemap, setBasemap,
@@ -19,122 +33,52 @@ export default function Header({
   showReview = false,
   onToggleShowReview,
 }) {
+  const next = nextBasemap(basemap);
+  const { Icon: BasemapIcon, titleKey } = BASEMAP_NEXT_UI[next] || BASEMAP_NEXT_UI.dark;
   return (
-    <header className="h-14 shrink-0 flex items-center justify-between px-5 border-b border-line bg-surface z-[1200]">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 flex items-center justify-center border border-accent/40 bg-accent/10 rounded-sm">
-          <Waves size={18} className="text-accent" />
+    <header className="h-12 shrink-0 flex items-center justify-between gap-4 px-4 border-b border-line bg-surface z-[1200] font-ui text-[13px] whitespace-nowrap">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-7 h-7 flex items-center justify-center border border-line rounded-md text-m-fg2 shrink-0" aria-hidden="true">
+          <Waves size={15} strokeWidth={1.75} />
         </div>
-        <div>
-          <h1 className="font-heading font-black text-lg leading-none tracking-tight text-white">
-            Blue Intelligence
-            <span className="block font-semibold text-[11px] tracking-normal text-accent/90 normal-case mt-0.5">
-              by Berry-Mappemonde
-            </span>
-          </h1>
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent/70 leading-none mt-1">
-            {t("subtitle")}
-          </p>
-        </div>
+        <h1 className="m-0 leading-none" title={t("subtitle")}>
+          <span className="block text-[13px] leading-4 font-semibold text-m-fg">Blue Intelligence</span>
+          <span className="block text-[11px] leading-4 text-m-fg3">by Berry-Mappemonde</span>
+        </h1>
         {status?.running && (
-          <span className="ml-3 flex items-center gap-2 font-mono text-[10px] text-bio border border-bio/30 bg-bio/5 px-2 py-1 rounded-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-bio animate-pulse" />
-            SWARM {t("runningStatus")}
+          <span className="ml-1 inline-flex items-center gap-2 h-6 px-2 border border-line rounded-md text-[12px] text-m-fg2" data-testid="swarm-running">
+            <span className="w-1.5 h-1.5 rounded-full bg-bio animate-pulse" aria-hidden="true" />
+            {t("runningStatus")}
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <nav className="flex items-center gap-1.5" aria-label={t("modeSwitchTitle")}>
         {/* Seven-mode switch — projects / marinas / capitaineries / formalities / amp / science / climatology */}
-        <div
-          className="flex border border-line rounded-sm overflow-hidden"
-          title={t("modeSwitchTitle")}
-          data-testid="mode-switch"
-        >
-          <button
-            data-testid="mode-toggle-projects"
-            onClick={() => setMode("projects")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "projects"
-                ? "bg-sonar/15 text-sonar"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <Compass size={13} /> <span className="hidden xl:inline">{t("modeProjects")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-marinas"
-            onClick={() => setMode("marinas")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "marinas"
-                ? "bg-alert/15 text-alert"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <Anchor size={13} /> <span className="hidden xl:inline">{t("modeMarinas")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-capitaineries"
-            onClick={() => setMode("capitaineries")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "capitaineries"
-                ? "bg-accent/15 text-accent"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <Radio size={13} /> <span className="hidden xl:inline">{t("modeCapitaineries")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-formalities"
-            onClick={() => setMode("formalities")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "formalities"
-                ? "bg-amberx/15 text-amberx"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <ScrollText size={13} /> <span className="hidden xl:inline">{t("modeFormalities")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-amp"
-            onClick={() => setMode("amp")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "amp"
-                ? "bg-[#4ade80]/15 text-[#4ade80]"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <Shield size={13} /> <span className="hidden xl:inline">{t("modeAmp")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-science"
-            onClick={() => setMode("science")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-r border-line ${
-              mode === "science"
-                ? "bg-[#a78bfa]/15 text-[#a78bfa]"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <FlaskConical size={13} /> <span className="hidden xl:inline">{t("modeScience")}</span>
-          </button>
-          <button
-            data-testid="mode-toggle-climatology"
-            onClick={() => setMode("climatology")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${
-              mode === "climatology"
-                ? "bg-[#2dd4bf]/15 text-[#2dd4bf]"
-                : "text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
-          >
-            <Wind size={13} /> <span className="hidden xl:inline">{t("modeClimatology")}</span>
-          </button>
+        <div className="nav-group" title={t("modeSwitchTitle")} data-testid="mode-switch">
+          {MODES.map(({ id, Icon, labelKey }) => (
+            <button
+              key={id}
+              type="button"
+              data-testid={`mode-toggle-${id}`}
+              onClick={() => setMode(id)}
+              className="nav-tab"
+              aria-current={mode === id ? "true" : undefined}
+              title={id === "climatology" ? t("modeClimatologyFull") : t(labelKey)}
+            >
+              {/* Below 1400 px only the active mode keeps its label; every tab keeps its title. */}
+              <Icon {...ICON} /> <span className={mode === id ? "inline" : "hidden min-[1400px]:inline"}>{t(labelKey)}</span>
+            </button>
+          ))}
         </div>
-        <div className="flex border border-line rounded-sm overflow-hidden">
+        <div className="nav-group">
           <button
+            type="button"
             data-testid="view-toggle-map"
             onClick={() => setView("map")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "map" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+            className="nav-tab"
+            aria-current={view === "map" ? "true" : undefined}
           >
-            <MapIcon size={13} /> {t("map")}
+            <MapIcon {...ICON} /> {t("map")}
           </button>
           {/* "Runs ›" — selector for the run shown on the map (per mode).
               Hidden in Science mode: the harvest writes the live map
@@ -148,18 +92,22 @@ export default function Header({
             />
           )}
           <button
+            type="button"
             data-testid="view-toggle-audit"
             onClick={() => setView("audit")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "audit" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+            className="nav-tab"
+            aria-current={view === "audit" ? "true" : undefined}
           >
-            <Radar size={13} /> {t("audit")}
+            <Radar {...ICON} /> {t("audit")}
           </button>
           <button
+            type="button"
             data-testid="view-toggle-review"
             onClick={() => setView("review")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-l border-line ${view === "review" ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+            className="nav-tab"
+            aria-current={view === "review" ? "true" : undefined}
           >
-            <ClipboardCheck size={13} /> {t("review")}
+            <ClipboardCheck {...ICON} /> {t("review")}
           </button>
         </div>
         <a
@@ -168,21 +116,28 @@ export default function Header({
           rel="noopener noreferrer"
           data-testid="membership-cta"
           title={t("membershipCtaTooltip")}
-          className="flex items-center gap-2 px-3 py-1.5 border border-bio/40 bg-bio/10 hover:bg-bio/15 rounded-sm text-bio font-semibold text-xs transition-colors"
+          aria-label={t("membershipCta")}
+          className="nav-tab border border-line rounded-md text-bio hover:text-bio"
         >
-          <UserPlus size={13} />
-          <span className="hidden md:inline">{t("membershipCta")}</span>
+          <UserPlus {...ICON} />
+          <span className="hidden 2xl:inline">{t("membershipCta")}</span>
         </a>
-        <div className="flex border border-line rounded-sm overflow-hidden font-mono text-xs">
+        <div className="nav-group m-num" role="group" aria-label="Language">
           <button
+            type="button"
             data-testid="lang-toggle-en"
             onClick={() => setLang("en")}
-            className={`px-2.5 py-1.5 ${lang === "en" ? "bg-accent/15 text-accent" : "text-slate-400 hover:bg-raised"}`}
+            className="nav-tab !px-2"
+            aria-pressed={lang === "en"}
+            lang="en"
           >EN</button>
           <button
+            type="button"
             data-testid="lang-toggle-fr"
             onClick={() => setLang("fr")}
-            className={`px-2.5 py-1.5 border-l border-line ${lang === "fr" ? "bg-accent/15 text-accent" : "text-slate-400 hover:bg-raised"}`}
+            className="nav-tab !px-2"
+            aria-pressed={lang === "fr"}
+            lang="fr"
           >FR</button>
         </div>
         {isAdmin && mode !== "science" && mode !== "climatology" && (
@@ -190,40 +145,36 @@ export default function Header({
             type="button"
             data-testid="map-show-review"
             onClick={() => onToggleShowReview && onToggleShowReview(!showReview)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-sm text-xs font-semibold ${
-              showReview
-                ? "border-accent/50 bg-accent/15 text-accent"
-                : "border-line text-slate-400 hover:text-slate-200 hover:bg-raised"
-            }`}
+            className={reviewToggleClass(showReview)}
+            aria-pressed={showReview}
             title={t("reviewShowReview")}
           >
-            <Eye size={13} />
-            <span className="hidden lg:inline">{t("reviewShowReview")}</span>
+            <Eye {...ICON} />
+            <span className={reviewToggleLabelClass(showReview)}>{t("reviewShowReview")}</span>
           </button>
         )}
-        {(() => {
-          const next = nextBasemap(basemap);
-          const { Icon, titleKey } = BASEMAP_NEXT_UI[next] || BASEMAP_NEXT_UI.dark;
-          return (
-            <button
-              data-testid="basemap-toggle-btn"
-              onClick={() => setBasemap(next)}
-              className="p-2 border border-line rounded-sm text-slate-400 hover:text-slate-200 hover:bg-raised"
-              title={t(titleKey)}
-            >
-              <Icon size={15} />
-            </button>
-          );
-        })()}
         <button
+          type="button"
+          data-testid="basemap-toggle-btn"
+          onClick={() => setBasemap(next)}
+          className="nav-icon-btn"
+          title={t(titleKey)}
+          aria-label={t(titleKey)}
+        >
+          <BasemapIcon {...ICON} />
+        </button>
+        <button
+          type="button"
           data-testid="settings-toggle-btn"
           onClick={() => setShowSettings(!showSettings)}
-          className={`p-2 border border-line rounded-sm ${showSettings ? "bg-accent/15 text-accent" : "text-slate-400 hover:text-slate-200 hover:bg-raised"}`}
+          className="nav-icon-btn"
+          aria-pressed={showSettings}
           title={t("settings")}
+          aria-label={t("settings")}
         >
-          <Settings size={15} />
+          <Settings {...ICON} />
         </button>
-      </div>
+      </nav>
     </header>
   );
 }

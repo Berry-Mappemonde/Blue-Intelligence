@@ -38,15 +38,35 @@ export const ampStyle = (lfp) => {
   };
 };
 
-export const zoneStyle = (status) => {
+// EEZ polygons are neutral hairlines (generated a little stronger than not
+// generated, errors in the danger colour); only the selected zone is amber, so
+// amber otherwise stays reserved for the PoE markers.
+export const ZONE_SELECTED_COLOR = "#fbbf24";
+export const ZONE_NEUTRAL_LINE = "#5e5e5e";
+export const ZONE_NEUTRAL_FILL = "#8f8f8f";
+export const ZONE_ERROR_COLOR = "#eb5a5a";
+// Above this zoom the selected zone is framed on its ports: the outline would only
+// trace the coastline, so it is hidden (outline and fill) until the user zooms out.
+export const ZONE_SELECTED_MAX_ZOOM = 9;
+export const zoneStyle = (status, selected = false, zoom = null) => {
   const s = status || "non_generee";
+  if (selected && zoom != null && zoom > ZONE_SELECTED_MAX_ZOOM) {
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0, dashArray: null };
+  }
+  if (selected) {
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
+  }
+  const generated = s === "ia" || s === "ia_sans_source";
+  const erreur = s === "erreur";
+  // Generated: solid fg-3 hairline. Not generated: dotted fg-4. No official source: dashed.
   return {
-    color: ZONE_COLORS[s] || ZONE_COLORS.non_generee,
+    color: erreur ? ZONE_ERROR_COLOR : generated ? ZONE_NEUTRAL_FILL : ZONE_NEUTRAL_LINE,
     weight: 1,
-    opacity: s === "non_generee" ? 0.35 : 0.75,
-    fillColor: ZONE_COLORS[s] || ZONE_COLORS.non_generee,
-    fillOpacity: s === "ia" ? 0.16 : s === "ia_sans_source" ? 0.1 : s === "erreur" ? 0.1 : 0.04,
-    dashArray: s === "ia_sans_source" ? "4 4" : null,
+    opacity: erreur ? 0.7 : generated ? 0.6 : 0.55,
+    fillColor: erreur ? ZONE_ERROR_COLOR : ZONE_NEUTRAL_FILL,
+    fillOpacity: erreur ? 0.04 : generated ? 0.04 : 0.015,
+    dashArray: s === "ia_sans_source" ? "4 4" : s === "non_generee" ? "1 4" : null,
+    lineCap: s === "non_generee" ? "round" : "butt",
   };
 };
 
