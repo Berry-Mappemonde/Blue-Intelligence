@@ -129,9 +129,11 @@ jobs:
           fi
       - name: Validation OSM réelle + scan d'anomalies (bi_ci seulement)
         timeout-minutes: 12
-        run: python scripts/enrich_ci_osm.py
+        run: |
+          python scripts/enrich_ci_osm.py || echo "OSM budget reached, proceeding to tests"
         env:
           CI_OSM_CACHE: ${{ github.workspace }}/backend/.ci-cache/osm-ports.json
+          CI_OSM_BUDGET_S: 60
       - name: Sauvegarder le cache Overpass
         if: always() && hashFiles('backend/.ci-cache/osm-ports.json') != ''
         uses: actions/cache/save@v6

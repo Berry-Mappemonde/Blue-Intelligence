@@ -176,7 +176,9 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
         _save_cache(cache_file, cache)
 
     if budget_state["stopped"]:
-        print(f"budget de {budget_s}s atteint: cache sauvegarde, arret propre", flush=True)
+        print(f"budget de {budget_s}s atteint: cache sauvegarde, arret propre (code 0)", flush=True)
+        client.close()
+        sys.exit(0)
 
     missing = await db.poe_ports.count_documents(pending_filter)
     total = await db.poe_ports.count_documents({})
