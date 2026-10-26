@@ -8,7 +8,7 @@ Only the seven sidebar/list components and their EN/FR presentation copy change.
 
 ## Visual evidence
 
-Each image is a 1440 × 1000 CSS-pixel viewport at device scale 1. Before images use the original `ui-polish` sidebar source at `fbc44c7`; the subsequent #52 commits do not change these sidebars. After images show this branch. Both use the isolated clone's frontend on 3004 and backend on 8004, with the navigation notice acknowledged through its controls.
+Each image is a 1440 × 1000 CSS-pixel viewport at device scale 1. Before images use the original `ui-polish` sidebar source at `fbc44c7`; the subsequent #52 commits do not change these sidebars. After images show this branch rebased onto #52 at `ad8d162`. Both use the isolated clone's frontend on 3004 and backend on 8004, with the navigation notice acknowledged through its controls.
 
 Projects contains 4,463 live records. The configured backend returns zero marinas, so that pair shows the real empty state. No fixture data appears in these four PR images. The existing map and top nav are outside this change.
 
