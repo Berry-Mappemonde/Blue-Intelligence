@@ -1,6 +1,7 @@
-import { Anchor, Clock, ScrollText, Search } from "lucide-react";
+import { ChevronRight, Info, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import ZoneFiche from "./ZoneFiche";
+import { TIER_ORDER, tierGlyphSvg } from "./poeRegistry";
 import { zoneDisplayName, zoneSearchHaystack, zoneSubtitle } from "./map/zoneLabel";
 
 // Refactor 2026-06 — Formalities mode = world map [EEZ -> Ports of Entry].
@@ -8,12 +9,6 @@ import { zoneDisplayName, zoneSearchHaystack, zoneSubtitle } from "./map/zoneLab
 // generation status and PoE count. Clicking a row flies to the EEZ polygon
 // and opens its popup on the map.
 
-const STATUS_COLOR = {
-  non_generee:    "bg-slate-500/15 text-slate-300 border-slate-500/40",
-  ia:             "bg-amberx/15 text-amberx border-amberx/40",
-  ia_sans_source: "bg-amberx/10 text-amberx border-amberx/40 border-dashed",
-  erreur:         "bg-alert/10 text-alert border-alert/40",
-};
 const STATUS_LABEL_KEY = {
   non_generee:    "poeStatusNonGeneree",
   ia:             "poeStatusIa",
@@ -21,11 +16,19 @@ const STATUS_LABEL_KEY = {
   erreur:         "poeStatusErreur",
 };
 
-const flagEmoji = (iso2) => {
-  if (!iso2 || iso2.length !== 2) return "🌐";
-  const cc = iso2.toUpperCase();
-  return String.fromCodePoint(0x1f1e6 + cc.charCodeAt(0) - 65, 0x1f1e6 + cc.charCodeAt(1) - 65);
+const ZONE_SWATCH = {
+  ia: { background: "rgba(251,191,36,0.22)", border: "1px solid #fbbf24" },
+  non_generee: { background: "rgba(100,116,139,0.12)", border: "1px solid #64748b" },
+  erreur: { background: "rgba(235,90,90,0.14)", border: "1px solid #eb5a5a" },
 };
+
+const fmtInt = (n, lang) => Number(n || 0).toLocaleString(lang === "fr" ? "fr-FR" : "en-GB");
+
+/** Tier glyph (status shape + colour), shared with the cards and popups. */
+function TierGlyph({ tier }) {
+  // Static SVG built by tierGlyphSvg(); no user content inside.
+  return <span className="tier-glyph" dangerouslySetInnerHTML={{ __html: tierGlyphSvg(tier) }} />;
+}
 
 export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort, onVerify, verifyState }) {
   const [q, setQ] = useState("");
@@ -45,63 +48,66 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
     });
   }, [items, q, statusFilter]);
 
-  const statusBadge = (status) => {
+  // The common case (generated from official sources) says nothing in the row; only
+  // the exceptions are labelled, so the label carries information when it appears.
+  const statusNote = (status) => {
     const s = status || "non_generee";
+    if (s === "ia") return null;
+    const danger = s === "erreur";
     return (
-      <span className={`px-1.5 py-0.5 border rounded-sm font-mono text-[9px] uppercase tracking-widest ${STATUS_COLOR[s] || STATUS_COLOR.non_generee}`}>
+      <span className={`text-[12px] leading-4 shrink-0 ${danger ? "text-m-danger-fg" : "text-m-fg3"}`}>
         {t(STATUS_LABEL_KEY[s] || "poeStatusNonGeneree")}
       </span>
     );
   };
 
+  const totalPorts = summary.total_ports || 0;
+
   return (
     <aside
-      className="w-[360px] shrink-0 flex flex-col border-r border-line bg-surface min-h-0"
+      className="w-[360px] shrink-0 flex flex-col border-r border-m-line bg-m-shell min-h-0 font-ui text-[13px] leading-[18px] text-m-fg"
       data-testid="formalities-panel"
     >
-      {/* Header + search — same structure as the other four modes */}
-      <div className="p-4 border-b border-line shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          <ScrollText size={18} className="text-amberx" />
-          {/* Same label as the mode button in the header (consistency);
-              the subtitle spells out the content (Ports of Entry). */}
-          <h2 className="font-heading font-bold text-white text-base">{t("modeFormalities")}</h2>
-          <span className="font-mono text-[10px] text-slate-500">· {t("poeTitle")}</span>
-          <span className="ml-auto font-mono text-[10px] text-slate-500" data-testid="poe-zones-count">
-            {items.length} {t("poeZonesCount")}
+      {/* Header + search — same structure as the other modes, Meridian type roles */}
+      <div className="px-4 pt-4 pb-3 border-b border-m-line shrink-0">
+        <div className="flex items-baseline justify-between gap-3">
+          {/* Same label as the mode button in the header (consistency). */}
+          <h2 className="text-[15px] leading-5 font-medium text-m-fg">{t("modeFormalities")}</h2>
+          <span className="text-[12px] leading-4 text-m-fg3 m-num" data-testid="poe-zones-count">
+            {fmtInt(items.length, lang)} {t("poeZonesCount")}
           </span>
         </div>
 
-        <div
+        <p
           data-testid="formalities-disclaimer"
-          className="bi-formalities-disclaimer text-[11px] leading-relaxed px-2.5 py-2 rounded-sm mb-3"
+          className="mt-2 flex items-start gap-2 text-[12px] leading-4 text-m-fg2"
         >
-          ⚠️ {t("formalitiesDisclaimer")}
-        </div>
+          <Info size={14} strokeWidth={1.75} className="mt-px shrink-0 text-m-fg3" aria-hidden="true" />
+          <span>{t("formalitiesDisclaimer")}</span>
+        </p>
 
-        <div className="relative mb-3">
-          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+        <div className="relative mt-3">
+          <Search size={14} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-m-fg3 pointer-events-none" aria-hidden="true" />
           <input
             data-testid="poe-search-input"
-            type="text"
+            type="search"
             name="poe-search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("poeSearch")}
-            className="w-full bg-raised border border-line rounded-sm pl-7 pr-2 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/50"
+            aria-label={t("poeSearch")}
+            className="m-field !pl-8"
           />
         </div>
 
         {/* Filter by status */}
-        <label className="font-mono text-[9px] uppercase tracking-widest text-slate-500 block mb-1" htmlFor="poe-status-filter">
-          {t("poeAllStatuses")}
-        </label>
+        <label className="sr-only" htmlFor="poe-status-filter">{t("poeAllStatuses")}</label>
         <select
           id="poe-status-filter"
           data-testid="poe-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="w-full bg-raised border border-line rounded-sm px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent/50"
+          className="m-field m-select mt-2"
         >
           <option value="All">{t("poeAllStatuses")}</option>
           <option value="non_generee">{t("poeStatusNonGeneree")}</option>
@@ -110,38 +116,48 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
           <option value="erreur">{t("poeStatusErreur")}</option>
         </select>
 
-        {/* Legend — same pattern as Projects mode */}
-        <div className="mt-3" data-testid="poe-legend">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-1.5">{t("legend")}</p>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px #fbbf2466" }} />
-              <span className="text-[11px] text-slate-300">{t("legendPoePort")}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 shrink-0 rounded-[2px]" style={{ background: "rgba(251,191,36,0.25)", border: "1px solid #fbbf24" }} />
-              <span className="text-[11px] text-slate-300">{t("poeStatusIa")}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 shrink-0 rounded-[2px]" style={{ background: "rgba(100,116,139,0.15)", border: "1px solid #64748b" }} />
-              <span className="text-[11px] text-slate-300">{t("poeStatusNonGeneree")}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 shrink-0 rounded-[2px]" style={{ background: "rgba(255,74,74,0.15)", border: "1px solid #ff4a4a" }} />
-              <span className="text-[11px] text-slate-300">{t("poeStatusErreur")}</span>
+        {/* Legend: marker, port tiers (status pattern), EEZ status */}
+        <details className="m-details mt-3 text-[12px] leading-4" data-testid="poe-legend" open={!selectedZone || undefined}>
+          <summary className="flex items-center gap-1.5 font-medium text-m-fg2 hover:text-m-fg">
+            <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+            {t("legend")}
+          </summary>
+          <div className="m-details-body">
+          <div className="mt-1.5 flex items-center gap-2 text-m-fg2">
+            <span className="legend-dot" aria-hidden="true" />
+            <span>{t("legendPoePort")}</span>
+          </div>
+          <p className="mt-2 text-m-fg3">{t("poeLegendTiers")}</p>
+          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-m-fg2">
+            {TIER_ORDER.map((tier) => (
+              <div key={tier} className="flex items-center gap-2 min-w-0" title={t(`poeTier_${tier}`)}>
+                <TierGlyph tier={tier} />
+                <span className="truncate">{t(`poeTierShort_${tier}`)}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 min-w-0 text-m-fg3">
+              <TierGlyph tier="none" />
+              <span className="truncate">{t("poeTierNone")}</span>
             </div>
           </div>
-        </div>
+          <p className="mt-2 text-m-fg3">{t("poeLegendZones")}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-m-fg2">
+            <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.ia} aria-hidden="true" />{t("poeLegendGenerated")}</span>
+            <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.non_generee} aria-hidden="true" />{t("poeStatusNonGeneree")}</span>
+            <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.erreur} aria-hidden="true" />{t("poeStatusErreur")}</span>
+          </div>
+          </div>
+        </details>
 
         {items.length > 0 && (
-          <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500" data-testid="poe-summary">
-            {generatedCount}/{items.length} {t("poeSummary")} · {summary.total_ports || 0} {t("poeSummaryPorts")}
+          <p className="mt-3 text-[12px] leading-4 text-m-fg3 m-num" data-testid="poe-summary">
+            {fmtInt(generatedCount, lang)} {t("poeOf")} {fmtInt(items.length, lang)} {t("poeSummary")}, {fmtInt(totalPorts, lang)} {t(totalPorts === 1 ? "poeSummaryPortOne" : "poeSummaryPorts")}
           </p>
         )}
       </div>
 
       {(selectedZone || ficheLoading) && (
-        <div className="shrink-0 max-h-[46%] overflow-y-auto border-b border-line">
+        <div className="shrink-0 max-h-[58%] overflow-y-auto border-b border-m-line bg-m-canvas">
           <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} onVerify={onVerify} verifyState={verifyState} />
         </div>
       )}
@@ -149,53 +165,57 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
       {/* EEZ list */}
       <div className="flex-1 overflow-y-auto" data-testid="poe-zones-list">
         {items.length === 0 && (
-          <div className="p-6 text-center text-xs text-slate-500 leading-relaxed">
-            <ScrollText size={28} className="mx-auto mb-3 text-slate-600" />
+          <div className="p-6 text-center text-[13px] text-m-fg3 leading-[18px]">
             {zonesLoading ? t("poeZonesLoading") : t("poeZonesEmpty")}
           </div>
         )}
         {filtered.map((z) => {
           const isSelected = selectedZone === z.mrgid;
+          const status = z.status || "non_generee";
+          const iso = (z.iso2 || z.sov_iso2 || "").toUpperCase();
+          const name = zoneDisplayName(z, t);
+          // The sovereign line only earns its place when it differs from the name.
+          const subtitle = zoneSubtitle(z) !== name ? zoneSubtitle(z) : "";
           return (
             <button
               key={z.mrgid}
+              type="button"
               data-testid={`poe-zone-row-${z.mrgid}`}
               onClick={() => onSelectZone && onSelectZone(z.mrgid, zoneDisplayName(z, t), z.bbox, z.anchor)}
               title={z.status === "erreur" && z.last_error ? z.last_error : zoneDisplayName(z, t)}
-              className={`w-full text-left px-4 py-2.5 border-b border-line hover:bg-raised transition-colors group ${
-                isSelected ? "bg-amberx/5 border-l-2 border-l-amberx" : ""
+              aria-current={isSelected ? "true" : undefined}
+              className={`w-full text-left px-4 py-2.5 border-b border-m-line-soft transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-m-accent ${
+                isSelected ? "bg-m-selected" : "hover:bg-m-raised"
               }`}
             >
-              <div className="flex items-start gap-2">
-                <span className="text-base leading-none mt-0.5">{flagEmoji(z.iso2 || z.sov_iso2)}</span>
+              <div className="flex items-start gap-3">
+                <span className="m-code w-6 shrink-0 mt-px text-[11px] leading-4 text-m-fg3" aria-hidden="true">
+                  {iso || "—"}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-heading text-sm text-slate-100 truncate group-hover:text-white" data-testid="poe-zone-row-label">
-                    {zoneDisplayName(z, t)}
-                  </div>
-                  <div className="font-mono text-[10px] text-slate-500 mt-0.5 truncate">
-                    {zoneSubtitle(z)}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    {statusBadge(z.status)}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span
+                      className={`truncate text-[13px] leading-[18px] font-medium ${status === "non_generee" ? "text-m-fg2" : "text-m-fg"}`}
+                      data-testid="poe-zone-row-label"
+                    >
+                      {name}
+                    </span>
                     {z.poe_count > 0 && (
-                      <span className="px-1.5 py-0.5 border rounded-sm font-mono text-[9px] uppercase tracking-widest border-slate-100/50 text-slate-100 bg-slate-100/10">
-                        <Anchor size={9} className="inline mr-1 -mt-0.5" />
-                        {z.poe_count} {t("poePortsCount")}
+                      <span className="m-num shrink-0 text-[12px] leading-4 text-m-fg2">
+                        {fmtInt(z.poe_count, lang)} {t("poePortsCount")}
                       </span>
                     )}
-                    {z.confidence_avg != null && (
-                      <span className="px-1.5 py-0.5 border rounded-sm font-mono text-[9px] uppercase tracking-widest border-line text-slate-300">
-                        {t("poeConfidence")} {z.confidence_avg}
-                      </span>
-                    )}
-                    {z.stale && (
-                      <span
-                        className="px-1.5 py-0.5 border rounded-sm font-mono text-[9px] uppercase tracking-widest border-amberx/40 bg-amberx/10 text-amberx flex items-center gap-1"
-                        title={t("poeStaleTooltip")}
-                      >
-                        <Clock size={9} /> {t("poeStale")}
-                      </span>
-                    )}
+                  </div>
+                  <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                    <span className="truncate text-[12px] leading-4 text-m-fg3">{subtitle}</span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      {statusNote(status)}
+                      {z.stale && (
+                        <span className="text-[12px] leading-4 text-m-fg3" title={t("poeStaleTooltip")}>
+                          {t("poeStale")}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -205,9 +225,9 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
       </div>
 
       {/* Attributions */}
-      <div className="px-4 py-2 border-t border-line">
-        <p className="font-mono text-[10px] text-slate-300 leading-relaxed">
-          {t("poeEezAttribution")} · {t("poeGeocodeAttribution")}
+      <div className="px-4 py-2 border-t border-m-line">
+        <p className="text-[11px] leading-4 text-m-fg3">
+          {t("poeEezAttribution")}. {t("poeGeocodeAttribution")}.
         </p>
       </div>
     </aside>

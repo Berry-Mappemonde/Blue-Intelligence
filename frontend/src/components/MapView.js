@@ -284,7 +284,7 @@ export default function MapView({
   useFormalitiesLayers({
     mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
     poeMarkersById,
-    mode, poeZones, poePorts, flyToZone, tRef,
+    mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
   });
   useProjectsLayer({
     mapObj, clusterRef, zoomingRef, pendingRef, markersById: projectMarkersById,
@@ -435,10 +435,11 @@ export default function MapView({
       {nauticalActive ? (
         <div
           data-testid="nautical-disclaimer"
-          className="absolute z-[1000] bottom-6 left-3 max-w-xs px-3 py-2 text-[11px] leading-snug bg-surface/95 border border-amber-400/50 text-amber-200 rounded-sm shadow-md pointer-events-none"
+          role="note"
+          className="absolute z-[1000] bottom-7 left-3 max-w-[22rem] px-2.5 py-1.5 font-ui text-[12px] leading-4 bg-m-overlay/95 border border-m-line-strong text-m-fg2 rounded-md pointer-events-none"
         >
-          <span className="font-bold uppercase tracking-wide">{t("seaMapDisclaimerTitle")}</span>
-          {" — "}
+          <span className="font-medium text-m-fg">{t("seaMapDisclaimerTitle")}.</span>
+          {" "}
           {t("seaMapDisclaimerBody")}
         </div>
       ) : null}

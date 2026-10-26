@@ -9,30 +9,53 @@
  * World Port Index match only; tier3 is neither. No registry: not verified yet.
  */
 
-// One colour per tier, used by the sidebar badge and the popup so both match.
-// tier_registered (registry match only) has its own colour, apart from tier3.
+// Meridian status pattern: shape + colour + label, the same in the sidebar cards,
+// the map popups and the legend. Colours live in index.css (--tier1 … --tier-none).
 export const TIER_COLOR = {
-  tier1: "#4ade80",
-  tier2: "#5eead4",
-  tier_registered: "#a78bfa",
-  tier3: "#fbbf24",
-  none: "#94a3b8",
+  tier1: "#4fb67f",
+  tier2: "#3cb5a8",
+  tier_registered: "#9b87f5",
+  tier3: "#8f8f8f",
+  none: "#5e5e5e",
 };
+export const TIER_ORDER = ["tier1", "tier2", "tier_registered", "tier3"];
 
-/** Inline badge style for a tier: coloured text, faint border and background. */
-export function tierStyle(tier) {
-  const color = TIER_COLOR[tier] || TIER_COLOR.none;
-  return { color, borderColor: `${color}66`, backgroundColor: `${color}1a` };
+/** Inline SVG glyph of a tier (12 px): filled disc + check, ring + check, half ring, dashed ring. */
+export function tierGlyphSvg(tier) {
+  const c = TIER_COLOR[tier] || TIER_COLOR.none;
+  const check = (stroke) => `<path d="M3.9 6.2l1.5 1.5 2.9-3" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  let body;
+  if (tier === "tier1") body = `<circle cx="6" cy="6" r="5.25" fill="${c}"/>${check("#121212")}`;
+  else if (tier === "tier2") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/>${check(c)}`;
+  else if (tier === "tier_registered") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/><path d="M6 1.25a4.75 4.75 0 0 1 0 9.5z" fill="${c}"/>`;
+  else if (tier === "tier3") body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4" stroke-dasharray="2.2 1.9" stroke-linecap="round"/>`;
+  else body = `<circle cx="6" cy="6" r="4.75" fill="none" stroke="${c}" stroke-width="1.4"/>`;
+  return `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">${body}</svg>`;
 }
 
-/** {tier, label} for a port: the i18n label of its registry tier, or "Not yet verified". */
+/** Inline chip style for a tier (kept for the review page): chip colour as a CSS variable. */
+export function tierStyle(tier) {
+  const color = TIER_COLOR[tier] || TIER_COLOR.none;
+  return { "--tier-c": color };
+}
+
+/** {tier, label, short} for a port: its registry tier labels, or "Not yet verified". */
 export function registryBadge(port, t) {
   const registry = port?.registry;
   const tier = registry?.tier;
-  if (!tier) return { tier: "none", label: t("poeTierNone") };
+  if (!tier) return { tier: "none", label: t("poeTierNone"), short: t("poeTierNone") };
   const key = `poeTier_${tier}`;
   const label = t(key) !== key ? t(key) : (registry.label || tier);
-  return { tier: TIER_COLOR[tier] ? tier : "none", label };
+  const shortKey = `poeTierShort_${tier}`;
+  const short = t(shortKey) !== shortKey ? t(shortKey) : label;
+  return { tier: TIER_COLOR[tier] ? tier : "none", label, short };
+}
+
+/** Verdict of the last run in words, or null before any Verify. */
+export function verdictLabel(port, t) {
+  if (port?.verdict === "pass") return { key: "pass", text: t("poeVerdictPass") };
+  if (port?.verdict === "flag" || port?.verdict === "retry") return { key: "flag", text: t("poeVerdictFlag") };
+  return null;
 }
 
 /** Closest same-name registry entry beyond the match distance, or null. */
@@ -60,11 +83,12 @@ export function registryNotes(port, t) {
   return notes;
 }
 
-/** Popup (inline HTML) version of the badge. `esc` escapes HTML. */
+/** Popup (inline HTML) version of the chip: glyph + short label, full label as title. */
 export function registryBadgeHtml(port, t, esc) {
-  const { tier, label } = registryBadge(port, t);
-  const { color, borderColor, backgroundColor } = tierStyle(tier);
-  return `<span data-testid="poe-popup-tier-${esc(tier)}" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${color};border:1px solid ${borderColor};background:${backgroundColor};padding:0 4px;border-radius:2px;">${esc(label)}</span>`;
+  const { tier, label, short } = registryBadge(port, t);
+  const color = TIER_COLOR[tier] || TIER_COLOR.none;
+  const cls = tier === "none" ? "tier-chip tier-chip--none" : "tier-chip";
+  return `<span class="${cls}" style="--tier-c:${color}" title="${esc(label)}" data-testid="poe-popup-tier-${esc(tier)}"><span class="tier-glyph">${tierGlyphSvg(tier)}</span>${esc(short)}</span>`;
 }
 
 // Same rules as registry_check.port_key in the backend, so a /poe/verify port ("Port of

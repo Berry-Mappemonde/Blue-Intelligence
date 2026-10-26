@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
-import { registryBadge, registryNotes, tierStyle } from "./poeRegistry";
+import { registryBadge, registryNotes, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
 import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
 
 /**
@@ -20,8 +20,8 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <section className="p-3 border-b border-line bg-raised/30">
-          <p className="font-mono text-[10px] text-amber-400" data-testid="poe-fiche-error">
+        <section className="px-4 py-3 border-b border-m-line font-ui">
+          <p className="text-[12px] leading-4 text-m-danger-fg" data-testid="poe-fiche-error">
             Erreur d'affichage de la fiche — champ manquant ou donnée invalide.
           </p>
         </section>
@@ -72,113 +72,100 @@ function buUrlOf(port) {
   return port?.url_bu?.url || (port?.source_urls || [])[0] || "";
 }
 
+/** Source link: host on the first line, document name underneath (monospace, it is a path). */
+function SourceLink({ href, testId, pathTestId }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      data-testid={testId}
+      className="min-w-0 block text-[13px] leading-[18px] text-m-accent-fg hover:underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent rounded-sm"
+      title={href}
+    >
+      <span className="block truncate">{hostOf(href)}</span>
+      {pathHint(href) ? (
+        <span className="m-code block text-[11px] leading-4 text-m-fg3 truncate" data-testid={pathTestId}>
+          {pathHint(href)}
+        </span>
+      ) : null}
+    </a>
+  );
+}
+
 function TdRow({ rec, testId, pathTestId, selectable, kept, onToggle, keepTestId }) {
   const href = rec?.url || "";
   const both = rec?.from_arm === "both";
   return (
-    <div className="flex items-center justify-between gap-2 min-w-0">
+    <div className="flex items-start justify-between gap-3 min-w-0">
       {selectable ? (
-        <label className="flex items-center gap-2 min-w-0 flex-1">
+        <label className="flex items-start gap-2 min-w-0 flex-1">
           <input
             type="checkbox"
             data-testid={keepTestId}
             checked={Boolean(kept)}
             onChange={onToggle}
-            className="shrink-0 accent-accent"
+            className="mt-1 shrink-0 accent-m-accent"
           />
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            data-testid={testId}
-            className="min-w-0 text-[11px] text-accent hover:text-white font-medium"
-            title={href}
-          >
-            <span className="block truncate">{hostOf(href)}</span>
-            {pathHint(href) ? (
-              <span
-                className="block font-mono text-[10px] text-slate-400 truncate"
-                data-testid={pathTestId}
-              >
-                {pathHint(href)}
-              </span>
-            ) : null}
-          </a>
+          <SourceLink href={href} testId={testId} pathTestId={pathTestId} />
         </label>
       ) : (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          data-testid={testId}
-          className="min-w-0 text-[11px] text-accent hover:text-white font-medium"
-          title={href}
-        >
-          <span className="block truncate">{hostOf(href)}</span>
-          {pathHint(href) ? (
-            <span
-              className="block font-mono text-[10px] text-slate-400 truncate"
-              data-testid={pathTestId}
-            >
-              {pathHint(href)}
-            </span>
-          ) : null}
-        </a>
+        <SourceLink href={href} testId={testId} pathTestId={pathTestId} />
       )}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 mt-0.5">
         {both && (
-          <span className="font-mono text-[8px] uppercase tracking-widest text-bio border border-bio/40 px-1 py-px rounded-sm">
-            {rec.bothLabel}
-          </span>
+          <span className="text-[11px] leading-4 text-m-fg3" title={rec.bothLabel}>{rec.bothLabel}</span>
         )}
-        <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:text-white">
-          <ExternalLink size={11} />
+        <a href={href} target="_blank" rel="noreferrer" className="text-m-fg3 hover:text-m-fg" aria-label={hostOf(href)}>
+          <ExternalLink size={14} strokeWidth={1.75} />
         </a>
       </div>
     </div>
   );
 }
 
-/** Registry tier badge, or a neutral "Not yet verified" when the port has no registry. */
+/** Registry tier chip (status pattern: glyph + colour + label), or "Not yet verified". */
 function RegistryBadge({ port, t }) {
-  const { tier, label } = registryBadge(port, t);
+  const { tier, label, short } = registryBadge(port, t);
   return (
     <span
-      className="px-1.5 py-0.5 rounded-sm border font-mono text-[8px] uppercase tracking-widest leading-tight"
+      key={tier}
+      className={`tier-chip tier-chip-in ${tier === "none" ? "tier-chip--none" : ""}`}
       style={tierStyle(tier)}
       data-testid={`poe-fiche-tier-${tier}`}
       title={(port?.registry?.reasons || [])[0] || label}
     >
-      {label}
+      {/* Static SVG built by tierGlyphSvg(); no user content inside. */}
+      <span className="tier-glyph" dangerouslySetInnerHTML={{ __html: tierGlyphSvg(tier) }} />
+      {short}
     </span>
   );
 }
 
-/** Official evidence of a port (registry.official_evidence): source link, snippet collapsed. */
+/** Official evidence of a port (registry.official_evidence): source domain, excerpt collapsed. */
 function OfficialEvidence({ evidence, t }) {
   if (!evidence?.length) return null;
   return (
-    <div className="mt-1 space-y-0.5" data-testid="poe-fiche-evidence">
-      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{t("poeEvidenceTitle")}</p>
+    <div className="mt-1.5 space-y-1" data-testid="poe-fiche-evidence">
       {evidence.map((e) => (
-        <details key={e.url} className="group" data-testid="poe-fiche-evidence-item">
-          <summary className="cursor-pointer list-none font-mono text-[9px] text-slate-400 hover:text-slate-200">
-            <a
-              href={e.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:text-white"
-              title={e.url}
-              onClick={(ev) => ev.stopPropagation()}
-            >
-              {e.domain}
-            </a>
-            {" · "}
-            {t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched")}
-            <span className="ml-1 text-slate-600 group-open:hidden">{t("poeEvidenceShow")} ▸</span>
-            <span className="ml-1 text-slate-600 hidden group-open:inline">{t("poeEvidenceHide")} ▾</span>
+        <details key={e.url} className="m-details" data-testid="poe-fiche-evidence-item">
+          <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
+            <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {t("poeEvidenceTitle")}: <a
+                href={e.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-m-accent-fg hover:underline underline-offset-2"
+                title={e.url}
+                onClick={(ev) => ev.stopPropagation()}
+              >
+                {e.domain}
+              </a>
+              {" "}({t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched")})
+            </span>
           </summary>
-          <p className="mt-0.5 pl-2 border-l border-line/60 text-[10px] leading-snug text-slate-400 whitespace-pre-line break-words">
+          <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 whitespace-pre-line break-words">
             {e.snippet}
           </p>
         </details>
@@ -187,32 +174,42 @@ function OfficialEvidence({ evidence, t }) {
   );
 }
 
-/** Telemetry of the last verify run, read from its payload only. */
+/** "How we checked": telemetry of the last Verify run, read from its payload only. */
 function VerifyTelemetry({ verify, t }) {
   const ns = verify?.nemotron_status || {};
   const mem = verify?.memory || {};
-  const cell = (label, value, testId) => (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</span>
-      <span className="font-mono text-[9px] text-slate-100 truncate" data-testid={testId} title={value}>{value}</span>
-    </div>
+  const row = (label, value, testId, mono) => (
+    <React.Fragment key={testId}>
+      <dt className="text-m-fg3">{label}</dt>
+      <dd className={`min-w-0 truncate text-m-fg ${mono ? "m-code" : "m-num"}`} data-testid={testId} title={value}>{value}</dd>
+    </React.Fragment>
   );
   return (
-    <div className="border border-line/60 bg-raised/40 rounded-sm p-2 space-y-1.5" data-testid="poe-fiche-telemetry">
-      <p className="font-mono text-[8px] uppercase tracking-[0.2em] text-slate-500">{t("telemetryTitle")}</p>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        {cell(t("telemetryModel"), ns.model || "—", "poe-telemetry-model")}
-        {cell(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
-        {cell(
+    <div className="rounded-[10px] border border-m-line bg-m-panel px-3 py-2.5" data-testid="poe-fiche-telemetry">
+      <p className="text-[12px] leading-4 font-medium text-m-fg2">{t("telemetryTitle")}</p>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px] leading-4">
+        {row(t("telemetryZetaris"), verify?.zetaris_mode || "—", "poe-telemetry-zetaris")}
+        {row(
           t("telemetryMemory"),
-          `${mem.recalled ?? 0} ${t("telemetryRecalled")} · ${mem.reinforced ?? 0} ${t("telemetryReinforced")} · ${mem.created ?? 0} ${t("telemetryCreated")}`,
+          `${mem.recalled ?? 0} ${t("telemetryRecalled")}, ${mem.reinforced ?? 0} ${t("telemetryReinforced")}, ${mem.created ?? 0} ${t("telemetryCreated")}`,
           "poe-telemetry-memory",
         )}
-        {cell(t("telemetryZetaris"), verify?.zetaris_mode || "—", "poe-telemetry-zetaris")}
-        {cell(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run")}
-        {ns.fallback_reason ? cell(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback") : null}
-      </div>
+        {row(t("telemetryModel"), ns.model || "—", "poe-telemetry-model", true)}
+        {row(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
+        {row(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run", true)}
+        {ns.fallback_reason ? row(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback") : null}
+      </dl>
     </div>
+  );
+}
+
+/** Section heading: 12 px medium, sentence case; the optional count is tabular. */
+function SectionHeading({ children, count }) {
+  return (
+    <p className="mb-1.5 text-[12px] leading-4 font-medium text-m-fg2">
+      {children}
+      {count != null ? <span className="m-num text-m-fg3"> {count}</span> : null}
+    </p>
   );
 }
 
@@ -233,8 +230,8 @@ export default function ZoneFiche({
   const [openPort, setOpenPort] = useState(null);
   if (loading) {
     return (
-      <section className="p-3 border-b border-line" data-testid="poe-zone-fiche-loading">
-        <p className="font-mono text-[10px] text-slate-500">{t("poeFicheLoading")}</p>
+      <section className="px-4 py-3 border-b border-m-line font-ui" data-testid="poe-zone-fiche-loading">
+        <p className="text-[12px] leading-4 text-m-fg3">{t("poeFicheLoading")}</p>
       </section>
     );
   }
@@ -246,88 +243,86 @@ export default function ZoneFiche({
   const td = tdUrlOf(fiche);
   const tdBoth = fiche?.url_td?.from_arm === "both" || (fiche?.sources_td || [])[0]?.from_arm === "both";
   const showAllTd = variant === "page";
-  const portsMax = variant === "page" ? "max-h-[45vh]" : "max-h-56";
+  const portsMax = variant === "page" ? "max-h-[45vh]" : "";
   const unclos = fiche.unclos && typeof fiche.unclos === "object" ? fiche.unclos : null;
   const unclosKey = unclos?.code ? `poeUnclos_${unclos.code}` : "";
+  const sourceCount = tdSources.length;
+  const summaryBits = [
+    `${ports.length} ${t(ports.length === 1 ? "poeSheetPortOne" : "poeSheetPorts")}`,
+    sourceCount ? `${sourceCount} ${t(sourceCount === 1 ? "poeSheetSource" : "poeSheetSources")}` : null,
+  ].filter(Boolean);
   return (
     <ErrorBoundary>
-      <section className="p-3 border-b border-line bg-raised/30 space-y-3" data-testid="poe-zone-fiche">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
-          {t("poeFicheTitle")}
+      <section key={fiche.mrgid} className="m-enter px-4 py-4 border-b border-m-line space-y-4 font-ui text-[13px] leading-[18px] text-m-fg" data-testid="poe-zone-fiche">
+      {/* Name → one-line summary → Verify */}
+      <div>
+        <p className="text-[15px] leading-5 font-medium text-m-fg" data-testid="poe-fiche-zone-label">
+          {zoneDisplayName(fiche, t)}
         </p>
-        {fiche.confidence_avg != null && (
-          <span className="font-mono text-[9px] text-slate-300" data-testid="poe-fiche-score">
-            {t("poeConfidenceAvg")} {fiche.confidence_avg}
-          </span>
-        )}
+        <p className="mt-0.5 text-[12px] leading-4 text-m-fg3 m-num">
+          {zoneSubtitle(fiche) ? (
+            // Disambiguated zones carry a code (ISO, polygon type): monospace. Names stay in Inter.
+            <span className={fiche.disambiguated ? "m-code text-[11px]" : ""}>{zoneSubtitle(fiche)}</span>
+          ) : null}
+          {zoneSubtitle(fiche) ? ". " : ""}
+          {summaryBits.join(", ")}
+          {fiche.confidence_avg != null ? (
+            <>, {t("poeSheetAvg")} <span data-testid="poe-fiche-score" className="text-m-fg2">{fiche.confidence_avg}</span></>
+          ) : null}.
+        </p>
+        {variant === "page" && fiche.fiche_scope === "union" ? (
+          <p className="mt-1 text-[12px] leading-4 text-m-fg3" data-testid="poe-fiche-union-hint">
+            {t("reviewUnionHint")}
+          </p>
+        ) : null}
       </div>
       {typeof onVerify === "function" ? (
-        <div className="space-y-1">
+        <div>
           <button
             type="button"
             onClick={onVerify}
             disabled={Boolean(verifyState?.running)}
             data-testid="poe-fiche-verify"
-            className="w-full px-2 py-1.5 border border-accent/50 text-accent font-mono text-[10px] uppercase tracking-widest rounded-sm hover:bg-accent/10 disabled:opacity-60 disabled:cursor-wait"
+            aria-busy={Boolean(verifyState?.running)}
+            className={`m-btn w-full ${fiche.verify ? "m-btn-secondary" : "m-btn-primary"}`}
           >
             {verifyState?.running ? (
               <>
                 <svg
-                  className="animate-spin -ml-1 mr-1 h-4 w-4 inline"
+                  className="animate-spin h-3.5 w-3.5"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
                 {t("poeVerifying")}
               </>
             ) : (
-              t("poeVerify")
+              t(fiche.verify ? "poeVerifyAgain" : "poeVerify")
             )}
           </button>
           {verifyState?.error ? (
-            <p className="font-mono text-[10px] text-amber-400 break-words" data-testid="poe-fiche-verify-error">
+            <p className="mt-1.5 text-[12px] leading-4 text-m-danger-fg break-words" data-testid="poe-fiche-verify-error">
               {t("poeVerifyFailed")}: {verifyState.error}
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-1.5 text-[12px] leading-4 text-m-fg3 text-center">
+              {fiche.verify
+                ? `${t("poeVerifiedWith")} ${fiche.verify?.nemotron_status?.provider || "—"}, Zetaris ${fiche.verify?.zetaris_mode || "—"}`
+                : t("poeVerifyHint")}
+            </p>
+          )}
         </div>
       ) : null}
       {fiche.verify ? <VerifyTelemetry verify={fiche.verify} t={t} /> : null}
-      <div>
-        <p className="font-heading text-sm text-white leading-snug" data-testid="poe-fiche-zone-label">
-          {zoneDisplayName(fiche, t)}
-        </p>
-        {zoneSubtitle(fiche) ? (
-          <p className="font-mono text-[10px] text-slate-500 mt-0.5">{zoneSubtitle(fiche)}</p>
-        ) : null}
-        {variant === "page" && fiche.fiche_scope === "union" ? (
-          <p className="font-mono text-[10px] text-slate-500 mt-1" data-testid="poe-fiche-union-hint">
-            {t("reviewUnionHint")}
-          </p>
-        ) : null}
-      </div>
 
       <div data-testid="poe-fiche-sources-td">
-        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 mb-1.5">
+        <SectionHeading count={showAllTd && tdSources.length > 1 ? tdSources.length : null}>
           {t("poeSourcesTd")}
-          {showAllTd && tdSources.length > 1 ? (
-            <span className="text-accent"> ({tdSources.length})</span>
-          ) : null}
-        </p>
+        </SectionHeading>
         {showAllTd ? (
           tdSources.length ? (
             <ul className="space-y-1.5" data-testid="poe-fiche-td-list">
@@ -350,54 +345,36 @@ export default function ZoneFiche({
               ))}
             </ul>
           ) : (
-            <p className="text-[11px] text-slate-500 leading-relaxed">{t("poeFicheEmptyTd")}</p>
+            <p className="text-[12px] leading-4 text-m-fg3">{t("poeFicheEmptyTd")}</p>
           )
         ) : td ? (
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <a
-              href={td}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="poe-fiche-td-url"
-              className="min-w-0 text-[11px] text-accent hover:text-white font-medium"
-              title={td}
-            >
-              <span className="block truncate">{hostOf(td)}</span>
-              {pathHint(td) ? (
-                <span className="block font-mono text-[10px] text-slate-400 truncate" data-testid="poe-fiche-td-path">
-                  {pathHint(td)}
-                </span>
-              ) : null}
-            </a>
-            <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <SourceLink href={td} testId="poe-fiche-td-url" pathTestId="poe-fiche-td-path" />
+            <div className="flex items-center gap-2 shrink-0 mt-0.5">
               {tdBoth && (
-                <span className="font-mono text-[8px] uppercase tracking-widest text-bio border border-bio/40 px-1 py-px rounded-sm">
-                  {t("poeSourceBoth")}
-                </span>
+                <span className="text-[11px] leading-4 text-m-fg3">{t("poeSourceBoth")}</span>
               )}
-              <a href={td} target="_blank" rel="noreferrer" className="text-accent hover:text-white">
-                <ExternalLink size={11} />
+              <a href={td} target="_blank" rel="noreferrer" className="text-m-fg3 hover:text-m-fg" aria-label={hostOf(td)}>
+                <ExternalLink size={14} strokeWidth={1.75} />
               </a>
             </div>
           </div>
         ) : (
-          <p className="text-[11px] text-slate-500 leading-relaxed">{t("poeFicheEmptyTd")}</p>
+          <p className="text-[12px] leading-4 text-m-fg3">{t("poeFicheEmptyTd")}</p>
         )}
       </div>
 
       <div data-testid="poe-fiche-ports">
-        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 mb-1.5">
-          {t("poeFichePorts")} <span className="text-accent">({ports.length})</span>
+        <SectionHeading count={ports.length}>
+          {t("poeFichePorts")}
           {variant === "page" ? (
-            <span className="ml-1 normal-case tracking-normal text-slate-500">
-              — {t("reviewPortsPreview")}
-            </span>
+            <span className="font-normal text-m-fg3"> — {t("reviewPortsPreview")}</span>
           ) : null}
-        </p>
+        </SectionHeading>
         {ports.length === 0 ? (
-          <p className="text-[11px] text-slate-500">{t("poeFicheNoPorts")}</p>
+          <p className="text-[12px] leading-4 text-m-fg3">{t("poeFicheNoPorts")}</p>
         ) : (
-          <div className={`divide-y divide-line/60 border border-line/60 rounded-sm ${portsMax} overflow-y-auto`}>
+          <div className={`divide-y divide-m-line-soft border-t border-m-line-soft ${portsMax} overflow-y-auto`}>
             {ports.map((p) => {
               const href = buUrlOf(p);
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
@@ -405,84 +382,93 @@ export default function ZoneFiche({
               const pid = p.port_id || p.id || p.name;
               const score = p.confidence;
               const notes = registryNotes(p, t);
+              const verdict = verdictLabel(p, t);
+              const isOpen = openPort === pid;
               return (
                 <div
                   key={pid || p.name}
                   data-testid={`poe-fiche-port-${pid || p.name}`}
-                  className="p-2 hover:bg-raised/60"
+                  className="py-2.5"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <button
                       type="button"
                       disabled={!canFly}
                       onClick={() => canFly && onFlyToPort({
                         id: pid, lat: p.lat, lon: p.lon, name: p.name,
                       })}
-                      className="min-w-0 flex-1 text-left disabled:cursor-default"
+                      className="min-w-0 flex-1 text-left disabled:cursor-default rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
+                      title={canFly ? p.name : undefined}
                     >
-                      <p className="text-xs font-semibold text-slate-200 leading-snug">{p.name}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        <RegistryBadge port={p} t={t} />
-                      </div>
-                      {notes.map((n) => (
-                        <p
-                          key={n.key}
-                          className="mt-0.5 font-mono text-[9px] text-slate-500 leading-snug"
-                          data-testid={`poe-fiche-note-${n.key}`}
-                        >
-                          {n.text}
-                        </p>
-                      ))}
+                      <p className="text-[13px] leading-[18px] font-medium text-m-fg truncate">{p.name}</p>
                     </button>
-                  </div>
-                  <OfficialEvidence evidence={p.registry?.official_evidence} t={t} />
-                  <div className="flex items-center justify-between mt-1 gap-2">
                     {score != null ? (
                       <button
                         type="button"
-                        onClick={() => setOpenPort(openPort === pid ? null : pid)}
-                        aria-expanded={openPort === pid}
+                        onClick={() => setOpenPort(isOpen ? null : pid)}
+                        aria-expanded={isOpen}
                         title={t("poeWhy")}
                         data-testid={`poe-fiche-port-why-${pid || p.name}`}
-                        className="font-mono text-[10px] text-slate-500 hover:text-slate-200 truncate"
+                        className="m-num shrink-0 inline-flex items-center gap-1 text-[13px] leading-[18px] text-m-fg2 hover:text-m-fg rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
                       >
-                        {t("poeConfidence")} {score}
-                        <span className="ml-1 text-slate-600">{openPort === pid ? "▾" : "▸"}</span>
+                        <span className="text-[12px] text-m-fg3">{t("poeScore")}</span> {score}
+                        <ChevronRight size={12} strokeWidth={1.75} className={`transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`} aria-hidden="true" />
                       </button>
-                    ) : (
-                      <span className="font-mono text-[10px] text-slate-500 truncate">{p.city || ""}</span>
-                    )}
+                    ) : p.city ? (
+                      <span className="text-[12px] leading-4 text-m-fg3 truncate">{p.city}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <RegistryBadge port={p} t={t} />
+                      {verdict ? (
+                        <span
+                          key={verdict.key}
+                          className={`tier-chip-in text-[12px] leading-4 ${verdict.key === "pass" ? "text-m-success-fg" : "text-m-fg3"}`}
+                          data-testid={`poe-fiche-verdict-${verdict.key}`}
+                        >
+                          {verdict.text}
+                        </span>
+                      ) : null}
+                    </div>
                     {bus.length ? (
                       <div
-                        className="flex flex-wrap items-center justify-end gap-1.5 min-w-0"
+                        className="flex flex-wrap items-center justify-end gap-2 min-w-0 shrink-0"
                         data-testid="poe-fiche-port-bu-list"
                       >
                         {bus.map((rec, i) => (
-                          <span key={rec.url} className="inline-flex items-center gap-1 shrink-0">
-                            <a
-                              href={rec.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-accent hover:text-white shrink-0"
-                              data-testid={i === 0 ? "poe-fiche-port-bu" : `poe-fiche-port-bu-${i}`}
-                              title={rec.url}
-                            >
-                              {showAllTd && bus.length > 1 ? (
-                                <span className="font-mono text-[9px] underline decoration-accent/40">
-                                  {hostOf(rec.url)}
-                                </span>
-                              ) : (
-                                <ExternalLink size={11} />
-                              )}
-                            </a>
-                          </span>
+                          <a
+                            key={rec.url}
+                            href={rec.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-m-fg3 hover:text-m-fg shrink-0"
+                            data-testid={i === 0 ? "poe-fiche-port-bu" : `poe-fiche-port-bu-${i}`}
+                            title={rec.url}
+                            aria-label={hostOf(rec.url)}
+                          >
+                            {showAllTd && bus.length > 1 ? (
+                              <span className="text-[12px] leading-4 text-m-accent-fg">{hostOf(rec.url)}</span>
+                            ) : null}
+                            <ExternalLink size={14} strokeWidth={1.75} />
+                          </a>
                         ))}
                       </div>
                     ) : (
-                      <span className="font-mono text-[9px] text-slate-600" data-testid="poe-fiche-port-bu-empty">—</span>
+                      <span className="sr-only" data-testid="poe-fiche-port-bu-empty" />
                     )}
                   </div>
-                  {openPort === pid && (
+                  {notes.map((n) => (
+                    <p
+                      key={n.key}
+                      className="mt-1 text-[12px] leading-4 text-m-fg3"
+                      data-testid={`poe-fiche-note-${n.key}`}
+                    >
+                      {n.text}
+                    </p>
+                  ))}
+                  <OfficialEvidence evidence={p.registry?.official_evidence} t={t} />
+                  {isOpen && (
                     <ConfidenceBreakdown
                       parts={p.confidence_parts}
                       reasons={p.confidence_reasons}
@@ -499,11 +485,9 @@ export default function ZoneFiche({
       </div>
 
       {unclos?.code ? (
-        <div data-testid="poe-fiche-unclos" className="border border-line/60 rounded-sm px-2.5 py-2">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 mb-1">
-            {t("poeUnclosTitle")}
-          </p>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
+        <div data-testid="poe-fiche-unclos" className="rounded-[10px] border border-m-line bg-m-panel px-3 py-2.5">
+          <p className="text-[12px] leading-4 font-medium text-m-fg2">{t("poeUnclosTitle")}</p>
+          <p className="mt-1 text-[12px] leading-4 text-m-fg2">
             {t(unclosKey) !== unclosKey ? t(unclosKey) : (unclos.label || unclos.code)}
           </p>
         </div>

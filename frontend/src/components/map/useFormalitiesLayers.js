@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
-import { escH, flagEmoji, zoneStyle } from "./constants";
+import { escH, zoneStyle } from "./constants";
 import { circleOpts, POPUP_OPTS } from "./points";
+import { portKey, registryBadgeHtml, verdictLabel } from "../poeRegistry";
 
 /**
  * Formalities layers: EEZ choropleth + Ports of Entry dots (canvas).
@@ -10,7 +11,7 @@ import { circleOpts, POPUP_OPTS } from "./points";
 export default function useFormalitiesLayers({
   mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
   poeMarkersById,
-  mode, poeZones, poePorts, flyToZone, tRef,
+  mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
 }) {
   const eezSigRef = useRef("");
   const poeSigRef = useRef("");
@@ -75,41 +76,57 @@ export default function useFormalitiesLayers({
       }));
       m.bindPopup(() => {
         const t = tRef.current;
-        const valid = p.spatial_kind === "inland_river"
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#22d3ee;border:1px solid rgba(34,211,238,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeInlandRiver"))}</span>`
+        // Same look as the sidebar card: name, tier chip, score, verdict in words.
+        // The tier and verdict come from the open zone sheet when it holds this port.
+        const fiche = zoneFicheRef?.current;
+        const sheetPort = fiche && Number(fiche.mrgid) === Number(p.mrgid)
+          ? (fiche.ports || []).find((fp) => portKey(fp.name) === portKey(p.name))
+          : null;
+        const placement = p.spatial_kind === "inland_river"
+          ? `<span class="poe-popup__chip poe-popup__chip--ok">${escH(t("poeInlandRiver"))}</span>`
           : p.spatial_kind === "coastal_land"
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#39ff14;border:1px solid rgba(57,255,20,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeCoastalLand"))}</span>`
+          ? `<span class="poe-popup__chip poe-popup__chip--ok">${escH(t("poeCoastalLand"))}</span>`
           : p.validated
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#39ff14;border:1px solid rgba(57,255,20,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeValidated"))}</span>`
-          : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#fbbf24;border:1px solid rgba(251,191,36,0.45);padding:2px 6px;border-radius:2px;">⚠ ${escH(t("poeOutsideEez"))}${p.distance_km != null ? " ~" + escH(p.distance_km) + " km" : ""}</span>`;
-        const conf = p.confidence != null
-          ? `<span data-testid="poe-confidence" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${Number(p.confidence) >= 70 ? "#39ff14" : Number(p.confidence) >= 40 ? "#fbbf24" : "#fca5a5"};border:1px solid #33415555;padding:2px 6px;border-radius:2px;">${escH(t("poeConfidence"))} ${Number(p.confidence)}</span>`
+          ? `<span class="poe-popup__chip poe-popup__chip--ok">${escH(t("poeValidated"))}</span>`
+          : `<span class="poe-popup__chip poe-popup__chip--danger">${escH(t("poeOutsideEez"))}${p.distance_km != null ? " ~" + escH(p.distance_km) + " km" : ""}</span>`;
+        const score = sheetPort?.confidence ?? p.confidence;
+        const conf = score != null
+          ? `<span data-testid="poe-confidence" class="poe-popup__chip poe-popup__chip--num"><span style="color:rgb(var(--m-fg-3));margin-right:4px;">${escH(t("poeScore"))}</span>${Number(score)}</span>`
+          : "";
+        const tierChip = sheetPort ? registryBadgeHtml(sheetPort, t, escH) : "";
+        const verdict = sheetPort ? verdictLabel(sheetPort, t) : null;
+        const verdictHtml = verdict
+          ? `<span class="poe-popup__verdict ${verdict.key === "pass" ? "poe-popup__verdict--pass" : ""}">${escH(verdict.text)}</span>`
           : "";
         const srcs = (p.source_urls || []).slice(0, 3).map((u) => `
-          <div style="margin-top:3px;font-size:10px;"><a href="${escH(u)}" target="_blank" rel="noreferrer" style="color:#00f0ff;text-decoration:none;word-break:break-all;">${escH(u)}</a></div>`).join("");
+          <div class="poe-popup__src"><a href="${escH(u)}" target="_blank" rel="noreferrer" title="${escH(u)}" style="word-break:break-all;">${escH(u.replace(/^https?:\/\/(www\.)?/, ""))}</a></div>`).join("");
         let osmBadge = "";
         if (p.osm_confidence != null) {
           const c = Number(p.osm_confidence);
-          const col = c >= 0.5 ? "#39ff14" : c > 0 ? "#fbbf24" : "#94a3b8";
           const label = c > 0
             ? `${escH(t("poeOsmConfidence"))} ${c.toFixed(2)}`
             : escH(t("poeOsmNoMatch"));
           const tags = (p.osm_tags || []).join(", ");
-          osmBadge = `<span data-testid="poe-osm-badge" title="${escH(tags)}" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col};border:1px solid ${col}55;padding:2px 6px;border-radius:2px;">${c > 0 ? "⬢ " : "∅ "}${label}</span>`;
+          osmBadge = `<span data-testid="poe-osm-badge" title="${escH(tags)}" class="poe-popup__chip poe-popup__chip--num">${label}</span>`;
         }
         const anomBadge = p.spatial_anomaly
-          ? `<span data-testid="poe-anomaly-badge" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#ff4a4a;border:1px solid rgba(255,74,74,0.5);background:rgba(255,74,74,0.08);padding:2px 6px;border-radius:2px;">⚠ ${escH(t("poeAnomaly"))}</span>`
+          ? `<span data-testid="poe-anomaly-badge" class="poe-popup__chip poe-popup__chip--danger">${escH(t("poeAnomaly"))}</span>`
           : "";
-        return `<div style="min-width:230px;max-width:300px;font-family:Manrope,sans-serif;">
-          <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:700;font-size:13px;color:#fff;line-height:1.3;">⚓ ${escH(p.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;margin:3px 0 5px;">${escH(p.city || "")}${p.city ? " · " : ""}${flagEmoji(p.country_iso2)} ${escH(p.zone_name || "")}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;">${valid}${conf}
-            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#94a3b8;border:1px solid #33415555;padding:2px 6px;border-radius:2px;">${escH(p.geocode_source || t("poeNotGeocoded"))}</span>
-            ${osmBadge}${anomBadge}
-          </div>
-          ${p.note ? `<div style="font-size:11px;color:#e2e8f0;line-height:1.4;margin-bottom:5px;">${escH(p.note)}</div>` : ""}
-          ${srcs ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">${escH(t("poeSourcesTitle"))}</div>${srcs}` : ""}
-          <div style="margin-top:7px;font-size:9px;color:#64748b;">${escH(t("poeGeocodeAttribution"))}${p.extracted_at ? " · " + escH(String(p.extracted_at).slice(0, 10)) : ""}</div>
+        const evidence = (sheetPort?.registry?.official_evidence || []).slice(0, 2).map((e) => `
+          <details class="poe-popup__details" style="margin-top:6px;">
+            <summary>${escH(t("poeEvidenceTitle"))}: <a href="${escH(e.url)}" target="_blank" rel="noreferrer" style="color:rgb(var(--m-accent-fg));text-decoration:none;">${escH(e.domain || "")}</a> (${escH(t(e.evidence_source === "stored_snippet" ? "poeEvidenceStored" : "poeEvidenceFetched"))})</summary>
+            <p class="poe-popup__excerpt">${escH(e.snippet || "")}</p>
+          </details>`).join("");
+        const meta = [p.city, p.zone_name].filter(Boolean).map(escH).join(" · ");
+        return `<div class="poe-popup" style="min-width:230px;max-width:300px;">
+          <div class="poe-popup__title">${escH(p.name)}</div>
+          ${meta ? `<div class="poe-popup__meta">${meta}</div>` : ""}
+          <div class="poe-popup__row">${tierChip}${verdictHtml}</div>
+          <div class="poe-popup__row">${conf}${placement}${osmBadge}${anomBadge}</div>
+          ${p.note ? `<div class="poe-popup__note">${escH(p.note)}</div>` : ""}
+          ${evidence}
+          ${srcs ? `<div class="poe-popup__h">${escH(t("poeSourcesTitle"))}</div>${srcs}` : ""}
+          <div class="poe-popup__footer">${escH(t("poeGeocodeAttribution"))}${p.extracted_at ? " · " + escH(String(p.extracted_at).slice(0, 10)) : ""}${p.geocode_source ? " · " + escH(p.geocode_source) : ""}</div>
         </div>`;
       }, { ...POPUP_OPTS, maxWidth: 310 });
       if (poeMarkersById?.current && p.id) poeMarkersById.current.set(p.id, m);
