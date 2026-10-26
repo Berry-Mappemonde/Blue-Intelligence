@@ -43,6 +43,30 @@ export function installInputModality(doc) {
   };
 }
 
+/**
+ * Disclosure toggles in HTML that React does not own (Leaflet popups): a click on a
+ * [data-disclosure] button flips aria-expanded and the [data-disclosure-body] of its
+ * [data-disclosure-root]. One delegated listener for the whole document.
+ */
+export function installDisclosureToggles(doc) {
+  if (!doc || !doc.documentElement || doc.documentElement.dataset?.disclosureTracked === "1") return () => {};
+  doc.documentElement.dataset.disclosureTracked = "1";
+  const onClick = (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-disclosure]") : null;
+    if (!btn) return;
+    const root = btn.closest("[data-disclosure-root]");
+    const body = root ? root.querySelector("[data-disclosure-body]") : null;
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (body) body.hidden = !open;
+  };
+  doc.addEventListener("click", onClick);
+  return () => {
+    doc.removeEventListener("click", onClick);
+    delete doc.documentElement.dataset.disclosureTracked;
+  };
+}
+
 /** Test id of a zone row, the element "All zones" hands focus back to. */
 export function zoneRowTestId(mrgid) {
   return mrgid == null ? null : `poe-zone-row-${mrgid}`;
