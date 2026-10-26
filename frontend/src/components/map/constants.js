@@ -48,7 +48,7 @@ export const ZONE_ERROR_COLOR = "#eb5a5a";
 export const zoneStyle = (status, selected = false) => {
   const s = status || "non_generee";
   if (selected) {
-    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.05, dashArray: null };
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
   }
   const generated = s === "ia" || s === "ia_sans_source";
   const erreur = s === "erreur";

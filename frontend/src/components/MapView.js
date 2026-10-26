@@ -3,6 +3,7 @@ import L from "leaflet";
 
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
 import { createPanes } from "./map/layerOrder";
+import { installAttributionDedupe } from "./map/attribution";
 import { zonePopupHtml } from "./map/zonePopup";
 import useAmpLayer, { popupHtml as ampPopupHtml, ampPointToLayer } from "./map/useAmpLayer";
 import useAnchoragesLayer from "./map/useAnchoragesLayer";
@@ -140,6 +141,8 @@ export default function MapView({
       maxBounds: WORLD,
       maxBoundsViscosity: 1.0,
     });
+    // Presentation only: each provider once in the attribution bar.
+    installAttributionDedupe(map.attributionControl);
     tileRef.current = L.tileLayer(TILE_URLS.dark, {
       attribution: "&copy; Esri &copy; OpenStreetMap contributors",
       maxZoom: 16,
