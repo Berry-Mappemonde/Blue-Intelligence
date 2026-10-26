@@ -54,7 +54,9 @@ export const zoneStyle = (status, selected = false, zoom = null) => {
     return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0, dashArray: null };
   }
   if (selected) {
-    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
+    // Fill only: the amber outline is a separate exterior-ring line (selectedOutlineRings),
+    // so interior holes (land cut-outs around islands) get no zigzag stroke.
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
   }
   const generated = s === "ia" || s === "ia_sans_source";
   const erreur = s === "erreur";
@@ -69,6 +71,22 @@ export const zoneStyle = (status, selected = false, zoom = null) => {
     lineCap: s === "non_generee" ? "round" : "butt",
   };
 };
+
+/**
+ * Exterior ring(s) of a GeoJSON Polygon / MultiPolygon as Leaflet [lat, lng] rings:
+ * the outer boundary of each part, never its holes.
+ */
+export function selectedOutlineRings(geometry) {
+  if (!geometry) return [];
+  const toLatLng = (ring) => (ring || []).map(([lng, lat]) => [lat, lng]);
+  if (geometry.type === "Polygon") return geometry.coordinates?.length ? [toLatLng(geometry.coordinates[0])] : [];
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).filter((poly) => poly?.length).map((poly) => toLatLng(poly[0]));
+  }
+  if (geometry.type === "GeometryCollection") return (geometry.geometries || []).flatMap(selectedOutlineRings);
+  return [];
+}
+export const SELECTED_OUTLINE_STYLE = { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, interactive: false };
 
 export const flagEmoji = (iso2) => {
   if (!iso2 || iso2.length !== 2) return "🌐";

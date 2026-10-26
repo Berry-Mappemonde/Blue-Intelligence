@@ -220,8 +220,8 @@ export default function MapView({
           }
         });
         const isSelected = () => selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
-        const hiddenSelected = () => isSelected() && zoneStyle(null, true, map.getZoom()).opacity === 0;
-        lyr.on("mouseover", () => { if (hiddenSelected()) return; try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
+        // The selected zone's outline is its exterior-ring line, so hover never strokes it.
+        lyr.on("mouseover", () => { if (isSelected()) return; try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
         lyr.on("mouseout", () => {
           try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, isSelected(), map.getZoom())); } catch (_) {}
         });
