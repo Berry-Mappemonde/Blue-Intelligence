@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
 import {
-  ESCALE_FILL, ESCALE_STROKE, INTERMEDIATE_FILL, INTERMEDIATE_STROKE,
+  ESCALE_FILL, ESCALE_RADIUS, ESCALE_STROKE, INTERMEDIATE_FILL, INTERMEDIATE_RADIUS, INTERMEDIATE_STROKE,
   ROUTE_CASING_COLOR, ROUTE_CASING_WEIGHT, ROUTE_MAIN_COLOR, ROUTE_MAIN_WEIGHT,
 } from "./constants";
 import { POPUP_OPTS } from "./points";
@@ -74,7 +74,7 @@ export default function useRouteLayer(mapObj, tRef, t) {
       // Intermediate waypoints — small muted dots (no tooltip, no popup — cleaner map)
       intermediates.forEach((w) => {
         L.circleMarker([w.lat, w.lng], {
-          radius: 2.5,
+          radius: INTERMEDIATE_RADIUS,
           color: INTERMEDIATE_STROKE,
           weight: 1,
           fillColor: INTERMEDIATE_FILL,
@@ -86,9 +86,9 @@ export default function useRouteLayer(mapObj, tRef, t) {
       // Escale waypoints — larger dots (no permanent label, popup on click only)
       escales.forEach((w) => {
         const m = L.circleMarker([w.lat, w.lng], {
-          radius: 6,
+          radius: ESCALE_RADIUS,
           color: ESCALE_STROKE,
-          weight: 2,
+          weight: 1.5,
           fillColor: ESCALE_FILL,
           fillOpacity: 1,
           pane: "route",

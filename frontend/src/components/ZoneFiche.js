@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
 import { evidenceMarkOptions, evidenceTerms, fallbackReasonText, registryBadge, registryNotes, snippetSegments, sourceTitle, telemetryWord, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
@@ -232,6 +232,15 @@ export default function ZoneFiche({
 }) {
   // Hook avant les retours anticipés : React exige des appels inconditionnels.
   const [openPort, setOpenPort] = useState(null);
+  // Elapsed seconds while a Verify runs (the frontend does not know the stage, only the clock).
+  const running = Boolean(verifyState?.running);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!running) { setElapsed(0); return undefined; }
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [running]);
   if (loading) {
     return (
       <section className="px-4 py-3 border-b border-m-line font-ui" data-testid="poe-zone-fiche-loading">
@@ -303,7 +312,20 @@ export default function ZoneFiche({
               t(fiche.verify ? "poeVerifyAgain" : "poeVerify")
             )}
           </button>
-          {verifyState?.error ? (
+          {running ? (
+            <div
+              className="mt-2 rounded-[10px] border border-m-line bg-m-panel px-3 py-2.5"
+              role="status"
+              aria-live="polite"
+              data-testid="poe-fiche-verifying"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[12px] leading-4 font-medium text-m-fg2">{t("poeVerifyingTitle")}</p>
+                <span className="m-num text-[12px] leading-4 text-m-fg3" data-testid="poe-fiche-verifying-elapsed">{elapsed} s</span>
+              </div>
+              <p className="mt-1 text-[12px] leading-4 text-m-fg3">{t("poeVerifyingBody")}</p>
+            </div>
+          ) : verifyState?.error ? (
             <p className="mt-1.5 text-[12px] leading-4 text-m-danger-fg break-words" data-testid="poe-fiche-verify-error">
               {t("poeVerifyFailed")}: {verifyState.error}
             </p>
@@ -370,10 +392,23 @@ export default function ZoneFiche({
             <span className="font-normal text-m-fg3"> — {t("reviewPortsPreview")}</span>
           ) : null}
         </SectionHeading>
-        {ports.length === 0 ? (
+        {running && ports.length === 0 ? (
+          // Skeleton cards while the first run is in flight: shape only, no fake progress.
+          <div className="divide-y divide-m-line-soft border-t border-m-line-soft" data-testid="poe-fiche-skeleton" aria-hidden="true">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="m-skeleton h-3.5 w-40 rounded" />
+                  <span className="m-skeleton h-3.5 w-[84px] rounded" />
+                </div>
+                <span className="m-skeleton mt-2.5 block h-5 w-[110px] rounded-[5px]" />
+              </div>
+            ))}
+          </div>
+        ) : ports.length === 0 ? (
           <p className="text-[12px] leading-4 text-m-fg3">{t("poeFicheNoPorts")}</p>
         ) : (
-          <div className={`divide-y divide-m-line-soft border-t border-m-line-soft ${portsMax} overflow-y-auto`}>
+          <div className={`divide-y divide-m-line-soft border-t border-m-line-soft ${portsMax} overflow-y-auto ${running ? "opacity-60" : ""}`} aria-busy={running || undefined}>
             {ports.map((p) => {
               const href = buUrlOf(p);
               const bus = showAllTd ? buListOf(p) : (href ? [{ url: href }] : []);
@@ -419,7 +454,10 @@ export default function ZoneFiche({
                   </div>
                   <div className="mt-1.5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                      <RegistryBadge port={p} t={t} />
+                      {/* While a run is in flight the chip slot is a skeleton: the tier is being recomputed. */}
+                      {running
+                        ? <span className="m-skeleton h-5 w-[110px] rounded-[5px]" data-testid="poe-fiche-chip-skeleton" aria-hidden="true" />
+                        : <RegistryBadge port={p} t={t} />}
                       {verdict ? (
                         <span
                           key={verdict.key}

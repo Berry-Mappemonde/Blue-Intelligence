@@ -1,4 +1,4 @@
-import { Anchor, ClipboardCheck, Compass, Eye, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Waves, Wind } from "lucide-react";
+import { Anchor, ClipboardCheck, Compass, Eye, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Wind } from "lucide-react";
 import RunSelector from "./RunSelector";
 import { reviewToggleClass, reviewToggleLabelClass } from "./headerState";
 import { HELLOASSO_MEMBERSHIP_URL } from "../config/helloasso";
@@ -38,12 +38,10 @@ export default function Header({
   return (
     <header className="h-12 shrink-0 flex items-center justify-between gap-4 px-4 border-b border-line bg-surface z-[1200] font-ui text-[13px] whitespace-nowrap">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-7 h-7 flex items-center justify-center border border-line rounded-md text-m-fg2 shrink-0" aria-hidden="true">
-          <Waves size={15} strokeWidth={1.75} />
-        </div>
-        <h1 className="m-0 leading-none" title={t("subtitle")}>
-          <span className="block text-[13px] leading-4 font-semibold text-m-fg">Blue Intelligence</span>
-          <span className="block text-[11px] leading-4 text-m-fg3">by Berry-Mappemonde</span>
+        {/* Wordmark only (no invented logo): title and attribution on one baseline. */}
+        <h1 className="m-0 flex items-baseline gap-2 whitespace-nowrap" title={t("subtitle")}>
+          <span className="text-[14px] leading-7 font-semibold tracking-[-0.01em] text-m-fg">Blue Intelligence</span>
+          <span className="text-[12px] leading-7 text-m-fg3">by Berry-Mappemonde</span>
         </h1>
         {status?.running && (
           <span className="ml-1 inline-flex items-center gap-2 h-6 px-2 border border-line rounded-md text-[12px] text-m-fg2" data-testid="swarm-running">
@@ -65,8 +63,8 @@ export default function Header({
               aria-current={mode === id ? "true" : undefined}
               title={id === "climatology" ? t("modeClimatologyFull") : t(labelKey)}
             >
-              {/* Below 1400 px only the active mode keeps its label; every tab keeps its title. */}
-              <Icon {...ICON} /> <span className={mode === id ? "inline" : "hidden min-[1400px]:inline"}>{t(labelKey)}</span>
+              {/* Below 1480 px only the active mode keeps its label; every tab keeps its title. */}
+              <Icon {...ICON} /> <span className={mode === id ? "inline" : "hidden min-[1480px]:inline"}>{t(labelKey)}</span>
             </button>
           ))}
         </div>
