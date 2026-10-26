@@ -11,14 +11,14 @@ export default function ProjectList({ t, projects, funderFilter, searchQuery, ca
   );
 
   return (
-    <section className="p-4" data-testid="project-list">
-      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2">
-        {t("projectList")} <span className="text-accent">({features.length})</span>
+    <section className="py-3" data-testid="project-list">
+      <p className="flex items-baseline justify-between gap-3 px-4 mb-2 text-[12px] leading-4 font-medium text-m-fg2">
+        {t("projectList")} <span className="text-m-fg3 m-num text-right">{features.length}</span>
       </p>
       {features.length === 0 && (
-        <p className="text-xs text-slate-500">{t("noProjects")}</p>
+        <p className="px-4 py-3 text-[13px] leading-[18px] text-m-fg3">{t("noProjects")}</p>
       )}
-      <div className="divide-y divide-line/60 border border-line/60 rounded-sm">
+      <div className="divide-y divide-m-line-soft">
         {features.slice(0, 100).map((f) => (
           <button
             type="button"
@@ -28,15 +28,16 @@ export default function ProjectList({ t, projects, funderFilter, searchQuery, ca
               const [lon, lat] = f.geometry?.coordinates || [];
               if (onFlyTo && lat != null && lon != null) onFlyTo(f.properties.id, lat, lon);
             }}
-            className="w-full text-left p-2.5 hover:bg-raised/60"
+            className="w-full text-left px-4 py-2.5 hover:bg-m-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-m-accent"
           >
-            <p className="text-xs font-semibold text-slate-200 leading-snug">{f.properties.title}</p>
-            <div className="flex items-center justify-between mt-1">
-              <span className="font-mono text-[10px] text-funder truncate max-w-[220px]">{f.properties.funder}</span>
+            <p className="text-[13px] leading-[18px] font-medium text-m-fg break-words">{f.properties.title}</p>
+            <div className="flex items-center justify-between gap-3 mt-1">
+              <span className="text-[12px] leading-4 text-m-fg3 truncate">{f.properties.funder}</span>
               <a href={f.properties.url} target="_blank" rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-accent hover:text-white">
-                <ExternalLink size={11} />
+                aria-label={f.properties.title}
+                className="shrink-0 text-m-fg3 hover:text-m-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent">
+                <ExternalLink size={14} strokeWidth={1.75} />
               </a>
             </div>
           </button>
