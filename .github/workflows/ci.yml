@@ -122,7 +122,7 @@ jobs:
             overpass-v2-
       - name: Si cache absent, copier le snapshot figé OSM
         run: |
-          if [ ! -s backend/.ci-cache/osm-ports.json ]; then
+          if [ -s backend/tests/fixtures/osm-ports.snapshot.json ]; then
             mkdir -p backend/.ci-cache
             cp backend/tests/fixtures/osm-ports.snapshot.json backend/.ci-cache/osm-ports.json
             echo "Snapshot OSM figure copie dans le cache"

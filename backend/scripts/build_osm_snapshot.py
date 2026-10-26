@@ -24,7 +24,7 @@ from app.services.osm_validate import overpass_around  # noqa: E402
 
 SEED = REPO / "seed" / "ports_of_entry.geojson"
 SNAPSHOT = REPO / "backend" / "tests" / "fixtures" / "osm-ports.snapshot.json"
-CONCURRENCY = 3
+CONCURRENCY = 1
 
 
 def load_ports() -> list[dict]:
@@ -73,7 +73,7 @@ async def main() -> None:
             "elements": elements,
         }
         done += 1
-        if done % 25 == 0 or done == len(ports):
+        if done % 2 == 0 or done == len(ports):
             _save_cache(SNAPSHOT, cache)
             print(f"  {done}/{len(ports)} (dernier: {port['name']})", flush=True)
         await asyncio.sleep(0.4)  # politesse Overpass
