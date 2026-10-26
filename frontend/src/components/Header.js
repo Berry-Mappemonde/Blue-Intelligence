@@ -1,5 +1,6 @@
 import { Anchor, ClipboardCheck, Compass, Eye, FlaskConical, Map as MapIcon, Moon, Radar, Radio, ScrollText, Settings, Shield, Ship, Sun, UserPlus, Waves, Wind } from "lucide-react";
 import RunSelector from "./RunSelector";
+import { reviewToggleClass, reviewToggleLabelClass } from "./headerState";
 import { HELLOASSO_MEMBERSHIP_URL } from "../config/helloasso";
 import { nextBasemap } from "./map/basemaps";
 
@@ -144,12 +145,12 @@ export default function Header({
             type="button"
             data-testid="map-show-review"
             onClick={() => onToggleShowReview && onToggleShowReview(!showReview)}
-            className="nav-tab border border-line rounded-md"
+            className={reviewToggleClass(showReview)}
             aria-pressed={showReview}
             title={t("reviewShowReview")}
           >
             <Eye {...ICON} />
-            <span className="hidden 2xl:inline">{t("reviewShowReview")}</span>
+            <span className={reviewToggleLabelClass(showReview)}>{t("reviewShowReview")}</span>
           </button>
         )}
         <button
