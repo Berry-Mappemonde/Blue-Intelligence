@@ -64,7 +64,7 @@ export const zoneStyle = (status, selected = false, zoom = null) => {
     weight: 1,
     opacity: erreur ? 0.7 : generated ? 0.6 : 0.55,
     fillColor: erreur ? ZONE_ERROR_COLOR : ZONE_NEUTRAL_FILL,
-    fillOpacity: erreur ? 0.04 : generated ? 0.04 : 0.015,
+    fillOpacity: erreur ? 0.05 : generated ? 0.06 : 0.015,
     dashArray: s === "ia_sans_source" ? "4 4" : s === "non_generee" ? "1 4" : null,
     lineCap: s === "non_generee" ? "round" : "butt",
   };
@@ -83,11 +83,15 @@ export const escH = (s) => String(s ?? "")
 
 // Neutral route styling that reads on both dark and light basemaps.
 // Two-layer stroke (dark casing + light main) gives contrast in every context.
-export const ROUTE_MAIN_COLOR = "#e2e8f0";     // slate-200 top line
-export const ROUTE_CASING_COLOR = "#0f172a";   // deep navy casing for contrast on light map
-export const ROUTE_MAIN_WEIGHT = 2.5;
-export const ROUTE_CASING_WEIGHT = 5;
-export const ESCALE_FILL = "#f8fafc";
-export const ESCALE_STROKE = "#0f172a";
-export const INTERMEDIATE_FILL = "#94a3b8";
-export const INTERMEDIATE_STROKE = "#475569";
+// Toned down to a hairline in fg-3 with a dark casing: visible on both basemaps,
+// never louder than the data layers.
+export const ROUTE_MAIN_COLOR = "#8f8f8f";     // fg-3
+export const ROUTE_CASING_COLOR = "#121212";   // dark casing for contrast on the light map
+export const ROUTE_MAIN_WEIGHT = 1.5;
+export const ROUTE_CASING_WEIGHT = 3;
+export const ESCALE_FILL = "#ededed";
+export const ESCALE_STROKE = "#121212";
+export const ESCALE_RADIUS = 4;
+export const INTERMEDIATE_FILL = "#8f8f8f";
+export const INTERMEDIATE_STROKE = "#121212";
+export const INTERMEDIATE_RADIUS = 1.8;

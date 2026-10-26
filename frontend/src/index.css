@@ -186,12 +186,14 @@ html, body, #root {
 }
 .leaflet-popup-content::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), 0.7); }
 .leaflet-popup-close-button { color: #94a3b8 !important; }
+/* Zoom controls: neutral in every mode (Meridian overlay surface), no per-mode accent. */
 .leaflet-bar a {
-  background: #0f172a !important;
-  color: rgb(var(--accent-rgb)) !important;
-  border-color: rgba(var(--accent-rgb), 0.35) !important;
+  background: rgb(var(--m-overlay)) !important;
+  color: rgb(var(--m-fg-2)) !important;
+  border-color: rgb(var(--m-line-strong)) !important;
 }
-.leaflet-bar a:hover { background: #1e293b !important; }
+.leaflet-bar a:hover { background: rgb(var(--m-raised)) !important; color: rgb(var(--m-fg)) !important; }
+.leaflet-bar a.leaflet-disabled { color: rgb(var(--m-fg-4)) !important; }
 
 .bi-cluster {
   background: rgba(0, 240, 255, 0.15);
@@ -449,6 +451,12 @@ button { transition: background-color 0.15s ease, border-color 0.15s ease, color
 }
 .m-btn:active:not(:disabled) { transform: scale(0.97); }
 .m-btn:disabled { opacity: 0.45; pointer-events: none; }
+/* A disabled primary keeps a readable label (fg-3 on raised, 5:1) instead of a dimmed white block. */
+.m-btn-primary:disabled { opacity: 1; background: rgb(var(--m-raised)); color: rgb(var(--m-fg-3)); box-shadow: inset 0 0 0 1px rgb(var(--m-line)); }
+/* Busy (a run in flight) is not "unavailable": full opacity, fg-2 surface, dark label (7.9:1). */
+.m-btn[aria-busy="true"] { cursor: progress; }
+.m-btn-primary[aria-busy="true"] { background: rgb(var(--m-fg-2)); color: rgb(var(--m-canvas)); box-shadow: none; }
+.m-btn-primary[aria-busy="true"]:active { transform: none; }
 .m-btn:focus-visible { outline: 2px solid rgb(var(--m-accent)); outline-offset: 1px; }
 .m-btn-primary { background: rgb(var(--m-fg)); color: rgb(var(--m-canvas)); }
 .m-btn-primary:hover { background: #ffffff; }
@@ -512,6 +520,25 @@ button { transition: background-color 0.15s ease, border-color 0.15s ease, color
   .m-details .m-disclosure, .m-btn, .nav-tab { transition: none; }
 }
 
+/* Skeleton: a quiet placeholder, one slow pulse, none with reduced motion */
+.m-skeleton { display: inline-block; background: rgb(var(--m-selected)); animation: m-skeleton-pulse 1.6s ease-in-out infinite; }
+@keyframes m-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .m-skeleton, .animate-spin, .animate-pulse { animation: none; } }
+
+/* Links: underlined at rest (sidebar and popups), stronger on hover */
+.m-link { color: rgb(var(--m-accent-fg)); text-decoration: underline; text-decoration-color: rgb(var(--m-accent-fg) / 0.45); text-underline-offset: 2px; }
+.m-link:hover { text-decoration-color: rgb(var(--m-accent-fg)); }
+.m-link:focus-visible { outline: 2px solid rgb(var(--m-accent)); outline-offset: 1px; border-radius: 3px; }
+.poe-popup__evidence { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; }
+.poe-popup__evidence > details { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.poe-popup__evidence > .m-link { flex: none; font-size: 12px; line-height: 16px; }
+
+/* Script-focused landing targets (tabindex="-1"): a ring for keyboard users only */
+.m-focus-target:focus { outline: none; }
+.m-focus-target:focus-visible { outline: 2px solid rgb(var(--m-accent)); outline-offset: 2px; }
+html[data-input="pointer"] .m-focus-target:focus,
+html[data-input="pointer"] .m-focus-target:focus-visible { outline: none; }
+
 /* ---- Text roles ---- */
 .m-num { font-variant-numeric: tabular-nums; }
 .m-code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -549,8 +576,8 @@ button { transition: background-color 0.15s ease, border-color 0.15s ease, color
 .poe-popup__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .poe-popup__h { font-size: 12px; line-height: 16px; font-weight: 500; color: rgb(var(--m-fg-2)); margin-top: 12px; padding-bottom: 4px; border-bottom: 1px solid rgb(var(--m-line)); }
 .poe-popup__src { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; margin-top: 6px; min-width: 0; }
-.poe-popup__src a { color: rgb(var(--m-accent-fg)); text-decoration: none; min-width: 0; }
-.poe-popup__src a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.poe-popup__src a { color: rgb(var(--m-accent-fg)); text-decoration: underline; text-decoration-color: rgb(var(--m-accent-fg) / 0.45); text-underline-offset: 2px; min-width: 0; }
+.poe-popup__src a:hover { text-decoration-color: rgb(var(--m-accent-fg)); }
 .poe-popup__host { display: block; font-size: 12px; line-height: 16px; color: rgb(var(--m-fg-3)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .poe-popup__port { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid rgb(var(--m-line-soft)); }
 .poe-popup__port:last-child { border-bottom: 0; }
@@ -580,10 +607,9 @@ button { transition: background-color 0.15s ease, border-color 0.15s ease, color
 /* Matched port name / entry term inside an evidence excerpt */
 .m-mark { background: color-mix(in oklab, rgb(var(--m-accent)) 22%, transparent); color: rgb(var(--m-fg)); border-radius: 3px; padding: 0 2px; }
 
-/* Attribution bar: never clipped at the map edge; neutral in Ports of entry mode */
-.leaflet-control-attribution { max-width: min(70vw, 960px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-[data-mode="formalities"] .leaflet-control-attribution { background: rgb(var(--m-overlay) / 0.92); color: rgb(var(--m-fg-3)); font-family: var(--m-font); font-size: 11px; line-height: 16px; padding: 2px 8px; }
-[data-mode="formalities"] .leaflet-control-attribution a { color: rgb(var(--m-fg-2)); }
+/* Attribution bar: never clipped at the map edge; neutral overlay surface in every mode */
+.leaflet-control-attribution { max-width: min(70vw, 960px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgb(var(--m-overlay) / 0.92) !important; color: rgb(var(--m-fg-3)); font-family: var(--m-font); font-size: 11px; line-height: 16px; padding: 2px 8px; }
+.leaflet-control-attribution a { color: rgb(var(--m-fg-2)); }
 
 /* Legend swatches */
 .legend-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; }

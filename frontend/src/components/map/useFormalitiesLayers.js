@@ -3,7 +3,7 @@ import L from "leaflet";
 import api from "../../api";
 import { escH, zoneStyle } from "./constants";
 import { circleOpts, POPUP_OPTS } from "./points";
-import { evidenceMarkOptions, evidenceTerms, portKey, registryBadgeHtml, snippetSegments, sourceTitle, verdictLabel } from "../poeRegistry";
+import { evidenceDetailsHtml, portKey, registryBadgeHtml, sourceTitle, verdictLabel } from "../poeRegistry";
 
 /**
  * Formalities layers: EEZ choropleth + Ports of Entry dots (SVG, poe-ports pane).
@@ -148,15 +148,8 @@ export default function useFormalitiesLayers({
           ? `<span data-testid="poe-anomaly-badge" class="poe-popup__chip poe-popup__chip--danger">${escH(t("poeAnomaly"))}</span>`
           : "";
         const allEvidence = sheetPort?.registry?.official_evidence || [];
-        const evidence = allEvidence.slice(0, 2).map((e) => {
-          const { lead, trail, segments } = snippetSegments(e.snippet, evidenceTerms(sheetPort, e), evidenceMarkOptions(e));
-          const body = segments.map((s) => (s.mark ? `<mark class="m-mark">${escH(s.text)}</mark>` : escH(s.text))).join("");
-          return `
-          <details class="poe-popup__details">
-            <summary>${CHEVRON}<span>${escH(t("poeEvidenceTitle"))}: <a href="${escH(e.url)}" target="_blank" rel="noreferrer" style="color:rgb(var(--m-accent-fg));text-decoration:none;">${escH(e.domain || "")}</a></span></summary>
-            <p class="poe-popup__excerpt">${lead ? "… " : ""}${body}${trail ? " …" : ""}</p>
-          </details>`;
-        }).join("") + (allEvidence.length > 2
+        const evidence = allEvidence.slice(0, 2).map((e) => evidenceDetailsHtml(e, sheetPort, t, escH, { chevron: CHEVRON }))
+          .join("") + (allEvidence.length > 2
           ? `<div class="poe-popup__muted">+${allEvidence.length - 2} ${escH(t("poeMoreSources"))}</div>`
           : "");
         // The seed note is shown only when its language matches the UI language.

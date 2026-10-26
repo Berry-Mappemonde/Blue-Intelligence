@@ -1,5 +1,6 @@
 import { ArrowLeft, ChevronRight, Info, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { restoreFocus, zoneRowTestId } from "../lib/a11y";
 import ZoneFiche from "./ZoneFiche";
 import { TIER_ORDER, tierGlyphSvg } from "./poeRegistry";
 import { zoneDisplayName, zoneSearchHaystack, zoneSubtitle } from "./map/zoneLabel";
@@ -35,6 +36,18 @@ function TierGlyph({ tier }) {
 export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selectedZone, onSelectZone, fiche, ficheLoading, onFlyToPort, onVerify, verifyState }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  // "All zones" hands focus back to the row of the zone that was open.
+  const returnToRowRef = useRef(null);
+  useEffect(() => {
+    if (selectedZone != null || returnToRowRef.current == null) return;
+    const id = zoneRowTestId(returnToRowRef.current);
+    returnToRowRef.current = null;
+    const row = id ? document.querySelector(`[data-testid="${id}"]`) : null;
+    if (row) {
+      try { row.scrollIntoView({ block: "nearest" }); } catch (_) { /* noop */ }
+      restoreFocus(row);
+    }
+  }, [selectedZone]);
 
   const items = zones?.items || [];
   const summary = zones?.summary || {};
@@ -166,7 +179,7 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
           <div className="shrink-0 px-4 py-2 border-b border-m-line-soft">
             <button
               type="button"
-              onClick={() => onSelectZone && onSelectZone(null)}
+              onClick={() => { returnToRowRef.current = selectedZone; if (onSelectZone) onSelectZone(null); }}
               className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-m-fg2 hover:text-m-fg rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
               data-testid="poe-back-to-list"
             >

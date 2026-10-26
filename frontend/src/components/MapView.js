@@ -4,6 +4,7 @@ import L from "leaflet";
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
 import { createPanes } from "./map/layerOrder";
 import { installAttributionDedupe } from "./map/attribution";
+import { isEscapeKey, restoreFocus } from "../lib/a11y";
 import { zonePopupHtml } from "./map/zonePopup";
 import useAmpLayer, { popupHtml as ampPopupHtml, ampPointToLayer } from "./map/useAmpLayer";
 import useAnchoragesLayer from "./map/useAnchoragesLayer";
@@ -143,6 +144,23 @@ export default function MapView({
     });
     // Presentation only: each provider once in the attribution bar.
     installAttributionDedupe(map.attributionControl);
+    // Escape closes an open popup from anywhere and returns focus to the element
+    // that opened it (a sidebar row or port name, a marker, the map itself).
+    let popupTrigger = null;
+    let closedByKey = false;
+    map.on("popupopen", () => { popupTrigger = document.activeElement; closedByKey = false; });
+    map.on("popupclose", () => {
+      if (closedByKey) restoreFocus(popupTrigger);
+      popupTrigger = null;
+      closedByKey = false;
+    });
+    const onEscape = (e) => {
+      if (!isEscapeKey(e) || !map._popup) return;
+      closedByKey = true;
+      map.closePopup();
+    };
+    document.addEventListener("keydown", onEscape);
+    map.once("unload", () => document.removeEventListener("keydown", onEscape));
     tileRef.current = L.tileLayer(TILE_URLS.dark, {
       attribution: "&copy; Esri &copy; OpenStreetMap contributors",
       maxZoom: 16,
@@ -450,17 +468,16 @@ export default function MapView({
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} data-testid="map-container" className="w-full h-full" />
-      {nauticalActive ? (
-        <div
-          data-testid="nautical-disclaimer"
-          role="note"
-          className="absolute z-[1000] bottom-7 left-3 max-w-[22rem] px-2.5 py-1.5 font-ui text-[12px] leading-4 bg-m-overlay/95 border border-m-line-strong text-m-fg2 rounded-md pointer-events-none"
-        >
-          <span className="font-medium text-m-fg">{t("seaMapDisclaimerTitle")}.</span>
-          {" "}
-          {t("seaMapDisclaimerBody")}
-        </div>
-      ) : null}
+      {/* The reminder the first-load dialog promises: on every basemap, compact, never over the data. */}
+      <div
+        data-testid="nautical-disclaimer"
+        role="note"
+        className="absolute z-[1000] bottom-7 left-3 max-w-[22rem] px-2.5 py-1.5 font-ui text-[12px] leading-4 bg-m-overlay/95 border border-m-line-strong text-m-fg2 rounded-md pointer-events-none"
+      >
+        <span className="font-medium text-m-fg">{t("seaMapDisclaimerTitle")}.</span>
+        {" "}
+        {t("seaMapDisclaimerBody")}
+      </div>
       {mapRun && emptyCount === 0 ? (
         <div
           data-testid="map-run-empty"
