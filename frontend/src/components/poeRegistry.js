@@ -147,6 +147,23 @@ export function fallbackReasonText(reason, t) {
   return parts.join(", ");
 }
 
+/**
+ * Popup HTML for one evidence item: a disclosure with the excerpt, and the source
+ * link beside the summary (never nested inside it). `esc` escapes HTML.
+ */
+export function evidenceDetailsHtml(evidence, port, t, esc, { chevron = "" } = {}) {
+  const { lead, trail, segments } = snippetSegments(evidence.snippet, evidenceTerms(port, evidence), evidenceMarkOptions(evidence));
+  const body = segments.map((s) => (s.mark ? `<mark class="m-mark">${esc(s.text)}</mark>` : esc(s.text))).join("");
+  const domain = esc(evidence.domain || "");
+  return `<div class="poe-popup__evidence">
+    <details class="poe-popup__details">
+      <summary>${chevron}<span>${esc(t("poeEvidenceTitle"))}: ${domain}</span></summary>
+      <p class="poe-popup__excerpt">${lead ? "… " : ""}${body}${trail ? " …" : ""}</p>
+    </details>
+    <a class="m-link" href="${esc(evidence.url)}" target="_blank" rel="noreferrer" title="${esc(evidence.url)}" aria-label="${esc(t("poeEvidenceTitle"))}: ${domain}">${domain}</a>
+  </div>`;
+}
+
 /** Inline SVG glyph of a tier (12 px): filled disc + check, ring + check, half ring, dashed ring. */
 export function tierGlyphSvg(tier) {
   const c = TIER_COLOR[tier] || TIER_COLOR.none;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
 import { evidenceMarkOptions, evidenceTerms, fallbackReasonText, registryBadge, registryNotes, snippetSegments, sourceTitle, telemetryWord, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
@@ -80,7 +80,7 @@ function SourceLink({ href, testId, pathTestId }) {
       target="_blank"
       rel="noreferrer"
       data-testid={testId}
-      className="min-w-0 block text-[13px] leading-[18px] text-m-accent-fg hover:underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent rounded-sm"
+      className="m-link min-w-0 block text-[13px] leading-[18px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent rounded-sm"
       title={pathHint(href) || href}
     >
       <span className="block truncate" data-testid={pathTestId}>{sourceTitle(href)}</span>
@@ -146,30 +146,32 @@ function OfficialEvidence({ evidence, port, t }) {
       {evidence.map((e) => {
         const { lead, trail, segments } = snippetSegments(e.snippet, evidenceTerms(port, e), evidenceMarkOptions(e));
         return (
-          <details key={e.url} className="m-details" data-testid="poe-fiche-evidence-item">
-            <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
-              <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
-              <span className="truncate">
-                {t("poeEvidenceTitle")}: <a
-                  href={e.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-m-accent-fg hover:underline underline-offset-2"
-                  title={e.url}
-                  onClick={(ev) => ev.stopPropagation()}
-                >
-                  {e.domain}
-                </a>
-              </span>
-            </summary>
-            <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 break-words">
-              {lead ? "… " : ""}
-              {segments.map((s, i) => (s.mark
-                ? <mark key={i} className="m-mark">{s.text}</mark>
-                : <React.Fragment key={i}>{s.text}</React.Fragment>))}
-              {trail ? " …" : ""}
-            </p>
-          </details>
+          <div key={e.url} className="flex items-start gap-2" data-testid="poe-fiche-evidence-item">
+            <details className="m-details min-w-0 flex-1">
+              <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
+                <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+                <span className="truncate">{t("poeEvidenceTitle")}: {e.domain}</span>
+              </summary>
+              <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 break-words">
+                {lead ? "… " : ""}
+                {segments.map((s, i) => (s.mark
+                  ? <mark key={i} className="m-mark">{s.text}</mark>
+                  : <React.Fragment key={i}>{s.text}</React.Fragment>))}
+                {trail ? " …" : ""}
+              </p>
+            </details>
+            {/* The link sits beside the disclosure, never inside its summary. */}
+            <a
+              href={e.url}
+              target="_blank"
+              rel="noreferrer"
+              className="m-link shrink-0 text-[12px] leading-4"
+              title={e.url}
+              aria-label={`${t("poeEvidenceTitle")}: ${e.domain}`}
+            >
+              {e.domain}
+            </a>
+          </div>
         );
       })}
     </div>
@@ -241,6 +243,16 @@ export default function ZoneFiche({
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
     return () => clearInterval(id);
   }, [running]);
+  // Opening a zone moves focus to its heading, so keyboard and screen-reader users land on the sheet.
+  const headingRef = useRef(null);
+  const ficheId = fiche?.mrgid;
+  useEffect(() => {
+    if (ficheId == null || variant !== "sidebar") return;
+    const el = headingRef.current;
+    if (el && !el.contains(document.activeElement)) {
+      try { el.focus({ preventScroll: true }); } catch (_) { /* noop */ }
+    }
+  }, [ficheId, variant]);
   if (loading) {
     return (
       <section className="px-4 py-3 border-b border-m-line font-ui" data-testid="poe-zone-fiche-loading">
@@ -269,9 +281,14 @@ export default function ZoneFiche({
       <section key={fiche.mrgid} className="m-enter px-4 py-4 border-b border-m-line space-y-4 font-ui text-[13px] leading-[18px] text-m-fg" data-testid="poe-zone-fiche">
       {/* Name → one-line summary → Verify */}
       <div>
-        <p className="text-[15px] leading-5 font-medium text-m-fg" data-testid="poe-fiche-zone-label">
+        <h3
+          ref={headingRef}
+          tabIndex={-1}
+          className="m-0 text-[15px] leading-5 font-medium text-m-fg rounded-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
+          data-testid="poe-fiche-zone-label"
+        >
           {zoneDisplayName(fiche, t)}
-        </p>
+        </h3>
         <p className="mt-0.5 text-[12px] leading-4 text-m-fg3 m-num">
           {summaryBits.join(" · ")}
           {fiche.confidence_avg != null ? (
@@ -288,10 +305,10 @@ export default function ZoneFiche({
         <div>
           <button
             type="button"
-            onClick={onVerify}
-            disabled={Boolean(verifyState?.running)}
+            onClick={() => { if (!running) onVerify(); }}
+            aria-disabled={running || undefined}
             data-testid="poe-fiche-verify"
-            aria-busy={Boolean(verifyState?.running)}
+            aria-busy={running}
             className={`m-btn w-full ${fiche.verify ? "m-btn-secondary" : "m-btn-primary"}`}
           >
             {verifyState?.running ? (

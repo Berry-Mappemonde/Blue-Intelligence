@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api, { verifyZonePoe, hasAdminKey } from "./api";
 import { makeT } from "./i18n";
 import { mergeVerifyIntoFiche } from "./components/poeRegistry";
+import { applyDocumentLang, zoneRowTestId } from "./lib/a11y";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
 import MarinasPanel from "./components/MarinasPanel";
@@ -258,7 +259,8 @@ export default function App() {
   useEffect(() => {
     // Set data-mode on <html> so [data-mode="..."] CSS vars kick in globally
     document.documentElement.setAttribute("data-mode", mode);
-  }, [mode]);
+    applyDocumentLang(document, lang);
+  }, [mode, lang]);
 
   const fetchStatus = useCallback(async () => {
     try {
