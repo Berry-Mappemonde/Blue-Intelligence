@@ -20,6 +20,33 @@ export const TIER_COLOR = {
 };
 export const TIER_ORDER = ["tier1", "tier2", "tier_registered", "tier3"];
 
+/**
+ * Readable title of a source URL: the last path segment without its hash/date
+ * prefix, extension and separators ("ca0e0347-bermuda_customs_guidelines.pdf" ->
+ * "Bermuda customs guidelines (PDF)"); the host when the path is empty.
+ */
+export function sourceTitle(url) {
+  try {
+    const u = new URL(url);
+    const segs = decodeURIComponent(u.pathname).split("/").filter(Boolean);
+    let leaf = segs.pop() || "";
+    const ext = (leaf.match(/\.([a-z0-9]{2,5})$/i) || [])[1] || "";
+    if (ext) leaf = leaf.slice(0, -(ext.length + 1));
+    leaf = leaf
+      .replace(/^[0-9a-f]{6,}[-_]/i, "")
+      .replace(/^\d{6,}[-_]/, "")
+      .replace(/[-_.+]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!leaf || /^(index|default|home)$/i.test(leaf)) leaf = segs.pop() || u.hostname.replace(/^www\./, "");
+    leaf = leaf.charAt(0).toUpperCase() + leaf.slice(1);
+    const kind = /^(pdf|docx?|xlsx?|pptx?)$/i.test(ext) ? ` (${ext.toUpperCase()})` : "";
+    return leaf + kind;
+  } catch (_) {
+    return String(url || "");
+  }
+}
+
 /** Inline SVG glyph of a tier (12 px): filled disc + check, ring + check, half ring, dashed ring. */
 export function tierGlyphSvg(tier) {
   const c = TIER_COLOR[tier] || TIER_COLOR.none;

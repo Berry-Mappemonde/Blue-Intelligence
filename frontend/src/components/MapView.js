@@ -48,6 +48,7 @@ export default function MapView({
   showAnchorages = true,
   poeZones,
   poePorts,
+  selectedZone = null,
   route,
   onSelectZone,
   flyToMarina,
@@ -97,6 +98,8 @@ export default function MapView({
   poePortsRef.current = poePorts;
   const zoneFicheRef = useRef(zoneFiche);
   zoneFicheRef.current = zoneFiche;
+  const selectedZoneRef = useRef(selectedZone);
+  selectedZoneRef.current = selectedZone;
   const basemapRef = useRef(basemap);
   basemapRef.current = basemap;
 
@@ -167,10 +170,13 @@ export default function MapView({
     scienceTracksRef.current = scienceTracks;
     const anchorCluster = makePointGroup();
     anchorClusterRef.current = anchorCluster;
-    const poeCluster = makePointGroup();
+    const poeCluster = makePointGroup({ pane: "poe-ports", svg: true });
     poeClusterRef.current = poeCluster;
     const eezLayer = L.geoJSON(null, {
-      style: (feat) => zoneStyle(zoneItemsRef.current.get(feat?.properties?.mrgid)?.status),
+      style: (feat) => zoneStyle(
+        zoneItemsRef.current.get(feat?.properties?.mrgid)?.status,
+        selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(feat?.properties?.mrgid),
+      ),
       onEachFeature: (feat, lyr) => {
         const mrgid = feat.properties?.mrgid;
         eezLayersByMrgid.current.set(mrgid, lyr);
@@ -189,7 +195,10 @@ export default function MapView({
           }
         });
         lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
-        lyr.on("mouseout", () => { try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status)); } catch (_) {} });
+        lyr.on("mouseout", () => {
+          const selected = selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected)); } catch (_) {}
+        });
       },
     });
     eezLayerRef.current = eezLayer;
@@ -285,6 +294,7 @@ export default function MapView({
     mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
     poeMarkersById,
     mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
+    selectedZone, selectedZoneRef,
   });
   useProjectsLayer({
     mapObj, clusterRef, zoomingRef, pendingRef, markersById: projectMarkersById,

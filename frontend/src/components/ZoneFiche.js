@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import ConfidenceBreakdown from "./ConfidenceBreakdown";
-import { registryBadge, registryNotes, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
-import { zoneDisplayName, zoneSubtitle } from "./map/zoneLabel";
+import { registryBadge, registryNotes, sourceTitle, tierGlyphSvg, tierStyle, verdictLabel } from "./poeRegistry";
+import { zoneDisplayName } from "./map/zoneLabel";
 
 /**
  * ErrorBoundary — évite l'écran blanc si un composant enfant de la fiche
@@ -72,7 +72,7 @@ function buUrlOf(port) {
   return port?.url_bu?.url || (port?.source_urls || [])[0] || "";
 }
 
-/** Source link: host on the first line, document name underneath (monospace, it is a path). */
+/** Source link: readable title on the first line, domain underneath. */
 function SourceLink({ href, testId, pathTestId }) {
   return (
     <a
@@ -81,14 +81,10 @@ function SourceLink({ href, testId, pathTestId }) {
       rel="noreferrer"
       data-testid={testId}
       className="min-w-0 block text-[13px] leading-[18px] text-m-accent-fg hover:underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent rounded-sm"
-      title={href}
+      title={pathHint(href) || href}
     >
-      <span className="block truncate">{hostOf(href)}</span>
-      {pathHint(href) ? (
-        <span className="m-code block text-[11px] leading-4 text-m-fg3 truncate" data-testid={pathTestId}>
-          {pathHint(href)}
-        </span>
-      ) : null}
+      <span className="block truncate" data-testid={pathTestId}>{sourceTitle(href)}</span>
+      <span className="block text-[12px] leading-4 text-m-fg3 truncate">{hostOf(href)}</span>
     </a>
   );
 }
@@ -197,7 +193,9 @@ function VerifyTelemetry({ verify, t }) {
         {row(t("telemetryModel"), ns.model || "—", "poe-telemetry-model", true)}
         {row(t("telemetryProvider"), ns.provider || "—", "poe-telemetry-provider")}
         {row(t("telemetryRun"), verify?.run_id || "—", "poe-telemetry-run", true)}
-        {ns.fallback_reason ? row(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback") : null}
+        {ns.fallback_reason && ns.provider && ns.provider !== "nightshift"
+          ? row(t("telemetryFallback"), ns.fallback_reason, "poe-telemetry-fallback")
+          : null}
       </dl>
     </div>
   );
@@ -260,15 +258,10 @@ export default function ZoneFiche({
           {zoneDisplayName(fiche, t)}
         </p>
         <p className="mt-0.5 text-[12px] leading-4 text-m-fg3 m-num">
-          {zoneSubtitle(fiche) ? (
-            // Disambiguated zones carry a code (ISO, polygon type): monospace. Names stay in Inter.
-            <span className={fiche.disambiguated ? "m-code text-[11px]" : ""}>{zoneSubtitle(fiche)}</span>
-          ) : null}
-          {zoneSubtitle(fiche) ? ". " : ""}
-          {summaryBits.join(", ")}
+          {summaryBits.join(" · ")}
           {fiche.confidence_avg != null ? (
-            <>, {t("poeSheetAvg")} <span data-testid="poe-fiche-score" className="text-m-fg2">{fiche.confidence_avg}</span></>
-          ) : null}.
+            <> · {t("poeSheetAvg")} <span data-testid="poe-fiche-score" className="text-m-fg2">{fiche.confidence_avg}</span></>
+          ) : null}
         </p>
         {variant === "page" && fiche.fiche_scope === "union" ? (
           <p className="mt-1 text-[12px] leading-4 text-m-fg3" data-testid="poe-fiche-union-hint">

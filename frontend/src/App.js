@@ -186,6 +186,11 @@ export default function App() {
   const [selectedZoneName, setSelectedZoneName] = useState(null);
   const [flyToZone, setFlyToZone] = useState(null);         // {mrgid, bbox, ts}
   const [zoneFiche, setZoneFiche] = useState(null);
+  // Current selection, readable from the stable handleSelectZone callback.
+  const selectedZoneRef = useRef(null);
+  const zoneFicheRef = useRef(null);
+  selectedZoneRef.current = selectedZone;
+  zoneFicheRef.current = zoneFiche;
   const [verifyState, setVerifyState] = useState({ mrgid: null, running: false, error: null });
   const [ficheLoading, setFicheLoading] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
@@ -760,18 +765,32 @@ export default function App() {
 // selects the zone; when a bbox is supplied (sidebar click), also flies to it.
 // Simple read-only fetch of the zone fiche via GET /poe/zones/{mrgid};
 // no POST /api/poe/verify is triggered on click.
+// Selecting the zone already open (its polygon, its row) keeps the sheet as it is,
+// verify result included; only a different zone resets and refetches it.
 const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
+  if (mrgid == null) {
+    // "All zones": close the sheet, back to the list.
+    setSelectedZone(null);
+    setSelectedZoneName(null);
+    setZoneFiche(null);
+    setFicheLoading(false);
+    return;
+  }
+  const sameZone = Number(selectedZoneRef.current) === Number(mrgid)
+    && zoneFicheRef.current && Number(zoneFicheRef.current.mrgid) === Number(mrgid);
   setSelectedZone(mrgid);
   setSelectedZoneName(zoneName ?? null);
-  setZoneFiche(null);
-  setFicheLoading(true);
-  try {
-    const { data } = await api.get(`/poe/zones/${mrgid}`);
-    setZoneFiche(data);
-  } catch (_) {
+  if (!sameZone) {
     setZoneFiche(null);
-  } finally {
-    setFicheLoading(false);
+    setFicheLoading(true);
+    try {
+      const { data } = await api.get(`/poe/zones/${mrgid}`);
+      setZoneFiche(data);
+    } catch (_) {
+      setZoneFiche(null);
+    } finally {
+      setFicheLoading(false);
+    }
   }
   if (bbox && Array.isArray(bbox) && bbox.length === 4) {
     setFlyToZone({ mrgid, bbox, anchor: anchor || null, ts: Date.now() });
@@ -938,6 +957,7 @@ const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
               showAnchorages={showAnchorages}
               poeZones={poeZones.items}
               poePorts={poePorts}
+              selectedZone={selectedZone}
               onSelectZone={handleSelectZone}
               flyToMarina={flyToMarina}
               flyToZone={flyToZone}

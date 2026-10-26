@@ -12,6 +12,7 @@ export default function useFormalitiesLayers({
   mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
   poeMarkersById,
   mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
+  selectedZone, selectedZoneRef,
 }) {
   const eezSigRef = useRef("");
   const poeSigRef = useRef("");
@@ -45,7 +46,8 @@ export default function useFormalitiesLayers({
     if (layer) {
       layer.eachLayer((lyr) => {
         const mrgid = lyr.feature?.properties?.mrgid;
-        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status)); } catch (_) { /* noop */ }
+        const selected = selectedZoneRef?.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected)); } catch (_) { /* noop */ }
       });
     }
     const map = mapObj.current;
@@ -55,6 +57,21 @@ export default function useFormalitiesLayers({
     }
     // eslint-disable-next-line
   }, [poeZones]);
+
+  // Only the selected polygon is amber; the previous one goes back to neutral.
+  useEffect(() => {
+    const layer = eezLayerRef.current;
+    if (!layer) return;
+    layer.eachLayer((lyr) => {
+      const mrgid = lyr.feature?.properties?.mrgid;
+      const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
+      try {
+        lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected));
+        if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
+      } catch (_) { /* noop */ }
+    });
+    // eslint-disable-next-line
+  }, [selectedZone]);
 
   useEffect(() => {
     const cluster = poeClusterRef.current;
@@ -71,9 +88,16 @@ export default function useFormalitiesLayers({
     const markers = feats.map((f) => {
       const [lon, lat] = f.geometry.coordinates;
       const p = f.properties;
-      const m = L.circleMarker([lat, lon], circleOpts("#fbbf24", {
-        zoom, fillOpacity: 0.88, renderer,
-      }));
+      // SVG dot in the "poe-ports" pane: the visible dot is the fill; the wide
+      // transparent stroke is the click target (SVG hit-tests painted strokes
+      // whatever their opacity), like the canvas tolerance it replaces.
+      const m = L.circleMarker([lat, lon], {
+        ...circleOpts("#fbbf24", { zoom, bump: 0.5, fillOpacity: 0.95, renderer }),
+        weight: 9,
+        opacity: 0,
+        pane: "poe-ports",
+      });
+      m._biBump = 0.5; // applyPenRadii keeps the fill radius on zoom
       m.bindPopup(() => {
         const t = tRef.current;
         // Same look as the sidebar card: name, tier chip, score, verdict in words.

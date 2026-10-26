@@ -1,6 +1,6 @@
 import { escH } from "./constants";
 import { zoneDisplayName, zoneSubtitle } from "./zoneLabel";
-import { registryBadgeHtml, verdictLabel } from "../poeRegistry";
+import { registryBadgeHtml, sourceTitle, verdictLabel } from "../poeRegistry";
 
 /**
  * HTML popup for a VLIZ polygon sheet: kept TD URLs,
@@ -48,9 +48,9 @@ function _tdBlock(t, recs) {
     const leaf = url ? _pathHint(url) : "";
     const testId = i === 0 ? "poe-fiche-popup-td-url" : `poe-fiche-popup-td-url-${i}`;
     return `<div class="poe-popup__src">
-        <a href="${escH(url)}" target="_blank" rel="noreferrer" data-testid="${testId}" title="${escH(url)}">
-          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(host)}</span>
-          ${leaf ? `<span class="poe-popup__path">${escH(leaf)}</span>` : ""}
+        <a href="${escH(url)}" target="_blank" rel="noreferrer" data-testid="${testId}" title="${escH(leaf || url)}">
+          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(sourceTitle(url))}</span>
+          <span class="poe-popup__host">${escH(host)}</span>
         </a>
         ${both ? `<span class="poe-popup__chip">${escH(t("poeSourceBoth"))}</span>` : ""}
       </div>`;

@@ -1,4 +1,4 @@
-import { ChevronRight, Info, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import ZoneFiche from "./ZoneFiche";
 import { TIER_ORDER, tierGlyphSvg } from "./poeRegistry";
@@ -16,10 +16,12 @@ const STATUS_LABEL_KEY = {
   erreur:         "poeStatusErreur",
 };
 
+// Mirrors zoneStyle() in map/constants.js: neutral hairlines, amber only when selected.
 const ZONE_SWATCH = {
-  ia: { background: "rgba(251,191,36,0.22)", border: "1px solid #fbbf24" },
-  non_generee: { background: "rgba(100,116,139,0.12)", border: "1px solid #64748b" },
-  erreur: { background: "rgba(235,90,90,0.14)", border: "1px solid #eb5a5a" },
+  ia: { background: "rgba(143,143,143,0.10)", border: "1px solid rgba(94,94,94,0.95)" },
+  non_generee: { background: "rgba(143,143,143,0.04)", border: "1px solid rgba(94,94,94,0.5)" },
+  erreur: { background: "rgba(235,90,90,0.10)", border: "1px solid #eb5a5a" },
+  selected: { background: "rgba(251,191,36,0.14)", border: "1px solid #fbbf24" },
 };
 
 const fmtInt = (n, lang) => Number(n || 0).toLocaleString(lang === "fr" ? "fr-FR" : "en-GB");
@@ -145,6 +147,7 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
             <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.ia} aria-hidden="true" />{t("poeLegendGenerated")}</span>
             <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.non_generee} aria-hidden="true" />{t("poeStatusNonGeneree")}</span>
             <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.erreur} aria-hidden="true" />{t("poeStatusErreur")}</span>
+            <span className="flex items-center gap-2"><span className="legend-swatch" style={ZONE_SWATCH.selected} aria-hidden="true" />{t("poeLegendSelected")}</span>
           </div>
           </div>
         </details>
@@ -156,14 +159,29 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
         )}
       </div>
 
+      {/* Open zone: the sheet owns the remaining height (its own scroll area);
+          the list is one click away behind "All zones". */}
       {(selectedZone || ficheLoading) && (
-        <div className="shrink-0 max-h-[58%] overflow-y-auto border-b border-m-line bg-m-canvas">
-          <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} onVerify={onVerify} verifyState={verifyState} />
+        <div className="flex-1 min-h-0 flex flex-col bg-m-canvas">
+          <div className="shrink-0 px-4 py-2 border-b border-m-line-soft">
+            <button
+              type="button"
+              onClick={() => onSelectZone && onSelectZone(null)}
+              className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-m-fg2 hover:text-m-fg rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
+              data-testid="poe-back-to-list"
+            >
+              <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+              {t("poeBackToList")} <span className="m-num text-m-fg3">{fmtInt(items.length, lang)}</span>
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <ZoneFiche t={t} lang={lang} fiche={fiche} loading={ficheLoading && !fiche} onFlyToPort={onFlyToPort} onVerify={onVerify} verifyState={verifyState} />
+          </div>
         </div>
       )}
 
       {/* EEZ list */}
-      <div className="flex-1 overflow-y-auto" data-testid="poe-zones-list">
+      <div className={`flex-1 overflow-y-auto ${(selectedZone || ficheLoading) ? "hidden" : ""}`} data-testid="poe-zones-list">
         {items.length === 0 && (
           <div className="p-6 text-center text-[13px] text-m-fg3 leading-[18px]">
             {zonesLoading ? t("poeZonesLoading") : t("poeZonesEmpty")}
@@ -174,8 +192,9 @@ export default function FormalitiesPanel({ t, lang, zones, zonesLoading, selecte
           const status = z.status || "non_generee";
           const iso = (z.iso2 || z.sov_iso2 || "").toUpperCase();
           const name = zoneDisplayName(z, t);
-          // The sovereign line only earns its place when it differs from the name.
-          const subtitle = zoneSubtitle(z) !== name ? zoneSubtitle(z) : "";
+          // The second line only earns its place when it adds to the name and the ISO column.
+          const rawSubtitle = zoneSubtitle(z);
+          const subtitle = rawSubtitle !== name && rawSubtitle.toUpperCase() !== iso ? rawSubtitle : "";
           return (
             <button
               key={z.mrgid}
