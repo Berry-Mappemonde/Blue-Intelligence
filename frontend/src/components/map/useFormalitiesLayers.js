@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
-import { escH, zoneStyle } from "./constants";
+import { escH, SELECTED_OUTLINE_STYLE, selectedOutlineRings, ZONE_SELECTED_MAX_ZOOM, zoneStyle } from "./constants";
 import { circleOpts, POPUP_OPTS } from "./points";
 import { evidenceDetailsHtml, portKey, registryBadgeHtml, sourceTitle, verdictLabel } from "../poeRegistry";
 
@@ -72,28 +72,48 @@ export default function useFormalitiesLayers({
     // eslint-disable-next-line
   }, [poeZones]);
 
-  // Only the selected polygon is amber; the previous one goes back to neutral. Above
-  // ZONE_SELECTED_MAX_ZOOM the selected outline is hidden, so re-apply on every zoom.
+  // Only the selected polygon is amber; the previous one goes back to neutral. The amber
+  // outline is its exterior ring(s) only, drawn as a separate non-interactive line, so
+  // land cut-outs around islands get no stroke. Above ZONE_SELECTED_MAX_ZOOM the fill and
+  // the outline are hidden, so re-apply on every zoom.
+  const outlineRef = useRef(null);
   useEffect(() => {
     const layer = eezLayerRef.current;
     const map = mapObj.current;
     if (!layer) return undefined;
+    let selectedLayer = null;
+    layer.eachLayer((lyr) => {
+      if (selectedZone != null && Number(selectedZone) === Number(lyr.feature?.properties?.mrgid)) selectedLayer = lyr;
+    });
+    if (outlineRef.current) { try { outlineRef.current.remove(); } catch (_) { /* noop */ } outlineRef.current = null; }
+    const rings = selectedLayer ? selectedOutlineRings(selectedLayer.feature?.geometry) : [];
+    if (rings.length && map) outlineRef.current = L.polyline(rings, SELECTED_OUTLINE_STYLE);
     const apply = () => {
       const zoom = map ? map.getZoom() : null;
       layer.eachLayer((lyr) => {
         const mrgid = lyr.feature?.properties?.mrgid;
-        const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
+        const selected = lyr === selectedLayer;
         try {
           lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected, zoom));
           if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
         } catch (_) { /* noop */ }
       });
+      const outline = outlineRef.current;
+      if (outline && map) {
+        const show = mode === "formalities" && (zoom == null || zoom <= ZONE_SELECTED_MAX_ZOOM);
+        if (show && !map.hasLayer(outline)) outline.addTo(map);
+        if (!show && map.hasLayer(outline)) outline.remove();
+        if (show) { try { outline.bringToFront(); } catch (_) { /* noop */ } }
+      }
     };
     apply();
     if (map) map.on("zoomend", apply);
-    return () => { if (map) map.off("zoomend", apply); };
+    return () => {
+      if (map) map.off("zoomend", apply);
+      if (outlineRef.current) { try { outlineRef.current.remove(); } catch (_) { /* noop */ } }
+    };
     // eslint-disable-next-line
-  }, [selectedZone]);
+  }, [selectedZone, mode, poeZones]);
 
   useEffect(() => {
     const cluster = poeClusterRef.current;

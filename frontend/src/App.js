@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api, { verifyZonePoe, hasAdminKey } from "./api";
 import { makeT } from "./i18n";
 import { mergeVerifyIntoFiche } from "./components/poeRegistry";
-import { applyDocumentLang, installInputModality } from "./lib/a11y";
+import { applyDocumentLang, installDisclosureToggles, installInputModality } from "./lib/a11y";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
 import MarinasPanel from "./components/MarinasPanel";
@@ -262,6 +262,7 @@ export default function App() {
     applyDocumentLang(document, lang);
   }, [mode, lang]);
   useEffect(() => installInputModality(document), []);
+  useEffect(() => installDisclosureToggles(document), []);
 
   const fetchStatus = useCallback(async () => {
     try {

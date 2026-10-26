@@ -155,12 +155,14 @@ export function evidenceDetailsHtml(evidence, port, t, esc, { chevron = "" } = {
   const { lead, trail, segments } = snippetSegments(evidence.snippet, evidenceTerms(port, evidence), evidenceMarkOptions(evidence));
   const body = segments.map((s) => (s.mark ? `<mark class="m-mark">${esc(s.text)}</mark>` : esc(s.text))).join("");
   const domain = esc(evidence.domain || "");
-  return `<div class="poe-popup__evidence">
-    <details class="poe-popup__details">
-      <summary>${chevron}<span>${esc(t("poeEvidenceTitle"))}: ${domain}</span></summary>
-      <p class="poe-popup__excerpt">${lead ? "… " : ""}${body}${trail ? " …" : ""}</p>
-    </details>
-    <a class="m-link" href="${esc(evidence.url)}" target="_blank" rel="noreferrer" title="${esc(evidence.url)}" aria-label="${esc(t("poeEvidenceTitle"))}: ${domain}">${domain}</a>
+  // "› Official source: gov.bm": the toggle shows the excerpt (see a11y.installDisclosureToggles),
+  // the domain is the link itself, shown once, beside the toggle and never inside it.
+  return `<div class="poe-popup__evidence" data-disclosure-root>
+    <div class="poe-popup__evidence-row">
+      <button type="button" class="poe-popup__toggle" aria-expanded="false" data-disclosure>${chevron}<span>${esc(t("poeEvidenceTitle"))}:</span></button>
+      <a class="m-link" href="${esc(evidence.url)}" target="_blank" rel="noreferrer" title="${esc(evidence.url)}">${domain}</a>
+    </div>
+    <p class="poe-popup__excerpt" data-disclosure-body hidden>${lead ? "… " : ""}${body}${trail ? " …" : ""}</p>
   </div>`;
 }
 

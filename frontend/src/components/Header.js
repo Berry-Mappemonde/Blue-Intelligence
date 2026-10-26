@@ -38,11 +38,13 @@ export default function Header({
   const { Icon: BasemapIcon, titleKey } = BASEMAP_NEXT_UI[next] || BASEMAP_NEXT_UI.dark;
   return (
     <header className="h-12 shrink-0 flex items-center justify-between gap-4 px-4 border-b border-line bg-surface z-[1200] font-ui text-[13px] whitespace-nowrap">
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Wordmark only (no invented logo): title and attribution on one baseline. */}
-        <h1 className="m-0 flex items-baseline gap-2 whitespace-nowrap" title={t("subtitle")}>
-          <span className="text-[14px] leading-7 font-semibold tracking-[-0.01em] text-m-fg">Blue Intelligence</span>
-          <span className="text-[12px] leading-7 text-m-fg3">by Berry-Mappemonde</span>
+      <div className="brand flex items-center gap-3 min-w-0 flex-1">
+        {/* Wordmark only (no invented logo): title and attribution on one baseline.
+            The block shrinks before the nav does: the title never gives way, the
+            attribution truncates when the row is short (Show review label expanded). */}
+        <h1 className="m-0 flex items-baseline gap-2 whitespace-nowrap min-w-0" title={t("subtitle")}>
+          <span className="shrink-0 text-[14px] leading-7 font-semibold tracking-[-0.01em] text-m-fg">Blue Intelligence</span>
+          <span className="brand-sub min-w-0 truncate text-[12px] leading-7 text-m-fg3">by Berry-Mappemonde</span>
         </h1>
         {status?.running && (
           <span className="ml-1 inline-flex items-center gap-2 h-6 px-2 border border-line rounded-md text-[12px] text-m-fg2" data-testid="swarm-running">
@@ -51,7 +53,7 @@ export default function Header({
           </span>
         )}
       </div>
-      <nav className="flex items-center gap-1.5" aria-label={t("modeSwitchTitle")}>
+      <nav className="flex items-center gap-1.5 shrink-0" aria-label={t("modeSwitchTitle")}>
         {/* Seven-mode switch — projects / marinas / capitaineries / formalities / amp / science / climatology */}
         <div className="nav-group" title={t("modeSwitchTitle")} data-testid="mode-switch">
           {MODES.map(({ id, testId, Icon, labelKey }) => (

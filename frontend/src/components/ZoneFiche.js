@@ -139,41 +139,56 @@ function RegistryBadge({ port, t }) {
 }
 
 /** Official evidence of a port (registry.official_evidence): source domain, excerpt collapsed. */
+/**
+ * One evidence item: "› Official source: gov.bm". The toggle (label + chevron) shows or
+ * hides the excerpt; the domain is the link itself, shown once, and sits beside the
+ * toggle, never inside it.
+ */
+function EvidenceItem({ e, port, t }) {
+  const [open, setOpen] = useState(false);
+  const { lead, trail, segments } = snippetSegments(e.snippet, evidenceTerms(port, e), evidenceMarkOptions(e));
+  const bodyId = `poe-evidence-${String(e.url).replace(/[^a-z0-9]+/gi, "-").slice(-48)}-${(port?.port_id || port?.id || port?.name || "").toString().replace(/[^a-z0-9]+/gi, "-")}`;
+  return (
+    <div data-testid="poe-fiche-evidence-item">
+      <div className="flex items-center gap-1 text-[12px] leading-4 min-w-0">
+        <button
+          type="button"
+          className="m-evidence-toggle inline-flex items-center gap-1.5 shrink-0 text-m-fg3 hover:text-m-fg2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+          <span>{t("poeEvidenceTitle")}:</span>
+        </button>
+        <a
+          href={e.url}
+          target="_blank"
+          rel="noreferrer"
+          className="m-link min-w-0 truncate"
+          title={e.url}
+        >
+          {e.domain}
+        </a>
+      </div>
+      {open ? (
+        <p id={bodyId} className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 break-words">
+          {lead ? "… " : ""}
+          {segments.map((s, i) => (s.mark
+            ? <mark key={i} className="m-mark">{s.text}</mark>
+            : <React.Fragment key={i}>{s.text}</React.Fragment>))}
+          {trail ? " …" : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function OfficialEvidence({ evidence, port, t }) {
   if (!evidence?.length) return null;
   return (
     <div className="mt-1.5 space-y-1" data-testid="poe-fiche-evidence">
-      {evidence.map((e) => {
-        const { lead, trail, segments } = snippetSegments(e.snippet, evidenceTerms(port, e), evidenceMarkOptions(e));
-        return (
-          <div key={e.url} className="flex items-start gap-2" data-testid="poe-fiche-evidence-item">
-            <details className="m-details min-w-0 flex-1">
-              <summary className="flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 hover:text-m-fg2">
-                <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
-                <span className="truncate">{t("poeEvidenceTitle")}: {e.domain}</span>
-              </summary>
-              <p className="m-details-body mt-1 ml-[18px] pl-2 border-l border-m-line-strong text-[12px] leading-4 text-m-fg2 break-words">
-                {lead ? "… " : ""}
-                {segments.map((s, i) => (s.mark
-                  ? <mark key={i} className="m-mark">{s.text}</mark>
-                  : <React.Fragment key={i}>{s.text}</React.Fragment>))}
-                {trail ? " …" : ""}
-              </p>
-            </details>
-            {/* The link sits beside the disclosure, never inside its summary. */}
-            <a
-              href={e.url}
-              target="_blank"
-              rel="noreferrer"
-              className="m-link shrink-0 text-[12px] leading-4"
-              title={e.url}
-              aria-label={`${t("poeEvidenceTitle")}: ${e.domain}`}
-            >
-              {e.domain}
-            </a>
-          </div>
-        );
-      })}
+      {evidence.map((e) => <EvidenceItem key={e.url} e={e} port={port} t={t} />)}
     </div>
   );
 }
