@@ -61,7 +61,7 @@ export default function useFormalitiesLayers({
       layer.eachLayer((lyr) => {
         const mrgid = lyr.feature?.properties?.mrgid;
         const selected = selectedZoneRef?.current != null && Number(selectedZoneRef.current) === Number(mrgid);
-        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected)); } catch (_) { /* noop */ }
+        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected, mapObj.current?.getZoom())); } catch (_) { /* noop */ }
       });
     }
     const map = mapObj.current;
@@ -72,18 +72,26 @@ export default function useFormalitiesLayers({
     // eslint-disable-next-line
   }, [poeZones]);
 
-  // Only the selected polygon is amber; the previous one goes back to neutral.
+  // Only the selected polygon is amber; the previous one goes back to neutral. Above
+  // ZONE_SELECTED_MAX_ZOOM the selected outline is hidden, so re-apply on every zoom.
   useEffect(() => {
     const layer = eezLayerRef.current;
-    if (!layer) return;
-    layer.eachLayer((lyr) => {
-      const mrgid = lyr.feature?.properties?.mrgid;
-      const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
-      try {
-        lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected));
-        if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
-      } catch (_) { /* noop */ }
-    });
+    const map = mapObj.current;
+    if (!layer) return undefined;
+    const apply = () => {
+      const zoom = map ? map.getZoom() : null;
+      layer.eachLayer((lyr) => {
+        const mrgid = lyr.feature?.properties?.mrgid;
+        const selected = selectedZone != null && Number(selectedZone) === Number(mrgid);
+        try {
+          lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected, zoom));
+          if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
+        } catch (_) { /* noop */ }
+      });
+    };
+    apply();
+    if (map) map.on("zoomend", apply);
+    return () => { if (map) map.off("zoomend", apply); };
     // eslint-disable-next-line
   }, [selectedZone]);
 

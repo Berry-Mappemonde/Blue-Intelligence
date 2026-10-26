@@ -201,10 +201,11 @@ export default function MapView({
             cb(mrgid, zoneName, Array.isArray(z?.bbox) && z.bbox.length === 4 ? z.bbox : null, z?.anchor || null);
           }
         });
-        lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
+        const isSelected = () => selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+        const hiddenSelected = () => isSelected() && zoneStyle(null, true, map.getZoom()).opacity === 0;
+        lyr.on("mouseover", () => { if (hiddenSelected()) return; try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
         lyr.on("mouseout", () => {
-          const selected = selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
-          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected)); } catch (_) {}
+          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, isSelected(), map.getZoom())); } catch (_) {}
         });
       },
     });
