@@ -4,6 +4,10 @@
 Réutilise ``overpass_around``, ``score_confidence`` et ``scan_poe_anomalies``.
 N'écrit que dans ``bi_ci`` sur 127.0.0.1 ou localhost. Une requête Overpass
 qui échoue ne reçoit aucun ``osm_confidence`` : aucun score n'est inventé.
+
+Mode offline (``CI_OSM_OFFLINE=1``) : aucun appel réseau n'est effectué. Un
+port absent du cache compte comme un échec. Seuls les refus finals sont
+appliqués (ports manquants / absence d'anomalie -> exit 1).
 """
 from __future__ import annotations
 
@@ -25,8 +29,7 @@ from app.services.osm_validate import overpass_around, score_confidence  # noqa:
 _CONCURRENCY = 3
 _ROUNDS = 4
 _CACHE_ENV = "CI_OSM_CACHE"
-_BUDGET_ENV = "CI_OSM_BUDGET_S"
-_BUDGET_DEFAULT = 600
+_OFFLINE_ENV = "CI_OSM_OFFLINE"
 
 
 def osm_updates(port: dict, elements: list[dict]) -> dict:
@@ -47,11 +50,11 @@ def osm_updates(port: dict, elements: list[dict]) -> dict:
             for u in (port.get("source_urls") or [])
         )
         apply_score(fresh, score_port(fresh, official_source=official))
-        updates["confidence"] = fresh.get("confidence")
-        updates["confidence_parts"] = fresh.get("confidence_parts")
-        updates["confidence_reasons"] = fresh.get("confidence_reasons")
     except Exception:
         pass
+    updates["confidence"] = fresh.get("confidence")
+    updates["confidence_parts"] = fresh.get("confidence_parts")
+    updates["confidence_reasons"] = fresh.get("confidence_reasons")
     return updates
 
 
@@ -71,16 +74,6 @@ def _load_cache(path: Path | None) -> dict:
     return ports if isinstance(ports, dict) else {}
 
 
-def _save_cache(path: Path | None, ports: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"version": 1, "ports": ports}, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-
 def _cached_elements(port: dict, cache: dict) -> list[dict] | None:
     hit = cache.get(str(port["_id"]))
     if not isinstance(hit, dict):
@@ -93,27 +86,28 @@ def _cached_elements(port: dict, cache: dict) -> list[dict] | None:
     return elements
 
 
-def _remember(cache: dict, port: dict, elements: list[dict]) -> None:
-    cache[str(port["_id"])] = {
-        "lat": port.get("lat"),
-        "lon": port.get("lon"),
-        "elements": elements,
-    }
+def _is_offline() -> bool:
+    return os.environ.get(_OFFLINE_ENV, "").strip() in {"1", "true", "True"}
 
 
 async def _validate_port(db, port: dict, sem: asyncio.Semaphore, cache: dict,
-                         stats: dict, budget_s: int, t0: float,
-                         budget_state: dict) -> None:
+                         stats: dict, offline: bool) -> None:
     cached = _cached_elements(port, cache)
     try:
         if cached is None:
-            if budget_state["stopped"] or time.time() - t0 >= budget_s:
-                budget_state["stopped"] = True
-                stats["budget_stopped"] += 1
+            if offline:
+                stats["missing"] += 1
+                stats["errors"].append(
+                    f"{port.get('name')}: port absent du cache Overpass (offline)"
+                )
                 return
             async with sem:
                 elements = await overpass_around(port["lat"], port["lon"])
-            _remember(cache, port, elements)
+            cache[str(port["_id"])] = {
+                "lat": port.get("lat"),
+                "lon": port.get("lon"),
+                "elements": elements,
+            }
         else:
             elements = cached
             stats["cache"] += 1
@@ -122,7 +116,9 @@ async def _validate_port(db, port: dict, sem: asyncio.Semaphore, cache: dict,
         stats["checked"] += 1
     except Exception as exc:
         stats["failed"] += 1
-        stats["errors"].append(f"{port.get('name')}: {type(exc).__name__}: {str(exc)[:80]}")
+        stats["errors"].append(
+            f"{port.get('name')}: {type(exc).__name__}: {str(exc)[:80]}"
+        )
 
 
 async def _enrich(mongo_url: str, db_name: str) -> dict:
@@ -130,8 +126,9 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
 
     from app.core.ml import scan_poe_anomalies
 
-    cache_file = _cache_path()
-    cache = _load_cache(cache_file)
+    offline = _is_offline()
+    cache_file = _cache_path() if offline else None
+    cache = _load_cache(cache_file) if cache_file else {}
     client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=10_000)
     db = client[db_name]
     await client.admin.command("ping")
@@ -141,27 +138,28 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
         "lon": {"$ne": None},
         "osm_checked_at": {"$exists": False},
     }
-    budget_s = int(os.environ.get(_BUDGET_ENV, _BUDGET_DEFAULT))
-    t0 = time.time()
-    budget_state = {"stopped": False}
     try:
         for round_n in range(1, _ROUNDS + 1):
-            if budget_state["stopped"]:
-                break
             ports = await db.poe_ports.find(pending_filter).to_list(20_000)
             if not ports:
                 break
-            stats = {"checked": 0, "failed": 0, "cache": 0, "budget_stopped": 0, "errors": []}
+            stats = {
+                "checked": 0, "failed": 0, "cache": 0,
+                "missing": 0, "errors": [],
+            }
             started = time.time()
             await asyncio.gather(*[
-                _validate_port(db, port, sem, cache, stats, budget_s, t0, budget_state)
+                _validate_port(db, port, sem, cache, stats, offline)
                 for port in ports
             ])
-            _save_cache(cache_file, cache)
+            if cache_file and not offline:
+                # Seul le job osm-cache ecrit le cache ; les shards offline
+                # ne le font pas.
+                pass
             print(
                 f"round {round_n}: {stats['checked']} validés, "
                 f"{stats['failed']} échecs, {stats['cache']} depuis le cache, "
-                f"{stats.get('budget_stopped', 0)} sautés (budget temps), "
+                f"{stats.get('missing', 0)} absents du cache (offline), "
                 f"{time.time() - started:.0f}s",
                 flush=True,
             )
@@ -169,29 +167,19 @@ async def _enrich(mongo_url: str, db_name: str) -> dict:
                 print(f"  {line}", flush=True)
             if stats["failed"] and round_n < _ROUNDS:
                 await asyncio.sleep(8)
-            if budget_state["stopped"]:
-                print(f"budget de {budget_s}s dépassé: arret des requetes Overpass", flush=True)
-                break
     finally:
-        _save_cache(cache_file, cache)
-
-    if budget_state["stopped"]:
-        print(f"budget de {budget_s}s atteint: cache sauvegarde, arret propre (code 0)", flush=True)
         client.close()
-        sys.exit(0)
 
     missing = await db.poe_ports.count_documents(pending_filter)
     total = await db.poe_ports.count_documents({})
     with_conf = await db.poe_ports.count_documents({"osm_confidence": {"$ne": None}})
     if missing or with_conf < total:
-        client.close()
         raise SystemExit(
             f"refus: {missing} ports sans validation OSM "
             f"({with_conf}/{total} avec osm_confidence)"
         )
     summary = await scan_poe_anomalies(db)
     flagged = int(summary.get("anomalies_flagged") or 0)
-    client.close()
     if flagged < 1:
         raise SystemExit(f"refus: scan d'anomalies sans drapeau ({summary})")
     return {
