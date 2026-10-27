@@ -3,15 +3,16 @@ name: CI
 #   - jest verrouille l'ordre des couches carte et le registre des fonds ;
 #   - le build CRA attrape les régressions de bundling (maplibre chargé à la demande) ;
 #   - le script d'audit des tags tourne en mode GeoJSON sur les seeds (stdlib pur) ;
-#   - API Blue Intelligence : six shards pytest parallèles (Mongo + uvicorn isolés),
-#     cache Overpass, venv et modèle HF en cache, puis agrégateur requis
+#   - API Blue Intelligence : un job osm-cache interroge Overpass une seule fois
+#     et remplit le cache ; six shards pytest parallèles lisent ce cache en mode
+#     offline (aucun appel réseau), puis l'agrégateur requiert
 #     « API Blue Intelligence — pytest » (ci_pytest_gate.py, exhaustivité).
 # Copie Blue Intelligence. Les jobs simulateur ne sont pas dans ce dépôt.
-
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, feat/integrate-poe-pipeline]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -49,12 +50,81 @@ jobs:
       - name: Audit des tags (mode GeoJSON, sans Mongo)
         run: python3 scripts/audit_tags.py --geojson seed/projects.geojson seed/ports_of_entry.geojson
 
+  # Un seul job interroge Overpass depuis les runners GitHub (qui y ont accès).
+  # Il est résumable : ne interroge que les ports absents du cache, sauvegarde
+  # après chaque succès, et ne passe au vert que si les 1169 ports y sont.
+  osm-cache:
+    name: Construire le cache Overpass OSM (1169 ports)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CI_OSM_CACHE: ${{ github.workspace }}/backend/.ci-cache/osm-ports.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Installer httpx (build_osm_snapshot)
+        run: python -m pip install httpx==0.28.1
+      - name: Restaurer le cache Overpass
+        uses: actions/cache/restore@v6
+        with:
+          path: backend/.ci-cache/osm-ports.json
+          key: overpass-v3-${{ hashFiles('seed/ports_of_entry.geojson') }}-${{ github.run_id }}
+          restore-keys: |
+            overpass-v3-${{ hashFiles('seed/ports_of_entry.geojson') }}-
+            overpass-v2-
+      - name: Interroger Overpass (résumable, pas de contournement)
+        run: |
+          mkdir -p .ci-cache
+          python scripts/build_osm_snapshot.py --cache .ci-cache/osm-ports.json --budget-s 1500
+      - name: Vérifier la complétude du cache (1169 ports)
+        run: |
+          python - <<'PY'
+          import json, sys
+          p = ".ci-cache/osm-ports.json"
+          try:
+              data = json.loads(open(p, encoding="utf-8").read())
+          except (OSError, json.JSONDecodeError):
+              print("cache Overpass absent ou illisible", file=sys.stderr)
+              sys.exit(1)
+          ports = data.get("ports") if isinstance(data, dict) else None
+          if not isinstance(ports, dict):
+              print("cache Overpass sans ports valides", file=sys.stderr)
+              sys.exit(1)
+          complete = sum(
+              1 for v in ports.values()
+              if isinstance(v, dict) and v.get("lat") and v.get("lon") and isinstance(v.get("elements"), list)
+          )
+          total = 1169
+          if complete < total:
+              print(
+                  f"cache Overpass incomplet {complete}/{total} : "
+                  "relancer le job, il reprend où il s'est arrêté",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print(f"cache Overpass complet {complete}/{total}")
+          PY
+      - name: Sauvegarder le cache Overpass
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: backend/.ci-cache/osm-ports.json
+          key: overpass-v3-${{ hashFiles('seed/ports_of_entry.geojson') }}-${{ github.run_id }}
+
   # Pytest de l'API : six shards parallèles (Mongo + uvicorn isolés chacun),
   # puis agrégateur requis « API Blue Intelligence — pytest » (exhaustivité).
+  # Chaque shard a besoin du job osm-cache et lit le cache en mode offline :
+  # aucun appel réseau, un port absent du cache = échec.
   backend-pytest-shard:
     name: API Blue Intelligence — pytest (shard ${{ matrix.group }}/6)
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    needs: osm-cache
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +150,8 @@ jobs:
       POE_AUTO_REFRESH: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       TOKENIZERS_PARALLELISM: "false"
+      CI_OSM_CACHE: ${{ github.workspace }}/backend/.ci-cache/osm-ports.json
+      CI_OSM_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -111,24 +183,18 @@ jobs:
           python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
       - name: Seed Mongo de CI (fichiers du dépôt uniquement)
         run: python scripts/seed_ci_mongo.py
-      - name: Restaurer le cache Overpass (seed des ports)
+      - name: Restaurer le cache Overpass (mode offline, aucun appel réseau)
         uses: actions/cache/restore@v6
         with:
           path: backend/.ci-cache/osm-ports.json
-          key: overpass-v2-${{ hashFiles('seed/ports_of_entry.geojson') }}-${{ github.run_id }}
+          key: overpass-v3-${{ hashFiles('seed/ports_of_entry.geojson') }}-${{ github.run_id }}
           restore-keys: |
-            overpass-v2-${{ hashFiles('seed/ports_of_entry.geojson') }}-
+            overpass-v3-${{ hashFiles('seed/ports_of_entry.geojson') }}-
             overpass-v2-
       - name: Validation OSM réelle + scan d'anomalies (bi_ci seulement)
-        run: python scripts/enrich_ci_osm.py
-        env:
-          CI_OSM_CACHE: ${{ github.workspace }}/backend/.ci-cache/osm-ports.json
-      - name: Sauvegarder le cache Overpass
-        if: always()
-        uses: actions/cache/save@v6
-        with:
-          path: backend/.ci-cache/osm-ports.json
-          key: overpass-v2-${{ hashFiles('seed/ports_of_entry.geojson') }}-${{ github.run_id }}
+        timeout-minutes: 12
+        run: |
+          python scripts/enrich_ci_osm.py
       - name: Fichiers d'environnement lus par les tests
         run: |
           cat > .env <<'EOF'

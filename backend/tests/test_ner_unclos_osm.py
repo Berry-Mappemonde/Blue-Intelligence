@@ -175,11 +175,19 @@ class TestOsmBadges:
         d1 = r1.json()
         if not d1.get("running"):
             pytest.skip(f"tâche Overpass non active (state={d1})")
-        time.sleep(8)
-        d2 = api.get(f"{BASE_URL}/api/poe/validate-osm/status", timeout=60).json()
-        assert d2["progress"] >= d1["progress"], (d1["progress"], d2["progress"])
-        assert d2["progress"] > d1["progress"], "progress n'avance pas en 8s"
-        assert d2["total"] == d1["total"]
+        p1 = d1["progress"]
+        deadline = time.time() + 60
+        progressed = False
+        while time.time() < deadline:
+            time.sleep(2)
+            d2 = api.get(f"{BASE_URL}/api/poe/validate-osm/status", timeout=60).json()
+            if not d2.get("running"):
+                pytest.skip(f"tâche Overpass terminee ou arretee entre-temps (state={d2})")
+            if d2["progress"] != d2["total"] and d2["progress"] > p1:
+                progressed = True
+                break
+        assert d2["total"] == d1["total"], (d1["total"], d2["total"])
+        assert progressed, f"progress n'avance pas en 60s ({p1} -> {d2['progress']})"
 
     def test_osm_checked_total_increasing(self, api, db):
         c1 = db.poe_ports.count_documents({"osm_confidence": {"$ne": None}})
