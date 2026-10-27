@@ -3,15 +3,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
 [![NVIDIA Nemotron](https://img.shields.io/badge/NVIDIA-Nemotron-76B900.svg)](https://www.nvidia.com/en-us/ai-data-science/foundation-models/nemotron/)
-[![Nebius Token Factory](https://img.shields.io/badge/Nebius-Token%20Factory-0B1F3A.svg)](https://tokenfactory.nebius.com/)
 
 A [Berry-Mappemonde](https://berrymappemonde.org) project. Code is **MIT or Apache-2.0**.
 
 > [!WARNING]
-> **Ne convient pas à la navigation / Not for navigation.**
-> Les cartes et les chiffres viennent de sources publiques et de calculs.
-> Ce n’est pas une carte marine officielle. Vérifiez toujours les publications
-> gouvernementales avant une décision en mer.
+> **Not for navigation.**
+> Maps and figures come from public sources and computations.
+> This is not an official nautical chart. Always check government
+> publications before making any decision at sea.
 
 **Blue Intelligence** ([blueintelligence.online](https://blueintelligence.online))
 is the memory of maritime sources: Ports of Entry per EEZ, marinas,
