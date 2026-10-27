@@ -31,7 +31,6 @@ CACHE_TTL = "1h"
 MIN_CACHE_TOKENS = 4096
 STOP_RATIO = 0.90
 MAX_OUTPUT_TOKENS = 2500
-CONTEXT_CHARS = 20000
 
 # Haiku 4.5 — $ / million de tokens (platform.claude.com/docs pricing)
 RATE_INPUT = 1.00
@@ -459,12 +458,13 @@ STATIC_PREFIX = _build_static_prefix()
 
 def build_extract_payload(zone: dict, context: str) -> dict:
     """Messages payload: breakpoint on the static prefix, never on the user."""
+    from app.core.llm import reader_context
     from app.services.poe_zone_label import search_polygon_name
     name = search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or "")
     sovereign = zone.get("sovereign") or ""
     user_text = (
         f"Zone à extraire : {name} ({sovereign}, polygone VLIZ mrgid={zone.get('mrgid')}).\n\n"
-        f"EXTRAITS DES SOURCES OFFICIELLES:\n{(context or '')[:CONTEXT_CHARS]}"
+        f"EXTRAITS DES SOURCES OFFICIELLES:\n{reader_context(context)}"
     )
     return {
         "model": CLAUDE_MODEL,

@@ -27,6 +27,10 @@ export const PANES = [
   { name: "climatology-vector", zIndex: 290, pointerEvents: "none" },
   // NAVIGUIDE route — under clusters and markers.
   { name: "route", zIndex: 380 },
+  // Ports of entry markers — above the EEZ polygons (overlayPane) so a port
+  // stays clickable where its polygon covers it; SVG, so empty areas let
+  // clicks through to the polygon below.
+  { name: "poe-ports", zIndex: 410 },
   // MPA polygons — above overlayPane, under stopovers.
   { name: "amp", zIndex: 420 },
   // Formalities stopovers — above everything except markers.

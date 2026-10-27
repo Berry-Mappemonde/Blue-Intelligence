@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start SearXNG without Docker (JSON enabled) on 127.0.0.1:8888.
+# Start SearXNG without Docker (JSON enabled) on 127.0.0.1:8890.
 set -euo pipefail
 ROOT="${SEARXNG_HOME:-/opt/searxng}"
 SETTINGS="${SEARXNG_SETTINGS_PATH:-/tmp/searxng-settings.yml}"
@@ -16,7 +16,7 @@ src = Path("$SRC_SETTINGS").read_text()
 if "port:" not in src:
     src = src.replace(
         "  limiter: false",
-        "  limiter: false\n  bind_address: \"127.0.0.1\"\n  port: 8888",
+        "  limiter: false\n  bind_address: \"127.0.0.1\"\n  port: 8890",
     )
 Path("$SETTINGS").write_text(src)
 print("settings → $SETTINGS")

@@ -6,6 +6,8 @@ module.exports = {
         heading: ["'IBM Plex Sans'", "sans-serif"],
         body: ["Manrope", "sans-serif"],
         mono: ["'JetBrains Mono'", "monospace"],
+        // Meridian UI face (top nav + Ports of entry screens)
+        ui: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "'Segoe UI'", "Roboto", "sans-serif"],
       },
       colors: {
         abyss: "#020617",
@@ -23,6 +25,29 @@ module.exports = {
         // Semantic "accent" — RGB channels come from --accent-rgb which switches
         // between projects (cyan) / marinas (red) / formalities (amberx) via [data-mode].
         accent: "rgb(var(--accent-rgb) / <alpha-value>)",
+        // Meridian tokens (dark only), defined in index.css as RGB triplets.
+        m: {
+          rail: "rgb(var(--m-rail) / <alpha-value>)",
+          canvas: "rgb(var(--m-canvas) / <alpha-value>)",
+          shell: "rgb(var(--m-shell) / <alpha-value>)",
+          panel: "rgb(var(--m-panel) / <alpha-value>)",
+          raised: "rgb(var(--m-raised) / <alpha-value>)",
+          selected: "rgb(var(--m-selected) / <alpha-value>)",
+          overlay: "rgb(var(--m-overlay) / <alpha-value>)",
+          line: "rgb(var(--m-line) / <alpha-value>)",
+          "line-soft": "rgb(var(--m-line-soft) / <alpha-value>)",
+          "line-strong": "rgb(var(--m-line-strong) / <alpha-value>)",
+          fg: "rgb(var(--m-fg) / <alpha-value>)",
+          fg2: "rgb(var(--m-fg-2) / <alpha-value>)",
+          fg3: "rgb(var(--m-fg-3) / <alpha-value>)",
+          fg4: "rgb(var(--m-fg-4) / <alpha-value>)",
+          accent: "rgb(var(--m-accent) / <alpha-value>)",
+          "accent-fg": "rgb(var(--m-accent-fg) / <alpha-value>)",
+          danger: "rgb(var(--m-danger) / <alpha-value>)",
+          "danger-fg": "rgb(var(--m-danger-fg) / <alpha-value>)",
+          success: "rgb(var(--m-success) / <alpha-value>)",
+          "success-fg": "rgb(var(--m-success-fg) / <alpha-value>)",
+        },
       },
     },
   },

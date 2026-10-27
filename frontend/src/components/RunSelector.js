@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import api from "../api";
 import { fetchRunsOnce } from "../lib/runCache";
+import { isEscapeKey, restoreFocus } from "../lib/a11y";
 
 // Per-mode "list runs" endpoint. PoE = poe_runs; the others = isolated runs.
 const RUNS_ENDPOINT = {
@@ -60,8 +61,17 @@ export default function RunSelector({ mode, mapRun, onSelect, t }) {
     const onDoc = (e) => {
       if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
     };
+    const onKey = (e) => {
+      if (!isEscapeKey(e)) return;
+      setOpen(false);
+      restoreFocus(btnRef.current);
+    };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const pick = (run) => {

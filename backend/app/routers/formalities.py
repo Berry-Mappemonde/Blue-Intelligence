@@ -486,3 +486,64 @@ async def export_poe_geojson():
         license_note=("Extraction Blue Intelligence de sources gouvernementales — "
                       "chaque port cite sa source ; statuts à vérifier avant escale"),
     )
+
+
+@router.post("/poe/verify")
+async def poe_verify(payload: dict):
+    """Verify PoE for a zone: run pipeline and return Nemotron status + registry validation + H-MEM activity.
+
+    Validated ports are tiers 1-2 of the run's registry check (official-source evidence);
+    a UN/LOCODE / World Port Index match alone is tier_registered, never validated. Each
+    port carries registry {tier, label, validation, matches, official_evidence,
+    coord_mismatch, first_port_of_entry, reasons}.
+
+    Input: { "zone_name": str, "mrgid": int | None }
+    Output: { zone_name, mrgid, run_id, nemotron_status, validated_ports, non_validated_ports,
+              ports_by_tier, zetaris_mode, registry, memory, brief, error, trace_name }
+    memory is {recalled, remembered, created, reinforced, superseded}. trace_name is the
+    trace file's name (logs/trace-<run_id>.jsonl on the server), never a filesystem path.
+    """
+    from pathlib import PurePath
+    from app.pipeline.run_pipeline import run_pipeline, validate_input
+
+    try:
+        zone_name, _ = validate_input(payload.get("zone_name"))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    mrgid = payload.get("mrgid")
+
+    # Run the pipeline
+    result = await run_pipeline(zone_name)
+
+    # Registry evidence recorded by the run's ZetarisAdapter.registry_check step
+    ports = result.get("ports") or []
+    validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") == "official"]
+    non_validated_ports = [p for p in ports if (p.get("registry") or {}).get("validation") != "official"]
+    ports_by_tier: dict[str, list[str]] = {}
+    for p in ports:
+        ports_by_tier.setdefault((p.get("registry") or {}).get("tier") or "unchecked", []).append(p.get("name"))
+
+    # Which model actually wrote the brief (served model, as reported by the runtime)
+    llm = result.get("llm") or {}
+    nemotron_status = {
+        "provider": llm.get("provider"),
+        "model": llm.get("model"),
+        "nemotron": "nemotron" in (llm.get("model") or "").lower(),
+        "fallback_reason": llm.get("fallback_reason"),
+    }
+
+    return {
+        "zone_name": zone_name,
+        "mrgid": mrgid,
+        "run_id": result["run_id"],
+        "nemotron_status": nemotron_status,
+        "validated_ports": validated_ports,
+        "non_validated_ports": non_validated_ports,
+        "zetaris_mode": (result.get("components") or {}).get("zetaris"),
+        "ports_by_tier": ports_by_tier,
+        "registry": result.get("registry"),
+        "memory": result.get("memory"),
+        "brief": result.get("brief"),
+        "error": result.get("error"),
+        "trace_name": PurePath(result["trace_file"]).name,
+    }

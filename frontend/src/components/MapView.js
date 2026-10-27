@@ -3,6 +3,8 @@ import L from "leaflet";
 
 import { FALLBACK_COLORS, TILE_URLS, ampStyle, zoneStyle } from "./map/constants";
 import { createPanes } from "./map/layerOrder";
+import { installAttributionDedupe } from "./map/attribution";
+import { isEscapeKey, restoreFocus } from "../lib/a11y";
 import { zonePopupHtml } from "./map/zonePopup";
 import useAmpLayer, { popupHtml as ampPopupHtml, ampPointToLayer } from "./map/useAmpLayer";
 import useAnchoragesLayer from "./map/useAnchoragesLayer";
@@ -48,6 +50,8 @@ export default function MapView({
   showAnchorages = true,
   poeZones,
   poePorts,
+  selectedZone = null,
+  lang = "en",
   route,
   onSelectZone,
   flyToMarina,
@@ -97,6 +101,10 @@ export default function MapView({
   poePortsRef.current = poePorts;
   const zoneFicheRef = useRef(zoneFiche);
   zoneFicheRef.current = zoneFiche;
+  const selectedZoneRef = useRef(selectedZone);
+  selectedZoneRef.current = selectedZone;
+  const langRef = useRef(lang);
+  langRef.current = lang;
   const basemapRef = useRef(basemap);
   basemapRef.current = basemap;
 
@@ -134,6 +142,25 @@ export default function MapView({
       maxBounds: WORLD,
       maxBoundsViscosity: 1.0,
     });
+    // Presentation only: each provider once in the attribution bar.
+    installAttributionDedupe(map.attributionControl);
+    // Escape closes an open popup from anywhere and returns focus to the element
+    // that opened it (a sidebar row or port name, a marker, the map itself).
+    let popupTrigger = null;
+    let closedByKey = false;
+    map.on("popupopen", () => { popupTrigger = document.activeElement; closedByKey = false; });
+    map.on("popupclose", () => {
+      if (closedByKey) restoreFocus(popupTrigger);
+      popupTrigger = null;
+      closedByKey = false;
+    });
+    const onEscape = (e) => {
+      if (!isEscapeKey(e) || !map._popup) return;
+      closedByKey = true;
+      map.closePopup();
+    };
+    document.addEventListener("keydown", onEscape);
+    map.once("unload", () => document.removeEventListener("keydown", onEscape));
     tileRef.current = L.tileLayer(TILE_URLS.dark, {
       attribution: "&copy; Esri &copy; OpenStreetMap contributors",
       maxZoom: 16,
@@ -167,10 +194,13 @@ export default function MapView({
     scienceTracksRef.current = scienceTracks;
     const anchorCluster = makePointGroup();
     anchorClusterRef.current = anchorCluster;
-    const poeCluster = makePointGroup();
+    const poeCluster = makePointGroup({ pane: "poe-ports", svg: true });
     poeClusterRef.current = poeCluster;
     const eezLayer = L.geoJSON(null, {
-      style: (feat) => zoneStyle(zoneItemsRef.current.get(feat?.properties?.mrgid)?.status),
+      style: (feat) => zoneStyle(
+        zoneItemsRef.current.get(feat?.properties?.mrgid)?.status,
+        selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(feat?.properties?.mrgid),
+      ),
       onEachFeature: (feat, lyr) => {
         const mrgid = feat.properties?.mrgid;
         eezLayersByMrgid.current.set(mrgid, lyr);
@@ -182,10 +212,19 @@ export default function MapView({
         });
         lyr.on("click", () => {
           const cb = onSelectZoneRef.current;
-          if (typeof cb === "function") cb(mrgid, null);
+          if (typeof cb === "function") {
+            const z = zoneItemsRef.current.get(mrgid);
+            const zoneName = z ? (z.label || z.name || z.geoname || "") : "";
+            // Same as a row click: the map fits the zone so its whole outline is visible.
+            cb(mrgid, zoneName, Array.isArray(z?.bbox) && z.bbox.length === 4 ? z.bbox : null, z?.anchor || null);
+          }
         });
-        lyr.on("mouseover", () => { try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
-        lyr.on("mouseout", () => { try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status)); } catch (_) {} });
+        const isSelected = () => selectedZoneRef.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+        // The selected zone's outline is its exterior-ring line, so hover never strokes it.
+        lyr.on("mouseover", () => { if (isSelected()) return; try { lyr.setStyle({ weight: 2, opacity: 0.95 }); } catch (_) {} });
+        lyr.on("mouseout", () => {
+          try { lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, isSelected(), map.getZoom())); } catch (_) {}
+        });
       },
     });
     eezLayerRef.current = eezLayer;
@@ -280,7 +319,8 @@ export default function MapView({
   useFormalitiesLayers({
     mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
     poeMarkersById,
-    mode, poeZones, poePorts, flyToZone, tRef,
+    mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
+    selectedZone, selectedZoneRef, langRef,
   });
   useProjectsLayer({
     mapObj, clusterRef, zoomingRef, pendingRef, markersById: projectMarkersById,
@@ -428,16 +468,16 @@ export default function MapView({
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} data-testid="map-container" className="w-full h-full" />
-      {nauticalActive ? (
-        <div
-          data-testid="nautical-disclaimer"
-          className="absolute z-[1000] bottom-6 left-3 max-w-xs px-3 py-2 text-[11px] leading-snug bg-surface/95 border border-amber-400/50 text-amber-200 rounded-sm shadow-md pointer-events-none"
-        >
-          <span className="font-bold uppercase tracking-wide">{t("seaMapDisclaimerTitle")}</span>
-          {" — "}
-          {t("seaMapDisclaimerBody")}
-        </div>
-      ) : null}
+      {/* The reminder the first-load dialog promises: on every basemap, compact, never over the data. */}
+      <div
+        data-testid="nautical-disclaimer"
+        role="note"
+        className="absolute z-[1000] bottom-7 left-3 max-w-[22rem] px-2.5 py-1.5 font-ui text-[12px] leading-4 bg-m-overlay/95 border border-m-line-strong text-m-fg2 rounded-md pointer-events-none"
+      >
+        <span className="font-medium text-m-fg">{t("seaMapDisclaimerTitle")}.</span>
+        {" "}
+        {t("seaMapDisclaimerBody")}
+      </div>
       {mapRun && emptyCount === 0 ? (
         <div
           data-testid="map-run-empty"

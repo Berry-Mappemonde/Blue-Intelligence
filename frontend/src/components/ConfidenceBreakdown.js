@@ -36,9 +36,9 @@ export default function ConfidenceBreakdown({
   const { entries, total, list } = breakdownModel(parts, reasons, reasonsEn, lang);
 
   return (
-    <div data-testid="poe-confidence-breakdown" className="mt-1.5">
+    <div data-testid="poe-confidence-breakdown" className="mt-2 font-ui">
       <div
-        className="flex h-1.5 w-full overflow-hidden rounded-sm bg-slate-800"
+        className="flex h-1.5 w-full overflow-hidden rounded-sm bg-m-raised"
         role="img"
         aria-label={`${t("poeBreakdown")}: ${total}`}
         data-testid="poe-confidence-bar"
@@ -54,29 +54,30 @@ export default function ConfidenceBreakdown({
       </div>
 
       {entries.length ? (
-        <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
           {entries.map((p) => (
-            <span key={p.key} className="font-mono text-[9px] text-slate-400">
+            <span key={p.key} className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-m-fg3 m-num">
               <span
-                className="inline-block h-1.5 w-1.5 rounded-sm align-middle"
+                className="inline-block h-2 w-2 rounded-sm"
                 style={{ backgroundColor: p.color }}
+                aria-hidden="true"
               />
-              {" "}{t(p.label)} <span className="text-slate-200">{p.value}</span>
+              {t(p.label)} <span className="text-m-fg2">{p.value}</span>
             </span>
           ))}
         </div>
       ) : null}
 
       {list.length ? (
-        <ul className="mt-1 space-y-0.5" data-testid="poe-confidence-reasons">
+        <ul className="mt-1.5 space-y-0.5 pl-3 list-disc marker:text-m-fg4" data-testid="poe-confidence-reasons">
           {list.map((reason, i) => (
-            <li key={`${i}-${reason}`} className="text-[10px] leading-snug text-slate-500">
-              · {reason}
+            <li key={`${i}-${reason}`} className="text-[12px] leading-4 text-m-fg3">
+              {reason}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-1 text-[10px] text-slate-600" data-testid="poe-confidence-no-reasons">
+        <p className="mt-1.5 text-[12px] leading-4 text-m-fg3" data-testid="poe-confidence-no-reasons">
           {t("poeNoReasons")}
         </p>
       )}
