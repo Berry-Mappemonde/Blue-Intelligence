@@ -245,3 +245,16 @@ class TestHaversineDomainClamp:
         # les règles 500 m / 250 m reposent sur cette distance : elle doit rester juste
         assert haversine_km(48.0, -4.0, 48.0045, -4.0) == pytest.approx(0.5, abs=0.01)
         assert haversine_km(48.0, -4.0, 48.0, -4.0) == pytest.approx(0.0, abs=1e-9)
+
+    def test_sibling_haversine_nm_implementations_are_clamped_too(self):
+        """Les trois haversines du dépôt doivent partager la protection.
+
+        `marina_build.haversine_nm` ne l'avait pas : sur le même couple
+        antipodal, elle levait ValueError (math domain error).
+        """
+        from app.services.climatology_common import haversine_nm as cc_nm
+        from app.services.marina_build import haversine_nm as mb_nm
+        for fn in (cc_nm, mb_nm):
+            dist = fn(*self.ANTIPODAL_TRIGGER)
+            assert 10800.0 < dist <= 10810.0
+        assert mb_nm(48.0, -4.0, 48.0045, -4.0) == pytest.approx(0.27, abs=0.01)

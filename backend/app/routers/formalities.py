@@ -2,6 +2,7 @@
 app.routers.formalities — Formalities mode FastAPI endpoints [EEZ -> Ports of Entry].
 """
 import asyncio
+import calendar
 import os
 import time
 
@@ -73,7 +74,9 @@ def _ts_of(iso: str | None) -> float | None:
     if not iso:
         return None
     try:
-        return time.mktime(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S"))
+        # timegm : generated_at / checked_at sont écrits en UTC (« Z ») ; mktime
+        # les lirait en heure locale et décalerait le cycle de rafraîchissement.
+        return calendar.timegm(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S"))
     except Exception:
         return None
 

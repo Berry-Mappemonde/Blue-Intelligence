@@ -132,11 +132,18 @@ def test_import_application_reste_sous_le_plafond():
         os.environ.setdefault("SERVE_FRONTEND", "0")
 
         def rss_kb():
-            with open("/proc/self/status") as fh:
-                for line in fh:
-                    if line.startswith("VmRSS:"):
-                        return int(line.split()[1])
-            raise SystemExit("rss")
+            # /proc n'existe pas sur macOS : on retombe sur getrusage.
+            try:
+                with open("/proc/self/status") as fh:
+                    for line in fh:
+                        if line.startswith("VmRSS:"):
+                            return int(line.split()[1])
+            except OSError:
+                pass
+            import resource
+            import sys as _sys
+            rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            return rss // 1024 if _sys.platform == "darwin" else rss
 
         from app.main import app
         from app.services.climatology_common import is_land

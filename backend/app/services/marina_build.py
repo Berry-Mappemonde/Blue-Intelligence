@@ -171,7 +171,9 @@ def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dphi = math.radians(lat2 - lat1)
     dl = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dl / 2) ** 2
-    d_m = 2 * R * math.asin(math.sqrt(a))
+    # min() : deux points quasi antipodaux font dépasser 1.0 à l'arrondi
+    # flottant près, et asin(sqrt(a)) lève alors ValueError (math domain error).
+    d_m = 2 * R * math.asin(min(1.0, math.sqrt(a)))
     return d_m * NM_PER_METER
 
 
