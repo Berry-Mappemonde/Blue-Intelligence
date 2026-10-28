@@ -24,6 +24,7 @@ NEVER fabricates values. Every field is null when unknown.
 from __future__ import annotations
 
 import asyncio
+import calendar
 import json
 import re
 import time
@@ -664,6 +665,8 @@ def is_stale(marina: dict, max_age_days: int = 365) -> bool:
         return False
     try:
         t = time.strptime(ea, "%Y-%m-%dT%H:%M:%SZ")
-        return (time.time() - time.mktime(t)) > max_age_days * 86400
+        # timegm : enriched_at est un horodatage UTC ; mktime le lirait en
+        # heure locale et décalerait le seuil « périmé » du fuseau de la machine.
+        return (time.time() - calendar.timegm(t)) > max_age_days * 86400
     except (ValueError, TypeError):
         return False

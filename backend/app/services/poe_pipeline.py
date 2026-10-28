@@ -21,6 +21,7 @@ Architecture:
                              osm_confidence / anomaly enrichments are preserved).
 """
 import asyncio
+import calendar
 import fcntl
 import json
 import os
@@ -404,7 +405,9 @@ def is_stale(doc: dict) -> bool:
     if not g:
         return False
     try:
-        gen = time.mktime(time.strptime(g[:19], "%Y-%m-%dT%H:%M:%S"))
+        # timegm : generated_at est écrit en UTC (« Z ») ; mktime lirait l'heure
+        # locale et décalerait la fenêtre « périmé » du fuseau de la machine.
+        gen = calendar.timegm(time.strptime(g[:19], "%Y-%m-%dT%H:%M:%S"))
         return (time.time() - gen) > STALE_DAYS * 86400
     except Exception:
         return False
