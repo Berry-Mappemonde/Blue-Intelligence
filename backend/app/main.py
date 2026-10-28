@@ -176,6 +176,10 @@ async def _shutdown():
 
 if _SERVE_FRONTEND:
     _RESERVED_ROOT = {"api", "docs", "redoc", "openapi.json"}
+    # Types MIME servis tels quels (indépendants de la table du système).
+    _SPA_MEDIA_TYPES = {
+        ".xml": "application/xml",
+    }
 
     def _spa_index_response() -> FileResponse:
         # no-cache: the browser revalidates index.html on every deploy,
@@ -196,7 +200,12 @@ if _SERVE_FRONTEND:
         if not candidate.is_relative_to(_FRONTEND_BUILD):
             raise HTTPException(404, detail="Not Found")
         if candidate.is_file():
-            return FileResponse(candidate)
+            # Le type MIME doit venir de nous, pas de la table du système :
+            # mimetypes renvoie `text/xml` sur certaines machines (macOS,
+            # /etc/mime.types) et `application/xml` sur d'autres, et un
+            # sitemap doit partir en application/xml partout.
+            media_type = _SPA_MEDIA_TYPES.get(candidate.suffix.lower())
+            return FileResponse(candidate, media_type=media_type)
         if head == "static":
             # Missing fingerprinted asset = stale client bundle: a frank 404
             # is better than index.html served in place of a JS file.
