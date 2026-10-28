@@ -1242,6 +1242,33 @@
       "group": "qualification"
     },
     {
+      "id": "formalities.catalog_min_names",
+      "mode": "formalities",
+      "kind": "geometrie",
+      "value": 8,
+      "numeric": "int",
+      "unit": "ports",
+      "interval": [
+        4,
+        20
+      ],
+      "vary": true,
+      "principle": "Une liste de noms sans coordonnées (PPF, MPI, SIS, kartelë) reste une liste : 8 noms extraits + allure de catalogue suffisent pour arrêter la recherche LLM.",
+      "cdc": "CAHIER_DES_CHARGES_POE.md §6.3",
+      "code": [
+        "app/core/extract.py:catalog_is_sufficient"
+      ],
+      "title": {
+        "fr": "Combien de noms suffisent pour une liste sans coordonnées",
+        "en": "How many names make a list without coordinates"
+      },
+      "help": {
+        "fr": "8 noms extraits + marqueurs de catalogue : on arrête là, sans LLM. Plus bas, une énumération de bureaux suffit.",
+        "en": "8 extracted names + catalogue markers: stop there, no LLM. Lower, any office enumeration passes."
+      },
+      "group": "qualification"
+    },
+    {
       "id": "formalities.catalog_lat_hits",
       "mode": "formalities",
       "kind": "geometrie",
