@@ -1,0 +1,112 @@
+{
+  "run_id": "example-azores",
+  "zone": "Azores",
+  "mode": "sample",
+  "ports": [
+    {
+      "name": "Porto / Marina de Ponta Delgada",
+      "verdict": "flag",
+      "confidence": 44,
+      "lat": 37.7393398,
+      "lon": -25.6689503,
+      "reasons_en": [
+        "national source not on the allowlist",
+        "single extractor",
+        "inside the EEZ",
+        "single geocoder, not cross-checked"
+      ],
+      "sources": [
+        {
+          "url": "https://www.acorianooriental.pt/noticia/veleiros-proibidos-de-atracar-nas-flores-377030",
+          "provenance": "zetaris"
+        }
+      ],
+      "memories_recalled": 0,
+      "research": null,
+      "registry": {
+        "tier": "tier_registered",
+        "label": "Registered port, entry status unverified",
+        "validation": "registered - entry status unverified",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "PTPDL",
+            "name": "Ponta Delgada",
+            "distance_km": 0.7
+          },
+          {
+            "source": "wpi",
+            "code": "PTPDL",
+            "name": "Ponta Delgada",
+            "distance_km": 0.7,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Registered port, entry status unverified: listed in UN/LOCODE PTPDL (0.7 km), WPI PTPDL (0.7 km), but no fetched official document names it; a registry listing does not establish port-of-entry status",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      },
+      "judge": null
+    }
+  ],
+  "summary": {
+    "flag": 1
+  },
+  "brief": "Clearance brief: Azores\nConfirmed ports of entry: none confirmed in this run.\nFlagged, verify before relying on them:\n- Porto / Marina de Ponta Delgada (confidence 44/100): single geocoder, not cross-checked; no government source. Registered port, entry status unverified: listed in UN/LOCODE PTPDL (0.7 km), WPI PTPDL (0.7 km), but no fetched official document names it; a registry listing does not establish port-of-entry status. Sources: https://www.acorianooriental.pt/noticia/veleiros-proibidos-de-atracar-nas-flores-377030\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "llm": {
+    "provider": "sample",
+    "model": "caller-sample-fn",
+    "fallback_reason": "SAMPLE_MODE=true"
+  },
+  "components": {
+    "zetaris": "sample",
+    "registry": "sample",
+    "llm": "sample",
+    "judge": "skipped"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "PT",
+    "registry_entries": 29,
+    "official_count": 0,
+    "tiers": {
+      "tier1": 0,
+      "tier2": 0,
+      "tier_registered": 1,
+      "tier3": 0
+    },
+    "coord_mismatch_count": 0
+  },
+  "judge": {
+    "status": "skipped",
+    "reason": "SAMPLE_MODE=true",
+    "provider": null,
+    "served_model": null,
+    "retry_requested": []
+  },
+  "retries": 0,
+  "memory": {
+    "recalled": 0,
+    "remembered": true,
+    "created": 1,
+    "reinforced": 0,
+    "superseded": 0
+  },
+  "trace_file": "logs/trace-example-azores.jsonl",
+  "timings_ms": {
+    "ZetarisAdapter.get_ports": 0.5,
+    "ZetarisAdapter.registry_check": 13.7,
+    "HMemAgent.recall": 0.6,
+    "EvaluatorAgent.evaluate": 0.9,
+    "NemotronJudge.critique": 0.1,
+    "EvaluatorAgent.finalise": 0.1,
+    "BriefingAgent.brief": 0.2,
+    "HMemAgent.remember": 0.9,
+    "total": 17.0
+  },
+  "error": null
+}

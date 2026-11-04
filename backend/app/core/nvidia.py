@@ -54,6 +54,13 @@ GPT_OSS_MODEL = "openai/gpt-oss-20b"
 PRIMARY_MODEL = GPT_OSS_MODEL
 SECONDARY_MODEL = "meta/muse-glimmer-30b"
 LEGAL_MODEL = "moonshotai/kimi-k3"
+
+# Nemotron suite — role-specialized NVIDIA NIM chat models (catalogue IDs, 2026-10).
+# nemotron-4-340b-reward is a reward model (it scores answers), never a chat model.
+NEMOTRON_LIGHTNING_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"  # filter, normalize, search_rank
+NEMOTRON_SUPER_VL_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"  # page (visual PDF reading)
+NEMOTRON_SUPER_MODEL = "nvidia/nemotron-3-super-120b-a12b"          # extract, json, reconcile
+NEMOTRON_ULTRA_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"          # judge, brief (reasoning)
 # Hosted trial gone (410 Gone). _usable_nim rewrites them to gpt-oss.
 _EOL_MODELS = frozenset({
     PRO_MODEL,
@@ -102,13 +109,33 @@ def _nvidia_sem() -> asyncio.Semaphore:
 
 
 CHAINS = {
-    "judge": (GPT_OSS_MODEL, SECONDARY_MODEL, FLASH_MODEL),
-    "extract": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "judge": (
+        NEMOTRON_ULTRA_MODEL,              # Nemotron Ultra for reasoning/legal arbitrage
+        GPT_OSS_MODEL,
+        SECONDARY_MODEL,
+        FLASH_MODEL,
+    ),
+    "extract": (
+        NEMOTRON_SUPER_MODEL,              # Nemotron 3-Super for structured extraction
+        GPT_OSS_MODEL,
+        SECONDARY_MODEL,
+    ),
     "legal": (LEGAL_MODEL, SECONDARY_MODEL),
-    "json": (GPT_OSS_MODEL, SECONDARY_MODEL),
-    "page": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "json": (
+        NEMOTRON_SUPER_MODEL,              # Nemotron 3-Super for JSON output
+        GPT_OSS_MODEL,
+        SECONDARY_MODEL,
+    ),
+    "page": (
+        NEMOTRON_SUPER_VL_MODEL,           # Nemotron 3.5-Super-VL for visual PDF reading
+        GPT_OSS_MODEL,
+        SECONDARY_MODEL,
+    ),
     "text": (GPT_OSS_MODEL, SECONDARY_MODEL),
     "review": (GPT_OSS_MODEL, SECONDARY_MODEL),
+    "filter": (NEMOTRON_LIGHTNING_MODEL,),  # Nemotron Lightning for triage
+    "normalize": (NEMOTRON_LIGHTNING_MODEL,),  # Nemotron Lightning for normalization
+    "search_rank": (NEMOTRON_LIGHTNING_MODEL,),  # Nemotron Lightning for ranking
 }
 
 _THINKING_RE = re.compile(r"^\s*here's a thinking process", re.I)
@@ -603,16 +630,17 @@ async def extract_ports_nvidia(context: str, zone: dict,
                                model: str | None = None,
                                engine: str | None = None,
                                fallback: bool | None = None) -> list[dict]:
-    from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports
+    from app.core.llm import POE_EXTRACT_PROMPT, coerce_ports, reader_context
 
     # Primary reader: extract chain (Pro → gpt-oss → Muse).
     # Kimi is second reader only via second_extract_choice (decree).
     role = "extract"
     do_fb = True if fallback is None and model is None else bool(fallback)
+    sent = reader_context(context)
     prompt = POE_EXTRACT_PROMPT.format(
         name=zone.get("name") or zone.get("geoname"),
         sovereign=zone.get("sovereign") or "",
-        context=(context or "")[:20000],
+        context=sent,
     )
     data, used = await complete_json_nvidia_tracked(
         "Tu réponds uniquement en JSON strict.", prompt, settings,
@@ -622,5 +650,5 @@ async def extract_ports_nvidia(context: str, zone: dict,
     for p in ports:
         p["extraction_engine"] = tag
     if log:
-        log(f"LLM {tag}: {len(ports)} port(s) extraits")
+        log(f"LLM {tag}: {len(ports)} port(s) extraits sur {len(sent)} chars envoyés")
     return ports

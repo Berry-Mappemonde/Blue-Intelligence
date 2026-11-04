@@ -1,0 +1,7 @@
+{
+  "description": "Synthetic sample rows for offline adapter demonstrations; not clearance advice.",
+  "data": [
+    ["Papeete", "French Polynesia", "sample"],
+    ["Hamburg", "Germany", "sample"]
+  ]
+}

@@ -38,17 +38,55 @@ export const ampStyle = (lfp) => {
   };
 };
 
-export const zoneStyle = (status) => {
+// EEZ polygons are neutral hairlines (generated a little stronger than not
+// generated, errors in the danger colour); only the selected zone is amber, so
+// amber otherwise stays reserved for the PoE markers.
+export const ZONE_SELECTED_COLOR = "#fbbf24";
+export const ZONE_NEUTRAL_LINE = "#5e5e5e";
+export const ZONE_NEUTRAL_FILL = "#8f8f8f";
+export const ZONE_ERROR_COLOR = "#eb5a5a";
+// Above this zoom the selected zone is framed on its ports: the outline would only
+// trace the coastline, so it is hidden (outline and fill) until the user zooms out.
+export const ZONE_SELECTED_MAX_ZOOM = 9;
+export const zoneStyle = (status, selected = false, zoom = null) => {
   const s = status || "non_generee";
+  if (selected && zoom != null && zoom > ZONE_SELECTED_MAX_ZOOM) {
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0, dashArray: null };
+  }
+  if (selected) {
+    // Fill only: the amber outline is a separate exterior-ring line (selectedOutlineRings),
+    // so interior holes (land cut-outs around islands) get no zigzag stroke.
+    return { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0, fillColor: ZONE_SELECTED_COLOR, fillOpacity: 0.03, dashArray: null };
+  }
+  const generated = s === "ia" || s === "ia_sans_source";
+  const erreur = s === "erreur";
+  // Generated: solid fg-3 hairline. Not generated: dotted fg-4. No official source: dashed.
   return {
-    color: ZONE_COLORS[s] || ZONE_COLORS.non_generee,
+    color: erreur ? ZONE_ERROR_COLOR : generated ? ZONE_NEUTRAL_FILL : ZONE_NEUTRAL_LINE,
     weight: 1,
-    opacity: s === "non_generee" ? 0.35 : 0.75,
-    fillColor: ZONE_COLORS[s] || ZONE_COLORS.non_generee,
-    fillOpacity: s === "ia" ? 0.16 : s === "ia_sans_source" ? 0.1 : s === "erreur" ? 0.1 : 0.04,
-    dashArray: s === "ia_sans_source" ? "4 4" : null,
+    opacity: erreur ? 0.7 : generated ? 0.6 : 0.55,
+    fillColor: erreur ? ZONE_ERROR_COLOR : ZONE_NEUTRAL_FILL,
+    fillOpacity: erreur ? 0.05 : generated ? 0.06 : 0.015,
+    dashArray: s === "ia_sans_source" ? "4 4" : s === "non_generee" ? "1 4" : null,
+    lineCap: s === "non_generee" ? "round" : "butt",
   };
 };
+
+/**
+ * Exterior ring(s) of a GeoJSON Polygon / MultiPolygon as Leaflet [lat, lng] rings:
+ * the outer boundary of each part, never its holes.
+ */
+export function selectedOutlineRings(geometry) {
+  if (!geometry) return [];
+  const toLatLng = (ring) => (ring || []).map(([lng, lat]) => [lat, lng]);
+  if (geometry.type === "Polygon") return geometry.coordinates?.length ? [toLatLng(geometry.coordinates[0])] : [];
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).filter((poly) => poly?.length).map((poly) => toLatLng(poly[0]));
+  }
+  if (geometry.type === "GeometryCollection") return (geometry.geometries || []).flatMap(selectedOutlineRings);
+  return [];
+}
+export const SELECTED_OUTLINE_STYLE = { color: ZONE_SELECTED_COLOR, weight: 1.5, opacity: 0.95, interactive: false };
 
 export const flagEmoji = (iso2) => {
   if (!iso2 || iso2.length !== 2) return "🌐";
@@ -63,11 +101,15 @@ export const escH = (s) => String(s ?? "")
 
 // Neutral route styling that reads on both dark and light basemaps.
 // Two-layer stroke (dark casing + light main) gives contrast in every context.
-export const ROUTE_MAIN_COLOR = "#e2e8f0";     // slate-200 top line
-export const ROUTE_CASING_COLOR = "#0f172a";   // deep navy casing for contrast on light map
-export const ROUTE_MAIN_WEIGHT = 2.5;
-export const ROUTE_CASING_WEIGHT = 5;
-export const ESCALE_FILL = "#f8fafc";
-export const ESCALE_STROKE = "#0f172a";
-export const INTERMEDIATE_FILL = "#94a3b8";
-export const INTERMEDIATE_STROKE = "#475569";
+// Toned down to a hairline in fg-3 with a dark casing: visible on both basemaps,
+// never louder than the data layers.
+export const ROUTE_MAIN_COLOR = "#8f8f8f";     // fg-3
+export const ROUTE_CASING_COLOR = "#121212";   // dark casing for contrast on the light map
+export const ROUTE_MAIN_WEIGHT = 1.5;
+export const ROUTE_CASING_WEIGHT = 3;
+export const ESCALE_FILL = "#ededed";
+export const ESCALE_STROKE = "#121212";
+export const ESCALE_RADIUS = 4;
+export const INTERMEDIATE_FILL = "#8f8f8f";
+export const INTERMEDIATE_STROKE = "#121212";
+export const INTERMEDIATE_RADIUS = 1.8;

@@ -4,17 +4,18 @@
 # a local instance guarantees free, unlimited, multi-engine SERPs.
 #
 # Start   : docker compose -f infra/searxng/docker-compose.yml up -d
-# Backend : SEARXNG_URL=http://127.0.0.1:8888 in backend/.env
+# Backend : SEARXNG_URL=http://127.0.0.1:8890 in backend/.env
 #             (the local instance goes first, public ones stay
-#              as fallback; without the variable, behaviour is unchanged)
+#              as fallback; 8890 is also the default without the variable)
+# Port 8890, not 8888: the local Zetaris API uses 8888-8889.
 services:
   searxng:
     image: searxng/searxng:latest
     container_name: blue-intelligence-searxng
     ports:
-      - "127.0.0.1:8888:8080"
+      - "127.0.0.1:8890:8080"
     volumes:
       - ./settings.yml:/etc/searxng/settings.yml:ro
     environment:
-      - SEARXNG_BASE_URL=http://127.0.0.1:8888/
+      - SEARXNG_BASE_URL=http://127.0.0.1:8890/
     restart: unless-stopped

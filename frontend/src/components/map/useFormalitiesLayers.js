@@ -1,16 +1,32 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import api from "../../api";
-import { escH, flagEmoji, zoneStyle } from "./constants";
+import { escH, SELECTED_OUTLINE_STYLE, selectedOutlineRings, ZONE_SELECTED_MAX_ZOOM, zoneStyle } from "./constants";
 import { circleOpts, POPUP_OPTS } from "./points";
+import { evidenceDetailsHtml, portKey, registryBadgeHtml, sourceTitle, verdictLabel } from "../poeRegistry";
 
 /**
- * Formalities layers: EEZ choropleth + Ports of Entry dots (canvas).
+ * Formalities layers: EEZ choropleth + Ports of Entry dots (SVG, poe-ports pane).
  */
+
+// PoE marker by zoom: a tiny amber dot with a transparent click halo on the world
+// view; from zoom 4 a bigger dot with a dark outline so it reads on any coastline.
+export function poeMarkerStyle(zoom) {
+  const z = Number(zoom) || 2;
+  if (z >= 9) return { radius: 5, weight: 1.5, color: "#121212", opacity: 1, fillOpacity: 1 };
+  if (z >= 6) return { radius: 4, weight: 1.5, color: "#121212", opacity: 1, fillOpacity: 1 };
+  if (z >= 4) return { radius: 2.5, weight: 1, color: "#121212", opacity: 0.9, fillOpacity: 1 };
+  return { radius: 1.6, weight: 9, color: "#fbbf24", opacity: 0, fillOpacity: 0.95 };
+}
+
+const CHEVRON = '<svg class="m-disclosure" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+const CHECK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const _looksFrench = (s) => /\b(le|la|les|des|du|pour|avec|sur|est|une|un|et|obligatoire|plaisance|douane|port d)\b/i.test(String(s || ""));
 export default function useFormalitiesLayers({
   mapObj, eezLayerRef, eezLayersByMrgid, zoneItemsRef, poeClusterRef,
   poeMarkersById,
-  mode, poeZones, poePorts, flyToZone, tRef,
+  mode, poeZones, poePorts, flyToZone, tRef, zoneFicheRef,
+  selectedZone, selectedZoneRef, langRef,
 }) {
   const eezSigRef = useRef("");
   const poeSigRef = useRef("");
@@ -44,7 +60,8 @@ export default function useFormalitiesLayers({
     if (layer) {
       layer.eachLayer((lyr) => {
         const mrgid = lyr.feature?.properties?.mrgid;
-        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status)); } catch (_) { /* noop */ }
+        const selected = selectedZoneRef?.current != null && Number(selectedZoneRef.current) === Number(mrgid);
+        try { lyr.setStyle(zoneStyle(byMrgid.get(mrgid)?.status, selected, mapObj.current?.getZoom())); } catch (_) { /* noop */ }
       });
     }
     const map = mapObj.current;
@@ -54,6 +71,49 @@ export default function useFormalitiesLayers({
     }
     // eslint-disable-next-line
   }, [poeZones]);
+
+  // Only the selected polygon is amber; the previous one goes back to neutral. The amber
+  // outline is its exterior ring(s) only, drawn as a separate non-interactive line, so
+  // land cut-outs around islands get no stroke. Above ZONE_SELECTED_MAX_ZOOM the fill and
+  // the outline are hidden, so re-apply on every zoom.
+  const outlineRef = useRef(null);
+  useEffect(() => {
+    const layer = eezLayerRef.current;
+    const map = mapObj.current;
+    if (!layer) return undefined;
+    let selectedLayer = null;
+    layer.eachLayer((lyr) => {
+      if (selectedZone != null && Number(selectedZone) === Number(lyr.feature?.properties?.mrgid)) selectedLayer = lyr;
+    });
+    if (outlineRef.current) { try { outlineRef.current.remove(); } catch (_) { /* noop */ } outlineRef.current = null; }
+    const rings = selectedLayer ? selectedOutlineRings(selectedLayer.feature?.geometry) : [];
+    if (rings.length && map) outlineRef.current = L.polyline(rings, SELECTED_OUTLINE_STYLE);
+    const apply = () => {
+      const zoom = map ? map.getZoom() : null;
+      layer.eachLayer((lyr) => {
+        const mrgid = lyr.feature?.properties?.mrgid;
+        const selected = lyr === selectedLayer;
+        try {
+          lyr.setStyle(zoneStyle(zoneItemsRef.current.get(mrgid)?.status, selected, zoom));
+          if (selected && typeof lyr.bringToFront === "function") lyr.bringToFront();
+        } catch (_) { /* noop */ }
+      });
+      const outline = outlineRef.current;
+      if (outline && map) {
+        const show = mode === "formalities" && (zoom == null || zoom <= ZONE_SELECTED_MAX_ZOOM);
+        if (show && !map.hasLayer(outline)) outline.addTo(map);
+        if (!show && map.hasLayer(outline)) outline.remove();
+        if (show) { try { outline.bringToFront(); } catch (_) { /* noop */ } }
+      }
+    };
+    apply();
+    if (map) map.on("zoomend", apply);
+    return () => {
+      if (map) map.off("zoomend", apply);
+      if (outlineRef.current) { try { outlineRef.current.remove(); } catch (_) { /* noop */ } }
+    };
+    // eslint-disable-next-line
+  }, [selectedZone, mode, poeZones]);
 
   useEffect(() => {
     const cluster = poeClusterRef.current;
@@ -70,46 +130,63 @@ export default function useFormalitiesLayers({
     const markers = feats.map((f) => {
       const [lon, lat] = f.geometry.coordinates;
       const p = f.properties;
-      const m = L.circleMarker([lat, lon], circleOpts("#fbbf24", {
-        zoom, fillOpacity: 0.88, renderer,
-      }));
+      // SVG dot in the "poe-ports" pane: the visible dot is the fill; its stroke is
+      // either the dark outline (zoomed in) or a transparent click halo (world view),
+      // see poeMarkerStyle. applyPenRadii re-applies the style on every zoom.
+      const m = L.circleMarker([lat, lon], {
+        ...circleOpts("#fbbf24", { zoom, renderer }),
+        ...poeMarkerStyle(zoom),
+        pane: "poe-ports",
+      });
+      m._biZoomStyle = poeMarkerStyle;
       m.bindPopup(() => {
         const t = tRef.current;
-        const valid = p.spatial_kind === "inland_river"
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#22d3ee;border:1px solid rgba(34,211,238,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeInlandRiver"))}</span>`
-          : p.spatial_kind === "coastal_land"
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#39ff14;border:1px solid rgba(57,255,20,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeCoastalLand"))}</span>`
-          : p.validated
-          ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#39ff14;border:1px solid rgba(57,255,20,0.45);padding:2px 6px;border-radius:2px;">✓ ${escH(t("poeValidated"))}</span>`
-          : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#fbbf24;border:1px solid rgba(251,191,36,0.45);padding:2px 6px;border-radius:2px;">⚠ ${escH(t("poeOutsideEez"))}${p.distance_km != null ? " ~" + escH(p.distance_km) + " km" : ""}</span>`;
-        const conf = p.confidence != null
-          ? `<span data-testid="poe-confidence" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${Number(p.confidence) >= 70 ? "#39ff14" : Number(p.confidence) >= 40 ? "#fbbf24" : "#fca5a5"};border:1px solid #33415555;padding:2px 6px;border-radius:2px;">${escH(t("poeConfidence"))} ${Number(p.confidence)}</span>`
+        // Same look as the sidebar card: name, tier chip, score, verdict in words.
+        // The tier and verdict come from the open zone sheet when it holds this port.
+        const fiche = zoneFicheRef?.current;
+        const sheetPort = fiche && Number(fiche.mrgid) === Number(p.mrgid)
+          ? (fiche.ports || []).find((fp) => portKey(fp.name) === portKey(p.name))
+          : null;
+        // Placement only speaks up when something is off (outside the EEZ).
+        const placement = p.validated || p.spatial_kind === "inland_river" || p.spatial_kind === "coastal_land"
+          ? ""
+          : `<span class="poe-popup__chip poe-popup__chip--danger">${escH(t("poeOutsideEez"))}${p.distance_km != null ? " ~" + escH(p.distance_km) + " km" : ""}</span>`;
+        const score = sheetPort?.confidence ?? p.confidence;
+        const conf = score != null
+          ? `<span data-testid="poe-confidence" class="poe-popup__chip poe-popup__chip--num"><span style="color:rgb(var(--m-fg-3));margin-right:4px;">${escH(t("poeScore"))}</span>${Number(score)}</span>`
+          : "";
+        const tierChip = sheetPort ? registryBadgeHtml(sheetPort, t, escH) : "";
+        const verdict = sheetPort ? verdictLabel(sheetPort, t) : null;
+        const verdictHtml = verdict
+          ? `<span class="poe-popup__verdict ${verdict.key === "pass" ? "poe-popup__verdict--pass" : ""}">${verdict.key === "pass" ? CHECK : ""}${escH(verdict.text)}</span>`
           : "";
         const srcs = (p.source_urls || []).slice(0, 3).map((u) => `
-          <div style="margin-top:3px;font-size:10px;"><a href="${escH(u)}" target="_blank" rel="noreferrer" style="color:#00f0ff;text-decoration:none;word-break:break-all;">${escH(u)}</a></div>`).join("");
-        let osmBadge = "";
-        if (p.osm_confidence != null) {
-          const c = Number(p.osm_confidence);
-          const col = c >= 0.5 ? "#39ff14" : c > 0 ? "#fbbf24" : "#94a3b8";
-          const label = c > 0
-            ? `${escH(t("poeOsmConfidence"))} ${c.toFixed(2)}`
-            : escH(t("poeOsmNoMatch"));
-          const tags = (p.osm_tags || []).join(", ");
-          osmBadge = `<span data-testid="poe-osm-badge" title="${escH(tags)}" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col};border:1px solid ${col}55;padding:2px 6px;border-radius:2px;">${c > 0 ? "⬢ " : "∅ "}${label}</span>`;
-        }
+          <div class="poe-popup__src"><a href="${escH(u)}" target="_blank" rel="noreferrer" title="${escH(u)}">
+            <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(sourceTitle(u))}</span>
+            <span class="poe-popup__host">${escH(u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0])}</span></a></div>`).join("");
         const anomBadge = p.spatial_anomaly
-          ? `<span data-testid="poe-anomaly-badge" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#ff4a4a;border:1px solid rgba(255,74,74,0.5);background:rgba(255,74,74,0.08);padding:2px 6px;border-radius:2px;">⚠ ${escH(t("poeAnomaly"))}</span>`
+          ? `<span data-testid="poe-anomaly-badge" class="poe-popup__chip poe-popup__chip--danger">${escH(t("poeAnomaly"))}</span>`
           : "";
-        return `<div style="min-width:230px;max-width:300px;font-family:Manrope,sans-serif;">
-          <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:700;font-size:13px;color:#fff;line-height:1.3;">⚓ ${escH(p.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;margin:3px 0 5px;">${escH(p.city || "")}${p.city ? " · " : ""}${flagEmoji(p.country_iso2)} ${escH(p.zone_name || "")}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;">${valid}${conf}
-            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#94a3b8;border:1px solid #33415555;padding:2px 6px;border-radius:2px;">${escH(p.geocode_source || t("poeNotGeocoded"))}</span>
-            ${osmBadge}${anomBadge}
-          </div>
-          ${p.note ? `<div style="font-size:11px;color:#e2e8f0;line-height:1.4;margin-bottom:5px;">${escH(p.note)}</div>` : ""}
-          ${srcs ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">${escH(t("poeSourcesTitle"))}</div>${srcs}` : ""}
-          <div style="margin-top:7px;font-size:9px;color:#64748b;">${escH(t("poeGeocodeAttribution"))}${p.extracted_at ? " · " + escH(String(p.extracted_at).slice(0, 10)) : ""}</div>
+        const allEvidence = sheetPort?.registry?.official_evidence || [];
+        const evidence = allEvidence.slice(0, 2).map((e) => evidenceDetailsHtml(e, sheetPort, t, escH, { chevron: CHEVRON }))
+          .join("") + (allEvidence.length > 2
+          ? `<div class="poe-popup__muted">+${allEvidence.length - 2} ${escH(t("poeMoreSources"))}</div>`
+          : "");
+        // The seed note is shown only when its language matches the UI language.
+        const lang = langRef?.current || "en";
+        const noteHtml = p.note && ((lang === "fr") === _looksFrench(p.note))
+          ? `<div class="poe-popup__note">${escH(p.note)}</div>`
+          : "";
+        const meta = [p.city, p.zone_name].filter(Boolean).map(escH).join(" · ");
+        return `<div class="poe-popup" style="min-width:230px;max-width:300px;">
+          <div class="poe-popup__title">${escH(p.name)}</div>
+          ${meta ? `<div class="poe-popup__meta">${meta}</div>` : ""}
+          <div class="poe-popup__row">${tierChip}${verdictHtml}</div>
+          <div class="poe-popup__row">${conf}${placement}${anomBadge}</div>
+          ${noteHtml}
+          ${evidence}
+          ${srcs ? `<div class="poe-popup__h">${escH(t("poeSourcesTitle"))}</div>${srcs}` : ""}
+          <div class="poe-popup__footer">${escH(t("poeGeocodeAttribution"))}${p.extracted_at ? " · " + escH(String(p.extracted_at).slice(0, 10)) : ""}${p.geocode_source && !/nominatim/i.test(p.geocode_source) ? " · " + escH(p.geocode_source) : ""}</div>
         </div>`;
       }, { ...POPUP_OPTS, maxWidth: 310 });
       if (poeMarkersById?.current && p.id) poeMarkersById.current.set(p.id, m);
@@ -142,11 +219,18 @@ export default function useFormalitiesLayers({
       try { lyr.openPopup(at || undefined); } catch (_) { /* not attached yet */ }
     };
     map.once("moveend", open);
+    // With ports, frame the ports (island and markers clearly visible); otherwise the EEZ.
+    const portLatLngs = (poePorts?.features || [])
+      .filter((f) => Number(f.properties?.mrgid) === Number(flyToZone.mrgid) && Array.isArray(f.geometry?.coordinates))
+      .map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]]);
     try {
-      if (e - w > 350 && anchorLatLng) {
+      if (portLatLngs.length) {
+        map.flyToBounds(L.latLngBounds(portLatLngs).pad(0.25), { duration: 0.8, maxZoom: 11, padding: [64, 64] });
+      } else if (e - w > 350 && anchorLatLng) {
         map.flyTo(anchorLatLng, 5, { duration: 0.8 });
       } else {
-        map.flyToBounds(L.latLngBounds([s, w], [n, e]), { duration: 0.8, maxZoom: 7, padding: [30, 30] });
+        // Whole outline visible: generous padding, the sheet's popup tip included.
+        map.flyToBounds(L.latLngBounds([s, w], [n, e]), { duration: 0.8, maxZoom: 7, padding: [48, 48] });
       }
     } catch (_) { /* noop */ }
     const safety = setTimeout(open, 1400);

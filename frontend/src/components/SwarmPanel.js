@@ -1,4 +1,4 @@
-import { Compass, Flag, Search } from "lucide-react";
+import { ChevronRight, Flag, Search } from "lucide-react";
 import ProjectList from "./ProjectList";
 
 // Number of category groups served by /api/categories (fixed taxonomy).
@@ -14,19 +14,18 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
   const legendCats = (categories || []).filter((c) => c.count > 0);
 
   return (
-    <aside className="w-[360px] shrink-0 flex flex-col border-r border-line bg-surface min-h-0" data-testid="swarm-panel">
-      <div className="flex-1 overflow-y-auto min-h-0">
+    <aside className="w-[360px] max-w-full shrink-0 flex flex-col border-r border-m-line bg-m-shell min-h-0 font-ui text-[13px] leading-[18px] text-m-fg" data-testid="swarm-panel">
+      <div className="flex-1 overflow-y-auto [scrollbar-color:rgb(var(--m-line-strong))_transparent] min-h-0">
         {/* Header + search */}
-        <section className="p-4 border-b border-line" data-testid="projects-panel-header">
-          <div className="flex items-center gap-2 mb-3">
-            <Compass size={18} className="text-sonar" />
-            <h2 className="font-heading font-bold text-white text-base">{t("modeProjects")}</h2>
-            <span className="ml-auto font-mono text-[10px] text-slate-500" data-testid="projects-count">
+        <section className="px-4 pt-4 pb-3 border-b border-m-line" data-testid="projects-panel-header">
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 className="text-[15px] leading-5 font-medium text-m-fg">{t("modeProjects")}</h2>
+            <span className="shrink-0 text-right text-[12px] leading-4 text-m-fg3 m-num" data-testid="projects-count">
               {funders.total} {t("projects")}
             </span>
           </div>
           <div className="relative">
-            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search size={14} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-m-fg3 pointer-events-none" aria-hidden="true" />
             <input
               data-testid="project-search-input"
               type="text"
@@ -34,14 +33,15 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("searchPlaceholder")}
-              className="w-full bg-raised border border-line rounded-sm pl-7 pr-2 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/50"
+              aria-label={t("searchPlaceholder")}
+              className="m-field !pl-8"
             />
           </div>
         </section>
 
         {/* Filter by organisation */}
-        <section className="p-4 border-b border-line">
-          <label className="font-mono text-[9px] uppercase tracking-widest text-slate-500 block mb-1" htmlFor="org-filter-select">
+        <section className="px-4 py-3 border-b border-m-line">
+          <label className="text-[12px] leading-4 font-medium text-m-fg2 block mb-1.5" htmlFor="org-filter-select">
             {t("orgFilter")}
           </label>
           <select
@@ -49,7 +49,7 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
             data-testid="org-filter-select"
             value={funderFilter}
             onChange={(e) => setFunderFilter(e.target.value)}
-            className="w-full bg-raised border border-line rounded-sm px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent/50"
+            className="m-field m-select"
           >
             <option value="All">{t("allOrgs")} ({funders.total} {t("projects")})</option>
             {funders.funders.map((f) => (
@@ -59,42 +59,48 @@ export default function SwarmPanel({ t, projects, funders, funderFilter, setFund
         </section>
 
         {/* Clickable legend = category filter */}
-        <section className="p-4 border-b border-line" data-testid="map-legend">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-2">{t("legend")}</p>
-          <div className="grid grid-cols-1 gap-0.5">
+        <details className="m-details px-4 py-3 border-b border-m-line text-[12px] leading-4" data-testid="map-legend" open>
+          <summary className="flex items-center gap-1.5 font-medium text-m-fg2 hover:text-m-fg">
+            <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+            {t("legend")}
+          </summary>
+          <div className="m-details-body mt-1.5 grid grid-cols-1 gap-0.5">
             {/* Perf 2026-10 (CLS): until /api/categories answers, reserve the
                 legend's height (9 fixed category groups) so the project list
                 below does not jump down when it arrives. */}
             {legendCats.length === 0 && Array.from({ length: LEGEND_PLACEHOLDER_ROWS }, (_, i) => (
               <div key={`ph-${i}`} aria-hidden="true" data-testid="legend-placeholder"
-                className="flex items-center gap-2 py-1 px-1.5 rounded-sm">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-raised" />
-                <span className="text-[11px] text-transparent select-none">&nbsp;</span>
+                className="flex items-center gap-2 min-h-7 px-1.5 rounded-md">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-m-raised" />
+                <span className="text-transparent select-none">&nbsp;</span>
               </div>
             ))}
             {legendCats.map((c) => (
               <button key={c.name} data-testid={`legend-item-${c.name}`}
+                type="button"
+                aria-pressed={categoryFilter === c.name}
                 onClick={() => setCategoryFilter(categoryFilter === c.name ? "All" : c.name)}
-                className={`flex items-center gap-2 py-1 px-1.5 rounded-sm text-left ${categoryFilter === c.name ? "bg-raised ring-1 ring-accent/40" : "hover:bg-raised/60"}`}>
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 6px ${c.color}66` }} />
-                <span className="text-[11px] text-slate-300 truncate">{t("cat_" + c.name)}</span>
-                <span className="font-mono text-[9px] text-slate-500 ml-auto">{c.count}</span>
+                className={`flex items-center gap-2 min-h-7 px-1.5 rounded-md text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent ${categoryFilter === c.name ? "bg-m-selected text-m-fg" : "text-m-fg2 hover:bg-m-raised"}`}>
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} aria-hidden="true" />
+                <span className="truncate">{t("cat_" + c.name)}</span>
+                <span className="text-m-fg3 m-num text-right shrink-0 ml-auto">{c.count}</span>
               </button>
             ))}
           </div>
-        </section>
+        </details>
 
         <ProjectList t={t} projects={projects} funderFilter={funderFilter} searchQuery={searchQuery} categoryFilter={categoryFilter} onFlyTo={onFlyTo} />
       </div>
 
       {/* Action de pied — signaler un projet manquant */}
-      <div className="shrink-0 p-3 border-t border-line bg-surface">
+      <div className="shrink-0 px-4 py-3 border-t border-m-line">
         <button
+          type="button"
           data-testid="report-project-btn"
           onClick={onReport}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold border border-amberx/40 text-amberx rounded-sm hover:bg-amberx/10"
+          className="m-btn m-btn-secondary w-full"
         >
-          <Flag size={12} /> {t("reportBtn")}
+          <Flag size={14} strokeWidth={1.75} aria-hidden="true" /> {t("reportBtn")}
         </button>
       </div>
     </aside>

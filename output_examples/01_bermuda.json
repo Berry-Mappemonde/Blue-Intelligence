@@ -1,0 +1,128 @@
+{
+  "run_id": "example-bermuda",
+  "zone": "Bermuda",
+  "mode": "sample",
+  "ports": [
+    {
+      "name": "Port of St. George’s",
+      "verdict": "pass",
+      "confidence": 67,
+      "lat": 32.3810447,
+      "lon": -64.676717,
+      "reasons_en": [
+        "government source",
+        "single extractor",
+        "inside the EEZ, geocoders agree",
+        "coordinates corroborated by WPI BMSGE, 0.67 km"
+      ],
+      "sources": [],
+      "memories_recalled": 0,
+      "research": null,
+      "registry": {
+        "tier": "tier1",
+        "label": "Official Commercial Port of Entry",
+        "validation": "official",
+        "matches": [
+          {
+            "source": "unlocode",
+            "code": "BMSGE",
+            "name": "Saint George",
+            "distance_km": 0.67
+          },
+          {
+            "source": "wpi",
+            "code": "BMSGE",
+            "name": "St George",
+            "distance_km": 0.67,
+            "first_port_of_entry": "Yes"
+          }
+        ],
+        "official_evidence": [
+          {
+            "url": "https://www.gov.bm/department/customs",
+            "domain": "gov.bm",
+            "name_found": "saint george",
+            "entry_term": "ports of entry",
+            "snippet": ". Customs officers work in partnership with the Bermuda Police Service in preventing and detecting smuggling and other criminal activity. Customs officers are stationed at Bermuda’s main ports of entry: St. George’s L. F. Wade International Airport Hamilton Customs officers process customs declarations for all arriving passengers on ships, yachts, or aircraft and assess and collect duty and other",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:53:55+00:00",
+            "content_sha256": "c59a59b73f0f576b4674dab7b637af241af80cf7a4d850f38567707439b0261f"
+          },
+          {
+            "url": "https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf",
+            "domain": "planning.gov.bm",
+            "name_found": "saint george",
+            "entry_term": "port of call for clearing",
+            "snippet": "arch vessels \ngenerally call at St. George’s with the BIOS vessel operating out of Ferry Reach. Bulk carriers \ndischarge aggregate at Penno’s Wharf in St. George’s. \n \nSt. George’s harbour is the requisite Port of Call for clearing Customs for all non-commercial \nvessels entering Bermuda. Total Yacht visitors for 2014 were 4,280, boosted by the biennial \nNewport to Bermuda Race; arrivals were 27.5",
+            "evidence_source": "stored_snippet",
+            "fetched_at": "2026-10-25T00:54:04+00:00",
+            "content_sha256": "b4d431d840bc71d4533adf451ab7773278a1eeabfdb984eec628c03ec5f59a2d"
+          }
+        ],
+        "coord_mismatch": [],
+        "first_port_of_entry": "Yes",
+        "reasons": [
+          "Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km)",
+          "World Port Index lists it as a First Port of Entry (supporting evidence only)"
+        ]
+      },
+      "judge": null
+    }
+  ],
+  "summary": {
+    "pass": 1
+  },
+  "brief": "Clearance brief: Bermuda\nConfirmed ports of entry:\n- Port of St. George’s (confidence 67/100). Official Commercial Port of Entry: named in official source https://www.gov.bm/department/customs (stored snippet), https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (stored snippet), and listed in UN/LOCODE BMSGE (0.67 km), WPI BMSGE (0.67 km). Sources: gov.bm: https://www.gov.bm/department/customs (official evidence), planning.gov.bm: https://planning.gov.bm/wp-content/uploads/2018/11/Scoping-Report.pdf (official evidence)\nIndicative only: confirm entry formalities with the official authorities before departure.",
+  "llm": {
+    "provider": "sample",
+    "model": "caller-sample-fn",
+    "fallback_reason": "SAMPLE_MODE=true"
+  },
+  "components": {
+    "zetaris": "sample",
+    "registry": "sample",
+    "llm": "sample",
+    "judge": "skipped"
+  },
+  "registry": {
+    "mode": "sample",
+    "country_iso2": "BM",
+    "registry_entries": 12,
+    "official_count": 1,
+    "tiers": {
+      "tier1": 1,
+      "tier2": 0,
+      "tier_registered": 0,
+      "tier3": 0
+    },
+    "coord_mismatch_count": 0
+  },
+  "judge": {
+    "status": "skipped",
+    "reason": "SAMPLE_MODE=true",
+    "provider": null,
+    "served_model": null,
+    "retry_requested": []
+  },
+  "retries": 0,
+  "memory": {
+    "recalled": 0,
+    "remembered": true,
+    "created": 1,
+    "reinforced": 0,
+    "superseded": 0
+  },
+  "trace_file": "logs/trace-example-bermuda.jsonl",
+  "timings_ms": {
+    "ZetarisAdapter.get_ports": 0.6,
+    "ZetarisAdapter.registry_check": 25.1,
+    "HMemAgent.recall": 0.7,
+    "EvaluatorAgent.evaluate": 1.4,
+    "NemotronJudge.critique": 0.1,
+    "EvaluatorAgent.finalise": 0.4,
+    "BriefingAgent.brief": 0.2,
+    "HMemAgent.remember": 1.6,
+    "total": 30.2
+  },
+  "error": null
+}

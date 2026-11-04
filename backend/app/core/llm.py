@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import httpx
@@ -26,6 +27,16 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "openai/gpt-4o-mini"
 JSON_SYSTEM = ("You are the Blue Intelligence maritime OSINT engine. "
                "Reply ONLY with a single valid JSON object, no prose, no markdown fences.")
+
+# Source text a port-extraction reader sends. The pipeline widens it for one zone
+# (``llm_context_chars.set(...)``) when it keeps a raw catalog; other callers keep 20,000.
+LLM_CONTEXT_CHARS = 20000
+llm_context_chars: ContextVar[int] = ContextVar("llm_context_chars", default=LLM_CONTEXT_CHARS)
+
+
+def reader_context(context: str | None) -> str:
+    """The part of ``context`` a port-extraction reader actually sends."""
+    return (context or "")[:llm_context_chars.get()]
 
 MARINE_KW = [
     "ocean", "marine", "sea", "coral", "reef", "mangrove", "seagrass", "coastal",
@@ -126,6 +137,8 @@ async def _call_openrouter(prompt: str, system: str, key: str, model: str | None
 # ---------------------------------------------------------------------------
 def _public_engine(engine: str, kind: str) -> str:
     """Persisted label (gatekeeper / project extractor)."""
+    if (engine or "").startswith("nightshift"):
+        return f"Nightshift {kind}"
     if (engine or "").startswith("nvidia"):
         return f"NVIDIA {kind}"
     if (engine or "").startswith("claude"):
@@ -133,15 +146,68 @@ def _public_engine(engine: str, kind: str) -> str:
     return f"OpenRouter {kind}"
 
 
+# Nemotron through Meterless Nightshift is the first hop of every completion.
+GENERATOR_PROVIDERS = ("nightshift", "nvidia")  # a "sample" result means no model answered
+LLM_TRACE_RUN_ID = "llm-calls"  # MeterlessGenerator events: logs/trace-llm-calls.jsonl
+
+
+def nightshift_model(role: str) -> str | None:
+    """METERLESS_MODEL when set, else the role's specialised Nemotron (first in its chain)."""
+    if _env("METERLESS_MODEL"):
+        return _env("METERLESS_MODEL")
+    from app.core.nvidia import CHAINS
+    return next((m for m in CHAINS.get(role, CHAINS["json"]) if "nemotron" in m), None)
+
+
+async def _nightshift(prompt: str, system: str, *, json_mode: bool, role: str, log=None) -> dict | None:
+    """Generator result when Nightshift (or its NVIDIA fallback) served it; None otherwise."""
+    from app.core.generator import generate
+    try:
+        result = await generate(prompt, system, json_mode=json_mode, role=role,
+                                run_id=LLM_TRACE_RUN_ID, model=nightshift_model(role))
+    except Exception as e:
+        if log:
+            log(f"Nightshift: {type(e).__name__}: {str(e)[:80]}")
+        return None
+    if result.get("provider") in GENERATOR_PROVIDERS:
+        return result
+    if log:
+        log(f"Nightshift unavailable ({result.get('fallback_reason')}); NIM fallback")
+    return None
+
+
+def _generator_engine(result: dict) -> str:
+    return f"{result['provider']}-{(result.get('model') or 'unknown').split('/')[-1]}"
+
+
 async def ask_json_tracked(prompt: str, system: str = JSON_SYSTEM,
                            settings: dict | None = None,
                            max_tokens: int = 2000, log=None,
                            role: str = "json") -> tuple[dict, str]:
-    """Strict JSON: NVIDIA (role chain) → OpenRouter → Claude last.
+    """Strict JSON: Nemotron via Nightshift (generator.generate) first → NVIDIA NIM (role chain) → OpenRouter → Claude last.
 
-    Return (object, engine) — engine = nvidia-* | openrouter | claude.
-    Same cable as ``ask_yes_no`` (twin #4).
+    The generator result is used only when Nightshift (or its NVIDIA fallback)
+    actually served it; a sample result means no model answered, so the NIM role
+    chain and then the old cascade take over. The served model is in the trace.
     """
+    served = await _nightshift(prompt, system, json_mode=True, role=role, log=log)
+    if served is not None:
+        return served["parsed"], _generator_engine(served)
+
+    # FALLBACK: NVIDIA NIM role chain (direct NIM calls, not via Nightshift)
+    from app.core.nvidia import get_nvidia_key, complete_json_nvidia_tracked, models_for
+    if get_nvidia_key(settings):
+        for model in models_for(role or "json"):
+            try:
+                data, served_model = await complete_json_nvidia_tracked(
+                    system, prompt, settings, model=model, role=role,
+                    fallback=False, max_tokens=max_tokens)
+                return data, f"nvidia-nim-{(served_model or model).split('/')[-1]}"
+            except Exception as e:
+                if log:
+                    log(f"NVIDIA NIM {model}: {type(e).__name__}: {str(e)[:80]}")
+                continue
+
     from app.core.judge import complete_json_cascade
     data, engine = await complete_json_cascade(
         system, prompt, settings, role=role, max_tokens=max_tokens, log=log)
@@ -160,7 +226,12 @@ async def ask_json(prompt: str, system: str = JSON_SYSTEM, settings: dict | None
 
 async def ask_text(prompt: str, system: str = "You are a helpful assistant.",
                    settings: dict | None = None, max_tokens: int = 2000) -> str:
-    """Text: NVIDIA (text chain) then OpenRouter. No Claude (JSON adapter)."""
+    """Text: Nemotron via Nightshift (generator.generate) first → NVIDIA NIM → OpenRouter."""
+    served = await _nightshift(prompt, system, json_mode=False, role="text")
+    if served is not None:
+        return served["text"]
+
+    # FALLBACK: NVIDIA NIM text chain
     from app.core import nvidia
     if nvidia.nvidia_enabled(settings):
         try:
@@ -438,10 +509,11 @@ async def extract_ports_openrouter(context: str, zone: dict,
                                    settings: dict | None = None, log=None) -> list[dict]:
     """OpenRouter reader only (no NIM loop-back)."""
     from app.services.poe_zone_label import search_polygon_name
+    sent = reader_context(context)
     prompt = POE_EXTRACT_PROMPT.format(
         name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
         sovereign=zone.get("sovereign") or "",
-        context=context[:20000],
+        context=sent,
     )
     data = await _json_openrouter(
         prompt, "Tu réponds uniquement en JSON strict.", settings, 2500)
@@ -449,13 +521,36 @@ async def extract_ports_openrouter(context: str, zone: dict,
     for p in ports:
         p["extraction_engine"] = "openrouter"
     if log:
-        log(f"LLM OpenRouter: {len(ports)} port(s) extraits")
+        log(f"LLM OpenRouter: {len(ports)} port(s) extraits sur {len(sent)} chars envoyés")
+    return ports
+
+
+async def extract_ports_nightshift(context: str, zone: dict, log=None) -> list[dict] | None:
+    """Nemotron through Nightshift with the same prompt as OpenRouter; None if unavailable."""
+    from app.services.poe_zone_label import search_polygon_name
+    sent = reader_context(context)
+    prompt = POE_EXTRACT_PROMPT.format(
+        name=search_polygon_name(zone) or (zone.get("name") or zone.get("geoname") or ""),
+        sovereign=zone.get("sovereign") or "",
+        context=sent,
+    )
+    served = await _nightshift(prompt, "Tu réponds uniquement en JSON strict.",
+                               json_mode=True, role="extract", log=log)
+    if served is None:
+        return None
+    ports = coerce_ports(served["parsed"], context=context)
+    for p in ports:
+        p["extraction_engine"] = "nightshift"
+        p["extraction_model"] = served.get("model")
+    if log:
+        log(f"LLM Nightshift ({served.get('model')}): {len(ports)} port(s) extraits "
+            f"sur {len(sent)} chars envoyés")
     return ports
 
 
 async def extract_ports(context: str, zone: dict, settings: dict | None = None, log=None) -> list[dict]:
-    """Primary reader. The second reader (gpt-oss / Kimi) is
-    orchestrated in poe_pipeline.extract_ports_llm."""
+    """Primary reader: Nemotron via Nightshift, then NIM, OpenRouter, Claude. The second
+    reader (gpt-oss / Kimi) is orchestrated in poe_pipeline.extract_ports_llm."""
     s = settings
     if s is None:
         try:
@@ -463,6 +558,9 @@ async def extract_ports(context: str, zone: dict, settings: dict | None = None, 
             s = await get_settings()
         except Exception:
             s = {}
+    ports = await extract_ports_nightshift(context, zone, log=log)
+    if ports is not None:
+        return ports
     from app.core.nvidia import extract_ports_nvidia, nvidia_enabled
     from app.core import claude
     if nvidia_enabled(s):

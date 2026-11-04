@@ -2,6 +2,7 @@
 
 Reads cgroup v2 memory (or process RSS) and pings the database.
 No grids, no settings, no environment values in the response.
+Where neither is readable (macOS has no /proc), memory_used_pct is null.
 """
 from __future__ import annotations
 
@@ -98,16 +99,16 @@ def rss_memory_used_pct(
     return 100.0 * rss_kb / total_kb
 
 
-def memory_used_pct() -> float:
+def memory_used_pct() -> float | None:
     """cgroup v2 current/max when the service limit is readable, else RSS/RAM.
 
-    Unreadable memory is reported as 100 so the probe does not claim ok.
+    None when neither is readable (no /proc, e.g. macOS): memory is unknown, not full.
     """
     used = cgroup_memory_used_pct()
     if used is None:
         used = rss_memory_used_pct()
     if used is None:
-        return 100.0
+        return None
     if used < 0:
         return 0.0
     return float(used)
@@ -138,7 +139,8 @@ async def db_ping_ok() -> bool:
 async def api_health():
     used = memory_used_pct()
     db_ok = await db_ping_ok()
-    status = "ok" if db_ok and used < _MEMORY_DEGRADED_PCT else "degraded"
+    memory_ok = used is None or used < _MEMORY_DEGRADED_PCT
+    status = "ok" if db_ok and memory_ok else "degraded"
     return JSONResponse(
         {
             "status": status,

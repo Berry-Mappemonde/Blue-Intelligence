@@ -16,8 +16,8 @@ DATA_DIR = BACKEND_DIR / "data"
 MODELS_DIR = BACKEND_DIR / "models"
 ROUTE_FILE = DATA_DIR / "route.geojson"
 
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
+MONGO_URL = os.environ.get("MONGO_URL") or os.environ.get("MONGO_URL_FALLBACK", "")
+DB_NAME = os.environ.get("DB_NAME") or os.environ.get("DB_NAME_FALLBACK", "app")
 
 # Completions: NVIDIA NIM if NVIDIA_API_KEY (per-usage chains, see nvidia.CHAINS).
 # OpenRouter stays for web search (:online) and fallback.

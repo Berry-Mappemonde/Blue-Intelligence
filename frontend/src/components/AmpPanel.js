@@ -1,4 +1,4 @@
-import { Search, Shield } from "lucide-react";
+import { ChevronRight, Info, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { LFP_COLORS } from "./map/constants";
 
@@ -26,30 +26,31 @@ export default function AmpPanel({ t, sites, sitesLoading, onFlyTo, lfpFilter = 
   const visible = filtered.slice(0, LIST_CAP);
 
   return (
-    <aside className="w-[360px] shrink-0 flex flex-col border-r border-line bg-surface min-h-0" data-testid="amp-panel">
-      <div className="p-4 border-b border-line shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          <Shield size={18} className="text-[#4ade80]" />
-          <h2 className="font-heading font-bold text-white text-base">{t("modeAmp")}</h2>
-          <span className="font-mono text-[10px] text-slate-500">· ProtectedSeas</span>
-          <span className="ml-auto font-mono text-[10px] text-slate-500" data-testid="amp-count">
+    <aside className="w-[360px] max-w-full shrink-0 flex flex-col border-r border-m-line bg-m-shell min-h-0 font-ui text-[13px] leading-[18px] text-m-fg" data-testid="amp-panel">
+      <div className="px-4 pt-4 pb-3 border-b border-m-line shrink-0 max-h-[65%] overflow-y-auto [scrollbar-color:rgb(var(--m-line-strong))_transparent]">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <h2 className="text-[15px] leading-5 font-medium text-m-fg">{t("modeAmp")}</h2>
+          <span className="text-[12px] leading-4 text-m-fg3">ProtectedSeas</span>
+          <span className="ml-auto shrink-0 text-right text-[12px] leading-4 text-m-fg3 m-num" data-testid="amp-count">
             {features.length} {t("ampCount")}
           </span>
         </div>
 
-        <div data-testid="amp-disclaimer" className="bi-amp-disclaimer text-[11px] leading-relaxed px-2.5 py-2 rounded-sm mb-3">
-          ⚠️ {t("mpaDisclaimer")}
+        <div data-testid="amp-disclaimer" className="flex items-start gap-2 text-[12px] leading-4 text-m-fg2 mb-3">
+          <Info size={14} strokeWidth={1.75} className="mt-px shrink-0 text-m-fg3" aria-hidden="true" />
+          <span>{t("mpaDisclaimer")}</span>
         </div>
 
         <div className="relative mb-3">
-          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-m-fg3 pointer-events-none" aria-hidden="true" />
           <input
             data-testid="amp-search-input"
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("ampSearch")}
-            className="w-full bg-raised border border-line rounded-sm pl-7 pr-2 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/50"
+            aria-label={t("ampSearch")}
+            className="m-field !pl-8"
           />
         </div>
 
@@ -58,8 +59,9 @@ export default function AmpPanel({ t, sites, sitesLoading, onFlyTo, lfpFilter = 
             type="button"
             data-testid="amp-lfp-all"
             onClick={() => setLfpFilter("All")}
-            className={`px-1.5 py-0.5 border rounded-sm font-mono text-[9px] uppercase ${
-              lfpFilter === "All" ? "border-accent/50 bg-accent/15 text-accent" : "border-line text-slate-400"
+            aria-pressed={lfpFilter === "All"}
+            className={`min-h-7 px-2 text-[12px] leading-4 border rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent ${
+              lfpFilter === "All" ? "border-m-line-strong bg-m-selected text-m-fg" : "border-m-line text-m-fg2 hover:bg-m-raised"
             }`}
           >
             {t("ampAllLfp")}
@@ -70,48 +72,52 @@ export default function AmpPanel({ t, sites, sitesLoading, onFlyTo, lfpFilter = 
               type="button"
               data-testid={`amp-lfp-${n}`}
               onClick={() => setLfpFilter(String(n))}
-              className={`px-1.5 py-0.5 border rounded-sm font-mono text-[9px] ${
-                lfpFilter === String(n) ? "border-accent/50 bg-accent/15 text-accent" : "border-line text-slate-400"
+              aria-pressed={lfpFilter === String(n)}
+              className={`min-h-7 px-2 text-[12px] leading-4 border rounded-md m-num focus-visible:outline focus-visible:outline-2 focus-visible:outline-m-accent ${
+                lfpFilter === String(n) ? "border-m-line-strong bg-m-selected text-m-fg" : "border-m-line text-m-fg2 hover:bg-m-raised"
               }`}
-              style={{ borderColor: lfpFilter === String(n) ? undefined : `${LFP_COLORS[n]}55` }}
             >
+              <span className="inline-block w-2 h-2 rounded-sm mr-1.5" style={{ background: LFP_COLORS[n] }} aria-hidden="true" />
               LFP {n}
             </button>
           ))}
         </div>
 
-        <div data-testid="amp-legend">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500 mb-1.5">{t("legend")}</p>
-          <div className="space-y-1">
+        <details className="m-details mt-3 text-[12px] leading-4" data-testid="amp-legend" open>
+          <summary className="flex items-center gap-1.5 font-medium text-m-fg2 hover:text-m-fg">
+            <ChevronRight size={12} strokeWidth={1.75} className="m-disclosure shrink-0" aria-hidden="true" />
+            {t("legend")}
+          </summary>
+          <div className="m-details-body mt-1.5 space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: LFP_COLORS[5] }} />
-              <span className="text-[11px] text-slate-300">{t("lfp5")}</span>
+              <span className="text-[12px] leading-4 text-m-fg2">{t("lfp5")}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: LFP_COLORS[3] }} />
-              <span className="text-[11px] text-slate-300">{t("lfp3")}</span>
+              <span className="text-[12px] leading-4 text-m-fg2">{t("lfp3")}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: LFP_COLORS[1] }} />
-              <span className="text-[11px] text-slate-300">{t("lfp1")}</span>
+              <span className="text-[12px] leading-4 text-m-fg2">{t("lfp1")}</span>
             </div>
           </div>
-        </div>
+        </details>
       </div>
 
-      <div className="flex-1 overflow-y-auto" data-testid="amp-list">
+      <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-color:rgb(var(--m-line-strong))_transparent]" data-testid="amp-list">
         {hint === "zoom" && (
-          <p className="p-6 text-center text-xs text-slate-500 leading-relaxed" data-testid="amp-zoom-hint">
+          <p className="p-6 text-center text-[13px] leading-[18px] text-m-fg3" data-testid="amp-zoom-hint">
             {t("mpaZoomHint")}
           </p>
         )}
         {hint !== "zoom" && features.length === 0 && (
-          <p className="p-6 text-center text-xs text-slate-500 leading-relaxed">
+          <p className="p-6 text-center text-[13px] leading-[18px] text-m-fg3">
             {sitesLoading ? t("ampLoading") : t("ampEmpty")}
           </p>
         )}
         {truncated && (
-          <p className="px-4 py-2 font-mono text-[10px] text-slate-500">{t("ampTruncated")}</p>
+          <p className="px-4 py-2 text-[12px] leading-4 text-m-fg3 m-num">{t("ampTruncated")}</p>
         )}
         {visible.map((f) => {
           const p = f.properties || {};
@@ -121,7 +127,7 @@ export default function AmpPanel({ t, sites, sitesLoading, onFlyTo, lfpFilter = 
               type="button"
               data-testid={`amp-row-${p.site_id || p.id}`}
               onClick={() => onFlyTo && onFlyTo(p.site_id || p.id, p.lat, p.lon)}
-              className="w-full text-left px-4 py-3 border-b border-line hover:bg-raised transition-colors group"
+              className="w-full text-left px-4 py-2.5 border-b border-m-line-soft hover:bg-m-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-m-accent"
             >
               <div className="flex items-start gap-2">
                 <span
@@ -129,16 +135,16 @@ export default function AmpPanel({ t, sites, sitesLoading, onFlyTo, lfpFilter = 
                   style={{ background: LFP_COLORS[Number(p.lfp) || 0] }}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-heading text-sm text-slate-100 truncate group-hover:text-white">{p.name}</p>
-                  <p className="font-mono text-[10px] text-slate-500 truncate">
+                  <p className="text-[13px] leading-[18px] font-medium text-m-fg truncate">{p.name}</p>
+                  <p className="text-[12px] leading-4 text-m-fg3 truncate">
                     {p.country}{p.designation ? ` · ${p.designation}` : ""}
                   </p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-wide">
-                    <span className="text-slate-500">{t("ampManagerUrl")}</span>
+                  <p className="mt-1 text-[12px] leading-4">
+                    <span className="text-m-fg3">{t("ampManagerUrl")}</span>
                     {" · "}
                     {p.visit_url
-                      ? <span className="text-[#4ade80]">{t("ampVisitFound")}</span>
-                      : <span className="text-slate-600">{t("ampVisitMissing")}</span>}
+                      ? <span className="text-m-fg2">{t("ampVisitFound")}</span>
+                      : <span className="text-m-fg3">{t("ampVisitMissing")}</span>}
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 """searx_instances — local URL always first, no duplicate."""
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -39,3 +40,9 @@ class TestSearxInstances:
         assert inst[0] == "http://searx.internal:8080"
         assert inst.count("http://searx.internal:8080") == 1
         assert LOCAL_SEARXNG_URL not in inst
+
+    def test_default_port_does_not_collide_with_zetaris(self, monkeypatch):
+        # The local Zetaris API listens on 8888-8889 (ZETARIS_REST_URL default).
+        monkeypatch.delenv("SEARXNG_URL", raising=False)
+        assert configured_searxng_url() == "http://127.0.0.1:8890"
+        assert urlparse(configured_searxng_url()).port not in (8888, 8889)

@@ -53,3 +53,13 @@ const api = axios.create({
 });
 
 export default api;
+
+// ---------------------------------------------------------------------------
+// V2: PoE verification via backend pipeline
+// ---------------------------------------------------------------------------
+export async function verifyZonePoe(zoneName, mrgid) {
+  // Through the shared client so the admin key (when set) is sent; a run can take
+  // up to the pipeline's 300 s limit, beyond the client's default timeout.
+  const { data } = await api.post("/poe/verify", { zone_name: zoneName, mrgid }, { timeout: 330000 });
+  return data;
+}

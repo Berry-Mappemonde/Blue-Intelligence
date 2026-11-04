@@ -14,7 +14,7 @@ server:
   limiter: false
   public_instance: false
   bind_address: "127.0.0.1"
-  port: 8888
+  port: 8890
 
 search:
   safe_search: 0

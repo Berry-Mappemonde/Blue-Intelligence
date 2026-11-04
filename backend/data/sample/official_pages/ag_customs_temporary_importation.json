@@ -1,0 +1,23 @@
+{
+  "url": "https://customs.gov.ag/page/temporary-importation",
+  "domain": "customs.gov.ag",
+  "fetched_at": "2026-10-25T00:51:41+00:00",
+  "sha256": "eead6a53afc8d9516a0feae57aa3e9347096e99a70b23c2dfa7cf26ac7276cb3",
+  "chars": 1721,
+  "extract_level": "N1-trafilatura",
+  "zones": [
+    {
+      "mrgid": 8414,
+      "zone_name": "Antigua and Barbuda"
+    }
+  ],
+  "designates": [
+    "Deep water Harbor"
+  ],
+  "sections": [
+    {
+      "offset": 0,
+      "text": "Antigua and Barbuda\nCustoms and Excise Division\nMinistry of Finance and Corporate Governance\nYachting Industry\nYachting Industry\nIn the fastly growing and dynamic yachting industry where yachts spares and sailing yachts are temporarily imported the process is facilitated by the following documents;\nClearance Procedure\nThe clearance of pleasure craft to include Motor Super yacht, sailing yacht and fishing vessels are as follows.  \n1. Each vessel must prepare an eSeaclear notification prior to their arrival in Antigua and Barbuda. \nProcedure: \n 2. The vessel should arrive at a legal port of entry: \nDeep water Harbor\nEnglish Harbor\nJolly Harbor\nHeritage Quay\nCrabbs Peninsular\nBarbuda.  \n \n3. Proceed directly to the customs place notified in accordance to paragraph (1)(b) of section 16 of the customs management act. \n4. Only the captain is allowed to disembark the vessel to make clearance at customs. Where there is a language barrier a crew member may accompany the captain to the customs office. \nDocuments Required: \n. Clearance from the last port. \n. A list of all passengers and crew on board \n. Registration of the vessel \n. Any other supporting documents that the comptroller may deem necessary for the completion of the clearance.\nPermission may be given to grant clearances outside the port entry only by request to the comptroller within 24hrs prior to arrival or departure.\nEmbarkation Seaport Tax\nEvery passenger who has been in Antigua & Barbuda for more than 24 hours and is departing via a pleasure craft is entitled to pay the Embarkation Sea Port Tax of $75.00XCD which is equivalent to $30.00usd to the Comptroller of Customs.\nThis is in accordance to the Embarkation Seaport Tax Act #7 of 2013"
+    }
+  ]
+}

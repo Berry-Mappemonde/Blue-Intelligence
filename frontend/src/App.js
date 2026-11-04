@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api, { clearAdminKey, hasAdminKey } from "./api";
+import api, { verifyZonePoe, hasAdminKey } from "./api";
 import { makeT } from "./i18n";
+import { mergeVerifyIntoFiche } from "./components/poeRegistry";
+import { applyDocumentLang, installDisclosureToggles, installInputModality } from "./lib/a11y";
 import Header from "./components/Header";
 import SwarmPanel from "./components/SwarmPanel";
 import MarinasPanel from "./components/MarinasPanel";
@@ -91,17 +93,9 @@ export default function App() {
     try { localStorage.setItem("bi.lang", l); } catch (_) { /* ignore */ }
   }, []);
   const [view, setView] = useState("map");
-  // Admin mode — Console and Review are visible only after the backend
-  // validates the key (?admin=<key> in the URL, stored by api.js).
+  // Admin mode — déterminé par GET /admin/check (ouvert par défaut en local sans ADMIN_KEY).
   const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    if (!hasAdminKey()) return;
-    api.get("/admin/check")
-      .then(() => setIsAdmin(true))
-      .catch((e) => {
-        if (e?.response?.status === 401) clearAdminKey();
-      });
-  }, []);
+  const [adminChecked, setAdminChecked] = useState(false);
   const [mode, setModeRaw] = useState(readInitialMode());   // 7 modes incl. climatology
   const [showSettings, setShowSettings] = useState(false);
   const [status, setStatus] = useState(null);
@@ -190,8 +184,15 @@ export default function App() {
   const [poeZonesLoading, setPoeZonesLoading] = useState(true);
   const [poePorts, setPoePorts] = useState({ type: "FeatureCollection", features: [] });
   const [selectedZone, setSelectedZone] = useState(null);   // mrgid
+  const [selectedZoneName, setSelectedZoneName] = useState(null);
   const [flyToZone, setFlyToZone] = useState(null);         // {mrgid, bbox, ts}
   const [zoneFiche, setZoneFiche] = useState(null);
+  // Current selection, readable from the stable handleSelectZone callback.
+  const selectedZoneRef = useRef(null);
+  const zoneFicheRef = useRef(null);
+  selectedZoneRef.current = selectedZone;
+  zoneFicheRef.current = zoneFiche;
+  const [verifyState, setVerifyState] = useState({ mrgid: null, running: false, error: null });
   const [ficheLoading, setFicheLoading] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [flyToPoe, setFlyToPoe] = useState(null);
@@ -221,10 +222,31 @@ export default function App() {
   const viewRef = useRef(view);
   viewRef.current = view;
 
+  // Resolve admin status from /admin/check on boot: open by default locally
+  // (ADMIN_KEY unset → admin_required: false → Console/Review reachable),
+  // protected in prod (ADMIN_KEY set → key required).
+  useEffect(() => {
+    let alive = true;
+    const resolveAdmin = async () => {
+      try {
+        const { data } = await api.get("/admin/check");
+        if (!alive) return;
+        setIsAdmin(!data.admin_required || hasAdminKey());
+        setAdminChecked(true);
+      } catch (_) {
+        if (!alive) return;
+        setIsAdmin(false);
+        setAdminChecked(true);
+      }
+    };
+    resolveAdmin();
+    return () => { alive = false; };
+  }, []);
+
   // Without admin rights, Console (audit) and Review views are unreachable.
   useEffect(() => {
     if (!isAdmin && (view === "audit" || view === "review")) setView("map");
-  }, [isAdmin, view]);
+  }, [isAdmin, view, adminChecked]);
 
   // Persist mode + reflect on <html> for CSS var switching
   const setMode = useCallback((m) => {
@@ -237,7 +259,10 @@ export default function App() {
   useEffect(() => {
     // Set data-mode on <html> so [data-mode="..."] CSS vars kick in globally
     document.documentElement.setAttribute("data-mode", mode);
-  }, [mode]);
+    applyDocumentLang(document, lang);
+  }, [mode, lang]);
+  useEffect(() => installInputModality(document), []);
+  useEffect(() => installDisclosureToggles(document), []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -740,14 +765,59 @@ export default function App() {
     return undefined;
   }, [mode, climoMonth, fetchClimoMeta]);
 
-  // Refactor 2026-06 — Handler wired to the sidebar rows and the EEZ polygons:
-  // selects the zone; when a bbox is supplied (sidebar click), also flies to it.
-  const handleSelectZone = useCallback((mrgid, bbox, anchor) => {
-    setSelectedZone(mrgid);
-    if (bbox && Array.isArray(bbox) && bbox.length === 4) {
-      setFlyToZone({ mrgid, bbox, anchor: anchor || null, ts: Date.now() });
+// Refactor 2026-06 — Handler wired to the sidebar rows and the EEZ polygons:
+// selects the zone; when a bbox is supplied (sidebar click), also flies to it.
+// Simple read-only fetch of the zone fiche via GET /poe/zones/{mrgid};
+// no POST /api/poe/verify is triggered on click.
+// Selecting the zone already open (its polygon, its row) keeps the sheet as it is,
+// verify result included; only a different zone resets and refetches it.
+const handleSelectZone = useCallback(async (mrgid, zoneName, bbox, anchor) => {
+  if (mrgid == null) {
+    // "All zones": close the sheet, back to the list.
+    setSelectedZone(null);
+    setSelectedZoneName(null);
+    setZoneFiche(null);
+    setFicheLoading(false);
+    return;
+  }
+  const sameZone = Number(selectedZoneRef.current) === Number(mrgid)
+    && zoneFicheRef.current && Number(zoneFicheRef.current.mrgid) === Number(mrgid);
+  setSelectedZone(mrgid);
+  setSelectedZoneName(zoneName ?? null);
+  if (!sameZone) {
+    setZoneFiche(null);
+    setFicheLoading(true);
+    try {
+      const { data } = await api.get(`/poe/zones/${mrgid}`);
+      setZoneFiche(data);
+    } catch (_) {
+      setZoneFiche(null);
+    } finally {
+      setFicheLoading(false);
     }
-  }, []);
+  }
+  if (bbox && Array.isArray(bbox) && bbox.length === 4) {
+    setFlyToZone({ mrgid, bbox, anchor: anchor || null, ts: Date.now() });
+  }
+}, []);
+
+  // Explicit "Verify" in the fiche: POST /poe/verify (Nemotron + Zetaris, ~50 s), merged
+  // into the fiche of the zone it started for; a result arriving after the user moved
+  // to another zone is dropped.
+  const handleVerifyZone = useCallback(async () => {
+    const mrgid = selectedZone;
+    const zoneName = zoneFiche?.name || zoneFiche?.geoname || selectedZoneName || "";
+    if (!mrgid || !zoneName) return;
+    setVerifyState({ mrgid, running: true, error: null });
+    try {
+      const data = await verifyZonePoe(zoneName, mrgid);
+      setZoneFiche((f) => (f && Number(f.mrgid) === Number(mrgid) ? mergeVerifyIntoFiche(f, data) : f));
+      setVerifyState((v) => (v.mrgid === mrgid ? { mrgid, running: false, error: data?.error || null } : v));
+    } catch (e) {
+      const detail = e?.response?.data?.detail || e?.message || String(e);
+      setVerifyState((v) => (v.mrgid === mrgid ? { mrgid, running: false, error: String(detail) } : v));
+    }
+  }, [selectedZone, selectedZoneName, zoneFiche]);
 
   const handleFlyToPoe = useCallback((port) => {
     if (!port || port.lat == null || port.lon == null) return;
@@ -765,13 +835,9 @@ export default function App() {
       setFicheLoading(false);
       return;
     }
-    let alive = true;
-    setFicheLoading(true);
-    api.get(`/poe/zones/${selectedZone}`)
-      .then(({ data }) => { if (alive) setZoneFiche(data); })
-      .catch(() => { if (alive) setZoneFiche(null); })
-      .finally(() => { if (alive) setFicheLoading(false); });
-    return () => { alive = false; };
+    // The fiche is loaded by handleSelectZone (read-only GET /poe/zones/{mrgid});
+    // POST /poe/verify only runs from the fiche's Verify button (handleVerifyZone).
+    return () => { /* noop */ };
   }, [selectedZone, mapEpoch]);
 
   return (
@@ -829,6 +895,8 @@ export default function App() {
             fiche={zoneFiche}
             ficheLoading={ficheLoading}
             onFlyToPort={handleFlyToPoe}
+            onVerify={handleVerifyZone}
+            verifyState={verifyState.mrgid === selectedZone ? verifyState : null}
           />
         )}
         {view !== "review" && mode === "amp" && (
@@ -893,6 +961,8 @@ export default function App() {
               showAnchorages={showAnchorages}
               poeZones={poeZones.items}
               poePorts={poePorts}
+              selectedZone={selectedZone}
+              lang={lang}
               onSelectZone={handleSelectZone}
               flyToMarina={flyToMarina}
               flyToZone={flyToZone}

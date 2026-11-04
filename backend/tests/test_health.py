@@ -18,7 +18,7 @@ client = TestClient(app)
 _KEYS = {"status", "memory_used_pct", "uptime_s"}
 
 
-def _patch_probe(monkeypatch, memory: float, db_ok: bool) -> None:
+def _patch_probe(monkeypatch, memory: float | None, db_ok: bool) -> None:
     monkeypatch.setattr(health, "memory_used_pct", lambda: memory)
 
     async def _ping() -> bool:
@@ -62,6 +62,25 @@ def test_health_degraded_when_db_ping_fails(monkeypatch):
     assert body["memory_used_pct"] == 10.0
     assert "secret" not in response.text
     assert "Traceback" not in response.text
+
+
+def test_health_unknown_memory_is_null_not_degraded(monkeypatch):
+    _patch_probe(monkeypatch, None, True)
+    body = client.get("/api/health").json()
+    assert set(body) == _KEYS
+    assert body["memory_used_pct"] is None
+    assert body["status"] == "ok"
+    _patch_probe(monkeypatch, None, False)
+    assert client.get("/api/health").json()["status"] == "degraded"
+
+
+def test_memory_probe_unreadable_returns_none(tmp_path, monkeypatch):
+    missing = tmp_path / "missing"
+    assert health.cgroup_memory_used_pct(missing, tmp_path) is None
+    assert health.rss_memory_used_pct(missing, missing) is None
+    monkeypatch.setattr(health, "cgroup_memory_used_pct", lambda *_a, **_k: None)
+    monkeypatch.setattr(health, "rss_memory_used_pct", lambda *_a, **_k: None)
+    assert health.memory_used_pct() is None
 
 
 def test_health_stays_public_with_admin_key(monkeypatch):
